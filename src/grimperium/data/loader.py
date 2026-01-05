@@ -24,10 +24,12 @@ Example:
 
 """
 
+from collections.abc import Iterable
 from pathlib import Path
 from typing import Optional, Union
 
 import pandas as pd
+from sklearn.model_selection import train_test_split
 
 
 class ChemperiumLoader:
@@ -39,7 +41,7 @@ class ChemperiumLoader:
 
     Attributes:
         data: Loaded DataFrame (None until load() is called)
-        columns: Expected column names in dataset
+        validate: Whether to validate data on load
 
     Example:
         >>> loader = ChemperiumLoader()
@@ -69,6 +71,9 @@ class ChemperiumLoader:
     # Heat capacity columns (cp_1 to cp_45)
     CP_COLUMNS = [f"cp_{i}" for i in range(1, 46)]
 
+    # Feature columns for ML (excluding targets)
+    FEATURE_COLUMNS = ["nheavy", "charge", "multiplicity"]
+
     def __init__(self, validate: bool = True) -> None:
         """
         Initialize ChemperiumLoader.
@@ -84,6 +89,8 @@ class ChemperiumLoader:
         self,
         path: Union[str, Path],
         columns: Optional[list[str]] = None,
+        max_nheavy: Optional[int] = None,
+        allowed_elements: Optional[Iterable[str]] = None,
     ) -> pd.DataFrame:
         """
         Load Chemperium dataset from file.
@@ -91,6 +98,8 @@ class ChemperiumLoader:
         Args:
             path: Path to CSV or Parquet file
             columns: Specific columns to load (None for all)
+            max_nheavy: Filter molecules with nheavy <= this value
+            allowed_elements: Filter by allowed elements (stub, requires RDKit)
 
         Returns:
             Loaded DataFrame
@@ -100,7 +109,30 @@ class ChemperiumLoader:
             ValueError: If required columns are missing
 
         """
-        raise NotImplementedError("Will be implemented in Batch 2")
+        path = Path(path)
+
+        if not path.exists():
+            raise FileNotFoundError(f"File not found: {path}")
+
+        # Read based on file extension
+        if path.suffix == ".csv":
+            df = pd.read_csv(path, usecols=columns)
+        elif path.suffix in {".parquet", ".pq"}:
+            df = pd.read_parquet(path, columns=columns)
+        else:
+            raise ValueError(f"Unsupported file type: {path.suffix}")
+
+        # Validate if enabled
+        if self.validate:
+            self._validate_dataframe(df)
+
+        # Apply filters
+        df = self._apply_filters(df, max_nheavy, allowed_elements)
+
+        # Store reference
+        self.data = df
+
+        return df
 
     def split(
         self,
@@ -121,8 +153,78 @@ class ChemperiumLoader:
         Returns:
             Tuple of (train_df, test_df)
 
+        Raises:
+            ValueError: If no data available
+
         """
-        raise NotImplementedError("Will be implemented in Batch 2")
+        if df is None:
+            df = self.data
+        if df is None:
+            raise ValueError("No data available. Call load() first or provide df.")
+
+        stratify = df[stratify_by] if stratify_by else None
+
+        train_df, test_df = train_test_split(
+            df,
+            test_size=test_size,
+            random_state=random_state,
+            stratify=stratify,
+            shuffle=True,
+        )
+
+        return train_df, test_df
+
+    def train_val_test_split(
+        self,
+        df: Optional[pd.DataFrame] = None,
+        test_size: float = 0.2,
+        val_size: float = 0.1,
+        random_state: int = 42,
+    ) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+        """
+        Split data into train, validation, and test sets.
+
+        Args:
+            df: DataFrame to split (uses self.data if None)
+            test_size: Fraction for test set
+            val_size: Fraction for validation set
+            random_state: Random seed for reproducibility
+
+        Returns:
+            Tuple of (train_df, val_df, test_df)
+
+        Raises:
+            ValueError: If no data available or invalid split sizes
+
+        """
+        if df is None:
+            df = self.data
+        if df is None:
+            raise ValueError("No data available. Call load() first or provide df.")
+
+        if test_size + val_size >= 1.0:
+            raise ValueError("test_size + val_size must be less than 1.0")
+
+        # First split: separate test set
+        train_val_df, test_df = train_test_split(
+            df,
+            test_size=test_size,
+            random_state=random_state,
+            shuffle=True,
+        )
+
+        # Second split: separate validation from train
+        # Adjust val_size relative to remaining data
+        relative_val_size = val_size / (1.0 - test_size)
+
+        train_df, val_df = train_test_split(
+            train_val_df,
+            test_size=relative_val_size,
+            random_state=random_state,
+            shuffle=True,
+        )
+
+        return train_df, val_df, test_df
 
     def get_features(
         self,
@@ -139,8 +241,23 @@ class ChemperiumLoader:
         Returns:
             DataFrame with feature columns only
 
+        Raises:
+            ValueError: If no data available
+
         """
-        raise NotImplementedError("Will be implemented in Batch 2")
+        if df is None:
+            df = self.data
+        if df is None:
+            raise ValueError("No data available. Call load() first or provide df.")
+
+        # Collect feature columns that exist in df
+        feature_cols = [c for c in self.FEATURE_COLUMNS if c in df.columns]
+
+        if include_cp:
+            cp_cols = [c for c in self.CP_COLUMNS if c in df.columns]
+            feature_cols.extend(cp_cols)
+
+        return df[feature_cols].copy()
 
     def get_targets(
         self,
@@ -157,12 +274,62 @@ class ChemperiumLoader:
         Returns:
             Series with target values
 
+        Raises:
+            ValueError: If no data available or target column missing
+
         """
-        raise NotImplementedError("Will be implemented in Batch 2")
+        if df is None:
+            df = self.data
+        if df is None:
+            raise ValueError("No data available. Call load() first or provide df.")
+
+        if target not in df.columns:
+            raise ValueError(f"Target column '{target}' not found in DataFrame")
+
+        return df[target].copy()
 
     def _validate_dataframe(self, df: pd.DataFrame) -> None:
-        """Validate DataFrame has required columns and types."""
-        raise NotImplementedError("Will be implemented in Batch 2")
+        """
+        Validate DataFrame has required columns.
+
+        Args:
+            df: DataFrame to validate
+
+        Raises:
+            ValueError: If required columns are missing
+
+        """
+        missing = [c for c in self.REQUIRED_COLUMNS if c not in df.columns]
+        if missing:
+            raise ValueError(f"Missing required columns: {missing}")
+
+    def _apply_filters(
+        self,
+        df: pd.DataFrame,
+        max_nheavy: Optional[int],
+        allowed_elements: Optional[Iterable[str]],
+    ) -> pd.DataFrame:
+        """
+        Apply optional filters to DataFrame.
+
+        Args:
+            df: DataFrame to filter
+            max_nheavy: Maximum number of heavy atoms
+            allowed_elements: Allowed chemical elements (stub)
+
+        Returns:
+            Filtered DataFrame
+
+        """
+        if max_nheavy is not None and "nheavy" in df.columns:
+            df = df[df["nheavy"] <= max_nheavy]
+
+        if allowed_elements is not None:
+            # Stub: Element filtering requires RDKit for SMILES parsing
+            # Will be implemented in a future batch with RDKit dependency
+            pass
+
+        return df
 
     def __repr__(self) -> str:
         """String representation."""

@@ -37,27 +37,48 @@ Handles all data loading, preprocessing, and fusion operations.
 
 #### ChemperiumLoader (`loader.py`)
 
-- Loads Chemperium dataset (CSV/Parquet)
-- Validates required columns
-- Provides train/test splitting
-- Extracts features and targets
+Loads and validates the Chemperium thermochemistry dataset (~52k molecules).
+
+**Supported formats:** CSV, Parquet
+**Required columns:** smiles, charge, multiplicity, nheavy, H298_cbs
+**Optional columns:** xyz, H298_b3, S298, cp_1...cp_45
+
+**Key methods:**
+- `load(path)` - Load and validate dataset with optional filtering
+- `split()` - 2-way train/test split
+- `train_val_test_split()` - 3-way train/val/test split
+- `get_features()` / `get_targets()` - Extract X, y for ML
 
 ```python
 loader = ChemperiumLoader()
-df = loader.load("chemperium.csv")
-train, test = loader.split(df, test_size=0.2)
+df = loader.load("chemperium.csv", max_nheavy=20)
+train, val, test = loader.train_val_test_split(df, test_size=0.2, val_size=0.1)
+features = loader.get_features(include_cp=True)
+targets = loader.get_targets(target="H298_cbs")
 ```
 
 #### DataFusion (`fusion.py`)
 
-- Merges CBS and PM7 datasets
-- Computes delta values
-- Validates merge integrity
+Combines data sources and creates task-specific views for ML training.
+
+**Key methods:**
+- `merge()` - Combine Chemperium + PM7 data
+- `compute_deltas()` - Calculate CBS - PM7 corrections
+- `select_task_view(task)` - Get X, y for specific task:
+  - `"enthalpy"` → targets H298_cbs
+  - `"entropy"` → targets S298
+  - `"heat_capacity"` → targets cp_1...cp_45 (multioutput)
+- `analyze_deltas()` - Compute delta statistics
 
 ```python
 fusion = DataFusion()
 merged = fusion.merge(chemperium_df, pm7_df, on="smiles")
 merged = fusion.compute_deltas(merged)
+stats = fusion.analyze_deltas()  # {"mean": ..., "std": ..., ...}
+
+# Task-specific views
+X, y = fusion.select_task_view(df, task="enthalpy")
+X_cp, Y_cp = fusion.select_task_view(df, task="heat_capacity")  # multioutput
 ```
 
 #### SemiempiricalHandler (`semiempirical.py`)
@@ -65,6 +86,7 @@ merged = fusion.compute_deltas(merged)
 - Interface for PM7 calculations via MOPAC
 - Supports CREST conformational search
 - Batch processing with caching
+- **Status:** Stub (will be implemented in Batch 6)
 
 ```python
 handler = SemiempiricalHandler(method="PM7")

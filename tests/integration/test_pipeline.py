@@ -11,9 +11,14 @@ These tests use mock data to avoid external dependencies.
 """
 
 import numpy as np
+import pandas as pd
 import pytest
 
-from tests.fixtures.mock_data import generate_training_data
+from tests.fixtures.mock_data import (
+    generate_training_data,
+    make_chemperium_with_pm7_df,
+    make_small_chemperium_df,
+)
 
 
 class TestFullPipeline:
@@ -59,21 +64,133 @@ class TestFullPipeline:
 class TestDataPipeline:
     """Tests for data loading and fusion pipeline."""
 
-    @pytest.mark.skip(reason="Data pipeline not implemented yet")
-    def test_load_and_fuse(self, mock_chemperium_df, mock_pm7_df):
-        """Test data loading and fusion."""
+    def test_load_and_fuse(self, tmp_path):
+        """Test data loading and fusion end-to-end."""
         from grimperium.data import ChemperiumLoader, DataFusion
+
+        # Create mock data files
+        chem_df = make_small_chemperium_df(n=50)
+        pm7_df = pd.DataFrame({
+            "smiles": chem_df["smiles"].tolist(),
+            "H298_pm7": chem_df["H298_cbs"] + np.random.normal(3.0, 1.5, len(chem_df)),
+        })
+
+        # Save to files
+        chem_path = tmp_path / "chemperium.csv"
+        pm7_path = tmp_path / "pm7.csv"
+        chem_df.to_csv(chem_path, index=False)
+        pm7_df.to_csv(pm7_path, index=False)
 
         # Load Chemperium
         loader = ChemperiumLoader()
-        # chem_df = loader.load(...)
+        loaded_df = loader.load(chem_path)
+        assert len(loaded_df) == 50
 
-        # Fuse with PM7
+        # Load PM7 manually (semiempirical handler not implemented yet)
+        pm7_loaded = pd.read_csv(pm7_path)
+
+        # Fuse datasets
         fusion = DataFusion()
-        # merged = fusion.merge(chem_df, pm7_df)
-        # deltas = fusion.compute_deltas(merged)
+        merged = fusion.merge(loaded_df, pm7_loaded, on="smiles")
+        assert "H298_cbs" in merged.columns
+        assert "H298_pm7" in merged.columns
 
-        pass
+        # Compute deltas
+        result = fusion.compute_deltas(merged)
+        assert "delta_pm7" in result.columns
+
+        # Analyze deltas
+        stats = fusion.analyze_deltas(result)
+        assert "mean" in stats
+        assert abs(stats["mean"]) < 10  # Realistic delta range
+
+    def test_loader_to_task_view(self, tmp_path):
+        """Test loading data and creating task views."""
+        from grimperium.data import ChemperiumLoader, DataFusion
+
+        # Create and save mock data
+        df = make_small_chemperium_df(n=30)
+        csv_path = tmp_path / "test_data.csv"
+        df.to_csv(csv_path, index=False)
+
+        # Load data
+        loader = ChemperiumLoader()
+        loaded_df = loader.load(csv_path)
+
+        # Create task views
+        fusion = DataFusion()
+
+        # Enthalpy task
+        X_enth, y_enth = fusion.select_task_view(loaded_df, task="enthalpy")
+        assert len(X_enth) == 30
+        assert len(y_enth) == 30
+        assert y_enth.name == "H298_cbs"
+
+        # Entropy task
+        X_ent, y_ent = fusion.select_task_view(loaded_df, task="entropy")
+        assert len(X_ent) == 30
+        assert y_ent.name == "S298"
+
+        # Heat capacity task (multioutput)
+        X_cp, Y_cp = fusion.select_task_view(loaded_df, task="heat_capacity")
+        assert len(X_cp) == 30
+        assert Y_cp.shape[1] == 45  # 45 Cp columns
+
+    def test_full_data_pipeline(self, tmp_path):
+        """Test full data pipeline: load -> filter -> split -> task view."""
+        from grimperium.data import ChemperiumLoader, DataFusion
+
+        # Create mock data with varied nheavy values
+        df = make_small_chemperium_df(n=100)
+        csv_path = tmp_path / "full_pipeline.csv"
+        df.to_csv(csv_path, index=False)
+
+        # Load with filter
+        loader = ChemperiumLoader()
+        filtered_df = loader.load(csv_path, max_nheavy=10)
+        assert all(filtered_df["nheavy"] <= 10)
+
+        # 3-way split
+        train_df, val_df, test_df = loader.train_val_test_split(
+            filtered_df,
+            test_size=0.2,
+            val_size=0.1,
+            random_state=42
+        )
+        assert len(train_df) + len(val_df) + len(test_df) == len(filtered_df)
+
+        # Create task view for training
+        fusion = DataFusion()
+        X_train, y_train = fusion.select_task_view(train_df, task="enthalpy")
+        X_val, y_val = fusion.select_task_view(val_df, task="enthalpy")
+        X_test, y_test = fusion.select_task_view(test_df, task="enthalpy")
+
+        # Verify shapes are consistent
+        assert X_train.shape[1] == X_val.shape[1] == X_test.shape[1]
+
+    def test_delta_learning_data_preparation(self):
+        """Test preparing data for delta learning."""
+        from grimperium.data import DataFusion
+
+        # Create mock data with PM7
+        df = make_chemperium_with_pm7_df(n=50)
+
+        # Create fusion and compute deltas
+        fusion = DataFusion()
+        fusion.merged_data = df
+        result = fusion.compute_deltas()
+
+        # Verify delta values
+        expected_delta = df["H298_cbs"] - df["H298_pm7"]
+        np.testing.assert_array_almost_equal(
+            result["delta_pm7"].values,
+            expected_delta.values
+        )
+
+        # Get training data
+        features, deltas = fusion.get_training_data()
+        assert len(features) == 50
+        assert len(deltas) == 50
 
 
 class TestModelPipeline:
@@ -148,6 +265,7 @@ class TestEvaluationPipeline:
     @pytest.mark.skip(reason="Evaluation pipeline not implemented yet")
     def test_delta_improvement(self, training_data):
         """Test that delta-learning improves over PM7 baseline."""
+        training_data = generate_training_data(n_samples=100, test_size=0.2)
         h298_cbs = training_data["h298_cbs_test"]
         h298_pm7 = training_data["h298_pm7_test"]
 

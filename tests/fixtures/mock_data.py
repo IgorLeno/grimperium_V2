@@ -221,3 +221,79 @@ def generate_training_data(
         "smiles_train": [merged["smiles"].iloc[i] for i in train_idx],
         "smiles_test": [merged["smiles"].iloc[i] for i in test_idx],
     }
+
+
+def make_small_chemperium_df(
+    n: int = 100,
+    random_state: int = 42,
+) -> pd.DataFrame:
+    """
+    Create a small Chemperium DataFrame for testing.
+
+    This is a convenience wrapper around generate_chemperium_mock()
+    with sensible defaults for unit tests. Includes all optional columns
+    (H298_b3, S298, cp_1...cp_45).
+
+    Args:
+        n: Number of molecules to generate
+        random_state: Random seed for reproducibility
+
+    Returns:
+        DataFrame with full Chemperium schema
+
+    Example:
+        >>> df = make_small_chemperium_df(n=50)
+        >>> assert "H298_cbs" in df.columns
+        >>> assert "cp_45" in df.columns
+
+    """
+    return generate_chemperium_mock(
+        n_molecules=n,
+        include_cp=True,
+        n_cp_columns=45,
+        random_state=random_state,
+    )
+
+
+def make_chemperium_with_pm7_df(
+    n: int = 100,
+    random_state: int = 42,
+    pm7_error_mean: float = 3.0,
+    pm7_error_std: float = 1.5,
+) -> pd.DataFrame:
+    """
+    Create a Chemperium DataFrame with PM7 enthalpy column.
+
+    Useful for testing delta computation and merge operations.
+    The H298_pm7 column simulates PM7 systematic error (~3±1.5 kcal/mol
+    relative to CBS reference).
+
+    Args:
+        n: Number of molecules to generate
+        random_state: Random seed for reproducibility
+        pm7_error_mean: Mean PM7 error in kcal/mol
+        pm7_error_std: Standard deviation of PM7 error
+
+    Returns:
+        DataFrame with Chemperium columns plus H298_pm7
+
+    Example:
+        >>> df = make_chemperium_with_pm7_df(n=50)
+        >>> delta = df["H298_cbs"] - df["H298_pm7"]
+        >>> assert abs(delta.mean()) < 10  # Realistic error range
+
+    """
+    # Generate base Chemperium data
+    df = generate_chemperium_mock(
+        n_molecules=n,
+        include_cp=True,
+        n_cp_columns=45,
+        random_state=random_state,
+    )
+
+    # Generate PM7 values with systematic error
+    np.random.seed(random_state + 1)  # Different seed for PM7 noise
+    errors = np.random.normal(pm7_error_mean, pm7_error_std, n)
+    df["H298_pm7"] = df["H298_cbs"] + errors
+
+    return df
