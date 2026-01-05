@@ -267,3 +267,43 @@ class TestChemperiumLoaderValidation:
 
         # Should load without error
         assert len(df) == 2
+
+    def test_load_real_dataset(self, tmp_path):
+        """Test loading actual thermo_cbs_opt.csv structure."""
+        # Create minimal real-like CSV
+        csv_path = tmp_path / "real_mini.csv"
+        csv_path.write_text(
+            "smiles,multiplicity,charge,nheavy,H298_cbs,H298_b3\n"
+            "CCO,1,0,3,-56.12,15.23\n"
+            "CC(=O)O,1,0,4,-103.45,-82.11\n"
+        )
+
+        loader = ChemperiumLoader()
+        df = loader.load(csv_path)
+
+        assert len(df) == 2
+        assert "smiles" in df.columns
+        assert "H298_cbs" in df.columns
+        assert "H298_b3" in df.columns
+        assert df["nheavy"].tolist() == [3, 4]
+
+    def test_load_thermo_cbs_opt_convenience(self, tmp_path):
+        """Test convenience method for real dataset."""
+        csv_path = tmp_path / "thermo_cbs_opt.csv"
+        csv_path.write_text(
+            "smiles,multiplicity,charge,nheavy,H298_cbs,H298_b3\n"
+            "CCO,1,0,3,-56.12,15.23\n"
+            "CC(=O)O,1,0,4,-103.45,-82.11\n"
+            "CCCC,1,0,4,-30.11,-8.52\n"
+        )
+
+        # Test without filter
+        df = ChemperiumLoader.load_thermo_cbs_opt(csv_path)
+        assert len(df) == 3
+
+        # Test with nheavy filter
+        df_filtered = ChemperiumLoader.load_thermo_cbs_opt(
+            csv_path, max_nheavy=3
+        )
+        assert len(df_filtered) == 1
+        assert df_filtered["smiles"].iloc[0] == "CCO"
