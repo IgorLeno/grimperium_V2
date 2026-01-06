@@ -48,7 +48,16 @@ def rmse(
         0.0816...
 
     """
-    raise NotImplementedError("Will be implemented in Batch 4")
+    y_true = np.asarray(y_true)
+    y_pred = np.asarray(y_pred)
+
+    squared_errors = (y_true - y_pred) ** 2
+
+    if sample_weight is not None:
+        sample_weight = np.asarray(sample_weight)
+        return float(np.sqrt(np.average(squared_errors, weights=sample_weight)))
+
+    return float(np.sqrt(np.mean(squared_errors)))
 
 
 def mae(
@@ -74,7 +83,16 @@ def mae(
         0.0666...
 
     """
-    raise NotImplementedError("Will be implemented in Batch 4")
+    y_true = np.asarray(y_true)
+    y_pred = np.asarray(y_pred)
+
+    absolute_errors = np.abs(y_true - y_pred)
+
+    if sample_weight is not None:
+        sample_weight = np.asarray(sample_weight)
+        return float(np.average(absolute_errors, weights=sample_weight))
+
+    return float(np.mean(absolute_errors))
 
 
 def r2_score(
@@ -103,7 +121,23 @@ def r2_score(
         0.985...
 
     """
-    raise NotImplementedError("Will be implemented in Batch 4")
+    y_true = np.asarray(y_true)
+    y_pred = np.asarray(y_pred)
+
+    if sample_weight is not None:
+        sample_weight = np.asarray(sample_weight)
+        y_mean = np.average(y_true, weights=sample_weight)
+        ss_res = np.sum(sample_weight * (y_true - y_pred) ** 2)
+        ss_tot = np.sum(sample_weight * (y_true - y_mean) ** 2)
+    else:
+        y_mean = np.mean(y_true)
+        ss_res = np.sum((y_true - y_pred) ** 2)
+        ss_tot = np.sum((y_true - y_mean) ** 2)
+
+    if ss_tot == 0:
+        return 1.0 if ss_res == 0 else 0.0
+
+    return float(1 - (ss_res / ss_tot))
 
 
 def mean_absolute_percentage_error(
@@ -128,7 +162,14 @@ def mean_absolute_percentage_error(
         MAPE can be misleading when y_true contains values near zero.
 
     """
-    raise NotImplementedError("Will be implemented in Batch 4")
+    y_true = np.asarray(y_true)
+    y_pred = np.asarray(y_pred)
+
+    # Avoid division by zero
+    denominator = np.maximum(np.abs(y_true), epsilon)
+    percentage_errors = np.abs((y_true - y_pred) / denominator)
+
+    return float(np.mean(percentage_errors) * 100)
 
 
 def max_error(
@@ -146,7 +187,12 @@ def max_error(
         Maximum absolute error
 
     """
-    raise NotImplementedError("Will be implemented in Batch 4")
+    y_true = np.asarray(y_true)
+    y_pred = np.asarray(y_pred)
+
+    absolute_errors = np.abs(y_true - y_pred)
+
+    return float(np.max(absolute_errors))
 
 
 def compute_all_metrics(
@@ -176,7 +222,13 @@ def compute_all_metrics(
         {'rmse': 0.0816, 'mae': 0.0666, 'r2': 0.985, ...}
 
     """
-    raise NotImplementedError("Will be implemented in Batch 4")
+    return {
+        'rmse': rmse(y_true, y_pred, sample_weight),
+        'mae': mae(y_true, y_pred, sample_weight),
+        'r2': r2_score(y_true, y_pred, sample_weight),
+        'mape': mean_absolute_percentage_error(y_true, y_pred),
+        'max_error': max_error(y_true, y_pred),
+    }
 
 
 def compare_methods(
@@ -203,4 +255,9 @@ def compare_methods(
         >>> print(results["PM7+delta"]["rmse"])
 
     """
-    raise NotImplementedError("Will be implemented in Batch 4")
+    results = {}
+
+    for method_name, y_pred in predictions.items():
+        results[method_name] = compute_all_metrics(y_true, y_pred)
+
+    return results
