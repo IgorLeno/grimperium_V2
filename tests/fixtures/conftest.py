@@ -203,7 +203,10 @@ def real_data_1k() -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
 
     # Load real CBS data
     loader = ChemperiumLoader()
-    df = loader.load_thermo_cbs_opt(max_rows=1000)
+    df = loader.load_thermo_cbs_opt()
+
+    # Sample 1000 rows (reproducible)
+    df = df.sample(n=1000, random_state=42)
 
     # Extract basic features
     X_basic = df[['nheavy', 'charge', 'multiplicity']].values.astype(float)
