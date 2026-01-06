@@ -1,241 +1,142 @@
-"""
-Delta-learning orchestration module.
-
-This module provides the DeltaLearner class that orchestrates
-the entire delta-learning workflow:
-    1. Data loading and fusion
-    2. Feature engineering
-    3. Delta computation
-    4. Model training
-    5. Prediction and evaluation
-
-The delta-learning approach:
-    delta = H298_CBS - H298_PM7
-    prediction = H298_PM7 + model.predict(features)
-
-Example:
-    >>> from grimperium.core import DeltaLearner
-    >>> learner = DeltaLearner()
-    >>> learner.load_data(chemperium_path, pm7_path)
-    >>> learner.train()
-    >>> results = learner.evaluate()
-
-"""
-
-from pathlib import Path
-from typing import Optional, Union
-
 import numpy as np
-import pandas as pd
-
-from grimperium.config import GrimperiumConfig
+from typing import Optional
+from grimperium.models.delta_ensemble import DeltaLearningEnsemble
+from grimperium.core.metrics import compute_all_metrics
 
 
 class DeltaLearner:
     """
-    Orchestrator for delta-learning workflow.
+    Delta-Learning orchestrator.
 
-    Manages the complete pipeline from data loading to evaluation,
-    providing a high-level interface for delta-learning experiments.
+    Core hypothesis: Learning delta (correction) is easier than learning y_cbs directly.
 
-    Attributes:
-        config: Configuration object
-        data: Fused dataset with deltas
-        features: Computed feature matrix
-        model: Trained ensemble model
-
-    Example:
-        >>> learner = DeltaLearner()
-        >>> learner.load_data("chemperium.csv", "pm7.csv")
-        >>> learner.compute_features()
-        >>> learner.train()
-        >>> metrics = learner.evaluate()
-        >>> print(f"RMSE: {metrics['rmse']:.4f} kcal/mol")
-
+    Architecture:
+    - Input: X (features), y_cbs (CBS results), y_pm7 (PM7 approximation)
+    - Process:
+        y_delta = y_cbs - y_pm7  ← EXPLICIT!
+        ensemble.fit(X, y_delta)  ← Train on DELTA!
+    - Prediction:
+        delta_pred = ensemble.predict(X)
+        y_pred = y_pm7 + delta_pred  ← Composition! EXPLICIT!
     """
 
     def __init__(
         self,
-        config: Optional[GrimperiumConfig] = None,
-    ) -> None:
+        w_krr: float = 0.5,
+        w_xgb: float = 0.5,
+        krr_params: Optional[dict] = None,
+        xgb_params: Optional[dict] = None
+    ):
         """
-        Initialize DeltaLearner.
+        Initialize DeltaLearner with ensemble.
 
-        Args:
-            config: Configuration object (uses defaults if None)
-
+        Parameters:
+            w_krr: Weight for KRR in ensemble
+            w_xgb: Weight for XGB in ensemble
+            krr_params: KRR hyperparameters
+            xgb_params: XGB hyperparameters
         """
-        self.config = config or GrimperiumConfig()
-        self._data: Optional[pd.DataFrame] = None
-        self._features: Optional[np.ndarray] = None
-        self._targets: Optional[np.ndarray] = None
-        self._model = None
-        self._is_trained = False
+        self.w_krr = w_krr
+        self.w_xgb = w_xgb
+        self.ensemble = DeltaLearningEnsemble(
+            w_krr=w_krr,
+            w_xgb=w_xgb,
+            krr_params=krr_params,
+            xgb_params=xgb_params
+        )
+        self.is_fitted = False
 
-    def load_data(
+    def fit(
         self,
-        chemperium_path: Union[str, Path],
-        pm7_path: Optional[Union[str, Path]] = None,
+        X: np.ndarray,
+        y_cbs: np.ndarray,
+        y_pm7: np.ndarray
     ) -> "DeltaLearner":
         """
-        Load and fuse datasets.
+        Fit DeltaLearner.
 
-        Args:
-            chemperium_path: Path to Chemperium dataset
-            pm7_path: Path to PM7 results (None to compute)
+        EXPLICIT PROCESS:
+        1. Calculate delta: y_delta = y_cbs - y_pm7
+        2. Train ensemble on y_delta (not on y_cbs!)
 
-        Returns:
-            self for method chaining
-
-        """
-        raise NotImplementedError("Will be implemented in Batch 4")
-
-    def compute_features(
-        self,
-        df: Optional[pd.DataFrame] = None,
-    ) -> "DeltaLearner":
-        """
-        Compute features from molecular data.
-
-        Generates:
-            - Morgan Fingerprints
-            - RDKit descriptors
-            - Tabular features
-
-        Args:
-            df: Source DataFrame (uses loaded data if None)
+        Parameters:
+            X: Features (n_samples, n_features)
+            y_cbs: CBS results (ground truth) (n_samples,)
+            y_pm7: PM7 approximation (n_samples,)
 
         Returns:
-            self for method chaining
+            self
 
+        Example:
+            learner = DeltaLearner()
+            learner.fit(X_train, y_cbs_train, y_pm7_train)
         """
-        raise NotImplementedError("Will be implemented in Batch 4")
+        # STEP 1: Calculate delta EXPLICITLY
+        y_delta = y_cbs - y_pm7
 
-    def compute_deltas(
-        self,
-        df: Optional[pd.DataFrame] = None,
-    ) -> np.ndarray:
-        """
-        Compute delta values from data.
+        # Sanity checks
+        assert X.shape[0] == len(y_cbs), "X and y_cbs must have same n_samples"
+        assert X.shape[0] == len(y_pm7), "X and y_pm7 must have same n_samples"
 
-        Args:
-            df: DataFrame with CBS and PM7 columns
+        # STEP 2: Train ensemble on y_delta
+        self.ensemble.fit(X, y_delta)
 
-        Returns:
-            Array of delta values
-
-        """
-        raise NotImplementedError("Will be implemented in Batch 4")
-
-    def train(
-        self,
-        X: Optional[np.ndarray] = None,
-        y: Optional[np.ndarray] = None,
-        validation_split: float = 0.1,
-    ) -> "DeltaLearner":
-        """
-        Train the ensemble model.
-
-        Args:
-            X: Feature matrix (uses computed features if None)
-            y: Target deltas (uses computed deltas if None)
-            validation_split: Fraction for validation
-
-        Returns:
-            self for method chaining
-
-        """
-        raise NotImplementedError("Will be implemented in Batch 4")
+        self.is_fitted = True
+        return self
 
     def predict(
         self,
-        X: Optional[np.ndarray] = None,
-        smiles: Optional[list[str]] = None,
-        h298_pm7: Optional[np.ndarray] = None,
-        return_delta: bool = False,
+        X: np.ndarray,
+        y_pm7: np.ndarray
     ) -> np.ndarray:
         """
-        Predict H298_CBS values.
+        Predict H298_CBS using delta-learning.
 
-        Args:
-            X: Feature matrix
-            smiles: SMILES strings (to compute features)
-            h298_pm7: PM7 values to add to delta
-            return_delta: If True, return delta instead of H298
+        EXPLICIT PROCESS:
+        1. Predict delta correction: delta_pred = ensemble.predict(X)
+        2. Compose with PM7: y_pred = y_pm7 + delta_pred
+
+        Parameters:
+            X: Features (n_samples, n_features)
+            y_pm7: PM7 approximation (n_samples,)
 
         Returns:
-            Predicted H298_CBS (or delta if return_delta=True)
+            Predicted H298_CBS (n_samples,)
 
+        Example:
+            y_pred = learner.predict(X_test, y_pm7_test)
         """
-        raise NotImplementedError("Will be implemented in Batch 4")
+        if not self.is_fitted:
+            raise ValueError("DeltaLearner not fitted. Call fit() first.")
+
+        # STEP 1: Predict delta
+        delta_pred = self.ensemble.predict(X)
+
+        # STEP 2: Compose with PM7 EXPLICITLY
+        y_pred = y_pm7 + delta_pred
+
+        return y_pred
 
     def evaluate(
         self,
-        X_test: Optional[np.ndarray] = None,
-        y_test: Optional[np.ndarray] = None,
-        h298_pm7_test: Optional[np.ndarray] = None,
-    ) -> dict[str, float]:
+        X: np.ndarray,
+        y_cbs: np.ndarray,
+        y_pm7: np.ndarray
+    ) -> dict:
         """
-        Evaluate model performance.
+        Evaluate model and return all metrics.
 
-        Args:
-            X_test: Test features
-            y_test: True H298_CBS values
-            h298_pm7_test: PM7 values for comparison
+        Parameters:
+            X: Features
+            y_cbs: Ground truth CBS
+            y_pm7: PM7 approximation
 
         Returns:
-            Dict with RMSE, MAE, R² for both delta and full prediction
+            Dict with RMSE, MAE, R², MAPE, max_error
 
+        Example:
+            metrics = learner.evaluate(X_test, y_cbs_test, y_pm7_test)
+            print(f"RMSE: {metrics['rmse']:.2f}")
         """
-        raise NotImplementedError("Will be implemented in Batch 4")
-
-    def cross_validate(
-        self,
-        n_folds: int = 5,
-        shuffle: bool = True,
-    ) -> dict[str, list[float]]:
-        """
-        Perform k-fold cross-validation.
-
-        Args:
-            n_folds: Number of CV folds
-            shuffle: Whether to shuffle data
-
-        Returns:
-            Dict with per-fold metrics
-
-        """
-        raise NotImplementedError("Will be implemented in Batch 4")
-
-    def compare_with_baseline(
-        self,
-        X_test: np.ndarray,
-        y_test: np.ndarray,
-        h298_pm7_test: np.ndarray,
-        h298_b3_test: Optional[np.ndarray] = None,
-    ) -> pd.DataFrame:
-        """
-        Compare delta-corrected predictions with baselines.
-
-        Compares:
-            - PM7 raw vs CBS
-            - PM7 + delta_ML vs CBS
-            - B3LYP vs CBS (if available)
-
-        Args:
-            X_test: Test features
-            y_test: True H298_CBS
-            h298_pm7_test: PM7 values
-            h298_b3_test: Optional B3LYP values
-
-        Returns:
-            DataFrame with comparison metrics
-
-        """
-        raise NotImplementedError("Will be implemented in Batch 4")
-
-    def __repr__(self) -> str:
-        """String representation."""
-        status = "trained" if self._is_trained else "not trained"
-        n_samples = len(self._data) if self._data is not None else 0
-        return f"DeltaLearner(n_samples={n_samples}, {status})"
+        y_pred = self.predict(X, y_pm7)
+        return compute_all_metrics(y_cbs, y_pred)
