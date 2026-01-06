@@ -29,6 +29,48 @@ This document describes the architecture of Grimperium, a delta-learning framewo
                     └─────────────────┘
 ```
 
+## Real Dataset
+
+Grimperium uses the **thermo_cbs_opt.csv** dataset containing 52,837 molecules with CBS-QB3 level thermodynamic properties.
+
+### Dataset Structure
+
+| Column | Type | Description | Range |
+|--------|------|-------------|-------|
+| smiles | string | SMILES molecular structure | - |
+| multiplicity | int | Spin multiplicity | 1-3 |
+| charge | int | Total molecular charge | -1, 0, +1 |
+| nheavy | int | Number of heavy atoms | 1-22 |
+| **H298_cbs** | float | CBS-QB3 enthalpy at 298K (kcal/mol) | -325,407 to 164,949 |
+| H298_b3 | float | B3LYP enthalpy at 298K (kcal/mol) | - |
+
+### Statistics
+
+- **Total Molecules:** 52,837
+- **H298_cbs Mean:** -320.37 kcal/mol
+- **H298_cbs Std:** 7,230.27 kcal/mol
+- **Molecular Size:** 1-22 heavy atoms (mean: 9.73)
+- **Quality:** No missing values, no duplicates, all SMILES validated
+
+### Usage in Testing
+
+For CI performance, use stratified subsets via fixtures:
+
+```python
+from tests.fixtures.real_data import load_real_subset
+
+# Load 1k stratified subset (fast CI testing)
+df = load_real_subset(n=1000, stratified=True)
+
+# Load train/test split
+train, test = load_real_train_test_split(test_size=0.2, max_samples=5000)
+
+# Get dataset statistics
+stats = get_dataset_stats()
+```
+
+**Note:** H298_b3 is currently used as a proxy for PM7 calculations in integration tests until CREST+MOPAC pipeline is implemented (Batch 6).
+
 ## Module Responsibilities
 
 ### 1. Data Module (`src/grimperium/data/`)

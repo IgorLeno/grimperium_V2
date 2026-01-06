@@ -126,14 +126,39 @@ Features combine multiple representations:
 
 ## Dataset
 
-Grimperium is designed for the **Chemperium dataset** (~52k molecules):
+Grimperium is designed for the **real CBS-QB3 thermodynamic dataset**:
 
-- **H298_CBS**: CBS-level enthalpy (reference)
-- **H298_B3**: B3LYP/DFT enthalpy
-- **S298**: Entropy at 298K
-- **Cp_1...45**: Heat capacity at multiple temperatures
-- **SMILES**: Molecular structure
-- **XYZ**: Optimized geometry
+**Dataset:** `thermo_cbs_opt.csv` (52,837 molecules)
+
+| Column | Description | Range |
+|--------|-------------|-------|
+| smiles | SMILES molecular structure | - |
+| multiplicity | Spin multiplicity | 1-3 |
+| charge | Total molecular charge | -1, 0, +1 |
+| nheavy | Number of heavy atoms | 1-22 |
+| **H298_cbs** | CBS-QB3 enthalpy at 298K (kcal/mol) | -325,407 to 164,949 |
+| H298_b3 | B3LYP enthalpy at 298K (kcal/mol) | - |
+
+**Statistics:**
+- **Total Molecules:** 52,837
+- **H298_cbs Mean:** -320.37 kcal/mol
+- **H298_cbs Std:** 7,230.27 kcal/mol
+- **Molecular Size:** 1-22 heavy atoms (mean: 9.73)
+
+**Data Quality:**
+- ✅ No missing values
+- ✅ No duplicates
+- ✅ All SMILES validated
+- ✅ Complete thermodynamic properties
+
+For CI testing, use the real data fixtures:
+
+```python
+from tests.fixtures.real_data import load_real_subset
+
+# Load stratified 1k subset for fast testing
+df = load_real_subset(n=1000, stratified=True)
+```
 
 ## Development
 
