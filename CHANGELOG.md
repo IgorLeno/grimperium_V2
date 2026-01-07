@@ -8,6 +8,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- **CI/CD: Error Summary Report** (2026-01-07)
+  - Fixed CI Error Summary generating contradictory status reports (PASSED ✅ but job result: failure ❌)
+  - Fixed report running tools again instead of capturing original logs from failed steps
+  - Implemented log capture system: each job now saves outputs to artifacts
+  - Created Python script (`.github/scripts/generate_ci_report.py`) to parse captured logs
+  - Report now shows exact errors from original execution with file:line context
+  - Added comprehensive summary table showing status of all CI components
+  - Added artifact upload for full error report (retention: 30 days)
+  - Report displays in GitHub Step Summary UI with collapsible error details
+
 - **CI/CD: Lint, Type Checks, and Module Imports** (2026-01-07)
   - Fixed lint error: Removed unused `h298_pm7` variable in `tests/integration/test_pipeline.py:270`
   - Fixed 16 mypy type errors across 5 files:

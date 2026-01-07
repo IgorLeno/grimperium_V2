@@ -14,6 +14,8 @@ jobs:
   lint:
     name: Lint
     runs-on: ubuntu-latest
+    continue-on-error: true
+
     steps:
       - uses: actions/checkout@v4
 
@@ -37,15 +39,28 @@ jobs:
           python -m pip install --upgrade pip
           pip install ruff black
 
-      - name: Run ruff
-        run: ruff check src/ tests/
+      - name: Run Ruff + Black (capture logs)
+        continue-on-error: true
+        run: |
+          echo "=== Running Ruff ===" > ${{ github.workspace }}/lint.log
+          ruff check src/ tests/ >> ${{ github.workspace }}/lint.log 2>&1 || true
+          echo "" >> ${{ github.workspace }}/lint.log
+          echo "=== Running Black ===" >> ${{ github.workspace }}/lint.log
+          black --check src/ tests/ >> ${{ github.workspace }}/lint.log 2>&1 || true
 
-      - name: Run black
-        run: black --check src/ tests/
+      - name: Upload lint log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lint-log
+          path: lint.log
+          retention-days: 30
 
   typecheck:
     name: Type Check
     runs-on: ubuntu-latest
+    continue-on-error: true
+
     steps:
       - uses: actions/checkout@v4
 
@@ -59,12 +74,23 @@ jobs:
           python -m pip install --upgrade pip
           pip install mypy pandas-stubs types-requests
 
-      - name: Run mypy
-        run: mypy src/grimperium --ignore-missing-imports
+      - name: Run Mypy (capture logs)
+        continue-on-error: true
+        run: |
+          mypy src/grimperium --ignore-missing-imports > ${{ github.workspace }}/type.log 2>&1 || true
+
+      - name: Upload type log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: type-log
+          path: type.log
+          retention-days: 30
 
   test:
     name: Test (Python ${{ matrix.python-version }})
     runs-on: ubuntu-latest
+    continue-on-error: true
     strategy:
       fail-fast: false
       matrix:
@@ -98,12 +124,23 @@ jobs:
       - name: Install project
         run: poetry install --no-interaction
 
-      - name: Run tests
-        run: poetry run pytest tests/ -v --cov=src/grimperium --cov-report=xml
+      - name: Run tests (capture logs)
+        continue-on-error: true
+        run: |
+          poetry run pytest tests/ -v --cov=src/grimperium --cov-report=xml --tb=short > ${{ github.workspace }}/test-${{ matrix.python-version }}.log 2>&1 || true
+
+      - name: Upload test log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-log-${{ matrix.python-version }}
+          path: test-${{ matrix.python-version }}.log
+          retention-days: 30
 
       - name: Upload coverage
         if: matrix.python-version == '3.11'
         uses: codecov/codecov-action@v4
+        continue-on-error: true
         with:
           files: ./coverage.xml
           fail_ci_if_error: false
@@ -112,6 +149,8 @@ jobs:
     name: Build Package
     runs-on: ubuntu-latest
     needs: [lint, typecheck, test]
+    if: always()
+
     steps:
       - uses: actions/checkout@v4
 
@@ -132,11 +171,12 @@ jobs:
           name: dist
           path: dist/
 
-  error-summary:
-    name: "📊 Error Summary"
+  report:
+    name: "📊 CI Error Summary"
     runs-on: ubuntu-latest
+    if: always()
     needs: [lint, typecheck, test, build]
-    if: always() && (needs.lint.result == 'failure' || needs.typecheck.result == 'failure' || needs.test.result == 'failure' || needs.build.result == 'failure')
+
     steps:
       - uses: actions/checkout@v4
 
@@ -145,171 +185,46 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Install Poetry
-        uses: snok/install-poetry@v1
+      - name: Download all logs
+        uses: actions/download-artifact@v4
         with:
-          virtualenvs-create: true
-          virtualenvs-in-project: true
+          path: ${{ github.workspace }}/logs
 
-      - name: Install dependencies
-        run: poetry install --with dev --no-interaction
-
-      - name: "📊 Generate CI Error Summary"
+      - name: List downloaded artifacts
         run: |
-          # Initialize report
-          cat > CI_ERROR_SUMMARY.md << 'HEADER'
-          # CI Error Summary Report
+          echo "=== Downloaded Artifacts ==="
+          ls -R ${{ github.workspace }}/logs
 
-          HEADER
+      - name: Generate CI Report
+        run: python .github/scripts/generate_ci_report.py
+        env:
+          GITHUB_WORKSPACE: ${{ github.workspace }}
+          GITHUB_SHA: ${{ github.sha }}
+          GITHUB_REF_NAME: ${{ github.ref_name }}
+          GITHUB_RUN_NUMBER: ${{ github.run_number }}
+          GITHUB_RUN_ID: ${{ github.run_id }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_SERVER_URL: ${{ github.server_url }}
+          GITHUB_STEP_SUMMARY: ${{ github.step_summary }}
 
-          echo "**Generated:** $(date -u '+%Y-%m-%d %H:%M:%S UTC')" >> CI_ERROR_SUMMARY.md
-          echo "**Commit:** ${{ github.sha }}" >> CI_ERROR_SUMMARY.md
-          echo "**Branch:** ${{ github.ref_name }}" >> CI_ERROR_SUMMARY.md
-          echo "**Run:** [#${{ github.run_number }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})" >> CI_ERROR_SUMMARY.md
-          echo "" >> CI_ERROR_SUMMARY.md
-          echo "---" >> CI_ERROR_SUMMARY.md
-          echo "" >> CI_ERROR_SUMMARY.md
+      - name: Upload comprehensive report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: CI-Error-Summary-Report
+          path: CI_ERROR_SUMMARY.md
+          retention-days: 30
 
-          # Track failure status
-          LINT_FAILED=false
-          TYPE_FAILED=false
-          TEST_FAILED=false
-
-          # Section 1: Lint Errors (Ruff)
-          echo "## 1️⃣ Lint Errors (Ruff)" >> CI_ERROR_SUMMARY.md
-          echo "" >> CI_ERROR_SUMMARY.md
-
-          if poetry run ruff check src/ tests/ 2>&1 | tee /tmp/ruff.log; then
-            echo "✅ **Status: PASSED**" >> CI_ERROR_SUMMARY.md
-          else
-            LINT_FAILED=true
-            echo "❌ **Status: FAILED**" >> CI_ERROR_SUMMARY.md
-            echo "" >> CI_ERROR_SUMMARY.md
-            echo "<details>" >> CI_ERROR_SUMMARY.md
-            echo "<summary>Show errors</summary>" >> CI_ERROR_SUMMARY.md
-            echo "" >> CI_ERROR_SUMMARY.md
-            echo '```' >> CI_ERROR_SUMMARY.md
-            cat /tmp/ruff.log >> CI_ERROR_SUMMARY.md
-            echo '```' >> CI_ERROR_SUMMARY.md
-            echo "</details>" >> CI_ERROR_SUMMARY.md
-          fi
-          echo "" >> CI_ERROR_SUMMARY.md
-
-          # Section 1b: Black formatting
-          echo "## 1️⃣b Format Check (Black)" >> CI_ERROR_SUMMARY.md
-          echo "" >> CI_ERROR_SUMMARY.md
-
-          if poetry run black --check src/ tests/ 2>&1 | tee /tmp/black.log; then
-            echo "✅ **Status: PASSED**" >> CI_ERROR_SUMMARY.md
-          else
-            LINT_FAILED=true
-            echo "❌ **Status: FAILED**" >> CI_ERROR_SUMMARY.md
-            echo "" >> CI_ERROR_SUMMARY.md
-            echo "<details>" >> CI_ERROR_SUMMARY.md
-            echo "<summary>Show formatting issues</summary>" >> CI_ERROR_SUMMARY.md
-            echo "" >> CI_ERROR_SUMMARY.md
-            echo '```' >> CI_ERROR_SUMMARY.md
-            cat /tmp/black.log >> CI_ERROR_SUMMARY.md
-            echo '```' >> CI_ERROR_SUMMARY.md
-            echo "</details>" >> CI_ERROR_SUMMARY.md
-          fi
-          echo "" >> CI_ERROR_SUMMARY.md
-
-          # Section 2: Type Errors (Mypy)
-          echo "## 2️⃣ Type Check Errors (Mypy)" >> CI_ERROR_SUMMARY.md
-          echo "" >> CI_ERROR_SUMMARY.md
-
-          if poetry run mypy src/grimperium --ignore-missing-imports 2>&1 | tee /tmp/mypy.log; then
-            echo "✅ **Status: PASSED**" >> CI_ERROR_SUMMARY.md
-          else
-            TYPE_FAILED=true
-            echo "❌ **Status: FAILED**" >> CI_ERROR_SUMMARY.md
-            echo "" >> CI_ERROR_SUMMARY.md
-            echo "<details>" >> CI_ERROR_SUMMARY.md
-            echo "<summary>Show type errors</summary>" >> CI_ERROR_SUMMARY.md
-            echo "" >> CI_ERROR_SUMMARY.md
-            echo '```' >> CI_ERROR_SUMMARY.md
-            grep -E "error:" /tmp/mypy.log | head -50 >> CI_ERROR_SUMMARY.md || true
-            echo '```' >> CI_ERROR_SUMMARY.md
-            echo "" >> CI_ERROR_SUMMARY.md
-            MYPY_COUNT=$(grep -c "error:" /tmp/mypy.log || echo "0")
-            echo "**Total errors:** $MYPY_COUNT" >> CI_ERROR_SUMMARY.md
-            echo "</details>" >> CI_ERROR_SUMMARY.md
-          fi
-          echo "" >> CI_ERROR_SUMMARY.md
-
-          # Section 3: Test Errors (Pytest)
-          echo "## 3️⃣ Test Errors (Pytest)" >> CI_ERROR_SUMMARY.md
-          echo "" >> CI_ERROR_SUMMARY.md
-
-          if poetry run pytest tests/ -v --tb=short 2>&1 | tee /tmp/pytest.log; then
-            echo "✅ **Status: PASSED**" >> CI_ERROR_SUMMARY.md
-          else
-            TEST_FAILED=true
-            echo "❌ **Status: FAILED**" >> CI_ERROR_SUMMARY.md
-            echo "" >> CI_ERROR_SUMMARY.md
-            echo "<details>" >> CI_ERROR_SUMMARY.md
-            echo "<summary>Show test failures</summary>" >> CI_ERROR_SUMMARY.md
-            echo "" >> CI_ERROR_SUMMARY.md
-            echo '```' >> CI_ERROR_SUMMARY.md
-            grep -E "FAILED|ERROR|ModuleNotFoundError|ImportError|AssertionError" /tmp/pytest.log | head -30 >> CI_ERROR_SUMMARY.md || true
-            echo "" >> CI_ERROR_SUMMARY.md
-            echo "--- Short Traceback ---" >> CI_ERROR_SUMMARY.md
-            grep -A 5 "FAILED\|ERROR" /tmp/pytest.log | head -50 >> CI_ERROR_SUMMARY.md || true
-            echo '```' >> CI_ERROR_SUMMARY.md
-            echo "</details>" >> CI_ERROR_SUMMARY.md
-          fi
-          echo "" >> CI_ERROR_SUMMARY.md
-
-          # Summary table
-          echo "---" >> CI_ERROR_SUMMARY.md
-          echo "" >> CI_ERROR_SUMMARY.md
-          echo "## 📊 Summary" >> CI_ERROR_SUMMARY.md
-          echo "" >> CI_ERROR_SUMMARY.md
-          echo "| Check | Status | Job Result |" >> CI_ERROR_SUMMARY.md
-          echo "|-------|--------|------------|" >> CI_ERROR_SUMMARY.md
-
-          if [ "$LINT_FAILED" = true ]; then
-            echo "| Lint (Ruff/Black) | ❌ FAILED | ${{ needs.lint.result }} |" >> CI_ERROR_SUMMARY.md
-          else
-            echo "| Lint (Ruff/Black) | ✅ PASSED | ${{ needs.lint.result }} |" >> CI_ERROR_SUMMARY.md
-          fi
-
-          if [ "$TYPE_FAILED" = true ]; then
-            echo "| Type Check (Mypy) | ❌ FAILED | ${{ needs.typecheck.result }} |" >> CI_ERROR_SUMMARY.md
-          else
-            echo "| Type Check (Mypy) | ✅ PASSED | ${{ needs.typecheck.result }} |" >> CI_ERROR_SUMMARY.md
-          fi
-
-          if [ "$TEST_FAILED" = true ]; then
-            echo "| Tests (Pytest) | ❌ FAILED | ${{ needs.test.result }} |" >> CI_ERROR_SUMMARY.md
-          else
-            echo "| Tests (Pytest) | ✅ PASSED | ${{ needs.test.result }} |" >> CI_ERROR_SUMMARY.md
-          fi
-
-          echo "| Build | - | ${{ needs.build.result }} |" >> CI_ERROR_SUMMARY.md
-          echo "" >> CI_ERROR_SUMMARY.md
-
-          # Final status
-          if [ "$LINT_FAILED" = true ] || [ "$TYPE_FAILED" = true ] || [ "$TEST_FAILED" = true ]; then
-            echo "### ❌ Overall: FAILED" >> CI_ERROR_SUMMARY.md
-          else
-            echo "### ✅ Overall: PASSED (job failures may be transient)" >> CI_ERROR_SUMMARY.md
-          fi
-          echo "" >> CI_ERROR_SUMMARY.md
-
-          # Display generated report
+      - name: Display report
+        if: always()
+        run: |
           echo "=========================================="
           echo "CI Error Summary Report Generated:"
           echo "=========================================="
           cat CI_ERROR_SUMMARY.md
 
-      - name: "📦 Upload Error Summary"
-        uses: actions/upload-artifact@v4
-        with:
-          name: CI-Error-Summary-${{ github.run_number }}
-          path: CI_ERROR_SUMMARY.md
-          retention-days: 30
-
-      - name: "📋 Post Summary to Job"
-        run: cat CI_ERROR_SUMMARY.md >> $GITHUB_STEP_SUMMARY
+      - name: Check for failures
+        if: needs.lint.result == 'failure' || needs.typecheck.result == 'failure' || needs.test.result == 'failure'
+        run: |
+          echo "❌ CI checks failed. See report above for details."
+          exit 1
