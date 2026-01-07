@@ -7,6 +7,59 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **BATCH 3: Hypothesis Validation Test Suite** (2026-01-07)
+  - `tests/experiments/conftest.py`: New fixtures with filtered and extreme data
+    - `real_data_1k_filtered()`: Realistic distribution [-1000, +1000] kcal/mol (99.1% of data)
+    - `real_data_1k_extreme()`: Pathological distribution for stress testing (includes outliers)
+    - `synthetic_data_1k()`: Fast synthetic data for CI/fallback tests
+  - `tests/experiments/test_validate_hypothesis.py`: Main hypothesis validation tests
+    - `test_decision_gate_delta_vs_direct()`: Primary test with filtered data
+    - `test_synthetic_fallback()`: Synthetic data fallback test
+  - `tests/experiments/test_stress_distribution_shift.py`: Robustness stress tests
+    - `test_stress_distribution_shift_extreme()`: Tests with severe distribution shift
+    - `test_distribution_shift_detection()`: Validates distribution shift detection
+  - Comprehensive documentation of methodological decisions in test docstrings
+
+### Changed
+- **BATCH 3: Fixture Methodology Correction** (2026-01-07)
+  - Replaced unfiltered data approach with filtered realistic distribution
+  - Split validation testing (OPTION B) from stress testing (OPTION A)
+  - Updated mock PM7 generator with configurable magnitude bias
+  - Improved fixture logging and statistics reporting
+
+### Fixed
+- **BATCH 3: Distribution Shift Artifact** (2026-01-07)
+  - Fixed misleading RMSE=1008 caused by severe distribution shift in unfiltered data
+  - Corrected hypothesis validation to use realistic data regime (std~70, not 7230)
+  - Resolved train/test distribution mismatch (6.1 vs 615 kcal/mol mean difference)
+  - Fixed Direct model comparison to be fair (61.11 RMSE vs 1008.88 artifact)
+
+### Deprecated
+- **BATCH 3** (2026-01-07)
+  - `tests/fixtures/conftest.py::real_data_1k()`: Now deprecated with warning
+    - Reason: Uses unfiltered data causing distribution shift artifacts
+    - Replacement: Use `real_data_1k_filtered` or `real_data_1k_extreme` from `tests/experiments/conftest.py`
+    - Warning: Added DeprecationWarning to guide users to new fixtures
+
+### Test Results - BATCH 3
+- **Hypothesis Validation (Realistic Regime)**
+  - Filter: [-1000, +1000] kcal/mol (removes 0.9% outliers)
+  - Distribution shift: 6.1 kcal/mol (minimal)
+  - RMSE Delta: 9.31 kcal/mol ✓
+  - RMSE Direct: 61.11 kcal/mol ✓
+  - Improvement: 6.6x (84.8%)
+  - R² Delta: 0.9768
+  - **DECISION GATE: PASS** ✅
+
+- **Stress Test (Extreme Regime)**
+  - Unfiltered data (outliers up to -325407 kcal/mol)
+  - Distribution shift: 615.3 kcal/mol (severe)
+  - RMSE Delta: 13.83 kcal/mol (robust)
+  - RMSE Direct: 1008.88 kcal/mol (catastrophic failure expected)
+  - Robustness ratio: 73x
+  - **STRESS TEST: PASS** ✅
+
 ### Planned
 - PM7 calculation pipeline (CREST + MOPAC integration)
 - Full model implementation (fit/predict)

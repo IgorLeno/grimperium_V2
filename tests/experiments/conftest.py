@@ -59,9 +59,8 @@ def create_realistic_mock_pm7(
     Args:
         y_cbs: True CBS energies (kcal/mol)
         X_basic: Basic features [nheavy, charge, mult]
-        seed: Random seed for reproducibility.
-            If None, uses global RNG state.
-        magnitude_bias_std: Desvio padrão do viés dependente da magnitude.
+        seed: Random seed for reproducibility. If None, uses global RNG state.
+        magnitude_bias_std: Standard deviation for magnitude-dependent bias.
 
     Returns:
         Mock PM7 energies with realistic error patterns
