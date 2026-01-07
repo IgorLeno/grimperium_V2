@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **CI/CD: Lint, Type Checks, and Module Imports** (2026-01-07)
+  - Fixed lint error: Removed unused `h298_pm7` variable in `tests/integration/test_pipeline.py:270`
+  - Fixed 16 mypy type errors across 5 files:
+    - `src/grimperium/core/metrics.py`: Added type annotations to array conversions (9 errors)
+    - `src/grimperium/core/delta_learning.py`: Added explicit `np.ndarray` type hints (1 error)
+    - `src/grimperium/utils/logging.py`: Added type annotations to `__exit__` method (1 error)
+    - `src/grimperium/models/delta_ensemble.py`: Added type annotations to ensemble predictions (1 error)
+    - `src/grimperium/models/kernel_ridge.py`: Added `Optional[KernelRidge]` type and assertions (4 errors)
+    - `src/grimperium/models/xgboost_model.py`: Fixed signature compatibility with BaseModel (6 errors)
+  - Verified module structure: `grimperium.models` package imports correctly
+
+### Changed
+- **CI/CD: Python Version Optimization** (2026-01-07)
+  - Reduced CI test matrix from 4 to 3 Python versions
+  - Removed Python 3.9 (EOL October 2025)
+  - Retained Python 3.10, 3.11, 3.12 (LTS and active versions)
+  - Estimated CI time reduction: ~25%
+
 ### Added
 - **BATCH 3: Hypothesis Validation Test Suite** (2026-01-07)
   - `tests/experiments/conftest.py`: New fixtures with filtered and extreme data
