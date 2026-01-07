@@ -19,10 +19,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     - `src/grimperium/models/xgboost_model.py`: Fixed signature compatibility with BaseModel (6 errors)
   - Verified module structure: `grimperium.models` package imports correctly
 
+### Breaking Changes
+- Dropped support for Python 3.9 (EOL October 2025)
+  - Minimum required version is now Python 3.10
+  - Recommended versions: 3.10 LTS, 3.11, 3.12
+
 ### Changed
 - **CI/CD: Python Version Optimization** (2026-01-07)
   - Reduced CI test matrix from 4 to 3 Python versions
-  - Removed Python 3.9 (EOL October 2025)
   - Retained Python 3.10, 3.11, 3.12 (LTS and active versions)
   - Estimated CI time reduction: ~25%
 

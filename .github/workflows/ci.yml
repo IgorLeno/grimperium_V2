@@ -152,7 +152,7 @@ jobs:
           virtualenvs-in-project: true
 
       - name: Install dependencies
-        run: poetry install --no-interaction
+        run: poetry install --with dev --no-interaction
 
       - name: "📊 Generate CI Error Summary"
         run: |
@@ -229,7 +229,7 @@ jobs:
             echo "<summary>Show type errors</summary>" >> CI_ERROR_SUMMARY.md
             echo "" >> CI_ERROR_SUMMARY.md
             echo '```' >> CI_ERROR_SUMMARY.md
-            grep -E "error:" /tmp/mypy.log | head -50 >> CI_ERROR_SUMMARY.md
+            grep -E "error:" /tmp/mypy.log | head -50 >> CI_ERROR_SUMMARY.md || true
             echo '```' >> CI_ERROR_SUMMARY.md
             echo "" >> CI_ERROR_SUMMARY.md
             MYPY_COUNT=$(grep -c "error:" /tmp/mypy.log || echo "0")
@@ -252,10 +252,10 @@ jobs:
             echo "<summary>Show test failures</summary>" >> CI_ERROR_SUMMARY.md
             echo "" >> CI_ERROR_SUMMARY.md
             echo '```' >> CI_ERROR_SUMMARY.md
-            grep -E "FAILED|ERROR|ModuleNotFoundError|ImportError|AssertionError" /tmp/pytest.log | head -30 >> CI_ERROR_SUMMARY.md
+            grep -E "FAILED|ERROR|ModuleNotFoundError|ImportError|AssertionError" /tmp/pytest.log | head -30 >> CI_ERROR_SUMMARY.md || true
             echo "" >> CI_ERROR_SUMMARY.md
             echo "--- Short Traceback ---" >> CI_ERROR_SUMMARY.md
-            grep -A 5 "FAILED\|ERROR" /tmp/pytest.log | head -50 >> CI_ERROR_SUMMARY.md
+            grep -A 5 "FAILED\|ERROR" /tmp/pytest.log | head -50 >> CI_ERROR_SUMMARY.md || true
             echo '```' >> CI_ERROR_SUMMARY.md
             echo "</details>" >> CI_ERROR_SUMMARY.md
           fi
