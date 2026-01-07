@@ -267,7 +267,6 @@ class TestEvaluationPipeline:
         """Test that delta-learning improves over PM7 baseline."""
         training_data = generate_training_data(n_samples=100, test_size=0.2)
         h298_cbs = training_data["h298_cbs_test"]
-        h298_pm7 = training_data["h298_pm7_test"]
 
         # Baseline: PM7 raw error
         # pm7_error = np.abs(h298_pm7 - h298_cbs).mean()

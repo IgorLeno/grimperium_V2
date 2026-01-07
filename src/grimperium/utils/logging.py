@@ -17,6 +17,7 @@ Example:
 
 import logging
 from pathlib import Path
+from types import TracebackType
 from typing import Optional, Union
 
 # Default format
@@ -103,7 +104,12 @@ class ProgressLogger:
         """Enter context."""
         raise NotImplementedError("Will be implemented in Batch 5")
 
-    def __exit__(self, exc_type, exc_val, exc_tb) -> None:
+    def __exit__(
+        self,
+        exc_type: Optional[type[BaseException]],
+        exc_val: Optional[BaseException],
+        exc_tb: Optional[TracebackType]
+    ) -> None:
         """Exit context."""
         raise NotImplementedError("Will be implemented in Batch 5")
 

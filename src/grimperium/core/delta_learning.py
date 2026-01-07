@@ -1,7 +1,9 @@
-import numpy as np
 from typing import Optional
-from grimperium.models.delta_ensemble import DeltaLearningEnsemble
+
+import numpy as np
+
 from grimperium.core.metrics import compute_all_metrics
+from grimperium.models.delta_ensemble import DeltaLearningEnsemble
 
 
 class DeltaLearner:
@@ -110,10 +112,10 @@ class DeltaLearner:
             raise ValueError("DeltaLearner not fitted. Call fit() first.")
 
         # STEP 1: Predict delta
-        delta_pred = self.ensemble.predict(X)
+        delta_pred: np.ndarray = self.ensemble.predict(X)
 
         # STEP 2: Compose with PM7 EXPLICITLY
-        y_pred = y_pm7 + delta_pred
+        y_pred: np.ndarray = y_pm7 + delta_pred
 
         return y_pred
 

@@ -48,14 +48,14 @@ def rmse(
         0.0816...
 
     """
-    y_true = np.asarray(y_true)
-    y_pred = np.asarray(y_pred)
+    y_true_arr: np.ndarray = np.asarray(y_true)
+    y_pred_arr: np.ndarray = np.asarray(y_pred)
 
-    squared_errors = (y_true - y_pred) ** 2
+    squared_errors = (y_true_arr - y_pred_arr) ** 2
 
     if sample_weight is not None:
-        sample_weight = np.asarray(sample_weight)
-        return float(np.sqrt(np.average(squared_errors, weights=sample_weight)))
+        sample_weight_arr: np.ndarray = np.asarray(sample_weight)
+        return float(np.sqrt(np.average(squared_errors, weights=sample_weight_arr)))
 
     return float(np.sqrt(np.mean(squared_errors)))
 
@@ -83,14 +83,14 @@ def mae(
         0.0666...
 
     """
-    y_true = np.asarray(y_true)
-    y_pred = np.asarray(y_pred)
+    y_true_arr: np.ndarray = np.asarray(y_true)
+    y_pred_arr: np.ndarray = np.asarray(y_pred)
 
-    absolute_errors = np.abs(y_true - y_pred)
+    absolute_errors = np.abs(y_true_arr - y_pred_arr)
 
     if sample_weight is not None:
-        sample_weight = np.asarray(sample_weight)
-        return float(np.average(absolute_errors, weights=sample_weight))
+        sample_weight_arr: np.ndarray = np.asarray(sample_weight)
+        return float(np.average(absolute_errors, weights=sample_weight_arr))
 
     return float(np.mean(absolute_errors))
 
@@ -121,18 +121,18 @@ def r2_score(
         0.985...
 
     """
-    y_true = np.asarray(y_true)
-    y_pred = np.asarray(y_pred)
+    y_true_arr: np.ndarray = np.asarray(y_true)
+    y_pred_arr: np.ndarray = np.asarray(y_pred)
 
     if sample_weight is not None:
-        sample_weight = np.asarray(sample_weight)
-        y_mean = np.average(y_true, weights=sample_weight)
-        ss_res = np.sum(sample_weight * (y_true - y_pred) ** 2)
-        ss_tot = np.sum(sample_weight * (y_true - y_mean) ** 2)
+        sample_weight_arr: np.ndarray = np.asarray(sample_weight)
+        y_mean = np.average(y_true_arr, weights=sample_weight_arr)
+        ss_res: float = float(np.sum(sample_weight_arr * (y_true_arr - y_pred_arr) ** 2))
+        ss_tot: float = float(np.sum(sample_weight_arr * (y_true_arr - y_mean) ** 2))
     else:
-        y_mean = np.mean(y_true)
-        ss_res = np.sum((y_true - y_pred) ** 2)
-        ss_tot = np.sum((y_true - y_mean) ** 2)
+        y_mean = np.mean(y_true_arr)
+        ss_res = float(np.sum((y_true_arr - y_pred_arr) ** 2))
+        ss_tot = float(np.sum((y_true_arr - y_mean) ** 2))
 
     if ss_tot == 0:
         return 1.0 if ss_res == 0 else 0.0
@@ -162,12 +162,12 @@ def mean_absolute_percentage_error(
         MAPE can be misleading when y_true contains values near zero.
 
     """
-    y_true = np.asarray(y_true)
-    y_pred = np.asarray(y_pred)
+    y_true_arr: np.ndarray = np.asarray(y_true)
+    y_pred_arr: np.ndarray = np.asarray(y_pred)
 
     # Avoid division by zero
-    denominator = np.maximum(np.abs(y_true), epsilon)
-    percentage_errors = np.abs((y_true - y_pred) / denominator)
+    denominator = np.maximum(np.abs(y_true_arr), epsilon)
+    percentage_errors = np.abs((y_true_arr - y_pred_arr) / denominator)
 
     return float(np.mean(percentage_errors) * 100)
 
@@ -187,10 +187,10 @@ def max_error(
         Maximum absolute error
 
     """
-    y_true = np.asarray(y_true)
-    y_pred = np.asarray(y_pred)
+    y_true_arr: np.ndarray = np.asarray(y_true)
+    y_pred_arr: np.ndarray = np.asarray(y_pred)
 
-    absolute_errors = np.abs(y_true - y_pred)
+    absolute_errors = np.abs(y_true_arr - y_pred_arr)
 
     return float(np.max(absolute_errors))
 
