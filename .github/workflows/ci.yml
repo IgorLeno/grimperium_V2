@@ -39,7 +39,6 @@ jobs:
           pip install ruff black
 
       - name: Run Ruff + Black (capture logs)
-        continue-on-error: true
         run: |
           set +e
           echo "=== Running Ruff ===" > ${{ github.workspace }}/lint.log
@@ -66,20 +65,19 @@ jobs:
           ruff_ec="$(cat "${{ github.workspace }}/ruff.exitcode" 2>/dev/null || echo 0)"
           black_ec="$(cat "${{ github.workspace }}/black.exitcode" 2>/dev/null || echo 0)"
 
-          # Guard clauses: se algum comando retornou erro, falha o job (mantendo o log já enviado).
+          # If either command returned an error, fail the job (preserving uploaded logs).
           if [ "${ruff_ec}" -ne 0 ] || [ "${black_ec}" -ne 0 ]; then
-            echo "❌ Lint falhou (ruff=${ruff_ec}, black=${black_ec}). Veja o artifact lint-log."
+            echo "❌ Lint failed (ruff=${ruff_ec}, black=${black_ec}). See lint-log artifact."
             exit 1
           fi
 
-          # Fallback: se por algum motivo não capturamos exit codes, tenta detectar erros pelo log.
-          if grep -Eiq "(Found [1-9][0-9]* error|error:|E\\d{3})" "${{ github.workspace }}/lint.log"; then
-            echo "❌ Possíveis erros detectados no lint.log. Veja o artifact lint-log."
+          # Fallback: if exit codes weren't captured, detect errors in the log.
+          if grep -Eiq "^(.*: error:|Found [1-9][0-9]* error)" "${{ github.workspace }}/lint.log"; then
+            echo "❌ Possible errors detected in lint.log. See lint-log artifact."
             exit 1
           fi
 
-          echo "✅ Lint OK."
-
+          echo "✅ Lint passed."
   typecheck:
     name: Type Check
     runs-on: ubuntu-latest
@@ -98,7 +96,6 @@ jobs:
           pip install mypy pandas-stubs types-requests
 
       - name: Run Mypy (capture logs)
-        continue-on-error: true
         run: |
           set +e
           mypy src/grimperium --ignore-missing-imports > ${{ github.workspace }}/type.log 2>&1
@@ -119,14 +116,14 @@ jobs:
           set -euo pipefail
           mypy_ec="$(cat "${{ github.workspace }}/mypy.exitcode" 2>/dev/null || echo 0)"
           if [ "${mypy_ec}" -ne 0 ]; then
-            echo "❌ Type check falhou (mypy=${mypy_ec}). Veja o artifact type-log."
+            echo "❌ Type check failed (mypy=${mypy_ec}). See type-log artifact."
             exit 1
           fi
           if grep -Eiq "\\berror:\\b" "${{ github.workspace }}/type.log"; then
-            echo "❌ Possíveis erros detectados no type.log. Veja o artifact type-log."
+            echo "❌ Possible errors detected in type.log. See type-log artifact."
             exit 1
           fi
-          echo "✅ Type check OK."
+          echo "✅ Type check passed."
 
   test:
     name: Test (Python ${{ matrix.python-version }})

@@ -2,8 +2,9 @@
 """
 Gera um relatório consolidado do CI a partir dos logs baixados como artifacts.
 
-Este script foi pensado para ser resiliente: caso algum log não exista (job não rodou,
-artifact não foi gerado, etc), ele não deve quebrar o CI — apenas reportar o estado.
+Este script foi pensado para ser resiliente: caso algum log não exista
+(job não rodou, artifact não foi gerado, etc), ele não deve quebrar o CI —
+apenas reportar o estado.
 """
 import os
 import re
@@ -23,7 +24,9 @@ LINT_LOG = LOGS_DIR / "lint-log" / "lint.log"
 TYPE_LOG = LOGS_DIR / "type-log" / "type.log"
 TEST_LOGS = list(LOGS_DIR.glob("test-log-*/test-*.log"))
 REPORT_FILE = WORKSPACE / "CI_ERROR_SUMMARY.md"
-GITHUB_STEP_SUMMARY = Path(os.environ.get("GITHUB_STEP_SUMMARY", "/tmp/summary.md"))
+GITHUB_STEP_SUMMARY = Path(
+    os.environ.get("GITHUB_STEP_SUMMARY", "/tmp/summary.md")
+)
 
 # Collect metadata
 COMMIT = os.environ.get("GITHUB_SHA", "unknown")[:12]
@@ -36,7 +39,11 @@ TIMESTAMP = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
 
 
 def read_log(path):
-    """Lê um arquivo de log de forma segura (sem explodir em caso de encoding/IO)."""
+    """
+    Lê um arquivo de log de forma segura.
+
+    Não deve explodir em caso de IO/encoding.
+    """
     if path.exists():
         try:
             return path.read_text(encoding="utf-8", errors="replace")
@@ -45,16 +52,20 @@ def read_log(path):
     return "Log file not found"
 
 
-def sanitize_log_excerpt(text: str, *, max_lines: int = 12, max_chars: int = 400) -> str:
+def sanitize_log_excerpt(
+    text: str, *, max_lines: int = 12, max_chars: int = 400
+) -> str:
     """
     Retorna um trecho curto e sanitizado de um log para exibição em relatórios.
 
-    Objetivo: evitar vazamento acidental de segredos (tokens/chaves) e paths locais.
+    Objetivo: evitar vazamento acidental de segredos (tokens/chaves) e
+    paths locais.
     """
     if not text:
         return ""
 
-    # Linhas que tendem a conter segredos ou material sensível devem ser removidas.
+    # Linhas que tendem a conter segredos ou material sensível
+    # devem ser removidas.
     drop_line_patterns = [
         re.compile(r"(?i)-----BEGIN (?:RSA|OPENSSH|EC|PGP) PRIVATE KEY-----"),
         re.compile(r"(?i)\baws_secret_access_key\b"),
@@ -66,14 +77,36 @@ def sanitize_log_excerpt(text: str, *, max_lines: int = 12, max_chars: int = 400
         (re.compile(r"\bgh[pousr]_[A-Za-z0-9_]{20,}\b"), "<redacted-token>"),
         (re.compile(r"\bgithub_pat_[A-Za-z0-9_]{20,}\b"), "<redacted-token>"),
         # JWT (3 segmentos base64url)
-        (re.compile(r"\beyJ[a-zA-Z0-9_-]{10,}\.[a-zA-Z0-9_-]{10,}\.[a-zA-Z0-9_-]{10,}\b"), "<redacted-jwt>"),
+        (
+            re.compile(
+                r"\beyJ[a-zA-Z0-9_-]{10,}\."
+                r"[a-zA-Z0-9_-]{10,}\."
+                r"[a-zA-Z0-9_-]{10,}\b"
+            ),
+            "<redacted-jwt>",
+        ),
         # AWS Access Key Id
         (re.compile(r"\bAKIA[0-9A-Z]{16}\b"), "<redacted-aws-key-id>"),
         # Authorization headers
-        (re.compile(r"(?i)(authorization:\s*bearer\s+)(\S+)"), r"\1<redacted>"),
-        (re.compile(r"(?i)(authorization:\s*token\s+)(\S+)"), r"\1<redacted>"),
+        (
+            re.compile(r"(?i)(authorization:\s*bearer\s+)(\S+)"),
+            r"\1<redacted>",
+        ),
+        (
+            re.compile(r"(?i)(authorization:\s*token\s+)(\S+)"),
+            r"\1<redacted>",
+        ),
         # Assignments de variáveis sensíveis
-        (re.compile(r"(?i)\b(token|api[_-]?key|secret|password|passwd)\b(\s*[:=]\s*)(\S+)"), r"\1\2<redacted>"),
+        (
+            re.compile(
+                r"(?i)\b(token|api[_-]?key|secret|password|passwd)\b"
+                r"(\s*[:=]\s*)"
+                r"(?P<q>['\"])?"
+                r"(?P<val>(?(q).*?(?=(?P=q))|\S+))"
+                r"(?(q)(?P=q))"
+            ),
+            r"\1\2\g<q><redacted>\g<q>",
+        ),
         # Paths absolutos comuns (Linux/macOS runners)
         (re.compile(r"(/(?:home|Users|runner|root)/[^\s:]+)"), "<path>"),
     ]
@@ -101,7 +134,9 @@ def sanitize_log_excerpt(text: str, *, max_lines: int = 12, max_chars: int = 400
 
 
 def should_include_log_excerpt(status: str, text: str) -> bool:
-    """Heurística simples: só mostra trecho quando houver indício claro de erro."""
+    """
+    Heurística simples: só mostra trecho quando houver indício claro de erro.
+    """
     if status == "failed":
         return True
     if not text:
@@ -131,7 +166,12 @@ def parse_lint_log(text):
     all_errors = ruff_errors + black_errors
 
     # Determine status
-    status = "not found" if "not found" in text else ("passed" if not all_errors else "failed")
+    if "not found" in text:
+        status = "not found"
+    elif not all_errors:
+        status = "passed"
+    else:
+        status = "failed"
 
     return all_errors, status
 
@@ -218,7 +258,9 @@ if TEST_LOGS:
         py_version = version_match.group(1) if version_match else "unknown"
 
         test_log = read_log(test_log_path)
-        failures, summary, errors, status = parse_test_log(test_log, py_version)
+        failures, summary, errors, status = parse_test_log(
+            test_log, py_version
+        )
 
         test_results.append({
             "version": py_version,
@@ -247,6 +289,8 @@ all_passed = (
 overall_status = "✅ ALL PASSED" if all_passed else "❌ FAILURES DETECTED"
 
 # Format status badges
+
+
 def status_badge(status):
     if status == "passed":
         return "✅ PASSED"
@@ -254,6 +298,7 @@ def status_badge(status):
         return "❌ FAILED"
     else:
         return "⚠️  NOT RUN"
+
 
 lint_badge = status_badge(lint_status)
 type_badge = status_badge(type_status)
@@ -293,12 +338,17 @@ if lint_status == "failed" and lint_errors:
 elif lint_status == "passed":
     report += "No lint errors found. ✨\n\n"
 else:
-    # Evita vazar conteúdo bruto de log (pode conter paths locais, tokens, etc).
+    # Evita vazar conteúdo bruto de log
+    # (pode conter paths locais, tokens, etc).
     report += "Lint output omitted for safety.\n\n"
     if should_include_log_excerpt(lint_status, lint_log):
         excerpt = sanitize_log_excerpt(lint_log)
         if excerpt:
-            report += "<details>\n<summary>Show sanitized lint excerpt</summary>\n\n```\n"
+            report += (
+                "<details>\n"
+                "<summary>Show sanitized lint excerpt</summary>\n\n"
+                "```\n"
+            )
             report += f"{excerpt}\n"
             report += "```\n</details>\n\n"
 
@@ -320,12 +370,17 @@ if type_status == "failed" and type_errors:
 elif type_status == "passed":
     report += "No type errors found. ✨\n\n"
 else:
-    # Evita vazar conteúdo bruto de log (pode conter paths locais, tokens, etc).
+    # Evita vazar conteúdo bruto de log
+    # (pode conter paths locais, tokens, etc).
     report += "Type check output omitted for safety.\n\n"
     if should_include_log_excerpt(type_status, type_log):
         excerpt = sanitize_log_excerpt(type_log)
         if excerpt:
-            report += "<details>\n<summary>Show sanitized type-check excerpt</summary>\n\n```\n"
+            report += (
+                "<details>\n"
+                "<summary>Show sanitized type-check excerpt</summary>\n\n"
+                "```\n"
+            )
             report += f"{excerpt}\n"
             report += "```\n</details>\n\n"
 
@@ -366,7 +421,9 @@ for i, test_result in enumerate(test_results):
         for error in errors_to_show:
             report += f"{error}\n"
         if len(test_result["errors"]) > MAX_TEST_ERRORS_DISPLAYED:
-            more_errors = len(test_result["errors"]) - MAX_TEST_ERRORS_DISPLAYED
+            more_errors = (
+                len(test_result["errors"]) - MAX_TEST_ERRORS_DISPLAYED
+            )
             report += f"\n... and {more_errors} more errors\n"
         report += "```\n</details>\n\n"
 
@@ -379,14 +436,33 @@ report += """---
 
 | Component | Status | Details |
 |-----------|--------|---------|
-| Lint (Ruff + Black) | """ + lint_badge + " | " + (f"{len(lint_errors)} errors" if lint_errors else "Clean") + """ |
-| Type Check (Mypy) | """ + type_badge + " | " + (f"{len(type_errors)} errors" if type_errors else "Clean") + """ |
 """
+report += (
+    "| Lint (Ruff + Black) | "
+    + lint_badge
+    + " | "
+    + (f"{len(lint_errors)} errors" if lint_errors else "Clean")
+    + " |\n"
+)
+report += (
+    "| Type Check (Mypy) | "
+    + type_badge
+    + " | "
+    + (f"{len(type_errors)} errors" if type_errors else "Clean")
+    + " |\n"
+)
 
 for test_result in test_results:
     test_badge = status_badge(test_result["status"])
-    details = f"{len(test_result['failures'])} failures" if test_result['failures'] else "All passed"
-    report += f"| Tests (Python {test_result['version']}) | {test_badge} | {details} |\n"
+    details = (
+        f"{len(test_result['failures'])} failures"
+        if test_result["failures"]
+        else "All passed"
+    )
+    report += (
+        f"| Tests (Python {test_result['version']}) | {test_badge} | "
+        f"{details} |\n"
+    )
 
 report += f"| **Overall** | **{overall_status}** | - |\n"
 
@@ -443,7 +519,10 @@ try:
     with open(GITHUB_STEP_SUMMARY, "a") as f:
         f.write(report)
         f.write("\n\n---\n\n")
-        f.write("📥 **Full report available in artifacts: `CI-Error-Summary-Report`**\n")
+        f.write(
+            "📥 **Full report available in artifacts: "
+            "`CI-Error-Summary-Report`**\n"
+        )
     print("✅ Job Summary updated")
 except Exception as e:
     print(f"⚠️  Could not update Job Summary: {e}")
