@@ -300,6 +300,8 @@ else:
 def normalize_status(status: str) -> str:
     if status in {"passed", "failed", "not_run"}:
         return status
+    if status:  # Don't warn on empty strings
+        print(f"⚠️  Normalizing unexpected status '{status}' to 'not_run'")
     return "not_run"
 
 
