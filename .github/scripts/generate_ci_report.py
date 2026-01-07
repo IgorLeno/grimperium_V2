@@ -146,8 +146,10 @@ def should_include_log_excerpt(status: str, text: str) -> bool:
 
 def parse_lint_log(text):
     """Parse ruff/black output"""
+    # Padroniza ausência de log como "not_run"
+    # (job não executou / artifact ausente).
     if "Log file not found" in text or "Error reading" in text:
-        return [], text
+        return [], "not_run"
 
     # Extract ruff errors
     ruff_errors = re.findall(
@@ -166,9 +168,7 @@ def parse_lint_log(text):
     all_errors = ruff_errors + black_errors
 
     # Determine status
-    if "not found" in text:
-        status = "not found"
-    elif not all_errors:
+    if not all_errors:
         status = "passed"
     else:
         status = "failed"
@@ -178,8 +178,10 @@ def parse_lint_log(text):
 
 def parse_type_log(text):
     """Parse mypy output"""
+    # Padroniza ausência de log como "not_run"
+    # (job não executou / artifact ausente).
     if "Log file not found" in text or "Error reading" in text:
-        return [], text
+        return [], "not_run"
 
     # Extract mypy errors
     errors = re.findall(
@@ -194,15 +196,17 @@ def parse_type_log(text):
     elif errors:
         status = "failed"
     else:
-        status = "not found"
+        status = "not_run"
 
     return errors, status
 
 
 def parse_test_log(text, python_version=""):
     """Parse pytest output"""
+    # Padroniza ausência de log como "not_run"
+    # (job não executou / artifact ausente).
     if "Log file not found" in text or "Error reading" in text:
-        return [], None, [], text
+        return [], "Log file not found", [], "not_run"
 
     # Extract summary line
     summary_match = re.search(
@@ -276,17 +280,50 @@ else:
         "failures": [],
         "errors": [],
         "summary": "No test logs found",
-        "status": "not found"
+        "status": "not_run"
     })
 
-# Determine overall status
-all_passed = (
-    lint_status in ["passed", "not found"] and
-    type_status in ["passed", "not found"] and
-    all(t["status"] in ["passed", "not found"] for t in test_results)
+# Determine overall status (agregado a partir dos componentes)
+#
+# Status suportados:
+# - passed: check executou e passou
+# - failed: check executou e falhou
+# - not_run: check não executou / artifact ausente
+#
+# Regras:
+# - Se qualquer check falhou -> FAILURES DETECTED
+# - Se todos estão not_run -> CHECKS NOT RUN
+# - Se todos passaram -> ALL PASSED
+# - Caso misto (pass + not_run) -> INCOMPLETE — SOME CHECKS NOT RUN
+
+
+def normalize_status(status: str) -> str:
+    if status in {"passed", "failed", "not_run"}:
+        return status
+    return "not_run"
+
+
+lint_status = normalize_status(lint_status)
+type_status = normalize_status(type_status)
+for t in test_results:
+    t["status"] = normalize_status(t.get("status", "not_run"))
+
+component_statuses = (
+    [lint_status, type_status] + [t["status"] for t in test_results]
 )
 
-overall_status = "✅ ALL PASSED" if all_passed else "❌ FAILURES DETECTED"
+any_failed = any(s == "failed" for s in component_statuses)
+all_not_run = all(s == "not_run" for s in component_statuses)
+all_passed = all(s == "passed" for s in component_statuses)
+
+if any_failed:
+    overall_status = "❌ FAILURES DETECTED"
+elif all_not_run:
+    overall_status = "⚠️ CHECKS NOT RUN"
+elif all_passed:
+    overall_status = "✅ ALL PASSED"
+else:
+    overall_status = "⚠️ INCOMPLETE — SOME CHECKS NOT RUN"
 
 # Format status badges
 
@@ -441,24 +478,35 @@ report += (
     "| Lint (Ruff + Black) | "
     + lint_badge
     + " | "
-    + (f"{len(lint_errors)} errors" if lint_errors else "Clean")
+    + (
+        "Not run"
+        if lint_status == "not_run"
+        else (f"{len(lint_errors)} errors" if lint_errors else "Clean")
+    )
     + " |\n"
 )
 report += (
     "| Type Check (Mypy) | "
     + type_badge
     + " | "
-    + (f"{len(type_errors)} errors" if type_errors else "Clean")
+    + (
+        "Not run"
+        if type_status == "not_run"
+        else (f"{len(type_errors)} errors" if type_errors else "Clean")
+    )
     + " |\n"
 )
 
 for test_result in test_results:
     test_badge = status_badge(test_result["status"])
-    details = (
-        f"{len(test_result['failures'])} failures"
-        if test_result["failures"]
-        else "All passed"
-    )
+    if test_result["status"] == "not_run":
+        details = "Not run"
+    elif test_result["errors"]:
+        details = f"{len(test_result['errors'])} errors"
+    elif test_result["failures"]:
+        details = f"{len(test_result['failures'])} failures"
+    else:
+        details = "All passed"
     report += (
         f"| Tests (Python {test_result['version']}) | {test_badge} | "
         f"{details} |\n"
