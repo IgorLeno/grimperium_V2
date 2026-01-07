@@ -47,7 +47,6 @@ For robustness testing with extreme data, see test_stress_distribution_shift.py
 """
 
 import numpy as np
-import pytest
 from sklearn.model_selection import train_test_split
 
 from grimperium.core.delta_learning import DeltaLearner
@@ -57,10 +56,11 @@ from grimperium.core.metrics import compute_all_metrics
 
 def test_decision_gate_delta_vs_direct(real_data_1k_filtered):
     """
-    Validate core hypothesis: delta-learning > direct learning (realistic regime).
+    Validate core hypothesis: delta-learning outperforms direct learning
+    (realistic regime).
 
-    This is the main BATCH 3 decision gate test. Uses filtered data to ensure
-    fair comparison without distribution shift artifacts.
+    Main BATCH 3 decision gate test. Uses filtered data to ensure a fair
+    comparison without distribution shift artifacts.
 
     Expected outcome:
     - rmse_delta: 10-15 kcal/mol
@@ -80,16 +80,27 @@ def test_decision_gate_delta_vs_direct(real_data_1k_filtered):
     print("\n[STEP 1] Loading data (realistic, no extreme outliers)...")
     X, y_cbs, y_pm7 = real_data_1k_filtered
 
-    print(f"  Data shape: X={X.shape}, y_cbs={y_cbs.shape}, y_pm7={y_pm7.shape}")
-    print(f"  y_cbs statistics: mean={np.mean(y_cbs):.1f}, std={np.std(y_cbs):.1f}")
+    print(
+        f"  Data shape: X={X.shape}, y_cbs={y_cbs.shape}, y_pm7={y_pm7.shape}"
+    )
+    print(
+        f"  y_cbs statistics: mean={np.mean(y_cbs):.1f}, "
+        f"std={np.std(y_cbs):.1f}"
+    )
     print(f"  y_cbs range: [{np.min(y_cbs):.1f}, {np.max(y_cbs):.1f}]")
 
     # ================================================================
     # STEP 2: Train/test split (80/20, no distribution shift)
     # ================================================================
     print("\n[STEP 2] Train/test split (80/20, random_state=42)...")
-    X_train, X_test, y_cbs_train, y_cbs_test, y_pm7_train, y_pm7_test = \
-        train_test_split(X, y_cbs, y_pm7, test_size=0.2, random_state=42)
+    (
+        X_train,
+        X_test,
+        y_cbs_train,
+        y_cbs_test,
+        y_pm7_train,
+        y_pm7_test,
+    ) = train_test_split(X, y_cbs, y_pm7, test_size=0.2, random_state=42)
 
     print(f"  Train: {len(X_train)} samples")
     print(f"  Test:  {len(X_test)} samples")
@@ -101,16 +112,23 @@ def test_decision_gate_delta_vs_direct(real_data_1k_filtered):
 
     print(f"  Train y_cbs mean: {train_mean:.1f}")
     print(f"  Test y_cbs mean:  {test_mean:.1f}")
-    print(f"  Mean difference: {mean_diff:.1f} (should be < 50 for fair comparison)")
+    print(
+        f"  Mean difference: {mean_diff:.1f} "
+        "(should be < 100 for fair comparison)"
+    )
 
     # With filtered data, distribution shift should be minimal
-    assert mean_diff < 100, \
-        f"Distribution shift detected: {mean_diff:.1f} > 100. Check data filtering."
+    assert mean_diff < 100, (
+        f"Distribution shift detected: {mean_diff:.1f} > 100. "
+        "Check data filtering."
+    )
 
     # ================================================================
     # STEP 3: Model Delta (reference approach)
     # ================================================================
-    print("\n[STEP 3] Training DELTA model (learns y_delta = y_cbs - y_pm7)...")
+    print(
+        "\n[STEP 3] Training DELTA model (learns y_delta = y_cbs - y_pm7)..."
+    )
     model_delta = DeltaLearner()
     model_delta.fit(X_train, y_cbs_train, y_pm7_train)
 
@@ -149,18 +167,30 @@ def test_decision_gate_delta_vs_direct(real_data_1k_filtered):
     print("-" * 70)
 
     rmse_improvement = rmse_direct - rmse_delta
-    rmse_improvement_pct = (rmse_improvement / rmse_direct) * 100 if rmse_direct > 0 else 0
+    rmse_improvement_pct = (
+        (rmse_improvement / rmse_direct) * 100 if rmse_direct > 0 else 0
+    )
     rmse_ratio = rmse_direct / rmse_delta if rmse_delta > 0 else float('inf')
 
     rmse_winner = "DELTA" if rmse_delta < rmse_direct else "DIRECT"
     mae_winner = "DELTA" if mae_delta < mae_direct else "DIRECT"
     r2_winner = "DELTA" if r2_delta > r2_direct else "DIRECT"
 
-    print(f"{'RMSE':<15} {rmse_delta:<15.2f} {rmse_direct:<15.2f} {rmse_winner:<10}")
-    print(f"{'MAE':<15} {mae_delta:<15.2f} {mae_direct:<15.2f} {mae_winner:<10}")
-    print(f"{'R2':<15} {r2_delta:<15.4f} {r2_direct:<15.4f} {r2_winner:<10}")
+    print(
+        f"{'RMSE':<15} {rmse_delta:<15.2f} {rmse_direct:<15.2f} "
+        f"{rmse_winner:<10}"
+    )
+    print(
+        f"{'MAE':<15} {mae_delta:<15.2f} {mae_direct:<15.2f} {mae_winner:<10}"
+    )
+    print(
+        f"{'R2':<15} {r2_delta:<15.4f} {r2_direct:<15.4f} {r2_winner:<10}"
+    )
     print("-" * 70)
-    print(f"RMSE improvement: {rmse_improvement:.2f} kcal/mol ({rmse_improvement_pct:.1f}%)")
+    print(
+        f"RMSE improvement: {rmse_improvement:.2f} kcal/mol "
+        f"({rmse_improvement_pct:.1f}%)"
+    )
     print(f"Delta is {rmse_ratio:.1f}x better than Direct")
 
     # ================================================================
@@ -173,33 +203,43 @@ def test_decision_gate_delta_vs_direct(real_data_1k_filtered):
     criterion_2 = rmse_delta < 20.0
     gate_pass = criterion_1 and criterion_2
 
-    print(f"  Criterion 1: rmse_delta < rmse_direct")
+    print("  Criterion 1: rmse_delta < rmse_direct")
     print(f"    {rmse_delta:.2f} < {rmse_direct:.2f}? -> {criterion_1}")
 
-    print(f"\n  Criterion 2: rmse_delta < 20.0 kcal/mol")
+    print("\n  Criterion 2: rmse_delta < 20.0 kcal/mol")
     print(f"    {rmse_delta:.2f} < 20.0? -> {criterion_2}")
 
     print("-" * 70)
 
     if gate_pass:
         print("  DECISION GATE: PASS")
-        print(f"  Hypothesis validated in realistic regime!")
-        print(f"  Delta-learning is {rmse_improvement_pct:.1f}% better than direct learning")
+        print("  Hypothesis validated in realistic regime!")
+        print(
+            f"  Delta-learning is {rmse_improvement_pct:.1f}% better than "
+            "direct learning"
+        )
     else:
         print("  DECISION GATE: FAIL")
         if not criterion_1:
-            print(f"  Criterion 1 failed: Delta ({rmse_delta:.2f}) >= Direct ({rmse_direct:.2f})")
+            print(
+                "  Criterion 1 failed: "
+                f"Delta ({rmse_delta:.2f}) >= Direct ({rmse_direct:.2f})"
+            )
         if not criterion_2:
-            print(f"  Criterion 2 failed: Delta RMSE ({rmse_delta:.2f}) >= 20.0")
+            print(
+                f"  Criterion 2 failed: Delta RMSE ({rmse_delta:.2f}) >= 20.0"
+            )
 
     print("=" * 70 + "\n")
 
     # ================================================================
     # STEP 7: Assert
     # ================================================================
-    assert gate_pass, \
-        f"Decision gate failed: c1={criterion_1} (rmse_delta={rmse_delta:.2f}, " \
-        f"rmse_direct={rmse_direct:.2f}), c2={criterion_2}"
+    assert gate_pass, (
+        f"Decision gate failed: c1={criterion_1} "
+        f"(rmse_delta={rmse_delta:.2f}, rmse_direct={rmse_direct:.2f}), "
+        f"c2={criterion_2}"
+    )
 
     return {
         'rmse_delta': rmse_delta,
@@ -229,8 +269,14 @@ def test_synthetic_fallback(synthetic_data_1k):
     X, y_cbs, y_pm7 = synthetic_data_1k
 
     # Quick validation with synthetic data
-    X_train, X_test, y_cbs_train, y_cbs_test, y_pm7_train, y_pm7_test = \
-        train_test_split(X, y_cbs, y_pm7, test_size=0.2, random_state=42)
+    (
+        X_train,
+        X_test,
+        y_cbs_train,
+        y_cbs_test,
+        y_pm7_train,
+        y_pm7_test,
+    ) = train_test_split(X, y_cbs, y_pm7, test_size=0.2, random_state=42)
 
     # Delta model
     model_delta = DeltaLearner()
@@ -249,5 +295,6 @@ def test_synthetic_fallback(synthetic_data_1k):
     print("=" * 70 + "\n")
 
     # Synthetic data should also show delta advantage
-    assert metrics_delta['rmse'] < metrics_direct['rmse'], \
+    assert metrics_delta['rmse'] < metrics_direct['rmse'], (
         "Delta should outperform direct even on synthetic data"
+    )

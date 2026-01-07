@@ -3,7 +3,8 @@ Fixtures for BATCH 3 hypothesis validation experiments.
 
 DESIGN DECISIONS:
 -----------------
-1. `real_data_1k_filtered`: Realistic distribution with filter [-1000, +1000] kcal/mol
+1. `real_data_1k_filtered`: Realistic distribution with filter
+   [-1000, +1000] kcal/mol
    - Removes extreme outliers (0.9% of data)
    - Produces std ~70 kcal/mol (not 7230!)
    - Safe for Week 2/3 reuse
@@ -16,7 +17,8 @@ DESIGN DECISIONS:
 WHY FILTER?
 -----------
 Original dataset has H298_cbs range [-325407, +164949] with std=7230.
-Random sampling creates severe distribution shift (train mean=-594, test mean=+21).
+Random sampling creates severe distribution shift
+(train mean=-594, test mean=+21).
 Direct learning fails catastrophically (RMSE=1008), but this is an artifact,
 not evidence of delta-learning superiority.
 
@@ -36,13 +38,14 @@ This mock is deterministic (seed=42) for reproducibility.
 
 import pytest
 import numpy as np
-from typing import Tuple
+from typing import Optional, Tuple
 
 
 def create_realistic_mock_pm7(
     y_cbs: np.ndarray,
     X_basic: np.ndarray,
-    seed: int = 42
+    seed: Optional[int] = 42,
+    magnitude_bias_std: float = 0.5,
 ) -> np.ndarray:
     """
     Generate H298_PM7 mock with realistic error patterns.
@@ -56,23 +59,31 @@ def create_realistic_mock_pm7(
     Args:
         y_cbs: True CBS energies (kcal/mol)
         X_basic: Basic features [nheavy, charge, mult]
-        seed: Random seed for reproducibility
+        seed: Random seed for reproducibility.
+            If None, uses global RNG state.
+        magnitude_bias_std: Desvio padrão do viés dependente da magnitude.
 
     Returns:
         Mock PM7 energies with realistic error patterns
     """
-    np.random.seed(seed)
+    if seed is not None:
+        np.random.seed(seed)
     nheavy = X_basic[:, 0]
 
     # Component 1: Base bias (PM7 systematically overestimates)
     base_bias = -5.0
 
     # Component 2: Size-dependent error
-    size_error = (1 + np.sqrt(np.maximum(nheavy, 1))) * np.random.normal(0, 1.5, len(y_cbs))
+    size_error = (1 + np.sqrt(np.maximum(nheavy, 1))) * np.random.normal(
+        0, 1.5, len(y_cbs)
+    )
 
-    # Component 3: Magnitude-dependent bias (reduced for filtered data)
-    # Note: In filtered data, magnitude bias is small since |y_cbs| < 1000
-    magnitude_bias = (np.abs(y_cbs) / 100) * np.random.normal(0, 0.5, len(y_cbs))
+    # Component 3: Magnitude-dependent bias (2% de |y_cbs| por padrão).
+    # Nota: em dados filtrados, esse termo tende a ser pequeno porque
+    # |y_cbs| < 1000.
+    magnitude_bias = (np.abs(y_cbs) / 50) * np.random.normal(
+        0, magnitude_bias_std, len(y_cbs)
+    )
 
     # Component 4: Random Gaussian noise
     gaussian_noise = np.random.normal(0, 7, len(y_cbs))
@@ -165,28 +176,45 @@ def real_data_1k_filtered() -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
 
     # Log original statistics
     print(f"\n[FIXTURE] Original data: {len(df)} molecules")
-    print(f"  H298_cbs: mean={df['H298_cbs'].mean():.1f}, std={df['H298_cbs'].std():.1f}")
-    print(f"  H298_cbs: range=[{df['H298_cbs'].min():.1f}, {df['H298_cbs'].max():.1f}]")
+    h_mean = df["H298_cbs"].mean()
+    h_std = df["H298_cbs"].std()
+    h_min = df["H298_cbs"].min()
+    h_max = df["H298_cbs"].max()
+    print(f"  H298_cbs: mean={h_mean:.1f}, std={h_std:.1f}")
+    print(f"  H298_cbs: range=[{h_min:.1f}, {h_max:.1f}]")
 
     # Apply physical filter to remove extreme outliers
     df_filtered = df[(df['H298_cbs'] >= -1000) & (df['H298_cbs'] <= 1000)]
 
-    print(f"\n[FIXTURE] After filter [-1000, +1000]: {len(df_filtered)} molecules ({len(df_filtered)/len(df)*100:.1f}%)")
-    print(f"  H298_cbs: mean={df_filtered['H298_cbs'].mean():.1f}, std={df_filtered['H298_cbs'].std():.1f}")
+    df_filtered_pct = len(df_filtered) / len(df) * 100
+    print(
+        f"\n[FIXTURE] After filter [-1000, +1000]: "
+        f"{len(df_filtered)} molecules ({df_filtered_pct:.1f}%)"
+    )
+    h_filtered_mean = df_filtered["H298_cbs"].mean()
+    h_filtered_std = df_filtered["H298_cbs"].std()
+    print(f"  H298_cbs: mean={h_filtered_mean:.1f}, std={h_filtered_std:.1f}")
 
     # Sample 1000 with reproducibility
     df_sample = df_filtered.sample(n=1000, random_state=42)
 
     print(f"\n[FIXTURE] Final sample: {len(df_sample)} molecules")
-    print(f"  H298_cbs: mean={df_sample['H298_cbs'].mean():.1f}, std={df_sample['H298_cbs'].std():.1f}")
-    print(f"  H298_cbs: range=[{df_sample['H298_cbs'].min():.1f}, {df_sample['H298_cbs'].max():.1f}]")
+    h_sample_mean = df_sample["H298_cbs"].mean()
+    h_sample_std = df_sample["H298_cbs"].std()
+    h_sample_min = df_sample["H298_cbs"].min()
+    h_sample_max = df_sample["H298_cbs"].max()
+    print(f"  H298_cbs: mean={h_sample_mean:.1f}, std={h_sample_std:.1f}")
+    print(f"  H298_cbs: range=[{h_sample_min:.1f}, {h_sample_max:.1f}]")
 
     # Validate: std should be reasonable (not 7000+)
-    assert df_sample['H298_cbs'].std() < 500, \
-        f"Filtered data should have std < 500, got {df_sample['H298_cbs'].std():.1f}"
+    assert h_sample_std < 500, (
+        f"Filtered data should have std < 500, got {h_sample_std:.1f}"
+    )
 
     # Extract basic features
-    X_basic = df_sample[['nheavy', 'charge', 'multiplicity']].values.astype(float)
+    X_basic = (
+        df_sample[["nheavy", "charge", "multiplicity"]].values.astype(float)
+    )
     y_cbs = df_sample['H298_cbs'].values.astype(float)
 
     # Create enriched features
@@ -197,7 +225,7 @@ def real_data_1k_filtered() -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
 
     # Log delta statistics
     y_delta = y_cbs - y_pm7
-    print(f"\n[FIXTURE] Delta (y_cbs - y_pm7):")
+    print("\n[FIXTURE] Delta (y_cbs - y_pm7):")
     print(f"  mean={y_delta.mean():.2f}, std={y_delta.std():.2f}")
     print(f"  range=[{y_delta.min():.2f}, {y_delta.max():.2f}]")
 
@@ -236,34 +264,40 @@ def real_data_1k_extreme() -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     loader = ChemperiumLoader()
     df = loader.load_thermo_cbs_opt()
 
-    print(f"\n[STRESS FIXTURE] Loading EXTREME distribution (unfiltered)")
+    print("\n[STRESS FIXTURE] Loading EXTREME distribution (unfiltered)")
     print(f"  Total molecules: {len(df)}")
-    print(f"  H298_cbs: mean={df['H298_cbs'].mean():.1f}, std={df['H298_cbs'].std():.1f}")
-    print(f"  H298_cbs: range=[{df['H298_cbs'].min():.1f}, {df['H298_cbs'].max():.1f}]")
-    print(f"  WARNING: Distribution shift expected between train/test!")
+    h_mean = df["H298_cbs"].mean()
+    h_std = df["H298_cbs"].std()
+    h_min = df["H298_cbs"].min()
+    h_max = df["H298_cbs"].max()
+    print(f"  H298_cbs: mean={h_mean:.1f}, std={h_std:.1f}")
+    print(f"  H298_cbs: range=[{h_min:.1f}, {h_max:.1f}]")
+    print("  WARNING: Distribution shift expected between train/test!")
 
     # Sample 1000 (includes outliers)
     df_sample = df.sample(n=1000, random_state=42)
 
     print(f"\n[STRESS FIXTURE] Sample: {len(df_sample)} molecules")
-    print(f"  H298_cbs: mean={df_sample['H298_cbs'].mean():.1f}, std={df_sample['H298_cbs'].std():.1f}")
+    h_sample_mean = df_sample["H298_cbs"].mean()
+    h_sample_std = df_sample["H298_cbs"].std()
+    print(f"  H298_cbs: mean={h_sample_mean:.1f}, std={h_sample_std:.1f}")
 
     # Extract basic features
-    X_basic = df_sample[['nheavy', 'charge', 'multiplicity']].values.astype(float)
+    X_basic = (
+        df_sample[["nheavy", "charge", "multiplicity"]].values.astype(float)
+    )
     y_cbs = df_sample['H298_cbs'].values.astype(float)
 
     # Create enriched features
     X = create_enriched_features(X_basic)
 
     # Generate mock PM7 (note: magnitude bias is large for outliers)
-    np.random.seed(42)
-    nheavy = X_basic[:, 0]
-    base_bias = -5.0
-    size_error = (1 + np.sqrt(np.maximum(nheavy, 1))) * np.random.normal(0, 1.5, len(y_cbs))
-    magnitude_bias = (np.abs(y_cbs) / 100) * np.random.normal(0, 3, len(y_cbs))
-    gaussian_noise = np.random.normal(0, 7, len(y_cbs))
-    total_error = base_bias + size_error + magnitude_bias + gaussian_noise
-    y_pm7 = y_cbs - total_error
+    y_pm7 = create_realistic_mock_pm7(
+        y_cbs,
+        X_basic,
+        seed=42,
+        magnitude_bias_std=3,
+    )
 
     return X, y_cbs, y_pm7
 
