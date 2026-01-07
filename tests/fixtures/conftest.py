@@ -175,37 +175,39 @@ def synthetic_data_1k() -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]
 @pytest.fixture
 def real_data_1k() -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """
-    Real CBS data with enriched features + mock PM7 (1000 samples).
+    DEPRECATED: Use fixtures from tests/experiments/conftest.py instead.
 
-    Use for: Integration tests with real molecular data
-    Timeline: ~2-3s for load + process
+    This fixture uses UNFILTERED data which creates severe distribution shift
+    between train/test splits (train mean=-594, test mean=+21). This causes
+    Direct learning to fail catastrophically (RMSE=1008) which is an artifact,
+    not meaningful comparison.
+
+    Recommended alternatives:
+    - real_data_1k_filtered: Realistic distribution for hypothesis validation
+    - real_data_1k_extreme: Pathological distribution for stress testing
 
     Returns:
         Tuple of (X_enriched, y_cbs, y_pm7_mock, y_delta)
-            - X_enriched: Features (1000, 10)
-            - y_cbs: True CBS energies from dataset (1000,)
-            - y_pm7_mock: Mock PM7 energies (1000,)
-            - y_delta: CBS - PM7 deltas (1000,)
 
-    Example:
-        >>> def test_integration(real_data_1k):
-        ...     X, y_cbs, y_pm7, y_delta = real_data_1k
-        ...     # Train on real CBS data distribution
-        ...     model.fit(X, y_delta)
-
-    Notes:
-        - Uses real CBS data from Chemperium dataset
-        - PM7 values are still mock (real PM7 not available yet)
-        - Provides realistic y_cbs distribution for testing
-
+    WARNING: Contains outliers up to -325407 kcal/mol. Results may be
+    misleading if used for hypothesis validation. See BATCH 3 documentation.
     """
+    import warnings
+    warnings.warn(
+        "real_data_1k is DEPRECATED. Use real_data_1k_filtered from "
+        "tests/experiments/conftest.py for hypothesis validation, or "
+        "real_data_1k_extreme for stress testing.",
+        DeprecationWarning,
+        stacklevel=2
+    )
+
     from grimperium.data.loader import ChemperiumLoader
 
-    # Load real CBS data
+    # Load real CBS data (UNFILTERED - contains extreme outliers!)
     loader = ChemperiumLoader()
     df = loader.load_thermo_cbs_opt()
 
-    # Sample 1000 rows (reproducible)
+    # Sample 1000 rows (reproducible but includes outliers)
     df = df.sample(n=1000, random_state=42)
 
     # Extract basic features
