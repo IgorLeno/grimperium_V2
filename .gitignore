@@ -118,3 +118,4 @@ logs/
 
 # Local work files
 anexos/
+.claude/settings.local.json
