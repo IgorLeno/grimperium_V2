@@ -14,7 +14,6 @@ jobs:
   lint:
     name: Lint
     runs-on: ubuntu-latest
-    continue-on-error: true
 
     steps:
       - uses: actions/checkout@v4
@@ -42,11 +41,15 @@ jobs:
       - name: Run Ruff + Black (capture logs)
         continue-on-error: true
         run: |
+          set +e
           echo "=== Running Ruff ===" > ${{ github.workspace }}/lint.log
-          ruff check src/ tests/ >> ${{ github.workspace }}/lint.log 2>&1 || true
+          ruff check src/ tests/ >> ${{ github.workspace }}/lint.log 2>&1
+          echo "$?" > ${{ github.workspace }}/ruff.exitcode
           echo "" >> ${{ github.workspace }}/lint.log
           echo "=== Running Black ===" >> ${{ github.workspace }}/lint.log
-          black --check src/ tests/ >> ${{ github.workspace }}/lint.log 2>&1 || true
+          black --check src/ tests/ >> ${{ github.workspace }}/lint.log 2>&1
+          echo "$?" > ${{ github.workspace }}/black.exitcode
+          set -e
 
       - name: Upload lint log
         if: always()
@@ -56,10 +59,30 @@ jobs:
           path: lint.log
           retention-days: 30
 
+      - name: Fail job if lint errors were found
+        if: always()
+        run: |
+          set -euo pipefail
+          ruff_ec="$(cat "${{ github.workspace }}/ruff.exitcode" 2>/dev/null || echo 0)"
+          black_ec="$(cat "${{ github.workspace }}/black.exitcode" 2>/dev/null || echo 0)"
+
+          # Guard clauses: se algum comando retornou erro, falha o job (mantendo o log já enviado).
+          if [ "${ruff_ec}" -ne 0 ] || [ "${black_ec}" -ne 0 ]; then
+            echo "❌ Lint falhou (ruff=${ruff_ec}, black=${black_ec}). Veja o artifact lint-log."
+            exit 1
+          fi
+
+          # Fallback: se por algum motivo não capturamos exit codes, tenta detectar erros pelo log.
+          if grep -Eiq "(Found [1-9][0-9]* error|error:|E\\d{3})" "${{ github.workspace }}/lint.log"; then
+            echo "❌ Possíveis erros detectados no lint.log. Veja o artifact lint-log."
+            exit 1
+          fi
+
+          echo "✅ Lint OK."
+
   typecheck:
     name: Type Check
     runs-on: ubuntu-latest
-    continue-on-error: true
 
     steps:
       - uses: actions/checkout@v4
@@ -77,7 +100,10 @@ jobs:
       - name: Run Mypy (capture logs)
         continue-on-error: true
         run: |
-          mypy src/grimperium --ignore-missing-imports > ${{ github.workspace }}/type.log 2>&1 || true
+          set +e
+          mypy src/grimperium --ignore-missing-imports > ${{ github.workspace }}/type.log 2>&1
+          echo "$?" > ${{ github.workspace }}/mypy.exitcode
+          set -e
 
       - name: Upload type log
         if: always()
@@ -87,10 +113,24 @@ jobs:
           path: type.log
           retention-days: 30
 
+      - name: Fail job if typecheck errors were found
+        if: always()
+        run: |
+          set -euo pipefail
+          mypy_ec="$(cat "${{ github.workspace }}/mypy.exitcode" 2>/dev/null || echo 0)"
+          if [ "${mypy_ec}" -ne 0 ]; then
+            echo "❌ Type check falhou (mypy=${mypy_ec}). Veja o artifact type-log."
+            exit 1
+          fi
+          if grep -Eiq "\\berror:\\b" "${{ github.workspace }}/type.log"; then
+            echo "❌ Possíveis erros detectados no type.log. Veja o artifact type-log."
+            exit 1
+          fi
+          echo "✅ Type check OK."
+
   test:
     name: Test (Python ${{ matrix.python-version }})
     runs-on: ubuntu-latest
-    continue-on-error: true
     strategy:
       fail-fast: false
       matrix:
@@ -125,9 +165,8 @@ jobs:
         run: poetry install --no-interaction
 
       - name: Run tests (capture logs)
-        continue-on-error: true
         run: |
-          poetry run pytest tests/ -v --cov=src/grimperium --cov-report=xml --tb=short > ${{ github.workspace }}/test-${{ matrix.python-version }}.log 2>&1 || true
+          poetry run pytest tests/ -v --cov=src/grimperium --cov-report=xml --tb=short > ${{ github.workspace }}/test-${{ matrix.python-version }}.log 2>&1
 
       - name: Upload test log
         if: always()
@@ -185,9 +224,10 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Download all logs
+      - name: Download log artifacts
         uses: actions/download-artifact@v4
         with:
+          pattern: "*-log*"
           path: ${{ github.workspace }}/logs
 
       - name: List downloaded artifacts
@@ -205,7 +245,7 @@ jobs:
           GITHUB_RUN_ID: ${{ github.run_id }}
           GITHUB_REPOSITORY: ${{ github.repository }}
           GITHUB_SERVER_URL: ${{ github.server_url }}
-          GITHUB_STEP_SUMMARY: ${{ github.step_summary }}
+          GITHUB_STEP_SUMMARY: ${{ env.GITHUB_STEP_SUMMARY }}
 
       - name: Upload comprehensive report
         if: always()
@@ -224,7 +264,7 @@ jobs:
           cat CI_ERROR_SUMMARY.md
 
       - name: Check for failures
-        if: needs.lint.result == 'failure' || needs.typecheck.result == 'failure' || needs.test.result == 'failure'
+        if: always() && (needs.lint.result == 'failure' || needs.typecheck.result == 'failure' || needs.test.result == 'failure')
         run: |
           echo "❌ CI checks failed. See report above for details."
           exit 1
