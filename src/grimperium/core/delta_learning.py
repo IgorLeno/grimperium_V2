@@ -27,7 +27,7 @@ class DeltaLearner:
         w_krr: float = 0.5,
         w_xgb: float = 0.5,
         krr_params: Optional[dict] = None,
-        xgb_params: Optional[dict] = None
+        xgb_params: Optional[dict] = None,
     ):
         """
         Initialize DeltaLearner with ensemble.
@@ -41,18 +41,12 @@ class DeltaLearner:
         self.w_krr = w_krr
         self.w_xgb = w_xgb
         self.ensemble = DeltaLearningEnsemble(
-            w_krr=w_krr,
-            w_xgb=w_xgb,
-            krr_params=krr_params,
-            xgb_params=xgb_params
+            w_krr=w_krr, w_xgb=w_xgb, krr_params=krr_params, xgb_params=xgb_params
         )
         self.is_fitted = False
 
     def fit(
-        self,
-        X: np.ndarray,
-        y_cbs: np.ndarray,
-        y_pm7: np.ndarray
+        self, X: np.ndarray, y_cbs: np.ndarray, y_pm7: np.ndarray
     ) -> "DeltaLearner":
         """
         Fit DeltaLearner.
@@ -86,11 +80,7 @@ class DeltaLearner:
         self.is_fitted = True
         return self
 
-    def predict(
-        self,
-        X: np.ndarray,
-        y_pm7: np.ndarray
-    ) -> np.ndarray:
+    def predict(self, X: np.ndarray, y_pm7: np.ndarray) -> np.ndarray:
         """
         Predict H298_CBS using delta-learning.
 
@@ -119,12 +109,7 @@ class DeltaLearner:
 
         return y_pred
 
-    def evaluate(
-        self,
-        X: np.ndarray,
-        y_cbs: np.ndarray,
-        y_pm7: np.ndarray
-    ) -> dict:
+    def evaluate(self, X: np.ndarray, y_cbs: np.ndarray, y_pm7: np.ndarray) -> dict:
         """
         Evaluate model and return all metrics.
 

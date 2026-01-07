@@ -140,7 +140,9 @@ class TestDataFusion:
         assert isinstance(stats["mean"], float)
         assert isinstance(stats["std"], float)
 
-    def test_analyze_deltas_no_delta_column_raises(self, mock_chemperium_df, mock_pm7_df):
+    def test_analyze_deltas_no_delta_column_raises(
+        self, mock_chemperium_df, mock_pm7_df
+    ):
         """Test analyze_deltas raises error when delta column missing."""
         fusion = DataFusion()
         # Create merged df WITHOUT delta column
@@ -235,12 +237,14 @@ class TestDataFusionTaskViews:
     def test_select_task_view_missing_column_raises(self):
         """Test that missing target column raises error."""
         fusion = DataFusion()
-        df = pd.DataFrame({
-            "smiles": ["C", "CC"],
-            "nheavy": [1, 2],
-            "charge": [0, 0],
-            "multiplicity": [1, 1],
-        })  # Missing H298_cbs
+        df = pd.DataFrame(
+            {
+                "smiles": ["C", "CC"],
+                "nheavy": [1, 2],
+                "charge": [0, 0],
+                "multiplicity": [1, 1],
+            }
+        )  # Missing H298_cbs
 
         with pytest.raises(ValueError, match="required for enthalpy"):
             fusion.select_task_view(df, task="enthalpy")
@@ -248,13 +252,15 @@ class TestDataFusionTaskViews:
     def test_select_task_view_no_cp_columns_raises(self):
         """Test heat_capacity task fails without cp columns."""
         fusion = DataFusion()
-        df = pd.DataFrame({
-            "smiles": ["C", "CC"],
-            "nheavy": [1, 2],
-            "charge": [0, 0],
-            "multiplicity": [1, 1],
-            "H298_cbs": [1.0, 2.0],
-        })  # No cp_* columns
+        df = pd.DataFrame(
+            {
+                "smiles": ["C", "CC"],
+                "nheavy": [1, 2],
+                "charge": [0, 0],
+                "multiplicity": [1, 1],
+                "H298_cbs": [1.0, 2.0],
+            }
+        )  # No cp_* columns
 
         with pytest.raises(ValueError, match="No cp_\\* columns"):
             fusion.select_task_view(df, task="heat_capacity")

@@ -127,7 +127,9 @@ def r2_score(
     if sample_weight is not None:
         sample_weight_arr: np.ndarray = np.asarray(sample_weight)
         y_mean = np.average(y_true_arr, weights=sample_weight_arr)
-        ss_res: float = float(np.sum(sample_weight_arr * (y_true_arr - y_pred_arr) ** 2))
+        ss_res: float = float(
+            np.sum(sample_weight_arr * (y_true_arr - y_pred_arr) ** 2)
+        )
         ss_tot: float = float(np.sum(sample_weight_arr * (y_true_arr - y_mean) ** 2))
     else:
         y_mean = np.mean(y_true_arr)
@@ -223,11 +225,11 @@ def compute_all_metrics(
 
     """
     return {
-        'rmse': rmse(y_true, y_pred, sample_weight),
-        'mae': mae(y_true, y_pred, sample_weight),
-        'r2': r2_score(y_true, y_pred, sample_weight),
-        'mape': mean_absolute_percentage_error(y_true, y_pred),
-        'max_error': max_error(y_true, y_pred),
+        "rmse": rmse(y_true, y_pred, sample_weight),
+        "mae": mae(y_true, y_pred, sample_weight),
+        "r2": r2_score(y_true, y_pred, sample_weight),
+        "mape": mean_absolute_percentage_error(y_true, y_pred),
+        "max_error": max_error(y_true, y_pred),
     }
 
 

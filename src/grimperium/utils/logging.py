@@ -108,7 +108,7 @@ class ProgressLogger:
         self,
         exc_type: Optional[type[BaseException]],
         exc_val: Optional[BaseException],
-        exc_tb: Optional[TracebackType]
+        exc_tb: Optional[TracebackType],
     ) -> None:
         """Exit context."""
         raise NotImplementedError("Will be implemented in Batch 5")

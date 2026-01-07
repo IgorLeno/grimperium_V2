@@ -196,7 +196,9 @@ class DataFusion:
             Y = df[cp_columns].copy()
             return X, Y
 
-        raise ValueError(f"Invalid task: {task}. Must be one of: enthalpy, entropy, heat_capacity")
+        raise ValueError(
+            f"Invalid task: {task}. Must be one of: enthalpy, entropy, heat_capacity"
+        )
 
     def get_training_data(
         self,
@@ -315,7 +317,9 @@ class DataFusion:
 
         """
         exclude_set = set(exclude or [])
-        return [c for c in self.FEATURE_COLUMNS if c in df.columns and c not in exclude_set]
+        return [
+            c for c in self.FEATURE_COLUMNS if c in df.columns and c not in exclude_set
+        ]
 
     def __repr__(self) -> str:
         """String representation."""

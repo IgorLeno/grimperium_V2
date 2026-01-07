@@ -25,9 +25,7 @@ from typing import Tuple
 
 
 def create_realistic_mock_pm7(
-    y_cbs: np.ndarray,
-    X_basic: np.ndarray,
-    seed: int = 42
+    y_cbs: np.ndarray, X_basic: np.ndarray, seed: int = 42
 ) -> np.ndarray:
     """
     Generate H298_PM7 mock with realistic error patterns.
@@ -61,7 +59,9 @@ def create_realistic_mock_pm7(
     base_bias = -5.0
 
     # Component 2: Size-dependent error
-    size_error = (1 + np.sqrt(np.maximum(nheavy, 1))) * np.random.normal(0, 1.5, len(y_cbs))
+    size_error = (1 + np.sqrt(np.maximum(nheavy, 1))) * np.random.normal(
+        0, 1.5, len(y_cbs)
+    )
 
     # Component 3: Magnitude-dependent bias
     magnitude_bias = (np.abs(y_cbs) / 100) * np.random.normal(0, 3, len(y_cbs))
@@ -107,18 +107,20 @@ def create_enriched_features(X_basic: np.ndarray) -> np.ndarray:
     charge = X_basic[:, 1:2]
     mult = X_basic[:, 2:3]
 
-    return np.hstack([
-        nheavy,                              # 1. Original
-        charge,                              # 2. Original
-        mult,                                # 3. Original
-        nheavy ** 2,                         # 4. Polynomial
-        np.sqrt(np.abs(nheavy) + 1),         # 5. Polynomial
-        nheavy * charge,                     # 6. Interaction
-        nheavy * mult,                       # 7. Interaction
-        charge ** 2,                         # 8. Polynomial
-        mult ** 2,                           # 9. Polynomial
-        np.ones_like(nheavy)                 # 10. Bias term
-    ])
+    return np.hstack(
+        [
+            nheavy,  # 1. Original
+            charge,  # 2. Original
+            mult,  # 3. Original
+            nheavy**2,  # 4. Polynomial
+            np.sqrt(np.abs(nheavy) + 1),  # 5. Polynomial
+            nheavy * charge,  # 6. Interaction
+            nheavy * mult,  # 7. Interaction
+            charge**2,  # 8. Polynomial
+            mult**2,  # 9. Polynomial
+            np.ones_like(nheavy),  # 10. Bias term
+        ]
+    )
 
 
 # ============================================================
@@ -193,12 +195,13 @@ def real_data_1k() -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     misleading if used for hypothesis validation. See BATCH 3 documentation.
     """
     import warnings
+
     warnings.warn(
         "real_data_1k is DEPRECATED. Use real_data_1k_filtered from "
         "tests/experiments/conftest.py for hypothesis validation, or "
         "real_data_1k_extreme for stress testing.",
         DeprecationWarning,
-        stacklevel=2
+        stacklevel=2,
     )
 
     from grimperium.data.loader import ChemperiumLoader
@@ -211,8 +214,8 @@ def real_data_1k() -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     df = df.sample(n=1000, random_state=42)
 
     # Extract basic features
-    X_basic = df[['nheavy', 'charge', 'multiplicity']].values.astype(float)
-    y_cbs = df['H298_cbs'].values.astype(float)
+    X_basic = df[["nheavy", "charge", "multiplicity"]].values.astype(float)
+    y_cbs = df["H298_cbs"].values.astype(float)
 
     # Create enriched features
     X = create_enriched_features(X_basic)

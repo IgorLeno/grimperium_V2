@@ -102,8 +102,14 @@ def test_stress_distribution_shift_extreme(real_data_1k_extreme):
     # STEP 2: Train/test split (expect distribution shift!)
     # ================================================================
     print("\n[STEP 2] Train/test split (distribution shift expected)...")
-    X_train, X_test, y_cbs_train, y_cbs_test, y_pm7_train, y_pm7_test = \
-        train_test_split(X, y_cbs, y_pm7, test_size=0.2, random_state=42)
+    (
+        X_train,
+        X_test,
+        y_cbs_train,
+        y_cbs_test,
+        y_pm7_train,
+        y_pm7_test,
+    ) = train_test_split(X, y_cbs, y_pm7, test_size=0.2, random_state=42)
 
     train_mean = np.mean(y_cbs_train)
     test_mean = np.mean(y_cbs_test)
@@ -125,8 +131,8 @@ def test_stress_distribution_shift_extreme(real_data_1k_extreme):
     model_delta.fit(X_train, y_cbs_train, y_pm7_train)
 
     metrics_delta = model_delta.evaluate(X_test, y_cbs_test, y_pm7_test)
-    rmse_delta = metrics_delta['rmse']
-    r2_delta = metrics_delta['r2']
+    rmse_delta = metrics_delta["rmse"]
+    r2_delta = metrics_delta["r2"]
 
     print(f"  RMSE: {rmse_delta:.2f} kcal/mol (expected: ~10-15, unaffected)")
     print(f"  R2:   {r2_delta:.4f} (expected: ~0.95-0.99)")
@@ -140,8 +146,8 @@ def test_stress_distribution_shift_extreme(real_data_1k_extreme):
 
     y_pred_direct = model_direct.predict(X_test)
     metrics_direct = compute_all_metrics(y_cbs_test, y_pred_direct)
-    rmse_direct = metrics_direct['rmse']
-    r2_direct = metrics_direct['r2']
+    rmse_direct = metrics_direct["rmse"]
+    r2_direct = metrics_direct["r2"]
 
     print(f"  RMSE: {rmse_direct:.2f} kcal/mol (expected: ~1000, broken by shift)")
     print(f"  R2:   {r2_direct:.4f} (expected: negative, worse than mean)")
@@ -150,7 +156,9 @@ def test_stress_distribution_shift_extreme(real_data_1k_extreme):
     print(f"\n  DEBUG: Prediction analysis")
     print(f"    y_pred mean: {np.mean(y_pred_direct):.1f}")
     print(f"    y_test mean: {np.mean(y_cbs_test):.1f}")
-    print(f"    Systematic error: {abs(np.mean(y_pred_direct) - np.mean(y_cbs_test)):.1f} kcal/mol")
+    print(
+        f"    Systematic error: {abs(np.mean(y_pred_direct) - np.mean(y_cbs_test)):.1f} kcal/mol"
+    )
 
     # ================================================================
     # STEP 5: Stress Test Analysis
@@ -158,7 +166,7 @@ def test_stress_distribution_shift_extreme(real_data_1k_extreme):
     print("\n[STEP 5] Stress Test Analysis...")
     print("-" * 70)
 
-    robustness_ratio = rmse_direct / rmse_delta if rmse_delta > 0 else float('inf')
+    robustness_ratio = rmse_direct / rmse_delta if rmse_delta > 0 else float("inf")
 
     print(f"  Delta RMSE:        {rmse_delta:.2f} kcal/mol (ROBUST)")
     print(f"  Direct RMSE:       {rmse_direct:.2f} kcal/mol (FAILED)")
@@ -185,33 +193,35 @@ def test_stress_distribution_shift_extreme(real_data_1k_extreme):
     print("\n[STEP 7] Validating stress test expectations...")
 
     # Delta should still outperform direct
-    assert rmse_delta < rmse_direct, \
-        f"Delta ({rmse_delta:.2f}) should be < Direct ({rmse_direct:.2f})"
+    assert (
+        rmse_delta < rmse_direct
+    ), f"Delta ({rmse_delta:.2f}) should be < Direct ({rmse_direct:.2f})"
 
     # Robustness ratio should be extreme (>10x)
-    assert robustness_ratio > 10, \
-        f"Expected robustness ratio > 10, got {robustness_ratio:.1f}"
+    assert (
+        robustness_ratio > 10
+    ), f"Expected robustness ratio > 10, got {robustness_ratio:.1f}"
 
     # Direct should have failed badly (R2 negative or near zero)
-    assert r2_direct < 0.5, \
-        f"Expected Direct R2 < 0.5 (failing), got {r2_direct:.4f}"
+    assert r2_direct < 0.5, f"Expected Direct R2 < 0.5 (failing), got {r2_direct:.4f}"
 
     # Delta should still be reasonable
-    assert rmse_delta < 50, \
-        f"Delta RMSE should be < 50 even with extreme data, got {rmse_delta:.2f}"
+    assert (
+        rmse_delta < 50
+    ), f"Delta RMSE should be < 50 even with extreme data, got {rmse_delta:.2f}"
 
     print(f"  All stress test expectations met!")
     print("=" * 70 + "\n")
 
     return {
-        'rmse_delta': rmse_delta,
-        'rmse_direct': rmse_direct,
-        'robustness_ratio': robustness_ratio,
-        'distribution_shift': mean_diff,
-        'r2_delta': r2_delta,
-        'r2_direct': r2_direct,
-        'regime': 'extreme (severe distribution shift)',
-        'note': 'This is robustness test, NOT hypothesis validation'
+        "rmse_delta": rmse_delta,
+        "rmse_direct": rmse_direct,
+        "robustness_ratio": robustness_ratio,
+        "distribution_shift": mean_diff,
+        "r2_delta": r2_delta,
+        "r2_direct": r2_direct,
+        "regime": "extreme (severe distribution shift)",
+        "note": "This is robustness test, NOT hypothesis validation",
     }
 
 
@@ -239,15 +249,16 @@ def test_distribution_shift_detection(real_data_1k_extreme):
         )
         shift = abs(np.mean(y_train) - np.mean(y_test))
         shifts.append(shift)
-        print(f"  Seed {seed}: train_mean={np.mean(y_train):.1f}, "
-              f"test_mean={np.mean(y_test):.1f}, shift={shift:.1f}")
+        print(
+            f"  Seed {seed}: train_mean={np.mean(y_train):.1f}, "
+            f"test_mean={np.mean(y_test):.1f}, shift={shift:.1f}"
+        )
 
     avg_shift = np.mean(shifts)
     print(f"\n  Average distribution shift: {avg_shift:.1f} kcal/mol")
 
     # With heterogeneous data, shifts should be significant
-    assert avg_shift > 100, \
-        f"Expected significant shift (>100), got {avg_shift:.1f}"
+    assert avg_shift > 100, f"Expected significant shift (>100), got {avg_shift:.1f}"
 
     print("  Confirmed: Extreme data creates distribution shift!")
     print("=" * 70 + "\n")

@@ -81,7 +81,9 @@ class SemiempiricalHandler:
 
         """
         if method not in self.SUPPORTED_METHODS:
-            raise ValueError(f"Method {method} not supported. Use one of {self.SUPPORTED_METHODS}")
+            raise ValueError(
+                f"Method {method} not supported. Use one of {self.SUPPORTED_METHODS}"
+            )
 
         self.method = method
         self.mopac_path = Path(mopac_path) if mopac_path else None

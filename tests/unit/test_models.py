@@ -28,9 +28,11 @@ class TestBaseModel:
 
     def test_check_is_fitted_raises(self):
         """Test that _check_is_fitted raises when not fitted."""
+
         class ConcreteModel(BaseModel):
             def fit(self, X, y, sample_weight=None):
                 pass
+
             def predict(self, X):
                 pass
 

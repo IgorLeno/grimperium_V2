@@ -60,15 +60,17 @@ def generate_chemperium_mock(
     # Generate mock SMILES (simplified, not chemically valid)
     smiles = [f"C{i}H{2*i+2}" for i in range(1, n_molecules + 1)]
 
-    df = pd.DataFrame({
-        "smiles": smiles,
-        "charge": charge,
-        "multiplicity": multiplicity,
-        "nheavy": nheavy,
-        "H298_cbs": h298_cbs,
-        "H298_b3": h298_b3,
-        "S298": s298,
-    })
+    df = pd.DataFrame(
+        {
+            "smiles": smiles,
+            "charge": charge,
+            "multiplicity": multiplicity,
+            "nheavy": nheavy,
+            "H298_cbs": h298_cbs,
+            "H298_b3": h298_b3,
+            "S298": s298,
+        }
+    )
 
     # Add heat capacity columns
     if include_cp:
@@ -115,10 +117,12 @@ def generate_pm7_mock(
     errors = np.random.normal(error_mean, error_std, n)
     h298_pm7 = h298_cbs + errors  # CBS - error = PM7 → PM7 = CBS + error
 
-    return pd.DataFrame({
-        "smiles": smiles,
-        "H298_pm7": h298_pm7,
-    })
+    return pd.DataFrame(
+        {
+            "smiles": smiles,
+            "H298_pm7": h298_pm7,
+        }
+    )
 
 
 def generate_features_mock(
@@ -186,7 +190,9 @@ def generate_training_data(
     np.random.seed(random_state)
 
     # Generate base data
-    df = generate_chemperium_mock(n_samples, include_cp=False, random_state=random_state)
+    df = generate_chemperium_mock(
+        n_samples, include_cp=False, random_state=random_state
+    )
     pm7_df = generate_pm7_mock(
         df["smiles"].tolist(),
         df["H298_cbs"].values,

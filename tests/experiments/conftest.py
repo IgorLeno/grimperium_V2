@@ -119,18 +119,20 @@ def create_enriched_features(X_basic: np.ndarray) -> np.ndarray:
     charge = X_basic[:, 1:2]
     mult = X_basic[:, 2:3]
 
-    return np.hstack([
-        nheavy,                              # 1. Original
-        charge,                              # 2. Original
-        mult,                                # 3. Original
-        nheavy ** 2,                         # 4. Polynomial
-        np.sqrt(np.abs(nheavy) + 1),         # 5. Polynomial
-        nheavy * charge,                     # 6. Interaction
-        nheavy * mult,                       # 7. Interaction
-        charge ** 2,                         # 8. Polynomial
-        mult ** 2,                           # 9. Polynomial
-        np.ones_like(nheavy)                 # 10. Bias term
-    ])
+    return np.hstack(
+        [
+            nheavy,  # 1. Original
+            charge,  # 2. Original
+            mult,  # 3. Original
+            nheavy**2,  # 4. Polynomial
+            np.sqrt(np.abs(nheavy) + 1),  # 5. Polynomial
+            nheavy * charge,  # 6. Interaction
+            nheavy * mult,  # 7. Interaction
+            charge**2,  # 8. Polynomial
+            mult**2,  # 9. Polynomial
+            np.ones_like(nheavy),  # 10. Bias term
+        ]
+    )
 
 
 # ============================================================
@@ -183,7 +185,7 @@ def real_data_1k_filtered() -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     print(f"  H298_cbs: range=[{h_min:.1f}, {h_max:.1f}]")
 
     # Apply physical filter to remove extreme outliers
-    df_filtered = df[(df['H298_cbs'] >= -1000) & (df['H298_cbs'] <= 1000)]
+    df_filtered = df[(df["H298_cbs"] >= -1000) & (df["H298_cbs"] <= 1000)]
 
     df_filtered_pct = len(df_filtered) / len(df) * 100
     print(
@@ -206,15 +208,13 @@ def real_data_1k_filtered() -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     print(f"  H298_cbs: range=[{h_sample_min:.1f}, {h_sample_max:.1f}]")
 
     # Validate: std should be reasonable (not 7000+)
-    assert h_sample_std < 500, (
-        f"Filtered data should have std < 500, got {h_sample_std:.1f}"
-    )
+    assert (
+        h_sample_std < 500
+    ), f"Filtered data should have std < 500, got {h_sample_std:.1f}"
 
     # Extract basic features
-    X_basic = (
-        df_sample[["nheavy", "charge", "multiplicity"]].values.astype(float)
-    )
-    y_cbs = df_sample['H298_cbs'].values.astype(float)
+    X_basic = df_sample[["nheavy", "charge", "multiplicity"]].values.astype(float)
+    y_cbs = df_sample["H298_cbs"].values.astype(float)
 
     # Create enriched features
     X = create_enriched_features(X_basic)
@@ -282,10 +282,8 @@ def real_data_1k_extreme() -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     print(f"  H298_cbs: mean={h_sample_mean:.1f}, std={h_sample_std:.1f}")
 
     # Extract basic features
-    X_basic = (
-        df_sample[["nheavy", "charge", "multiplicity"]].values.astype(float)
-    )
-    y_cbs = df_sample['H298_cbs'].values.astype(float)
+    X_basic = df_sample[["nheavy", "charge", "multiplicity"]].values.astype(float)
+    y_cbs = df_sample["H298_cbs"].values.astype(float)
 
     # Create enriched features
     X = create_enriched_features(X_basic)

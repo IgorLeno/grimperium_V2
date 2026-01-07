@@ -24,16 +24,16 @@ import pytest
 def sample_smiles() -> list[str]:
     """Sample SMILES strings for testing."""
     return [
-        "C",           # Methane
-        "CC",          # Ethane
-        "CCC",         # Propane
-        "CCO",         # Ethanol
-        "CC(=O)O",     # Acetic acid
-        "c1ccccc1",    # Benzene
-        "CC(C)C",      # Isobutane
-        "CCCO",        # 1-Propanol
-        "CC=O",        # Acetaldehyde
-        "COC",         # Dimethyl ether
+        "C",  # Methane
+        "CC",  # Ethane
+        "CCC",  # Propane
+        "CCO",  # Ethanol
+        "CC(=O)O",  # Acetic acid
+        "c1ccccc1",  # Benzene
+        "CC(C)C",  # Isobutane
+        "CCCO",  # 1-Propanol
+        "CC=O",  # Acetaldehyde
+        "COC",  # Dimethyl ether
     ]
 
 
@@ -58,18 +58,20 @@ def mock_chemperium_df(sample_smiles: list[str]) -> pd.DataFrame:
 
     # Realistic mock thermodynamic values
     # H298 in kcal/mol, typical range for small organics
-    h298_cbs = np.array([
-        -17.9,   # Methane
-        -20.0,   # Ethane
-        -25.0,   # Propane
-        -56.2,   # Ethanol
-        -103.4,  # Acetic acid
-        19.8,    # Benzene
-        -32.1,   # Isobutane
-        -61.0,   # 1-Propanol
-        -39.7,   # Acetaldehyde
-        -44.0,   # Dimethyl ether
-    ])
+    h298_cbs = np.array(
+        [
+            -17.9,  # Methane
+            -20.0,  # Ethane
+            -25.0,  # Propane
+            -56.2,  # Ethanol
+            -103.4,  # Acetic acid
+            19.8,  # Benzene
+            -32.1,  # Isobutane
+            -61.0,  # 1-Propanol
+            -39.7,  # Acetaldehyde
+            -44.0,  # Dimethyl ether
+        ]
+    )
 
     # B3LYP values (slightly different from CBS)
     h298_b3 = h298_cbs + np.random.normal(0, 2, n_molecules)
@@ -80,15 +82,17 @@ def mock_chemperium_df(sample_smiles: list[str]) -> pd.DataFrame:
     # Heat capacity values (cal/mol·K) - just 5 columns for mock
     cp_base = np.array([8.5, 12.6, 17.6, 15.7, 16.0, 19.5, 23.2, 21.5, 13.2, 15.3])
 
-    df = pd.DataFrame({
-        "smiles": sample_smiles,
-        "charge": [0] * n_molecules,
-        "multiplicity": [1] * n_molecules,
-        "nheavy": [1, 2, 3, 3, 4, 6, 4, 4, 3, 3],
-        "H298_cbs": h298_cbs,
-        "H298_b3": h298_b3,
-        "S298": s298,
-    })
+    df = pd.DataFrame(
+        {
+            "smiles": sample_smiles,
+            "charge": [0] * n_molecules,
+            "multiplicity": [1] * n_molecules,
+            "nheavy": [1, 2, 3, 3, 4, 6, 4, 4, 3, 3],
+            "H298_cbs": h298_cbs,
+            "H298_b3": h298_b3,
+            "S298": s298,
+        }
+    )
 
     # Add heat capacity columns
     for i in range(1, 6):
@@ -109,23 +113,27 @@ def mock_pm7_df(sample_smiles: list[str]) -> pd.DataFrame:
     n_molecules = len(sample_smiles)
 
     # PM7 values with systematic underestimation
-    h298_pm7 = np.array([
-        -15.2,   # Methane (error: ~2.7 kcal/mol)
-        -17.8,   # Ethane (error: ~2.2 kcal/mol)
-        -22.5,   # Propane (error: ~2.5 kcal/mol)
-        -52.0,   # Ethanol (error: ~4.2 kcal/mol)
-        -98.0,   # Acetic acid (error: ~5.4 kcal/mol)
-        22.5,    # Benzene (error: ~2.7 kcal/mol)
-        -29.0,   # Isobutane (error: ~3.1 kcal/mol)
-        -57.0,   # 1-Propanol (error: ~4.0 kcal/mol)
-        -36.5,   # Acetaldehyde (error: ~3.2 kcal/mol)
-        -41.0,   # Dimethyl ether (error: ~3.0 kcal/mol)
-    ])
+    h298_pm7 = np.array(
+        [
+            -15.2,  # Methane (error: ~2.7 kcal/mol)
+            -17.8,  # Ethane (error: ~2.2 kcal/mol)
+            -22.5,  # Propane (error: ~2.5 kcal/mol)
+            -52.0,  # Ethanol (error: ~4.2 kcal/mol)
+            -98.0,  # Acetic acid (error: ~5.4 kcal/mol)
+            22.5,  # Benzene (error: ~2.7 kcal/mol)
+            -29.0,  # Isobutane (error: ~3.1 kcal/mol)
+            -57.0,  # 1-Propanol (error: ~4.0 kcal/mol)
+            -36.5,  # Acetaldehyde (error: ~3.2 kcal/mol)
+            -41.0,  # Dimethyl ether (error: ~3.0 kcal/mol)
+        ]
+    )
 
-    return pd.DataFrame({
-        "smiles": sample_smiles,
-        "H298_pm7": h298_pm7,
-    })
+    return pd.DataFrame(
+        {
+            "smiles": sample_smiles,
+            "H298_pm7": h298_pm7,
+        }
+    )
 
 
 @pytest.fixture
@@ -161,18 +169,20 @@ def mock_features(sample_smiles: list[str]) -> np.ndarray:
     np.random.seed(42)
 
     # Tabular features: nheavy, charge, multiplicity
-    tabular = np.array([
-        [1, 0, 1],
-        [2, 0, 1],
-        [3, 0, 1],
-        [3, 0, 1],
-        [4, 0, 1],
-        [6, 0, 1],
-        [4, 0, 1],
-        [4, 0, 1],
-        [3, 0, 1],
-        [3, 0, 1],
-    ])
+    tabular = np.array(
+        [
+            [1, 0, 1],
+            [2, 0, 1],
+            [3, 0, 1],
+            [3, 0, 1],
+            [4, 0, 1],
+            [6, 0, 1],
+            [4, 0, 1],
+            [4, 0, 1],
+            [3, 0, 1],
+            [3, 0, 1],
+        ]
+    )
 
     # Mock Morgan fingerprints (32 bits for testing, normally 256)
     morgan_fp = np.random.randint(0, 2, (n_samples, 32))
@@ -217,6 +227,7 @@ def train_test_split(
 def default_config():
     """Default Grimperium configuration."""
     from grimperium.config import GrimperiumConfig
+
     return GrimperiumConfig()
 
 

@@ -70,10 +70,13 @@ class TestDataPipeline:
 
         # Create mock data files
         chem_df = make_small_chemperium_df(n=50)
-        pm7_df = pd.DataFrame({
-            "smiles": chem_df["smiles"].tolist(),
-            "H298_pm7": chem_df["H298_cbs"] + np.random.normal(3.0, 1.5, len(chem_df)),
-        })
+        pm7_df = pd.DataFrame(
+            {
+                "smiles": chem_df["smiles"].tolist(),
+                "H298_pm7": chem_df["H298_cbs"]
+                + np.random.normal(3.0, 1.5, len(chem_df)),
+            }
+        )
 
         # Save to files
         chem_path = tmp_path / "chemperium.csv"
@@ -152,10 +155,7 @@ class TestDataPipeline:
 
         # 3-way split
         train_df, val_df, test_df = loader.train_val_test_split(
-            filtered_df,
-            test_size=0.2,
-            val_size=0.1,
-            random_state=42
+            filtered_df, test_size=0.2, val_size=0.1, random_state=42
         )
         assert len(train_df) + len(val_df) + len(test_df) == len(filtered_df)
 
@@ -183,8 +183,7 @@ class TestDataPipeline:
         # Verify delta values
         expected_delta = df["H298_cbs"] - df["H298_pm7"]
         np.testing.assert_array_almost_equal(
-            result["delta_pm7"].values,
-            expected_delta.values
+            result["delta_pm7"].values, expected_delta.values
         )
 
         # Get training data

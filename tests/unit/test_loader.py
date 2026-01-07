@@ -135,8 +135,12 @@ class TestChemperiumLoader:
         train1, test1 = loader.split(test_size=0.2, random_state=42)
         train2, test2 = loader.split(test_size=0.2, random_state=42)
 
-        pd.testing.assert_frame_equal(train1.reset_index(drop=True), train2.reset_index(drop=True))
-        pd.testing.assert_frame_equal(test1.reset_index(drop=True), test2.reset_index(drop=True))
+        pd.testing.assert_frame_equal(
+            train1.reset_index(drop=True), train2.reset_index(drop=True)
+        )
+        pd.testing.assert_frame_equal(
+            test1.reset_index(drop=True), test2.reset_index(drop=True)
+        )
 
     def test_train_val_test_split(self, mock_chemperium_df):
         """Test 3-way train/val/test split."""
@@ -151,7 +155,7 @@ class TestChemperiumLoader:
         assert len(train) + len(val) + len(test) == len(mock_chemperium_df)
         # Check proportions (approximate due to small sample size)
         assert len(test) == 2  # 20% of 10
-        assert len(val) == 1   # 10% of 10 (approximately)
+        assert len(val) == 1  # 10% of 10 (approximately)
 
     def test_train_val_test_split_invalid_sizes(self, mock_chemperium_df):
         """Test that invalid split sizes raise error."""
@@ -302,8 +306,6 @@ class TestChemperiumLoaderValidation:
         assert len(df) == 3
 
         # Test with nheavy filter
-        df_filtered = ChemperiumLoader.load_thermo_cbs_opt(
-            csv_path, max_nheavy=3
-        )
+        df_filtered = ChemperiumLoader.load_thermo_cbs_opt(csv_path, max_nheavy=3)
         assert len(df_filtered) == 1
         assert df_filtered["smiles"].iloc[0] == "CCO"
