@@ -34,4 +34,7 @@ language = 'pt_BR'
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#options-for-html-output
 
 html_theme = 'sphinx_rtd_theme'
+# Diretório de assets estáticos do Sphinx.
+# Fonte de verdade: `html_static_path` (não mantenha documentação/README dentro de `_static`).
+# Se o diretório precisar existir no git mesmo vazio, use um `.gitkeep`.
 html_static_path = ['_static']

@@ -143,6 +143,7 @@ X_selected, selected_indices = select_features(
 ## Workflow Completo
 
 ```python
+from grimperium.exceptions import DataValidationError
 from grimperium.utils import (
     validate_data,
     setup_logger,
@@ -158,7 +159,6 @@ logger = setup_logger('experiment_1')
 is_valid, errors = validate_data(raw_data)
 if not is_valid:
     logger.error(f"Data validation failed: {errors}")
-    from grimperium.exceptions import DataValidationError
     raise DataValidationError(f"Data validation failed: {errors}")
 
 # 3. Feature engineering

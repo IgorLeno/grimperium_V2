@@ -3,7 +3,8 @@ Reproduz os benchmarks do relatório técnico: BATCH 3 (Hypothesis Validation).
 
 Este script roda exatamente o mesmo protocolo codificado em:
 - tests/experiments/test_validate_hypothesis.py (regime realista/filtrado)
-- tests/experiments/test_stress_distribution_shift.py (regime extremo/não filtrado)
+- tests/experiments/test_stress_distribution_shift.py
+  (regime extremo/não filtrado)
 - tests/experiments/conftest.py (filtro, amostragem, PM7 mock e seeds)
 
 Além do "point estimate" (seed=42), o script calcula incerteza via bootstrap
@@ -28,7 +29,7 @@ import subprocess
 import sys
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
+from typing import Optional, TypedDict
 
 import numpy as np
 import pandas as pd
@@ -40,9 +41,96 @@ from grimperium.data.loader import ChemperiumLoader
 from grimperium.models.delta_ensemble import DeltaLearningEnsemble
 
 
+class Metrics(TypedDict):
+    """Métricas retornadas por `compute_all_metrics`."""
+
+    rmse: float
+    mae: float
+    r2: float
+    mape: float
+    max_error: float
+
+
+class FitPredictOutput(TypedDict):
+    """
+    Saída tipada de `_fit_predict`.
+
+    Mantém shape estável e elimina `type: ignore` em acessos por chave.
+    """
+
+    y_true: np.ndarray
+    y_pred_delta: np.ndarray
+    y_pred_direct: np.ndarray
+    metrics_delta: Metrics
+    metrics_direct: Metrics
+    rmse_ratio: float
+
+
+class SummaryStats(TypedDict):
+    mean: float
+    std: float
+    ci95_lo: float
+    ci95_hi: float
+
+
+class BootstrapCI95(TypedDict):
+    rmse_delta: SummaryStats
+    rmse_direct: SummaryStats
+    r2_delta: SummaryStats
+    r2_direct: SummaryStats
+    rmse_ratio: SummaryStats
+
+
+class Env(TypedDict):
+    git_commit: str
+    python: str
+    platform: str
+    cpu: str
+    mem_gb: Optional[float]
+    numpy: str
+    pandas: str
+    sklearn: str
+    xgboost: str
+
+
+class RegimeConfigJSON(TypedDict):
+    filtered: bool
+    filter_range_kcal_mol: Optional[list[int]]
+    n_samples: int
+    test_size: float
+    sample_seed: int
+    split_seed: int
+    pm7_mock_seed: int
+    pm7_mock_magnitude_bias_std: float
+    bootstrap_n: int
+    bootstrap_seed: int
+
+
+class PointEstimate(TypedDict):
+    rmse_delta: float
+    rmse_direct: float
+    r2_delta: float
+    r2_direct: float
+    rmse_ratio: float
+
+
+class RegimeResults(TypedDict):
+    config: RegimeConfigJSON
+    point_estimate: PointEstimate
+    bootstrap_ci95: BootstrapCI95
+
+
+class Results(TypedDict):
+    env: Env
+    protocol_seed: int
+    regimes: dict[str, RegimeResults]
+
+
 def _get_git_commit() -> str:
     try:
-        out = subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()
+        out = subprocess.check_output(
+            ["git", "rev-parse", "HEAD"], text=True
+        ).strip()
         return out
     except Exception:
         return "unknown"
@@ -50,7 +138,9 @@ def _get_git_commit() -> str:
 
 def _get_cpu_model() -> str:
     try:
-        txt = Path("/proc/cpuinfo").read_text(encoding="utf-8", errors="ignore")
+        txt = Path("/proc/cpuinfo").read_text(
+            encoding="utf-8", errors="ignore"
+        )
         m = re.search(r"^model name\s*:\s*(.+)$", txt, re.M)
         return m.group(1).strip() if m else "unknown"
     except Exception:
@@ -59,7 +149,8 @@ def _get_cpu_model() -> str:
 
 def _get_mem_total_gb() -> Optional[float]:
     try:
-        for line in Path("/proc/meminfo").read_text(encoding="utf-8").splitlines():
+        meminfo = Path("/proc/meminfo").read_text(encoding="utf-8")
+        for line in meminfo.splitlines():
             if line.startswith("MemTotal:"):
                 kb = int(line.split()[1])
                 return kb / 1024 / 1024
@@ -78,8 +169,8 @@ def _create_realistic_mock_pm7(
     """
     Copiado 1:1 de `tests/experiments/conftest.py::create_realistic_mock_pm7`.
 
-    Nota: usa `np.random.seed(seed)` (global) por compatibilidade com o protocolo
-    atual dos experimentos.
+    Nota: usa `np.random.seed(seed)` (global) por compatibilidade com o
+    protocolo atual dos experimentos.
     """
     if seed is not None:
         np.random.seed(seed)
@@ -106,7 +197,9 @@ def _create_realistic_mock_pm7(
 
 
 def _create_enriched_features(X_basic: np.ndarray) -> np.ndarray:
-    """Copiado 1:1 de `tests/experiments/conftest.py::create_enriched_features`."""
+    """
+    Copiado 1:1 de `tests/experiments/conftest.py::create_enriched_features`.
+    """
     nheavy = X_basic[:, 0:1]
     charge = X_basic[:, 1:2]
     mult = X_basic[:, 2:3]
@@ -150,7 +243,9 @@ def _load_xy(
 
     df_sample = df.sample(n=n_samples, random_state=sample_seed)
 
-    X_basic = df_sample[["nheavy", "charge", "multiplicity"]].values.astype(float)
+    X_basic = (
+        df_sample[["nheavy", "charge", "multiplicity"]].values.astype(float)
+    )
     y_cbs = df_sample["H298_cbs"].values.astype(float)
     X = _create_enriched_features(X_basic)
     y_pm7 = _create_realistic_mock_pm7(
@@ -166,7 +261,7 @@ def _fit_predict(
     y_pm7: np.ndarray,
     split_seed: int,
     test_size: float,
-) -> dict[str, object]:
+) -> FitPredictOutput:
     (
         X_train,
         X_test,
@@ -188,7 +283,12 @@ def _fit_predict(
     y_pred_direct = model_direct.predict(X_test)
     metrics_direct = compute_all_metrics(y_cbs_test, y_pred_direct)
 
-    rmse_ratio = metrics_direct["rmse"] / metrics_delta["rmse"]
+    # Guard contra divisão por zero (ou valores extremamente pequenos).
+    denom = float(metrics_delta["rmse"])
+    if abs(denom) < 1e-12:
+        rmse_ratio = float("inf")
+    else:
+        rmse_ratio = float(metrics_direct["rmse"]) / denom
 
     return {
         "y_true": y_cbs_test,
@@ -207,7 +307,7 @@ def _bootstrap_ci(
     y_pred_direct: np.ndarray,
     n_bootstrap: int,
     seed: int,
-) -> dict[str, dict[str, float]]:
+) -> BootstrapCI95:
     rng = np.random.default_rng(seed)
     n = len(y_true)
     idx = np.arange(n)
@@ -226,9 +326,13 @@ def _bootstrap_ci(
         rmse_directs.append(float(m_direct["rmse"]))
         r2_deltas.append(float(m_delta["r2"]))
         r2_directs.append(float(m_direct["r2"]))
-        ratios.append(float(m_direct["rmse"] / m_delta["rmse"]))
+        denom = float(m_delta["rmse"])
+        if abs(denom) < 1e-12:
+            ratios.append(float("inf"))
+        else:
+            ratios.append(float(m_direct["rmse"]) / denom)
 
-    def summarize(xs: list[float]) -> dict[str, float]:
+    def summarize(xs: list[float]) -> SummaryStats:
         arr = np.asarray(xs, dtype=float)
         lo, hi = np.percentile(arr, [2.5, 97.5])
         return {
@@ -253,16 +357,20 @@ def main() -> int:
         "--data-path",
         type=Path,
         default=Path("thermo_cbs_opt.csv"),
-        help="Caminho para o CSV do Chemperium (padrão: ./thermo_cbs_opt.csv).",
+        help=(
+            "Caminho para o CSV do Chemperium (padrão: ./thermo_cbs_opt.csv)."
+        ),
     )
     parser.add_argument("--n-samples", type=int, default=1000)
     parser.add_argument("--test-size", type=float, default=0.2)
-    parser.add_argument("--seed", type=int, default=42, help="Seed do protocolo.")
+    parser.add_argument(
+        "--seed", type=int, default=42, help="Seed do protocolo."
+    )
     parser.add_argument("--bootstrap-n", type=int, default=2000)
     parser.add_argument("--bootstrap-seed", type=int, default=42)
     args = parser.parse_args()
 
-    env = {
+    env: Env = {
         "git_commit": _get_git_commit(),
         "python": sys.version.split()[0],
         "platform": platform.platform(),
@@ -270,19 +378,21 @@ def main() -> int:
         "mem_gb": _get_mem_total_gb(),
         "numpy": np.__version__,
         "pandas": pd.__version__,
+        "sklearn": "unknown",
+        "xgboost": "unknown",
     }
     try:
         import sklearn  # type: ignore
 
         env["sklearn"] = sklearn.__version__
     except Exception:
-        env["sklearn"] = "unknown"
+        pass
     try:
         import xgboost  # type: ignore
 
         env["xgboost"] = xgboost.__version__
     except Exception:
-        env["xgboost"] = "unknown"
+        pass
 
     regimes = [
         RegimeConfig(
@@ -297,7 +407,7 @@ def main() -> int:
         ),
     ]
 
-    results: dict[str, object] = {"env": env, "protocol_seed": args.seed, "regimes": {}}
+    results: Results = {"env": env, "protocol_seed": args.seed, "regimes": {}}
 
     for reg in regimes:
         X, y_cbs, y_pm7 = _load_xy(
@@ -315,17 +425,18 @@ def main() -> int:
             test_size=args.test_size,
         )
         ci = _bootstrap_ci(
-            y_true=fit["y_true"],  # type: ignore[arg-type]
-            y_pred_delta=fit["y_pred_delta"],  # type: ignore[arg-type]
-            y_pred_direct=fit["y_pred_direct"],  # type: ignore[arg-type]
+            y_true=fit["y_true"],
+            y_pred_delta=fit["y_pred_delta"],
+            y_pred_direct=fit["y_pred_direct"],
             n_bootstrap=args.bootstrap_n,
             seed=args.bootstrap_seed,
         )
 
+        filter_range = [-1000, 1000] if reg.filtered else None
         results["regimes"][reg.name] = {
             "config": {
                 "filtered": reg.filtered,
-                "filter_range_kcal_mol": [-1000, 1000] if reg.filtered else None,
+                "filter_range_kcal_mol": filter_range,
                 "n_samples": args.n_samples,
                 "test_size": args.test_size,
                 "sample_seed": args.seed,
@@ -336,11 +447,11 @@ def main() -> int:
                 "bootstrap_seed": args.bootstrap_seed,
             },
             "point_estimate": {
-                "rmse_delta": float(fit["metrics_delta"]["rmse"]),  # type: ignore[index]
-                "rmse_direct": float(fit["metrics_direct"]["rmse"]),  # type: ignore[index]
-                "r2_delta": float(fit["metrics_delta"]["r2"]),  # type: ignore[index]
-                "r2_direct": float(fit["metrics_direct"]["r2"]),  # type: ignore[index]
-                "rmse_ratio": float(fit["rmse_ratio"]),  # type: ignore[arg-type]
+                "rmse_delta": float(fit["metrics_delta"]["rmse"]),
+                "rmse_direct": float(fit["metrics_direct"]["rmse"]),
+                "r2_delta": float(fit["metrics_delta"]["r2"]),
+                "r2_direct": float(fit["metrics_direct"]["r2"]),
+                "rmse_ratio": float(fit["rmse_ratio"]),
             },
             "bootstrap_ci95": ci,
         }
@@ -351,5 +462,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-
-
