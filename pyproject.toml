@@ -51,6 +51,9 @@ tox = "^4.11.0"
 
 [tool.poetry.group.docs.dependencies]
 pdoc = "^14.0.0"
+sphinx = ">=7.0,<8.0"
+sphinx-rtd-theme = ">=2.0,<3.0"
+sphinx-autodoc-typehints = ">=1.24,<2.0"
 
 [tool.poetry.scripts]
 grimperium = "grimperium.api:main"
