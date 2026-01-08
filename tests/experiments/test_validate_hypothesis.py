@@ -1,3 +1,4 @@
+# pyright: reportMissingImports=false
 """
 BATCH 3 - DECISION GATE TEST (Hypothesis Validation)
 
@@ -80,8 +81,13 @@ def test_decision_gate_delta_vs_direct(real_data_1k_filtered):
     print("\n[STEP 1] Loading data (realistic, no extreme outliers)...")
     X, y_cbs, y_pm7 = real_data_1k_filtered
 
-    print(f"  Data shape: X={X.shape}, y_cbs={y_cbs.shape}, y_pm7={y_pm7.shape}")
-    print(f"  y_cbs statistics: mean={np.mean(y_cbs):.1f}, " f"std={np.std(y_cbs):.1f}")
+    print(
+        f"  Data shape: X={X.shape}, y_cbs={y_cbs.shape}, y_pm7={y_pm7.shape}"
+    )
+    print(
+        f"  y_cbs statistics: mean={np.mean(y_cbs):.1f}, "
+        f"std={np.std(y_cbs):.1f}"
+    )
     print(f"  y_cbs range: [{np.min(y_cbs):.1f}, {np.max(y_cbs):.1f}]")
 
     # ================================================================
@@ -108,18 +114,22 @@ def test_decision_gate_delta_vs_direct(real_data_1k_filtered):
     print(f"  Train y_cbs mean: {train_mean:.1f}")
     print(f"  Test y_cbs mean:  {test_mean:.1f}")
     print(
-        f"  Mean difference: {mean_diff:.1f} " "(should be < 100 for fair comparison)"
+        f"  Mean difference: {mean_diff:.1f} "
+        "(should be < 100 for fair comparison)"
     )
 
     # With filtered data, distribution shift should be minimal
     assert mean_diff < 100, (
-        f"Distribution shift detected: {mean_diff:.1f} > 100. " "Check data filtering."
+        f"Distribution shift detected: {mean_diff:.1f} > 100. "
+        "Check data filtering."
     )
 
     # ================================================================
     # STEP 3: Model Delta (reference approach)
     # ================================================================
-    print("\n[STEP 3] Training DELTA model (learns y_delta = y_cbs - y_pm7)...")
+    print(
+        "\n[STEP 3] Training DELTA model (learns y_delta = y_cbs - y_pm7)..."
+    )
     model_delta = DeltaLearner()
     model_delta.fit(X_train, y_cbs_train, y_pm7_train)
 
@@ -168,9 +178,12 @@ def test_decision_gate_delta_vs_direct(real_data_1k_filtered):
     r2_winner = "DELTA" if r2_delta > r2_direct else "DIRECT"
 
     print(
-        f"{'RMSE':<15} {rmse_delta:<15.2f} {rmse_direct:<15.2f} " f"{rmse_winner:<10}"
+        f"{'RMSE':<15} {rmse_delta:<15.2f} {rmse_direct:<15.2f} "
+        f"{rmse_winner:<10}"
     )
-    print(f"{'MAE':<15} {mae_delta:<15.2f} {mae_direct:<15.2f} {mae_winner:<10}")
+    print(
+        f"{'MAE':<15} {mae_delta:<15.2f} {mae_direct:<15.2f} {mae_winner:<10}"
+    )
     print(f"{'R2':<15} {r2_delta:<15.4f} {r2_direct:<15.4f} {r2_winner:<10}")
     print("-" * 70)
     print(
@@ -212,7 +225,9 @@ def test_decision_gate_delta_vs_direct(real_data_1k_filtered):
                 f"Delta ({rmse_delta:.2f}) >= Direct ({rmse_direct:.2f})"
             )
         if not criterion_2:
-            print(f"  Criterion 2 failed: Delta RMSE ({rmse_delta:.2f}) >= 20.0")
+            print(
+                f"  Criterion 2 failed: Delta RMSE ({rmse_delta:.2f}) >= 20.0"
+            )
 
     print("=" * 70 + "\n")
 
