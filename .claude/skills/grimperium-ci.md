@@ -29,9 +29,9 @@ allowed-tools:
 1. ✅ Parse do CI Error Report
 2. ✅ Identifica tipo de erro (Lint, Type, Tests)
 3. ✅ Aplica fixes automáticos para **Lint/format** e mudanças mecânicas seguras (ex.: `black`, `ruff`) quando o resultado é determinístico
-4. ✅ Para **Type** e **Tests**, pode gerar **patches diagnósticos**: sugestões de mudanças de código para resolver erros de Type/Tests que **exigem julgamento humano** (ex.: ajustar lógica, API, contrato/assinatura, comportamento do teste). Esses patches são **mostrados para revisão** e **não são aplicados automaticamente**
-   - **Workflow de confirmação**: eu apresento o patch proposto → executo as validações relevantes (ex.: `mypy`, `pytest`) e mostro os resultados → **pauso** para você **aceitar**, **editar** ou **rejeitar** a mudança antes de qualquer passo de commit/push
-5. ✅ **Commit + Push**: só acontecem após sua confirmação quando houver **patch diagnóstico** (Type/Tests). Para **Lint/format**, as correções podem ser aplicadas automaticamente, mas não avanço para commit/push se você solicitar revisão antes
+4. ✅ Para **Type** e **Tests**, pode gerar **patches diagnósticos**: sugestões de mudanças de código para resolver erros de Type/Tests que **exigem julgamento humano** (ex.: ajustar lógica, API, contrato/assinatura, comportamento do teste). **Esses patches são apenas gerados/mostrados e nunca são aplicados automaticamente.**
+   - **Workflow (Type/Tests / patch diagnóstico)**: eu apresento o patch (diff) → **pauso** para você **aceitar**, **editar** ou **rejeitar** → **somente se você aceitar** eu aplico as mudanças no workspace → executo as validações relevantes (ex.: `mypy`, `pytest`) e mostro os resultados → **somente então** peço confirmação para commit/push
+5. ✅ **Lint/format + Commit + Push**: para **Lint/format**, eu **aplico automaticamente as correções imediatamente** (ex.: rodo `black`/`ruff`, o que altera os arquivos no workspace) e mostro o `git diff`. **Commit + push só acontecem após sua confirmação explícita** (inclusive para Lint/format). Para **Type/Tests (patch diagnóstico)**, commit/push também só acontecem **depois** da sua confirmação **e** depois de aplicar o patch e revalidar
 
 ## Tipos de Erros Suportados
 
