@@ -128,7 +128,7 @@ def mock_pm7_df(sample_smiles: list[str]) -> pd.DataFrame:
         ]
     )
 
-    # Garantia de consistência: o fixture `sample_smiles` e os valores mock devem ter o mesmo tamanho.
+    # Consistency check: ensure mock PM7 values match the number of sample SMILES
     assert h298_pm7.shape[0] == n_molecules
 
     return pd.DataFrame(

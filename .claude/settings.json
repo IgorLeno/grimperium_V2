@@ -1,0 +1,24 @@
+{
+  "permissions": {
+    "Bash": [
+      "poetry *",
+      "pytest *",
+      "ruff *",
+      "black *",
+      "mypy *",
+      "git *",
+      "git add *",
+      "git commit *",
+      "git push *",
+      "find * -name *.py",
+      "find * -type f -name *.md",
+      "ls *",
+      "cat *",
+      "grep *",
+      "pwd",
+      "cd *"
+    ]
+  },
+  "defaultLanguage": "en",
+  "respectGitignore": true
+}
