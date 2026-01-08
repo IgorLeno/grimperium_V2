@@ -215,9 +215,7 @@ def real_data_1k_filtered() -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     ), f"Filtered data should have std < 500, got {h_sample_std:.1f}"
 
     # Extract basic features
-    X_basic = (
-        df_sample[["nheavy", "charge", "multiplicity"]].values.astype(float)
-    )
+    X_basic = df_sample[["nheavy", "charge", "multiplicity"]].values.astype(float)
     y_cbs = df_sample["H298_cbs"].values.astype(float)
 
     # Create enriched features
@@ -286,9 +284,7 @@ def real_data_1k_extreme() -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     print(f"  H298_cbs: mean={h_sample_mean:.1f}, std={h_sample_std:.1f}")
 
     # Extract basic features
-    X_basic = (
-        df_sample[["nheavy", "charge", "multiplicity"]].values.astype(float)
-    )
+    X_basic = df_sample[["nheavy", "charge", "multiplicity"]].values.astype(float)
     y_cbs = df_sample["H298_cbs"].values.astype(float)
 
     # Create enriched features
