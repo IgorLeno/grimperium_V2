@@ -34,7 +34,7 @@ class TestFullPipeline:
         """Test complete delta-learning pipeline."""
         from grimperium import GrimperiumAPI
 
-        api = GrimperiumAPI()
+        _api = GrimperiumAPI()
 
         # Load data
         # api.load_data(...)
@@ -56,7 +56,7 @@ class TestFullPipeline:
         """Test API prediction."""
         from grimperium import GrimperiumAPI
 
-        api = GrimperiumAPI()
+        _api = GrimperiumAPI()
         # Predictions should match expected shape
         pass
 
@@ -205,10 +205,10 @@ class TestModelPipeline:
         """Test ensemble model training."""
         from grimperium.models import DeltaLearningEnsemble
 
-        X_train = training_data["X_train"]
-        y_train = training_data["y_train"]
+        _X_train = training_data["X_train"]
+        _y_train = training_data["y_train"]
 
-        ensemble = DeltaLearningEnsemble()
+        _ensemble = DeltaLearningEnsemble()
         # ensemble.fit(X_train, y_train)
 
         # assert ensemble.is_fitted
@@ -229,7 +229,7 @@ class TestFeaturePipeline:
         """Test feature engineering from SMILES."""
         from grimperium.utils import FeatureEngineer
 
-        fe = FeatureEngineer(morgan_bits=256)
+        _fe = FeatureEngineer(morgan_bits=256)
         # features = fe.fit_transform(sample_smiles)
 
         # assert features.shape[0] == len(sample_smiles)
@@ -250,8 +250,8 @@ class TestEvaluationPipeline:
     def test_metrics_computation(self):
         """Test metrics computation."""
 
-        y_true = np.array([1.0, 2.0, 3.0, 4.0, 5.0])
-        y_pred = np.array([1.1, 2.0, 2.9, 4.1, 5.0])
+        _y_true = np.array([1.0, 2.0, 3.0, 4.0, 5.0])
+        _y_pred = np.array([1.1, 2.0, 2.9, 4.1, 5.0])
 
         # rmse_val = rmse(y_true, y_pred)
         # mae_val = mae(y_true, y_pred)
@@ -264,8 +264,8 @@ class TestEvaluationPipeline:
     @pytest.mark.skip(reason="Evaluation pipeline not implemented yet")
     def test_delta_improvement(self, training_data):
         """Test that delta-learning improves over PM7 baseline."""
-        training_data = generate_training_data(n_samples=100, test_size=0.2)
-        h298_cbs = training_data["h298_cbs_test"]
+        _training_data = generate_training_data(n_samples=100, test_size=0.2)
+        _h298_cbs = _training_data["h298_cbs_test"]
 
         # Baseline: PM7 raw error
         # pm7_error = np.abs(h298_pm7 - h298_cbs).mean()

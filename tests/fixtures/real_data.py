@@ -18,7 +18,6 @@ from typing import Optional
 import pandas as pd
 from sklearn.model_selection import train_test_split
 
-
 _DATASET_PATH = Path(__file__).parent.parent.parent / "thermo_cbs_opt.csv"
 
 

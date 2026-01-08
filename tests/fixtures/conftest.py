@@ -14,10 +14,8 @@ Mock PM7 Error Model:
 
 """
 
-import pytest
 import numpy as np
-from typing import Tuple
-
+import pytest
 
 # ============================================================
 # MOCK PM7 FUNCTIONS
@@ -129,7 +127,7 @@ def create_enriched_features(X_basic: np.ndarray) -> np.ndarray:
 
 
 @pytest.fixture
-def synthetic_data_1k() -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+def synthetic_data_1k() -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """
     Synthetic data with enriched features (1000 samples).
 
@@ -175,7 +173,7 @@ def synthetic_data_1k() -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]
 
 
 @pytest.fixture
-def real_data_1k() -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+def real_data_1k() -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """
     DEPRECATED: Use fixtures from tests/experiments/conftest.py instead.
 

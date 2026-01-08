@@ -59,12 +59,11 @@ Do NOT use this test to:
 """
 
 import numpy as np
-import pytest
 from sklearn.model_selection import train_test_split
 
 from grimperium.core.delta_learning import DeltaLearner
-from grimperium.models.delta_ensemble import DeltaLearningEnsemble
 from grimperium.core.metrics import compute_all_metrics
+from grimperium.models.delta_ensemble import DeltaLearningEnsemble
 
 
 def test_stress_distribution_shift_extreme(real_data_1k_extreme):
@@ -121,7 +120,7 @@ def test_stress_distribution_shift_extreme(real_data_1k_extreme):
 
     # In extreme data, we EXPECT distribution shift
     if mean_diff > 100:
-        print(f"  (This is expected with extreme outliers)")
+        print("  (This is expected with extreme outliers)")
 
     # ================================================================
     # STEP 3: Model Delta (should be robust)
@@ -153,7 +152,7 @@ def test_stress_distribution_shift_extreme(real_data_1k_extreme):
     print(f"  R2:   {r2_direct:.4f} (expected: negative, worse than mean)")
 
     # Debug: show prediction vs actual
-    print(f"\n  DEBUG: Prediction analysis")
+    print("\n  DEBUG: Prediction analysis")
     print(f"    y_pred mean: {np.mean(y_pred_direct):.1f}")
     print(f"    y_test mean: {np.mean(y_cbs_test):.1f}")
     print(
@@ -180,10 +179,10 @@ def test_stress_distribution_shift_extreme(real_data_1k_extreme):
     print("  The extreme RMSE difference is NOT about variance reduction.")
     print("  It's about conceptual leakage: PM7 baseline is correlated with CBS")
     print("  in extreme distribution, making delta robust by accident.")
-    print(f"\n  In REALISTIC regime (test_decision_gate), ratio is ~2-5x.")
+    print("\n  In REALISTIC regime (test_decision_gate), ratio is ~2-5x.")
     print(f"  In EXTREME regime (this test), ratio is {robustness_ratio:.0f}x.")
-    print(f"\n  Conclusion: Both tests are valid, measuring different phenomena:")
-    print(f"    - Hypothesis validation: variance reduction (2-5x)")
+    print("\n  Conclusion: Both tests are valid, measuring different phenomena:")
+    print("    - Hypothesis validation: variance reduction (2-5x)")
     print(f"    - Robustness test: PM7 baseline stability ({robustness_ratio:.0f}x)")
     print("-" * 70)
 
@@ -210,7 +209,7 @@ def test_stress_distribution_shift_extreme(real_data_1k_extreme):
         rmse_delta < 50
     ), f"Delta RMSE should be < 50 even with extreme data, got {rmse_delta:.2f}"
 
-    print(f"  All stress test expectations met!")
+    print("  All stress test expectations met!")
     print("=" * 70 + "\n")
 
     return {

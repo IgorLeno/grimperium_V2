@@ -2,6 +2,7 @@ from typing import Optional
 
 import numpy as np
 
+from grimperium.config import GrimperiumConfig
 from grimperium.core.metrics import compute_all_metrics
 from grimperium.models.delta_ensemble import DeltaLearningEnsemble
 
@@ -28,6 +29,8 @@ class DeltaLearner:
         w_xgb: float = 0.5,
         krr_params: Optional[dict] = None,
         xgb_params: Optional[dict] = None,
+        *,
+        config: Optional[GrimperiumConfig] = None,
     ):
         """
         Initialize DeltaLearner with ensemble.
@@ -37,13 +40,27 @@ class DeltaLearner:
             w_xgb: Weight for XGB in ensemble
             krr_params: KRR hyperparameters
             xgb_params: XGB hyperparameters
+            config: Configuração global do Grimperium (opcional).
         """
+        self.config: GrimperiumConfig = config or GrimperiumConfig()
+
         self.w_krr = w_krr
         self.w_xgb = w_xgb
         self.ensemble = DeltaLearningEnsemble(
             w_krr=w_krr, w_xgb=w_xgb, krr_params=krr_params, xgb_params=xgb_params
         )
-        self.is_fitted = False
+
+        # Estado interno esperado pelos testes/unit (mantido por compatibilidade).
+        self._data: Optional[object] = None
+        self._is_trained: bool = False
+        self._n_samples: int = 0
+
+        # Alias legado usado no restante do código.
+        self.is_fitted: bool = False
+
+    def __repr__(self) -> str:
+        status = "trained" if self._is_trained else "not trained"
+        return f"DeltaLearner(n_samples={self._n_samples}, {status})"
 
     def fit(
         self, X: np.ndarray, y_cbs: np.ndarray, y_pm7: np.ndarray
@@ -77,6 +94,8 @@ class DeltaLearner:
         # STEP 2: Train ensemble on y_delta
         self.ensemble.fit(X, y_delta)
 
+        self._n_samples = int(X.shape[0])
+        self._is_trained = True
         self.is_fitted = True
         return self
 

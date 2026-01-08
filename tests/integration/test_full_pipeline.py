@@ -11,7 +11,6 @@ This test validates the complete flow:
 """
 
 import numpy as np
-import pytest
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.metrics import mean_absolute_error, r2_score
 
@@ -83,7 +82,7 @@ def test_full_pipeline_real_data():
     assert r2 > -10.0  # R² should not be catastrophically bad
     assert np.isfinite(y_pred).all()  # No NaN or inf predictions
 
-    print(f"\n=== Pipeline Validation Results ===")
+    print("\n=== Pipeline Validation Results ===")
     print(f"MAE: {mae:.2f} kcal/mol")
     print(f"R²: {r2:.4f}")
     print(f"Delta mean: {y_test.mean():.2f} kcal/mol")
@@ -118,7 +117,7 @@ def test_pipeline_delta_distribution():
     assert abs(delta.mean()) < 1000  # Mean should be bounded
     assert delta.std() > 0  # Should have variance
 
-    print(f"\n=== Delta Distribution (CBS - B3LYP) ===")
+    print("\n=== Delta Distribution (CBS - B3LYP) ===")
     print(f"Mean: {delta.mean():.2f} kcal/mol")
     print(f"Std: {delta.std():.2f} kcal/mol")
     print(f"Min: {delta.min():.2f} kcal/mol")

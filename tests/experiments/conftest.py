@@ -36,9 +36,10 @@ Real PM7 data not available. Mock PM7 simulates realistic error patterns:
 This mock is deterministic (seed=42) for reproducibility.
 """
 
-import pytest
+from typing import Optional
+
 import numpy as np
-from typing import Optional, Tuple
+import pytest
 
 
 def create_realistic_mock_pm7(
@@ -141,7 +142,7 @@ def create_enriched_features(X_basic: np.ndarray) -> np.ndarray:
 
 
 @pytest.fixture
-def real_data_1k_filtered() -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+def real_data_1k_filtered() -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
     Load 1000 molecules with REALISTIC distribution (filtered).
 
@@ -232,7 +233,7 @@ def real_data_1k_filtered() -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
 
 
 @pytest.fixture
-def real_data_1k_extreme() -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+def real_data_1k_extreme() -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
     Load 1000 molecules with EXTREME distribution (unfiltered).
 
@@ -300,7 +301,7 @@ def real_data_1k_extreme() -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
 
 
 @pytest.fixture
-def synthetic_data_1k() -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+def synthetic_data_1k() -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
     Synthetic data with controlled distribution (1000 samples).
 

@@ -50,8 +50,8 @@ import numpy as np
 from sklearn.model_selection import train_test_split
 
 from grimperium.core.delta_learning import DeltaLearner
-from grimperium.models.delta_ensemble import DeltaLearningEnsemble
 from grimperium.core.metrics import compute_all_metrics
+from grimperium.models.delta_ensemble import DeltaLearningEnsemble
 
 
 def test_decision_gate_delta_vs_direct(real_data_1k_filtered):
