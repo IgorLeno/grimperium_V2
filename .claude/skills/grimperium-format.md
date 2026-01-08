@@ -97,7 +97,7 @@ Black:    3 files reformatted ✅
 Ruff:     2 errors ❌
 Status:   FIX REQUIRED ❌
 
-Next: Fix errors manually or use @claude fix these ruff errors
+Next: Fix errors manually or use @claude to fix these ruff errors
 ```
 
 ## Notas

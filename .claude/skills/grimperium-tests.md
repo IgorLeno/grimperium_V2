@@ -111,7 +111,7 @@ Coverage HTML written to dir `htmlcov`
 - Roda em **background** (context: fork) — você não espera
 - Se houver falhas, você recebe notificação
 - Coverage report em HTML fica em `htmlcov/index.html`
-- Pode opener coverage no navegador para análise detalhada
+- Pode abrir coverage no navegador para análise detalhada
 
 ## Se Testes Falharem
 
