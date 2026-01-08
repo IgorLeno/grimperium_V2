@@ -78,7 +78,7 @@ Implemented complete documentation automation:
 **Development Workflow Impact:**
 ```
 Code → @claude /grimperium-docs → git commit → git push
-    └─ Documentação sempre atualizada automaticamente
+    └─ Documentation always kept up-to-date automatically
 ```
 
 **Complete Claude Code Integration:**

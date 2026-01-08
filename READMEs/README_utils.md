@@ -158,7 +158,8 @@ logger = setup_logger('experiment_1')
 is_valid, errors = validate_data(raw_data)
 if not is_valid:
     logger.error(f"Data validation failed: {errors}")
-    raise ValueError("Invalid data")
+    from grimperium.exceptions import DataValidationError
+    raise DataValidationError(f"Data validation failed: {errors}")
 
 # 3. Feature engineering
 descriptors = compute_descriptors(molecules)
@@ -251,4 +252,4 @@ with exp_logger.experiment('delta_v1') as exp:
 - [Core Module](README_core.md) - Delta Learning
 - [Data Module](README_data.md) - Data loading
 - [Models Module](README_models.md) - ML models
-- [Documentation](../docs/build/html/grimperium.utils.html) - API completa
+- [Documentation](https://grimperium.readthedocs.io/en/latest/grimperium.utils.html) - API completa (para gerar localmente: `cd docs && make html`, depois abra `docs/build/html/index.html`)

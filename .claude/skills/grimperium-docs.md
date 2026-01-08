@@ -180,7 +180,7 @@ grimperium/
 git subtree push --prefix docs/html origin gh-pages
 ```
 
-Docs ficam em: `https://github.com/IgorLeno/grimperium_V2/docs`
+Docs ficam em: `https://IgorLeno.github.io/grimperium_V2/`
 
 ## Output Detalhado
 
@@ -229,15 +229,82 @@ sphinx-quickstart docs/
 
 ## Integração com Git Hooks
 
-Para automatizar completamente:
+> Importante: `@claude /grimperium-docs` é um comando do **Claude Code** (interativo) e **não pode ser executado diretamente** dentro de scripts de git hook como `.git/hooks/pre-commit` e `.git/hooks/post-merge`.
+>
+> Se você copiou o snippet antigo que colocava `@claude /grimperium-docs` dentro desses arquivos, substitua por uma das alternativas abaixo.
+
+**(a) Recomendado: integração via CI/CD (ex.: GitHub Actions)**
+
+Em vez de tentar gerar docs via hooks locais, rode a geração/validação de docs no CI. Exemplo de workflow em `.github/workflows/docs.yml`:
+
+```yaml
+name: docs
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  build-docs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - uses: snok/install-poetry@v1
+        with:
+          poetry-version: "1.8.4"
+
+      - name: Instalar dependências
+        run: poetry install --with docs --no-interaction
+
+      - name: Build do Sphinx (validação)
+        run: poetry run sphinx-build -b html docs/source docs/build/html
+
+      - name: Upload artifact (opcional)
+        uses: actions/upload-artifact@v4
+        with:
+          name: docs-html
+          path: docs/build/html
+```
+
+**(b) Fluxo manual local (simples e explícito)**
+
+Quando você quiser atualizar docs localmente:
+
+```bash
+# 1) gerar docs (local)
+@claude /grimperium-docs
+
+# (opcional) apenas Sphinx
+# @claude /grimperium-docs --sphinx-only
+
+# 2) revisar e commitar
+git diff
+git add -A
+git commit -m "docs: atualizar documentação"
+```
+
+**(c) Opcional: wrapper script do repositório (para hooks chamarem)**
+
+Se você realmente quiser automatizar via hooks, **o hook deve chamar um script executável do repositório**, não `@claude` direto.
+
+- Crie um wrapper como `scripts/generate-docs.sh` que execute a geração de docs (ex.: `poetry run sphinx-build ...` e/ou outros passos necessários).
+- Então, nos hooks, chame o script:
 
 ```bash
 # .git/hooks/pre-commit
-@claude /grimperium-docs --sphinx-only
+./scripts/generate-docs.sh --sphinx-only
 
 # .git/hooks/post-merge
-@claude /grimperium-docs
+./scripts/generate-docs.sh
 ```
+
+Nota: hooks rodam no ambiente local do dev; mantenha o script rápido e com falhas claras (exit code ≠ 0) se a intenção for bloquear o commit quando a geração/validação falhar.
 
 ## Performance
 

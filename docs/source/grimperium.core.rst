@@ -9,7 +9,7 @@ grimperium.core.delta\_learning module
 
 .. automodule:: grimperium.core.delta_learning
    :members:
-   :undoc-members:
+   :undocumented-members:
    :show-inheritance:
 
 grimperium.core.metrics module
@@ -17,7 +17,7 @@ grimperium.core.metrics module
 
 .. automodule:: grimperium.core.metrics
    :members:
-   :undoc-members:
+   :undocumented-members:
    :show-inheritance:
 
 Module contents
@@ -25,5 +25,5 @@ Module contents
 
 .. automodule:: grimperium.core
    :members:
-   :undoc-members:
+   :undocumented-members:
    :show-inheritance:

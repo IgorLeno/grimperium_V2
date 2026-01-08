@@ -133,26 +133,6 @@ predictions = ensemble.predict(X_test)
 
 ## Workflow de Seleção de Modelo
 
-```python
-from grimperium.models import KernelRidgeModel, XGBoostModel, DeltaEnsemble
-
-# Para dataset pequeno (<5k amostras)
-if len(X_train) < 5000:
-    model = KernelRidgeModel()
-
-# Para dataset grande (>5k amostras)
-elif len(X_train) >= 5000:
-    model = XGBoostModel()
-
-# Para máxima acurácia (mais lento)
-else:
-    model = DeltaEnsemble(
-        models=[KernelRidgeModel(), XGBoostModel()]
-    )
-
-# Treinar
-model.fit(X_train, y_train)
-```
 
 ## Uso com Delta Learning
 
