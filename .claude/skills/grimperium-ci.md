@@ -28,9 +28,10 @@ allowed-tools:
 
 1. ✅ Parse do CI Error Report
 2. ✅ Identifica tipo de erro (Lint, Type, Tests)
-3. ✅ Aplica fixes automáticos principalmente para Lint e erros simples (ex.: formatting)
-4. ✅ Para Type e Tests, pode apenas sugerir fixes e/ou aplicar patches diagnósticos; eu mostro os resultados de validação e posso pausar para decisão do dev e edições manuais antes de seguir (ver nota em Type e seção "Notas")
-5. ✅ Commit + Push somente após revisão humana quando houver Type/Tests que exigem decisão/edição manual (posso parar antes do commit/push para você ajustar e confirmar)
+3. ✅ Aplica fixes automáticos para **Lint/format** e mudanças mecânicas seguras (ex.: `black`, `ruff`) quando o resultado é determinístico
+4. ✅ Para **Type** e **Tests**, pode gerar **patches diagnósticos**: sugestões de mudanças de código para resolver erros de Type/Tests que **exigem julgamento humano** (ex.: ajustar lógica, API, contrato/assinatura, comportamento do teste). Esses patches são **mostrados para revisão** e **não são aplicados automaticamente**
+   - **Workflow de confirmação**: eu apresento o patch proposto → executo as validações relevantes (ex.: `mypy`, `pytest`) e mostro os resultados → **pauso** para você **aceitar**, **editar** ou **rejeitar** a mudança antes de qualquer passo de commit/push
+5. ✅ **Commit + Push**: só acontecem após sua confirmação quando houver **patch diagnóstico** (Type/Tests). Para **Lint/format**, as correções podem ser aplicadas automaticamente, mas não avanço para commit/push se você solicitar revisão antes
 
 ## Tipos de Erros Suportados
 
@@ -293,7 +294,7 @@ FileNotFoundError: Arquivo de dataset não encontrado: /home/runner/work/grimper
 
 2️⃣ Execute Fixes
    ├─ poetry run black src/ tests/
-   ├─ poetry run mypy src/ --ignore-missing-imports
+   ├─ poetry run mypy src/grimperium --ignore-missing-imports
    └─ poetry run pytest tests/ -v
 
 3️⃣ Validate

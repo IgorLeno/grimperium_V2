@@ -7,8 +7,6 @@
       "black *",
       "mypy *",
       "git *",
-      "git *",
-      "find * -name *.py",
       "find * -name *.py",
       "find * -type f -name *.md",
       "ls *",
