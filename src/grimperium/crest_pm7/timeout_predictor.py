@@ -151,7 +151,6 @@ class TimeoutPredictor:
                 tol=self.tol,
             )
             self.model.fit(X, y)
-            self._molecules_since_recalibration = 0
 
             LOG.info(f"Model fitted with {self.n_samples} samples")
             return True

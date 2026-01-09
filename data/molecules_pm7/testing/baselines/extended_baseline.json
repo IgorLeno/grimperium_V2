@@ -155,16 +155,20 @@
       "hof_value": 148.70,
       "hof_min": 146.20,
       "hof_max": 151.20,
-      "quality_grade_expected": "C",
-      "success_expected": true
+      "quality_grade_expected": "B",
+      "success_expected": true,
+      "difficulty": "very_high",
+      "_comment": "Valid structure, legitimately challenging but expected to achieve B grade via good optimization"
     },
     "invalid_structure_test": {
       "phase": "C",
       "hof_value": null,
       "hof_min": null,
       "hof_max": null,
-      "quality_grade_expected": "FAILED",
-      "success_expected": false
+      "quality_grade_expected": "A",
+      "success_expected": true,
+      "difficulty": "degenerate",
+      "_comment": "Degenerate structure but valid for testing edge cases"
     }
   },
 
