@@ -12,7 +12,6 @@ Exit codes:
 """
 
 import csv
-import json
 import sys
 import uuid
 from pathlib import Path
@@ -20,10 +19,9 @@ from pathlib import Path
 # Add src to path for local development
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
-from grimperium.crest_pm7 import (
+from grimperium.crest_pm7 import (  # noqa: E402
     CRESTPM7Pipeline,
     PM7Config,
-    validate_environment,
 )
 
 
@@ -52,10 +50,13 @@ def load_test_molecules(csv_path: Path) -> list[tuple[str, str]]:
             missing_columns.append("smiles")
 
         if missing_columns:
-            raise ValueError(
-                f"CSV file '{csv_path}' is missing required column(s): {', '.join(missing_columns)}. "
-                f"Found columns: {', '.join(fieldnames) if fieldnames else 'none'}"
+            found = ", ".join(fieldnames) if fieldnames else "none"
+            msg = (
+                f"CSV file '{csv_path}' is missing required column(s): "
+                f"{', '.join(missing_columns)}. "
+                f"Found columns: {found}"
             )
+            raise ValueError(msg)
 
         for row in reader:
             molecules.append((row["mol_id"], row["smiles"]))
@@ -74,8 +75,9 @@ def main() -> int:
 
     # Paths
     base_dir = Path(__file__).parent.parent
-    molecules_csv = base_dir / "data/molecules_pm7/testing/baselines/phase_a_molecules.csv"
-    expected_json = base_dir / "data/molecules_pm7/testing/baselines/phase_a_baseline.json"
+    testing_dir = base_dir / "data/molecules_pm7/testing/baselines"
+    molecules_csv = testing_dir / "phase_a_molecules.csv"
+    expected_json = testing_dir / "phase_a_baseline.json"
     output_dir = base_dir / "data/molecules_pm7/computed"
     results_json = output_dir / "phase_a_results.json"
 
@@ -97,7 +99,8 @@ def main() -> int:
             test_file.touch()
             test_file.unlink()
         except OSError as e:
-            print(f"ERROR: Output directory is not writable: {output_dir} ({e})")
+            print(f"ERROR: Output directory is not writable: "
+                  f"{output_dir} ({e})")
             return 1
     except OSError as e:
         print(f"ERROR: Cannot create output directory: {output_dir} ({e})")
@@ -146,7 +149,11 @@ def main() -> int:
             print(f"\nProcessing: {mol_id}")
             result = pipeline.process_molecule(mol_id, smiles)
             print(f"  Success: {result.success}")
-            grade_value = result.quality_grade.value if result.quality_grade is not None else "N/A"
+            grade_value = (
+                result.quality_grade.value
+                if result.quality_grade is not None
+                else "N/A"
+            )
             print(f"  Grade: {grade_value}")
             print(f"  HOF: {result.most_stable_hof}")
             if result.error_message:
@@ -178,7 +185,10 @@ def main() -> int:
         status = "PASS" if mol_eval.passed else "FAIL"
         print(f"  {mol_eval.mol_id}: {status}")
         if mol_eval.hof_actual is not None:
-            print(f"    HOF: {mol_eval.hof_actual:.2f} (expected: {mol_eval.hof_expected:.2f})")
+            print(
+                f"    HOF: {mol_eval.hof_actual:.2f} "
+                f"(expected: {mol_eval.hof_expected:.2f})"
+            )
         if mol_eval.issues:
             for issue in mol_eval.issues:
                 print(f"    Issue: {issue}")
