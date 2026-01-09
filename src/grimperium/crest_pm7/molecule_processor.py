@@ -242,7 +242,7 @@ def compute_molecular_descriptors(smiles: str) -> dict[str, Any]:
     Returns:
         Dictionary with nheavy, nrotbonds, tpsa, aromatic_rings, has_heteroatoms
     """
-    result = {
+    result: dict[str, Any] = {
         "nheavy": None,
         "nrotbonds": None,
         "tpsa": None,
@@ -262,7 +262,9 @@ def compute_molecular_descriptors(smiles: str) -> dict[str, Any]:
 
         # Check for heteroatoms (N, O, S, P, etc.)
         hetero_atoms = {"N", "O", "S", "P", "F", "Cl", "Br", "I"}
-        has_hetero = any(atom.GetSymbol() in hetero_atoms for atom in mol.GetAtoms())
+        has_hetero: bool = any(
+            atom.GetSymbol() in hetero_atoms for atom in mol.GetAtoms()
+        )
         result["has_heteroatoms"] = has_hetero
 
     except Exception as e:
@@ -525,8 +527,8 @@ class MoleculeProcessor:
             remaining_conformers -= 1
 
         # Calculate energy differences - is_successful guarantees energy_hof is not None
-        successful_energies = [
-            c.energy_hof for c in result.conformers if c.is_successful
+        successful_energies: list[float] = [
+            c.energy_hof for c in result.conformers if c.is_successful and c.energy_hof is not None  # type: ignore[misc]
         ]
         if successful_energies:
             deltas = calculate_delta_e(successful_energies)

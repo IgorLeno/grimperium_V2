@@ -258,7 +258,8 @@ def run_mopac(
             if hof is not None:
                 result.hof = hof
                 result.hof_method = method
-                result.hof_confidence = confidence
+                if confidence is not None:
+                    result.hof_confidence = confidence
             return result
 
         if _detect_geometry_error(output_content):
@@ -270,7 +271,8 @@ def run_mopac(
             if hof is not None:
                 result.hof = hof
                 result.hof_method = method
-                result.hof_confidence = confidence
+                if confidence is not None:
+                    result.hof_confidence = confidence
             return result
 
         # Extract HOF
@@ -285,7 +287,8 @@ def run_mopac(
                 # Pattern matched but validation failed
                 result.status = MOPACStatus.SUCCESS
                 result.hof_method = method
-                result.hof_confidence = confidence
+                if confidence is not None:
+                    result.hof_confidence = confidence
                 result.error_message = "HOF extraction succeeded but validation failed"
             else:
                 result.status = MOPACStatus.SUCCESS
@@ -303,11 +306,13 @@ def run_mopac(
 
         result.hof = hof
         result.hof_method = method
-        result.hof_confidence = confidence
+        if confidence is not None:
+            result.hof_confidence = confidence
 
+        confidence_str = confidence.value if confidence is not None else "UNKNOWN"
         LOG.info(
             f"MOPAC completed for {mol_id} conf{conf_index}: "
-            f"HOF={hof:.2f} kcal/mol ({method}, {confidence.value}) "
+            f"HOF={hof:.2f} kcal/mol ({method}, {confidence_str}) "
             f"in {result.execution_time:.1f}s"
         )
 

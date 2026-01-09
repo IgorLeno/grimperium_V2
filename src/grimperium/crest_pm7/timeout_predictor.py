@@ -13,7 +13,7 @@ import logging
 import numbers
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 import joblib
 import numpy as np
@@ -181,6 +181,11 @@ class TimeoutPredictor:
         Returns:
             Tuple of (timeout_seconds, confidence)
         """
+        if self.model is None:
+            LOG.warning("Model is None, using heuristic fallback")
+            timeout = (120 + 5 * nheavy) * (1 + 0.2 * (num_conformers - 1))
+            return _clamp(timeout), TimeoutConfidence.LOW
+
         pred = self.model.predict([[nheavy]])[0]
 
         # Validate prediction
@@ -336,7 +341,7 @@ class TimeoutPredictor:
         Returns:
             Dictionary with stats
         """
-        stats = {
+        stats: dict[str, Any] = {
             "n_samples": self.n_samples,
             "is_fitted": self.is_fitted,
             "molecules_since_recalibration": self._molecules_since_recalibration,
@@ -360,7 +365,12 @@ class TimeoutPredictor:
                     pass
 
         if self.n_samples > 0:
-            stats["nheavy_range"] = (min(self.samples_nheavy), max(self.samples_nheavy))
-            stats["time_range"] = (min(self.samples_time), max(self.samples_time))
+            min_nheavy = min(self.samples_nheavy)
+            max_nheavy = max(self.samples_nheavy)
+            stats["nheavy_range"] = (min_nheavy, max_nheavy)
+
+            min_time = min(self.samples_time)
+            max_time = max(self.samples_time)
+            stats["time_range"] = (min_time, max_time)
 
         return stats

@@ -98,7 +98,7 @@ def calculate_delta_e(
     sorted_e = sorted(energies)
     n = len(sorted_e)
 
-    result = {
+    result: dict[str, Optional[float]] = {
         "delta_e_12": None,
         "delta_e_13": None,
         "delta_e_15": None,

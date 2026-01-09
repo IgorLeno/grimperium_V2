@@ -119,10 +119,10 @@ def extract_hof(
         - Bounds failure: (None, method_name, confidence) - preserves diagnostic
     """
     for pattern in PATTERNS:
-        name = pattern["name"]
-        regex = pattern["regex"]
-        confidence = pattern["confidence"]
-        use_last = pattern["use_finditer_last"]
+        name: str = pattern["name"]  # type: ignore[assignment]
+        regex: re.Pattern[str] = pattern["regex"]  # type: ignore[assignment]
+        confidence: HOFConfidence = pattern["confidence"]  # type: ignore[assignment]
+        use_last: bool = pattern["use_finditer_last"]  # type: ignore[assignment]
 
         LOG.debug(f"Trying pattern: {name}")
 

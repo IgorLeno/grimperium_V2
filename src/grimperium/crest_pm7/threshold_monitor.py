@@ -174,7 +174,8 @@ class ThresholdMonitor:
         # Check success rate
         half_window = max(1, self.window_size // 2)
         if len(self.recent_successes) >= half_window:
-            window_rate = sum(self.recent_successes[-half_window:]) / half_window
+            recent_window = list(self.recent_successes)[-half_window:]
+            window_rate = sum(1 for x in recent_window if x) / half_window
             if window_rate < self.config.success_rate_critical:
                 return True
 
@@ -248,13 +249,14 @@ class ThresholdMonitor:
 
     def _check_success_rate_drop(self) -> list[Alert]:
         """Pattern 1: Check for success rate drop."""
-        alerts = []
+        alerts: list[Alert] = []
 
         # Only check if we have enough data
         if len(self.recent_successes) < self.window_size:
             return alerts
 
-        window_rate = sum(self.recent_successes[-self.window_size :]) / self.window_size
+        recent_window = list(self.recent_successes)[-self.window_size :]
+        window_rate = sum(1 for x in recent_window if x) / self.window_size
 
         if window_rate < self.config.success_rate_critical:
             alerts.append(
@@ -289,7 +291,7 @@ class ThresholdMonitor:
 
     def _check_hof_extraction_failure(self) -> list[Alert]:
         """Pattern 2: Check for HOF extraction failure spike."""
-        alerts = []
+        alerts: list[Alert] = []
 
         # Use threshold from config
         if len(self.recent_hof_extractions) < self.config.hof_extraction_min_samples:
@@ -351,7 +353,7 @@ class ThresholdMonitor:
 
     def _check_grade_degradation(self) -> list[Alert]:
         """Pattern 4: Check for grade quality degradation."""
-        alerts = []
+        alerts: list[Alert] = []
 
         if len(self.recent_grades) < self.config.grade_degradation_min_samples:
             return alerts
@@ -379,7 +381,7 @@ class ThresholdMonitor:
 
     def _check_timeout_scf_pattern(self) -> list[Alert]:
         """Pattern 5: Check for timeout/SCF failure pattern."""
-        alerts = []
+        alerts: list[Alert] = []
 
         if self.metrics.total_processed < 10:
             return alerts

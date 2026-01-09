@@ -1,6 +1,7 @@
 """Environment validation for CREST-PM7 Pipeline.
 
-Validates that all required external tools are available and properly configured.
+Validates that all required external tools are available and properly
+configured.
 """
 
 import shutil
@@ -61,9 +62,11 @@ def _check_executable(
             text=True,
             timeout=10,
         )
-        version = result.stdout.strip() or result.stderr.strip()
+        version_str = result.stdout.strip() or result.stderr.strip()
         # Take first line only
-        version = version.split("\n")[0] if version else None
+        version: Optional[str] = (
+            version_str.split("\n")[0] if version_str else None
+        )
         return True, version
     except (subprocess.TimeoutExpired, subprocess.SubprocessError):
         # Subprocess failure means the executable is not functioning correctly
@@ -89,7 +92,9 @@ def validate_environment(config: PM7Config) -> ValidationResult:
     )
     if not result.crest_available:
         result.valid = False
-        result.errors.append(f"CREST executable not found: {config.crest_executable}")
+        result.errors.append(
+            f"CREST executable not found: {config.crest_executable}"
+        )
 
     # Check MOPAC
     result.mopac_available, result.mopac_version = _check_executable(
@@ -97,7 +102,9 @@ def validate_environment(config: PM7Config) -> ValidationResult:
     )
     if not result.mopac_available:
         result.valid = False
-        result.errors.append(f"MOPAC executable not found: {config.mopac_executable}")
+        result.errors.append(
+            f"MOPAC executable not found: {config.mopac_executable}"
+        )
 
     # Check Open Babel (required for XYZ -> SDF conversion)
     result.obabel_available, result.obabel_version = _check_executable(
@@ -105,7 +112,8 @@ def validate_environment(config: PM7Config) -> ValidationResult:
     )
     if not result.obabel_available:
         result.warnings.append(
-            "Open Babel (obabel) not found - RDKit fallback will be used for XYZ->SDF"
+            "Open Babel (obabel) not found - "
+            "RDKit fallback will be used for XYZ->SDF"
         )
 
     # Check directories
@@ -113,13 +121,17 @@ def validate_environment(config: PM7Config) -> ValidationResult:
         config.temp_dir.mkdir(parents=True, exist_ok=True)
     except OSError as e:
         result.valid = False
-        result.errors.append(f"Cannot create temp directory {config.temp_dir}: {e}")
+        result.errors.append(
+            f"Cannot create temp directory {config.temp_dir}: {e}"
+        )
 
     try:
         config.output_dir.mkdir(parents=True, exist_ok=True)
     except OSError as e:
         result.valid = False
-        result.errors.append(f"Cannot create output directory {config.output_dir}: {e}")
+        result.errors.append(
+            f"Cannot create output directory {config.output_dir}: {e}"
+        )
 
     return result
 
@@ -141,8 +153,11 @@ def validate_environment_strict(config: PM7Config) -> ValidationResult:
         result.valid = False
         # Remove existing Open Babel warning to avoid duplication
         result.warnings = [
-            w for w in result.warnings if "Open Babel" not in w and "obabel" not in w
+            w for w in result.warnings
+            if "Open Babel" not in w and "obabel" not in w
         ]
-        result.errors.append("Open Babel (obabel) required for strict validation")
+        result.errors.append(
+            "Open Babel (obabel) required for strict validation"
+        )
 
     return result
