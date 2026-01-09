@@ -160,15 +160,15 @@
       "difficulty": "very_high",
       "_comment": "Valid structure, legitimately challenging but expected to achieve B grade via good optimization"
     },
-    "invalid_structure_test": {
+    "degenerate_failure_test": {
       "phase": "C",
       "hof_value": null,
       "hof_min": null,
       "hof_max": null,
-      "quality_grade_expected": "A",
-      "success_expected": true,
+      "quality_grade_expected": null,
+      "success_expected": false,
       "difficulty": "degenerate",
-      "_comment": "Degenerate structure but valid for testing edge cases"
+      "_comment": "Degenerate structure expected to fail - tests edge case handling for invalid structures"
     }
   },
 

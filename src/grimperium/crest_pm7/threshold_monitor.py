@@ -246,11 +246,10 @@ class ThresholdMonitor:
         alerts = []
 
         # Only check if we have enough data
-        half_window = max(1, self.window_size // 2)
-        if len(self.recent_successes) < half_window:
+        if len(self.recent_successes) < self.window_size:
             return alerts
 
-        window_rate = sum(self.recent_successes[-half_window:]) / half_window
+        window_rate = sum(self.recent_successes[-self.window_size:]) / self.window_size
 
         if window_rate < self.config.success_rate_critical:
             alerts.append(Alert(
