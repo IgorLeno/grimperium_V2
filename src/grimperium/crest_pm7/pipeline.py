@@ -8,7 +8,7 @@ import logging
 from pathlib import Path
 from typing import Callable, Iterator, Optional
 
-from .config import PM7Config, QualityGrade
+from .config import MOPACStatus, PM7Config, QualityGrade
 from .logging_utils import log_molecule_complete, log_molecule_start, setup_logging
 from .molecule_processor import MoleculeProcessor, PM7Result
 from .result_evaluator import PhaseAEvaluation, ResultEvaluator
@@ -66,6 +66,14 @@ class CRESTPM7Pipeline:
         LOG.info("Environment validation passed")
         return True
 
+    def _get_phase_value(self) -> str:
+        """Get the phase value as a string, handling both enum and string types.
+
+        Returns:
+            Phase value as string
+        """
+        return self.config.phase.value if hasattr(self.config.phase, 'value') else self.config.phase
+
     def setup(self, session_name: Optional[str] = None) -> None:
         """Set up pipeline for a processing session.
 
@@ -76,7 +84,7 @@ class CRESTPM7Pipeline:
         self.logger = setup_logging(self.config, session_name)
         self.results = []
         self._paused = False
-        LOG.info(f"Pipeline setup complete for phase {self.config.phase}")
+        LOG.info(f"Pipeline setup complete for phase {self._get_phase_value()}")
 
     def load_baseline(self, baseline_path: Path) -> bool:
         """Load baseline expectations for evaluation.
@@ -96,6 +104,18 @@ class CRESTPM7Pipeline:
             callback: Function to call when alert is generated
         """
         self.monitor.register_callback(callback)
+
+    def _handle_alerts(self, alerts: list[Alert]) -> None:
+        """Handle alerts generated during molecule processing.
+
+        Args:
+            alerts: List of alerts to handle
+        """
+        if not alerts:
+            return
+
+        for alert in alerts:
+            LOG.warning(f"Alert [{alert.level.value}] {alert.pattern}: {alert.message}")
 
     def process_molecule(
         self,
@@ -119,13 +139,13 @@ class CRESTPM7Pipeline:
         result = self.processor.process(mol_id, smiles, input_xyz)
         self.results.append(result)
 
-        # Record in monitor
+        # Record in monitor (use direct comparison with enum members)
         timeout_occurred = any(
-            c.mopac_status.value == "TIMEOUT"
+            c.mopac_status == MOPACStatus.TIMEOUT
             for c in result.conformers
         )
         scf_failed = any(
-            c.mopac_status.value == "SCF_FAILED"
+            c.mopac_status == MOPACStatus.SCF_FAILED
             for c in result.conformers
         )
 
@@ -136,6 +156,9 @@ class CRESTPM7Pipeline:
             timeout=timeout_occurred,
             scf_failed=scf_failed,
         )
+
+        # Handle alerts returned by the monitor
+        self._handle_alerts(alerts)
 
         if self.logger:
             log_molecule_complete(
@@ -194,7 +217,7 @@ class CRESTPM7Pipeline:
             output_path.parent.mkdir(parents=True, exist_ok=True)
 
             data = {
-                "phase": self.config.phase,
+                "phase": self._get_phase_value(),
                 "n_molecules": len(self.results),
                 "monitor_summary": self.monitor.get_summary(),
                 "timeout_predictor_stats": self.timeout_predictor.get_stats(),
@@ -242,22 +265,38 @@ class CRESTPM7Pipeline:
     def get_summary(self) -> dict:
         """Get pipeline execution summary.
 
+        Uses single-pass aggregation for efficiency.
+
         Returns:
             Summary dictionary
         """
+        # Single-pass aggregation
+        n_successful = 0
+        n_failed = 0
+        grade_counts = {"A": 0, "B": 0, "C": 0, "FAILED": 0}
+
+        for r in self.results:
+            if r.success:
+                n_successful += 1
+            else:
+                n_failed += 1
+
+            # Map quality grade to count
+            grade_name = r.quality_grade.name if r.quality_grade else "FAILED"
+            if grade_name in grade_counts:
+                grade_counts[grade_name] += 1
+            else:
+                grade_counts.setdefault("UNKNOWN", 0)
+                grade_counts["UNKNOWN"] += 1
+
         return {
-            "phase": self.config.phase,
+            "phase": self._get_phase_value(),
             "n_molecules_processed": len(self.results),
-            "n_successful": sum(1 for r in self.results if r.success),
-            "n_failed": sum(1 for r in self.results if not r.success),
+            "n_successful": n_successful,
+            "n_failed": n_failed,
             "success_rate": self.monitor.metrics.success_rate,
             "hof_extraction_rate": self.monitor.metrics.hof_extraction_rate,
-            "grade_distribution": {
-                "A": sum(1 for r in self.results if r.quality_grade == QualityGrade.A),
-                "B": sum(1 for r in self.results if r.quality_grade == QualityGrade.B),
-                "C": sum(1 for r in self.results if r.quality_grade == QualityGrade.C),
-                "FAILED": sum(1 for r in self.results if r.quality_grade == QualityGrade.FAILED),
-            },
+            "grade_distribution": grade_counts,
             "alerts_generated": len(self.monitor.alerts),
             "paused": self._paused,
         }

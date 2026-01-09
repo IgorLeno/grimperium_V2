@@ -4,6 +4,7 @@ This module defines all configuration dataclasses and enums for the
 CREST + PM7 computational chemistry pipeline.
 """
 
+import tempfile
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
@@ -51,6 +52,7 @@ class MOPACStatus(str, Enum):
     SCF_FAILED = "SCF_FAILED"
     GEOMETRY_ERROR = "GEOMETRY_ERROR"
     NOT_ATTEMPTED = "NOT_ATTEMPTED"
+    ERROR = "ERROR"  # Generic error state for unexpected failures
 
 
 class AlertLevel(str, Enum):
@@ -59,6 +61,15 @@ class AlertLevel(str, Enum):
     INFO = "INFO"
     WARNING = "WARNING"
     CRITICAL = "CRITICAL"
+
+
+class Phase(str, Enum):
+    """Processing phase for the pipeline."""
+
+    A = "A"  # Initial validation phase
+    B = "B"  # Extended testing phase
+    C = "C"  # Calibration phase
+    PRODUCTION = "PRODUCTION"  # Production phase
 
 
 @dataclass
@@ -82,18 +93,20 @@ class PM7Config:
         success_rate_warning: Success rate threshold for warning
         success_rate_critical: Success rate threshold for critical alert
         monitor_window_size: Window size for monitoring metrics
+        hof_extraction_min_samples: Minimum samples for HOF extraction rate check
+        hof_extraction_threshold: Threshold for HOF extraction rate
     """
 
     # Phase control
-    phase: str = "A"
+    phase: Phase = Phase.A
 
     # Executables
     crest_executable: str = "crest"
     mopac_executable: str = "mopac"
 
-    # Paths
-    temp_dir: Path = field(default_factory=lambda: Path("/tmp/crest_pm7"))
-    output_dir: Path = field(default_factory=lambda: Path("data/molecules_pm7/computed"))
+    # Paths - using cross-platform tempdir and absolute output path
+    temp_dir: Path = field(default_factory=lambda: Path(tempfile.gettempdir()) / "crest_pm7")
+    output_dir: Path = field(default_factory=lambda: Path.cwd() / "data/molecules_pm7/computed")
 
     # CREST settings
     max_conformers: int = 10
@@ -116,12 +129,81 @@ class PM7Config:
     success_rate_critical: float = 0.70
     monitor_window_size: int = 50
 
+    # HOF extraction thresholds (for ThresholdMonitor)
+    hof_extraction_min_samples: int = 10
+    hof_extraction_threshold: float = 0.8
+
+    # Grade degradation thresholds
+    grade_degradation_min_samples: int = 10
+    grade_degradation_threshold: float = 0.5
+
+    # Timeout/SCF pattern thresholds
+    timeout_pattern_threshold: float = 0.2
+    scf_pattern_threshold: float = 0.15
+
+    # Consecutive failures threshold
+    consecutive_failures_warning: int = 3
+    consecutive_failures_critical: int = 5
+
     def __post_init__(self) -> None:
-        """Convert string paths to Path objects."""
+        """Convert string paths to Path objects and validate phase."""
         if isinstance(self.temp_dir, str):
             self.temp_dir = Path(self.temp_dir)
         if isinstance(self.output_dir, str):
             self.output_dir = Path(self.output_dir)
+
+        # Validate and convert phase if it is a string
+        if isinstance(self.phase, str):
+            valid_phases = {p.value for p in Phase}
+            if self.phase not in valid_phases:
+                raise ValueError(
+                    f"Invalid phase '{self.phase}'. "
+                    f"Must be one of: {', '.join(sorted(valid_phases))}"
+                )
+            self.phase = Phase(self.phase)
+
+        # Validate threshold fields
+        if not (0 <= self.hof_extraction_threshold <= 1):
+            raise ValueError(
+                f"hof_extraction_threshold must be between 0 and 1, got {self.hof_extraction_threshold}"
+            )
+        if not (0 <= self.grade_degradation_threshold <= 1):
+            raise ValueError(
+                f"grade_degradation_threshold must be between 0 and 1, got {self.grade_degradation_threshold}"
+            )
+        if not (0 <= self.timeout_pattern_threshold <= 1):
+            raise ValueError(
+                f"timeout_pattern_threshold must be between 0 and 1, got {self.timeout_pattern_threshold}"
+            )
+        if not (0 <= self.scf_pattern_threshold <= 1):
+            raise ValueError(
+                f"scf_pattern_threshold must be between 0 and 1, got {self.scf_pattern_threshold}"
+            )
+
+        # Validate min_samples fields
+        if self.hof_extraction_min_samples <= 0:
+            raise ValueError(
+                f"hof_extraction_min_samples must be positive, got {self.hof_extraction_min_samples}"
+            )
+        if self.grade_degradation_min_samples <= 0:
+            raise ValueError(
+                f"grade_degradation_min_samples must be positive, got {self.grade_degradation_min_samples}"
+            )
+
+        # Validate consecutive failures thresholds
+        if self.consecutive_failures_warning <= 0:
+            raise ValueError(
+                f"consecutive_failures_warning must be positive, got {self.consecutive_failures_warning}"
+            )
+        if self.consecutive_failures_critical <= 0:
+            raise ValueError(
+                f"consecutive_failures_critical must be positive, got {self.consecutive_failures_critical}"
+            )
+        if self.consecutive_failures_warning >= self.consecutive_failures_critical:
+            raise ValueError(
+                f"consecutive_failures_warning ({self.consecutive_failures_warning}) must be less than "
+                f"consecutive_failures_critical ({self.consecutive_failures_critical})"
+            )
 
     def ensure_directories(self) -> None:
         """Create necessary directories if they don't exist."""

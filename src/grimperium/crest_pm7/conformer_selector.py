@@ -36,10 +36,10 @@ def get_num_conformers(
 ) -> tuple[int, str]:
     """Determine optimal number of conformers to process.
 
-    Based on molecular flexibility:
-    - Rigid (0-1 rotbonds): 1 conformer
-    - Medium (2-4 rotbonds): 3 conformers
-    - Flexible (5+ rotbonds): 5 conformers
+    Flexibility is determined by config-driven thresholds via classify_flexibility:
+    - Rigid: nrotbonds <= config.nrotbonds_threshold_rigid_to_medium
+    - Medium: nrotbonds <= config.nrotbonds_threshold_medium_to_flexible
+    - Flexible: nrotbonds > config.nrotbonds_threshold_medium_to_flexible
 
     Args:
         nrotbonds: Number of rotatable bonds
@@ -51,15 +51,19 @@ def get_num_conformers(
     """
     flexibility = classify_flexibility(nrotbonds, config)
 
+    # Get thresholds from config for informational messages
+    rigid_threshold = config.nrotbonds_threshold_rigid_to_medium
+    medium_threshold = config.nrotbonds_threshold_medium_to_flexible
+
     if flexibility == "rigid":
         target = 1
-        reason = f"rigid molecule (nrotbonds={nrotbonds}<=1)"
+        reason = f"rigid molecule (nrotbonds={nrotbonds}<={rigid_threshold})"
     elif flexibility == "medium":
         target = 3
-        reason = f"medium flexibility (nrotbonds={nrotbonds}, 2-4)"
+        reason = f"medium flexibility (nrotbonds={nrotbonds}, {rigid_threshold+1}-{medium_threshold})"
     else:
         target = 5
-        reason = f"flexible molecule (nrotbonds={nrotbonds}>=5)"
+        reason = f"flexible molecule (nrotbonds={nrotbonds}>{medium_threshold})"
 
     # Respect max_conformers from config
     target = min(target, config.max_conformers)
@@ -76,13 +80,13 @@ def get_num_conformers(
 
 def calculate_delta_e(
     energies: list[float],
-    reference_index: int = 0,
 ) -> dict[str, Optional[float]]:
     """Calculate energy differences between conformers.
 
+    Computes delta_e values relative to the lowest energy conformer.
+
     Args:
         energies: List of conformer energies (kcal/mol)
-        reference_index: Index of reference conformer (usually lowest energy)
 
     Returns:
         Dictionary with delta_e_12, delta_e_13, delta_e_15

@@ -10,8 +10,8 @@ Main Components:
 - validate_environment: Environment validation function
 
 Example:
-    >>> from grimperium.crest_pm7 import CRESTPM7Pipeline, PM7Config
-    >>> config = PM7Config(phase="A", max_conformers=5)
+    >>> from grimperium.crest_pm7 import CRESTPM7Pipeline, PM7Config, Phase
+    >>> config = PM7Config(phase=Phase.A, max_conformers=5)
     >>> pipeline = CRESTPM7Pipeline(config)
     >>> if pipeline.validate():
     ...     pipeline.setup()
@@ -24,6 +24,7 @@ from .config import (
     CRESTStatus,
     HOFConfidence,
     MOPACStatus,
+    Phase,
     PM7Config,
     QualityGrade,
     TimeoutConfidence,
@@ -41,10 +42,13 @@ from .timeout_predictor import TimeoutPredictor
 from .validation import validate_environment, ValidationResult
 
 __all__ = [
-    # Main classes
+    # Core Pipeline
     "CRESTPM7Pipeline",
+    # Configuration & Results
     "PM7Config",
     "PM7Result",
+    "ValidationResult",
+    "Phase",
     # Enums
     "QualityGrade",
     "HOFConfidence",
@@ -56,14 +60,14 @@ __all__ = [
     "ConformerData",
     "Alert",
     "MonitoringMetrics",
-    "ValidationResult",
     "MoleculeEvaluation",
     "PhaseAEvaluation",
-    # Classes
+    # Processing & Evaluation
     "MoleculeProcessor",
+    "ResultEvaluator",
+    # Monitoring & Prediction
     "ThresholdMonitor",
     "TimeoutPredictor",
-    "ResultEvaluator",
     # Functions
     "validate_environment",
     # Constants

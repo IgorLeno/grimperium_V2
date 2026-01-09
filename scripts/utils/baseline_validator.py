@@ -16,41 +16,9 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "src"))
 
 from grimperium.crest_pm7 import (
-    PM7Result,
-    ResultEvaluator,
     QualityGrade,
     TOLERANCE_ABSOLUTE,
 )
-
-
-def load_results(results_path: Path) -> list[PM7Result]:
-    """Load results from JSON file.
-
-    Args:
-        results_path: Path to results JSON
-
-    Returns:
-        List of PM7Result objects
-    """
-    with open(results_path, encoding="utf-8") as f:
-        data = json.load(f)
-
-    results = []
-    for r in data.get("results", []):
-        # Reconstruct PM7Result from dict
-        result = PM7Result(
-            mol_id=r["mol_id"],
-            smiles=r["smiles"],
-        )
-        result.success = r.get("success", False)
-        result.quality_grade = QualityGrade(r.get("quality_grade", "FAILED"))
-
-        # We need most_stable_hof but it's a property, so we need to hack this
-        # For validation purposes, we'll use the value directly
-        result._cached_hof = r.get("most_stable_hof")
-        results.append(result)
-
-    return results
 
 
 def main() -> int:
@@ -101,6 +69,9 @@ def main() -> int:
     passes = 0
     fails = 0
 
+    # Valid QualityGrade values for acceptable grades
+    acceptable_grades = {QualityGrade.A.value, QualityGrade.B.value}
+
     for r in results_data.get("results", []):
         mol_id = r["mol_id"]
         expected = molecules_baseline.get(mol_id, {})
@@ -111,8 +82,21 @@ def main() -> int:
 
         hof_actual = r.get("most_stable_hof")
         hof_expected = expected.get("hof_value")
-        hof_min = expected.get("hof_min", hof_expected - args.tolerance if hof_expected else None)
-        hof_max = expected.get("hof_max", hof_expected + args.tolerance if hof_expected else None)
+
+        # Explicit calculation of hof_min and hof_max with clear logic
+        if "hof_min" in expected:
+            hof_min = expected["hof_min"]
+        elif hof_expected is not None:
+            hof_min = hof_expected - args.tolerance
+        else:
+            hof_min = None
+
+        if "hof_max" in expected:
+            hof_max = expected["hof_max"]
+        elif hof_expected is not None:
+            hof_max = hof_expected + args.tolerance
+        else:
+            hof_max = None
 
         success = r.get("success", False)
         grade = r.get("quality_grade", "FAILED")
@@ -128,7 +112,8 @@ def main() -> int:
             if not (hof_min <= hof_actual <= hof_max):
                 issues.append(f"hof_out_of_range: {hof_actual:.2f} not in [{hof_min:.2f}, {hof_max:.2f}]")
 
-        if grade not in ("A", "B"):
+        # Type-safe validation using QualityGrade enum
+        if grade not in acceptable_grades:
             issues.append(f"grade_not_acceptable: {grade}")
 
         passed = len(issues) == 0

@@ -5,11 +5,14 @@ Provides JSONL logging for analysis and text logging for debugging.
 
 import json
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
 
 from .config import PM7Config
+
+# Reserved keys that should not be overwritten by extra_data
+_RESERVED_KEYS = {"timestamp", "level", "logger", "message"}
 
 
 class StructuredLogHandler(logging.Handler):
@@ -29,7 +32,7 @@ class StructuredLogHandler(logging.Handler):
         """Write a log record as JSONL."""
         try:
             log_entry = {
-                "timestamp": datetime.now().isoformat(timespec="milliseconds"),
+                "timestamp": datetime.now(timezone.utc).isoformat(timespec="milliseconds"),
                 "level": record.levelname,
                 "logger": record.name,
                 "message": record.getMessage(),
@@ -44,8 +47,16 @@ class StructuredLogHandler(logging.Handler):
                 log_entry["grade"] = record.grade
             if hasattr(record, "hof"):
                 log_entry["hof"] = record.hof
+            if hasattr(record, "success"):
+                log_entry["success"] = record.success
+
+            # Merge extra_data filtering out reserved keys
             if hasattr(record, "extra_data"):
-                log_entry.update(record.extra_data)
+                filtered = {
+                    k: v for k, v in record.extra_data.items()
+                    if k not in _RESERVED_KEYS and k not in log_entry
+                }
+                log_entry.update(filtered)
 
             with open(self.log_file, "a", encoding="utf-8") as f:
                 f.write(json.dumps(log_entry, ensure_ascii=False) + "\n")
@@ -60,6 +71,7 @@ def setup_logging(
     """Set up logging for a pipeline session.
 
     Creates both JSONL (for analysis) and text (for debugging) handlers.
+    Uses a session-specific child logger to avoid clearing shared handlers.
 
     Args:
         config: Pipeline configuration
@@ -69,8 +81,8 @@ def setup_logging(
         Configured logger for the pipeline
     """
     if session_name is None:
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        session_name = f"phase_{config.phase}_{timestamp}"
+        timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+        session_name = f"phase_{config.phase.value if hasattr(config.phase, 'value') else config.phase}_{timestamp}"
 
     log_dir = config.output_dir / "logs"
     log_dir.mkdir(parents=True, exist_ok=True)
@@ -81,11 +93,14 @@ def setup_logging(
     # Text log for debugging
     text_file = log_dir / f"{session_name}.log"
 
-    # Get or create logger
-    logger = logging.getLogger("grimperium.crest_pm7")
+    # Create a child logger specific to this session to avoid clearing shared logger handlers
+    logger = logging.getLogger(f"grimperium.crest_pm7.{session_name}")
     logger.setLevel(logging.DEBUG)
 
-    # Clear existing handlers
+    # Disable propagation to parent loggers (prevents duplicate entries)
+    logger.propagate = False
+
+    # Clear existing handlers only on this session-specific logger
     logger.handlers.clear()
 
     # JSONL handler

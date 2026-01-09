@@ -64,7 +64,8 @@ def _check_executable(name: str, version_flag: str = "--version") -> tuple[bool,
         version = version.split("\n")[0] if version else None
         return True, version
     except (subprocess.TimeoutExpired, subprocess.SubprocessError):
-        return True, None
+        # Subprocess failure means the executable is not functioning correctly
+        return False, None
 
 
 def validate_environment(config: PM7Config) -> ValidationResult:
@@ -140,6 +141,11 @@ def validate_environment_strict(config: PM7Config) -> ValidationResult:
 
     if not result.obabel_available:
         result.valid = False
+        # Remove existing Open Babel warning to avoid duplication
+        result.warnings = [
+            w for w in result.warnings
+            if "Open Babel" not in w and "obabel" not in w
+        ]
         result.errors.append(
             "Open Babel (obabel) required for strict validation"
         )

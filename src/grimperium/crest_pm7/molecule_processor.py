@@ -4,13 +4,14 @@ Defines result dataclasses and the main MoleculeProcessor class.
 """
 
 import logging
+import time
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
 
 from rdkit import Chem
-from rdkit.Chem import Descriptors, rdMolDescriptors
+from rdkit.Chem import AllChem, Descriptors, rdMolDescriptors
 
 from .config import (
     CRESTStatus,
@@ -93,7 +94,8 @@ class ConformerData:
             "mopac_timeout_used": self.mopac_timeout_used,
             "mopac_error_message": self.mopac_error_message,
             "energy_hof": self.energy_hof,
-            "hof_confidence": self.hof_confidence.value if self.hof_confidence else None,
+            # hof_confidence is non-Optional with a default, always serializes its value
+            "hof_confidence": self.hof_confidence.value,
             "hof_extraction_method": self.hof_extraction_method,
             "hof_extraction_successful": self.hof_extraction_successful,
             "is_successful": self.is_successful,
@@ -107,7 +109,7 @@ class PM7Result:
     Attributes:
         mol_id: Molecule identifier
         smiles: SMILES string
-        timestamp: Processing timestamp
+        timestamp: Processing timestamp (timezone-aware UTC)
         phase: Processing phase
         nheavy: Number of heavy atoms
         nrotbonds: Number of rotatable bonds
@@ -136,7 +138,7 @@ class PM7Result:
     # Identification
     mol_id: str
     smiles: str
-    timestamp: datetime = field(default_factory=datetime.now)
+    timestamp: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     phase: str = "A"
 
     # Metadata
@@ -183,7 +185,11 @@ class PM7Result:
         successful = [c for c in self.conformers if c.is_successful]
         if not successful:
             return None
-        return min(c.energy_hof for c in successful)
+        # is_successful guarantees energy_hof is not None
+        energies: list[float] = [c.energy_hof for c in successful]  # type: ignore[misc]
+        if not energies:
+            return None
+        return min(energies)
 
     @property
     def successful_conformers(self) -> list[ConformerData]:
@@ -264,6 +270,69 @@ def compute_molecular_descriptors(smiles: str) -> dict[str, Any]:
     return result
 
 
+def _collect_issues(result: PM7Result) -> list[str]:
+    """Collect quality issues from a PM7Result.
+
+    Pure helper function that analyzes result and returns list of issues.
+
+    Args:
+        result: PM7Result to analyze
+
+    Returns:
+        List of issue strings
+    """
+    if not result.success:
+        return []  # No detailed issues for failed results
+
+    successful = result.successful_conformers
+    if not successful:
+        return []
+
+    issues = []
+
+    # Check HOF confidence
+    high_conf = sum(1 for c in successful if c.hof_confidence == HOFConfidence.HIGH)
+    if high_conf == 0:
+        issues.append("no_high_confidence_hof")
+
+    # Check conformer coverage
+    if result.num_conformers_selected and len(successful) < result.num_conformers_selected:
+        issues.append("incomplete_conformer_coverage")
+
+    # Check timeout
+    if result.timeout_confidence == TimeoutConfidence.LOW:
+        issues.append("low_timeout_confidence")
+
+    return issues
+
+
+def _grade_from_issues(issues: list[str], success: bool, has_conformers: bool) -> QualityGrade:
+    """Determine quality grade based on issues.
+
+    Pure helper function that returns grade based solely on input parameters.
+
+    Args:
+        issues: List of issue strings
+        success: Whether processing succeeded
+        has_conformers: Whether any conformers were successful
+
+    Returns:
+        QualityGrade
+    """
+    if not success:
+        return QualityGrade.FAILED
+
+    if not has_conformers:
+        return QualityGrade.FAILED
+
+    if len(issues) == 0:
+        return QualityGrade.A
+    elif len(issues) == 1:
+        return QualityGrade.B
+    else:
+        return QualityGrade.C
+
+
 class MoleculeProcessor:
     """Processes a single molecule through CREST + MOPAC pipeline."""
 
@@ -286,42 +355,26 @@ class MoleculeProcessor:
     def _assign_quality_grade(self, result: PM7Result) -> QualityGrade:
         """Assign quality grade based on results.
 
+        Uses pure helper functions for issue collection and grading.
+
         Args:
             result: PM7Result to grade
 
         Returns:
             QualityGrade
         """
-        if not result.success:
-            return QualityGrade.FAILED
+        # Collect issues using pure helper
+        issues = _collect_issues(result)
 
-        successful = result.successful_conformers
-        if not successful:
-            return QualityGrade.FAILED
-
-        issues = []
-
-        # Check HOF confidence
-        high_conf = sum(1 for c in successful if c.hof_confidence == HOFConfidence.HIGH)
-        if high_conf == 0:
-            issues.append("no_high_confidence_hof")
-
-        # Check conformer coverage
-        if result.num_conformers_selected and len(successful) < result.num_conformers_selected:
-            issues.append("incomplete_conformer_coverage")
-
-        # Check timeout
-        if result.timeout_confidence == TimeoutConfidence.LOW:
-            issues.append("low_timeout_confidence")
-
+        # Assign issues to result (caller may also do this)
         result.issues = issues
 
-        if len(issues) == 0:
-            return QualityGrade.A
-        elif len(issues) == 1:
-            return QualityGrade.B
-        else:
-            return QualityGrade.C
+        # Determine grade using pure helper
+        return _grade_from_issues(
+            issues,
+            success=result.success,
+            has_conformers=len(result.successful_conformers) > 0
+        )
 
     def process(
         self,
@@ -339,14 +392,15 @@ class MoleculeProcessor:
         Returns:
             PM7Result with all processing results
         """
-        import time
-
         start_time = time.time()
+
+        # Get phase value for string representation
+        phase_value = self.config.phase.value if hasattr(self.config.phase, 'value') else str(self.config.phase)
 
         result = PM7Result(
             mol_id=mol_id,
             smiles=smiles,
-            phase=self.config.phase,
+            phase=phase_value,
         )
 
         LOG.info(f"Processing molecule: {mol_id} ({smiles})")
@@ -413,10 +467,14 @@ class MoleculeProcessor:
         conformers_to_process = crest_result.conformer_files[:num_conformers]
         result.decisions.append(f"processing {len(conformers_to_process)} of {crest_result.conformers_found} conformers")
 
-        # Run MOPAC on each conformer
-        per_conformer_timeout = timeout / max(1, len(conformers_to_process))
+        # Run MOPAC on each conformer with dynamic timeout redistribution
+        remaining_timeout = timeout
+        remaining_conformers = len(conformers_to_process)
 
         for idx, xyz_file in enumerate(conformers_to_process):
+            # Calculate timeout for this conformer based on remaining time
+            per_conformer_timeout = remaining_timeout / max(1, remaining_conformers)
+
             conf_data = ConformerData(index=idx, mol_id=mol_id)
             conf_data.crest_status = CRESTStatus.SUCCESS
             conf_data.crest_geometry_file = xyz_file
@@ -450,10 +508,14 @@ class MoleculeProcessor:
 
             result.conformers.append(conf_data)
 
-        # Calculate energy differences
+            # Atualizar tempo restante para próximos conformers
+            remaining_timeout = max(0, remaining_timeout - mopac_result.execution_time)
+            remaining_conformers -= 1
+
+        # Calculate energy differences - is_successful guarantees energy_hof is not None
         successful_energies = [
             c.energy_hof for c in result.conformers
-            if c.is_successful and c.energy_hof is not None
+            if c.is_successful
         ]
         if successful_energies:
             deltas = calculate_delta_e(successful_energies)
@@ -493,8 +555,6 @@ class MoleculeProcessor:
             Path to XYZ file or None if failed
         """
         try:
-            from rdkit.Chem import AllChem
-
             mol = Chem.MolFromSmiles(smiles)
             if mol is None:
                 return None
@@ -502,15 +562,28 @@ class MoleculeProcessor:
             mol = Chem.AddHs(mol)
 
             # Generate 3D coordinates
-            result = AllChem.EmbedMolecule(mol, AllChem.ETKDG())
-            if result != 0:
+            embed_result = AllChem.EmbedMolecule(mol, AllChem.ETKDG())
+            if embed_result < 0:
                 # Try with random seed
-                result = AllChem.EmbedMolecule(mol, randomSeed=42)
-                if result != 0:
+                embed_result = AllChem.EmbedMolecule(mol, randomSeed=42)
+                if embed_result < 0:
                     return None
 
-            # Optimize geometry
-            AllChem.MMFFOptimizeMolecule(mol)
+            # Optimize geometry and check result
+            optim_result = AllChem.MMFFOptimizeMolecule(mol)
+            if optim_result == -1:
+                # -1 means missing force field parameters
+                mol_name = mol.GetProp('_Name') if mol.HasProp('_Name') else smiles[:50]
+                LOG.warning(
+                    f"MMFF optimization failed for '{mol_name}' (return code -1): "
+                    "missing force field parameters. Geometry may be unreliable."
+                )
+            elif optim_result != 0:
+                mol_name = mol.GetProp('_Name') if mol.HasProp('_Name') else smiles[:50]
+                LOG.warning(
+                    f"MMFF optimization returned non-zero code {optim_result} for '{mol_name}'. "
+                    "Geometry may not be fully optimized."
+                )
 
             # Write XYZ
             work_dir = self.config.temp_dir / mol_id

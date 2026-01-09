@@ -6,15 +6,24 @@ Handles MOPAC execution and robust output parsing.
 import logging
 import re
 import subprocess
-from dataclasses import dataclass, field
+import time
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
-import time
 
 from .config import HOFConfidence, MOPACStatus, PM7Config
 from .energy_extractor import extract_hof
 
 LOG = logging.getLogger("grimperium.crest_pm7.mopac_optimizer")
+
+# Mapeamento de multiplicidade para keywords do MOPAC
+_MULTIPLICITY_KEYWORDS = {
+    2: "DOUBLET",
+    3: "TRIPLET",
+    4: "QUARTET",
+    5: "QUINTET",
+    6: "SEXTET",
+}
 
 
 @dataclass
@@ -54,10 +63,13 @@ def _create_mopac_input(
         xyz_file: Input XYZ file
         output_mop: Output .mop file
         charge: Molecular charge
-        multiplicity: Spin multiplicity
+        multiplicity: Spin multiplicity (1=singlet, 2=doublet, etc.)
 
     Returns:
         True if input file created successfully
+
+    Raises:
+        ValueError: If multiplicity is not supported
     """
     try:
         with open(xyz_file, encoding="utf-8") as f:
@@ -70,11 +82,14 @@ def _create_mopac_input(
         keywords = ["PM7", "PRECISE"]
         if charge != 0:
             keywords.append(f"CHARGE={charge}")
+
         if multiplicity != 1:
-            if multiplicity == 2:
-                keywords.append("DOUBLET")
-            elif multiplicity == 3:
-                keywords.append("TRIPLET")
+            if multiplicity not in _MULTIPLICITY_KEYWORDS:
+                raise ValueError(
+                    f"Unsupported multiplicity {multiplicity}. "
+                    f"Supported values: 1 (singlet), {', '.join(f'{k} ({v.lower()})' for k, v in sorted(_MULTIPLICITY_KEYWORDS.items()))}"
+                )
+            keywords.append(_MULTIPLICITY_KEYWORDS[multiplicity])
 
         with open(output_mop, "w", encoding="utf-8") as f:
             f.write(" ".join(keywords) + "\n")
@@ -139,26 +154,6 @@ def _detect_geometry_error(output_content: str) -> bool:
     return False
 
 
-def _detect_success(output_content: str) -> bool:
-    """Detect successful completion in MOPAC output.
-
-    Args:
-        output_content: MOPAC output file content
-
-    Returns:
-        True if success markers found
-    """
-    success_patterns = [
-        r"CALCULATION\s+DONE",
-        r"TOTAL\s+JOB\s+TIME",
-        r"HEAT\s+OF\s+FORMATION",
-    ]
-    for pattern in success_patterns:
-        if re.search(pattern, output_content, re.IGNORECASE):
-            return True
-    return False
-
-
 def run_mopac(
     mol_id: str,
     xyz_file: Path,
@@ -216,11 +211,27 @@ def run_mopac(
 
         result.execution_time = time.time() - start_time
 
+        # Check returncode of subprocess
+        had_nonzero_exit = False
+        if proc.returncode != 0:
+            had_nonzero_exit = True
+            error_msg = (
+                f"MOPAC returned non-zero exit code {proc.returncode}. "
+                f"cmd: {' '.join(cmd)}, stdout: {proc.stdout[:200] if proc.stdout else 'N/A'}, "
+                f"stderr: {proc.stderr[:200] if proc.stderr else 'N/A'}"
+            )
+            LOG.warning(f"MOPAC non-zero exit for {mol_id} conf{conf_index}: {error_msg}")
+            # Continue to attempt HOF extraction instead of returning immediately
+
         # MOPAC creates output with same name but .out extension
         if not out_file.exists():
             # Try arc file
             arc_file = mop_file.with_suffix(".arc")
             if arc_file.exists():
+                LOG.info(
+                    f"Using fallback arc file for {mol_id} conf{conf_index}: "
+                    f"expected {out_file}, using {arc_file}"
+                )
                 out_file = arc_file
 
         if not out_file.exists():
@@ -251,13 +262,23 @@ def run_mopac(
             result.status = MOPACStatus.GEOMETRY_ERROR
             result.error_message = "Geometry optimization error"
             LOG.warning(f"MOPAC geometry error for {mol_id} conf{conf_index}")
+            # Try to extract HOF even with geometry error (consistent with SCF branch)
+            hof, method, confidence = extract_hof(output_content, nheavy)
+            if hof is not None:
+                result.hof = hof
+                result.hof_method = method
+                result.hof_confidence = confidence
             return result
 
         # Extract HOF
         hof, method, confidence = extract_hof(output_content, nheavy)
 
         if hof is None:
-            if method is not None:
+            # No HOF extracted - check if we had a non-zero exit
+            if had_nonzero_exit:
+                result.status = MOPACStatus.ERROR
+                result.error_message = error_msg
+            elif method is not None:
                 # Pattern matched but validation failed
                 result.status = MOPACStatus.SUCCESS
                 result.hof_method = method
@@ -268,8 +289,15 @@ def run_mopac(
                 result.error_message = "No HOF value found in output"
             return result
 
-        # Success with HOF
-        result.status = MOPACStatus.SUCCESS
+        # HOF extracted successfully
+        if had_nonzero_exit:
+            # Had non-zero exit but managed to extract HOF - still an error
+            result.status = MOPACStatus.ERROR
+            result.error_message = error_msg
+        else:
+            # Success with HOF
+            result.status = MOPACStatus.SUCCESS
+        
         result.hof = hof
         result.hof_method = method
         result.hof_confidence = confidence
@@ -288,7 +316,7 @@ def run_mopac(
 
     except Exception as e:
         result.execution_time = time.time() - start_time
-        result.status = MOPACStatus.NOT_ATTEMPTED
+        result.status = MOPACStatus.ERROR
         result.error_message = f"MOPAC error: {e}"
         LOG.error(f"MOPAC error for {mol_id} conf{conf_index}: {e}")
 
@@ -303,7 +331,10 @@ def optimize_conformer(
     nheavy: Optional[int] = None,
     conf_index: int = 0,
 ) -> MOPACResult:
-    """Convenience wrapper for run_mopac.
+    """Wrapper for run_mopac.
+
+    This function exists for API stability and potential future extension.
+    Currently forwards all arguments to run_mopac.
 
     Args:
         mol_id: Molecule identifier

@@ -80,7 +80,7 @@ class PhaseAEvaluation:
     issues: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
-        """Convert to dictionary."""
+        """Convert to dictionary with full diagnostic fields."""
         return {
             "passed": self.passed,
             "molecules": [
@@ -89,9 +89,14 @@ class PhaseAEvaluation:
                     "passed": m.passed,
                     "hof_expected": m.hof_expected,
                     "hof_actual": m.hof_actual,
+                    "hof_min": m.hof_min,
+                    "hof_max": m.hof_max,
                     "hof_in_range": m.hof_in_range,
+                    "grade_expected": m.grade_expected,
                     "grade_actual": m.grade_actual,
                     "grade_acceptable": m.grade_acceptable,
+                    "success_expected": m.success_expected,
+                    "success_actual": m.success_actual,
                     "issues": m.issues,
                 }
                 for m in self.molecules
@@ -119,13 +124,20 @@ class ResultEvaluator:
         Args:
             baseline_path: Path to baseline JSON file
             tolerance: HOF tolerance in kcal/mol
+
+        Attributes:
+            baseline_loaded: True when load_baseline succeeded, False otherwise.
+                Downstream callers should check baseline_loaded before relying on baseline validation.
         """
         self.tolerance = tolerance
         self.baseline: dict = {}
         self.criteria: dict = {}
+        self.baseline_loaded: bool = False
 
         if baseline_path and baseline_path.exists():
-            self.load_baseline(baseline_path)
+            result = self.load_baseline(baseline_path)
+            if not result:
+                LOG.error(f"Failed to load baseline from {baseline_path}")
 
     def load_baseline(self, path: Path) -> bool:
         """Load baseline expectations from JSON file.
@@ -143,12 +155,14 @@ class ResultEvaluator:
             self.baseline = data.get("molecules", {})
             self.criteria = data.get("phase_a_success_criteria", {})
             self.tolerance = data.get("tolerance_kcal_mol", TOLERANCE_ABSOLUTE)
+            self.baseline_loaded = True
 
             LOG.info(f"Loaded baseline with {len(self.baseline)} molecules")
             return True
 
         except Exception as e:
             LOG.warning(f"Failed to load baseline: {e}")
+            self.baseline_loaded = False
             return False
 
     def evaluate_molecule(

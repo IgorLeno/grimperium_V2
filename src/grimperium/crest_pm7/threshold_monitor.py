@@ -67,25 +67,37 @@ class MonitoringMetrics:
     consecutive_failures: int = 0
 
     @property
-    def success_rate(self) -> float:
-        """Overall success rate."""
+    def success_rate(self) -> Optional[float]:
+        """Overall success rate.
+
+        Returns:
+            Success rate as float, or None if no samples processed.
+        """
         if self.total_processed == 0:
-            return 1.0
+            return None
         return self.success_count / self.total_processed
 
     @property
-    def hof_extraction_rate(self) -> float:
-        """HOF extraction success rate."""
+    def hof_extraction_rate(self) -> Optional[float]:
+        """HOF extraction success rate.
+
+        Returns:
+            Extraction rate as float, or None if no samples.
+        """
         total = self.hof_extraction_success + self.hof_extraction_failure
         if total == 0:
-            return 1.0
+            return None
         return self.hof_extraction_success / total
 
     @property
-    def grade_ab_rate(self) -> float:
-        """Grade A+B rate."""
+    def grade_ab_rate(self) -> Optional[float]:
+        """Grade A+B rate.
+
+        Returns:
+            A+B rate as float, or None if no samples.
+        """
         if self.total_processed == 0:
-            return 1.0
+            return None
         return (self.grade_a_count + self.grade_b_count) / self.total_processed
 
 
@@ -141,6 +153,27 @@ class ThresholdMonitor:
                 callback(alert)
             except Exception as e:
                 LOG.error(f"Alert callback failed: {e}")
+
+    def _is_critical_condition(self) -> bool:
+        """Check if current state is critical.
+
+        Shared helper to avoid duplicated threshold logic.
+
+        Returns:
+            True if critical conditions are met
+        """
+        # Check consecutive failures
+        if self.metrics.consecutive_failures >= self.config.consecutive_failures_critical:
+            return True
+
+        # Check success rate (guard against division by zero)
+        half_window = max(1, self.window_size // 2)
+        if len(self.recent_successes) >= half_window and len(self.recent_successes) > 0:
+            window_rate = sum(self.recent_successes) / len(self.recent_successes)
+            if window_rate < self.config.success_rate_critical:
+                return True
+
+        return False
 
     def record_result(
         self,
@@ -249,19 +282,20 @@ class ThresholdMonitor:
         """Pattern 2: Check for HOF extraction failure spike."""
         alerts = []
 
-        if len(self.recent_hof_extractions) < 10:
+        # Use threshold from config
+        if len(self.recent_hof_extractions) < self.config.hof_extraction_min_samples:
             return alerts
 
         recent_rate = sum(self.recent_hof_extractions) / len(self.recent_hof_extractions)
 
-        if recent_rate < 0.8:  # Less than 80% extraction rate
+        if recent_rate < self.config.hof_extraction_threshold:
             alerts.append(Alert(
                 level=AlertLevel.WARNING,
                 pattern="hof_extraction_failure",
                 message=f"HOF extraction rate low: {recent_rate:.1%}",
                 metrics={
                     "extraction_rate": recent_rate,
-                    "threshold": 0.8,
+                    "threshold": self.config.hof_extraction_threshold,
                 },
             ))
             self._emit_alert(alerts[-1])
@@ -272,7 +306,7 @@ class ThresholdMonitor:
         """Pattern 3: Check for consecutive failures."""
         alerts = []
 
-        if self.metrics.consecutive_failures >= 5:
+        if self.metrics.consecutive_failures >= self.config.consecutive_failures_critical:
             alerts.append(Alert(
                 level=AlertLevel.CRITICAL,
                 pattern="consecutive_failures",
@@ -281,7 +315,7 @@ class ThresholdMonitor:
             ))
             self._emit_alert(alerts[-1])
 
-        elif self.metrics.consecutive_failures >= 3:
+        elif self.metrics.consecutive_failures >= self.config.consecutive_failures_warning:
             alerts.append(Alert(
                 level=AlertLevel.WARNING,
                 pattern="consecutive_failures",
@@ -296,20 +330,20 @@ class ThresholdMonitor:
         """Pattern 4: Check for grade quality degradation."""
         alerts = []
 
-        if len(self.recent_grades) < 10:
+        if len(self.recent_grades) < self.config.grade_degradation_min_samples:
             return alerts
 
         ab_count = sum(1 for g in self.recent_grades if g in (QualityGrade.A, QualityGrade.B))
         ab_rate = ab_count / len(self.recent_grades)
 
-        if ab_rate < 0.5:  # Less than 50% A/B grades
+        if ab_rate < self.config.grade_degradation_threshold:
             alerts.append(Alert(
                 level=AlertLevel.WARNING,
                 pattern="grade_degradation",
                 message=f"Quality grade degradation: {ab_rate:.1%} A/B grades",
                 metrics={
                     "ab_rate": ab_rate,
-                    "threshold": 0.5,
+                    "threshold": self.config.grade_degradation_threshold,
                 },
             ))
             self._emit_alert(alerts[-1])
@@ -326,7 +360,7 @@ class ThresholdMonitor:
         timeout_rate = self.metrics.timeout_count / self.metrics.total_processed
         scf_rate = self.metrics.scf_failure_count / self.metrics.total_processed
 
-        if timeout_rate > 0.2:  # More than 20% timeouts
+        if timeout_rate > self.config.timeout_pattern_threshold:
             alerts.append(Alert(
                 level=AlertLevel.WARNING,
                 pattern="timeout_pattern",
@@ -338,7 +372,7 @@ class ThresholdMonitor:
             ))
             self._emit_alert(alerts[-1])
 
-        if scf_rate > 0.15:  # More than 15% SCF failures
+        if scf_rate > self.config.scf_pattern_threshold:
             alerts.append(Alert(
                 level=AlertLevel.WARNING,
                 pattern="scf_failure_pattern",
@@ -379,17 +413,18 @@ class ThresholdMonitor:
     def should_pause(self) -> bool:
         """Determine if pipeline should pause for review.
 
+        Uses shared helper to check critical conditions.
+
         Returns:
             True if critical conditions detected
         """
-        # Pause on 5+ consecutive failures
-        if self.metrics.consecutive_failures >= 5:
+        # Use helper to check critical conditions
+        if self._is_critical_condition():
             return True
 
-        # Pause on critical success rate drop
-        if len(self.recent_successes) >= self.window_size // 2:
-            window_rate = sum(self.recent_successes) / len(self.recent_successes)
-            if window_rate < self.config.success_rate_critical:
-                return True
+        # Also check if there are recent critical alerts
+        recent_alerts = self.alerts[-10:] if len(self.alerts) > 10 else self.alerts
+        if any(a.level == AlertLevel.CRITICAL for a in recent_alerts):
+            return True
 
         return False

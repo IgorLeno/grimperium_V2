@@ -14,6 +14,7 @@ Exit codes:
 import csv
 import json
 import sys
+import uuid
 from pathlib import Path
 
 # Add src to path for local development
@@ -34,10 +35,28 @@ def load_test_molecules(csv_path: Path) -> list[tuple[str, str]]:
 
     Returns:
         List of (mol_id, smiles) tuples
+
+    Raises:
+        ValueError: If required columns are missing from CSV
     """
     molecules = []
     with open(csv_path, encoding="utf-8") as f:
         reader = csv.DictReader(f)
+
+        # Validar que as colunas necessárias existem
+        fieldnames = reader.fieldnames or []
+        missing_columns = []
+        if "mol_id" not in fieldnames:
+            missing_columns.append("mol_id")
+        if "smiles" not in fieldnames:
+            missing_columns.append("smiles")
+
+        if missing_columns:
+            raise ValueError(
+                f"CSV file '{csv_path}' is missing required column(s): {', '.join(missing_columns)}. "
+                f"Found columns: {', '.join(fieldnames) if fieldnames else 'none'}"
+            )
+
         for row in reader:
             molecules.append((row["mol_id"], row["smiles"]))
     return molecules
@@ -69,8 +88,28 @@ def main() -> int:
         print(f"ERROR: Expected JSON not found: {expected_json}")
         return 1
 
+    # Ensure output_dir exists and is writable
+    try:
+        output_dir.mkdir(parents=True, exist_ok=True)
+        # Verify writability by attempting to create/remove a temp file
+        test_file = output_dir / f".write_test_{uuid.uuid4().hex[:8]}"
+        try:
+            test_file.touch()
+            test_file.unlink()
+        except OSError as e:
+            print(f"ERROR: Output directory is not writable: {output_dir} ({e})")
+            return 1
+    except OSError as e:
+        print(f"ERROR: Cannot create output directory: {output_dir} ({e})")
+        return 1
+
     # Load test molecules
-    molecules = load_test_molecules(molecules_csv)
+    try:
+        molecules = load_test_molecules(molecules_csv)
+    except ValueError as e:
+        print(f"ERROR: Failed to load molecules CSV: {e}")
+        return 1
+
     print(f"\nLoaded {len(molecules)} test molecules:")
     for mol_id, smiles in molecules:
         print(f"  - {mol_id}: {smiles}")
@@ -93,24 +132,37 @@ def main() -> int:
 
     # Setup pipeline
     print("\n--- Pipeline Setup ---")
-    pipeline.setup(session_name="phase_a_quick_test")
-    pipeline.load_baseline(expected_json)
+    try:
+        pipeline.setup(session_name="phase_a_quick_test")
+        pipeline.load_baseline(expected_json)
+    except Exception as e:
+        print(f"ERROR: Pipeline setup failed: {e}")
+        return 1
 
     # Process molecules
     print("\n--- Processing Molecules ---")
-    for mol_id, smiles in molecules:
-        print(f"\nProcessing: {mol_id}")
-        result = pipeline.process_molecule(mol_id, smiles)
-        print(f"  Success: {result.success}")
-        print(f"  Grade: {result.quality_grade.value}")
-        print(f"  HOF: {result.most_stable_hof}")
-        if result.error_message:
-            print(f"  Error: {result.error_message}")
+    try:
+        for mol_id, smiles in molecules:
+            print(f"\nProcessing: {mol_id}")
+            result = pipeline.process_molecule(mol_id, smiles)
+            print(f"  Success: {result.success}")
+            grade_value = result.quality_grade.value if result.quality_grade is not None else "N/A"
+            print(f"  Grade: {grade_value}")
+            print(f"  HOF: {result.most_stable_hof}")
+            if result.error_message:
+                print(f"  Error: {result.error_message}")
+    except Exception as e:
+        print(f"ERROR: Processing failed: {e}")
+        return 1
 
     # Save results
     print("\n--- Saving Results ---")
-    pipeline.save_results(results_json)
-    print(f"Results saved to: {results_json}")
+    try:
+        pipeline.save_results(results_json)
+        print(f"Results saved to: {results_json}")
+    except Exception as e:
+        print(f"ERROR: Failed to save results: {e}")
+        return 1
 
     # Evaluate Phase A
     print("\n--- Phase A Evaluation ---")
