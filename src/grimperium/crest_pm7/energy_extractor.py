@@ -93,7 +93,9 @@ def validate_hof(hof: float, nheavy: int) -> tuple[bool, str]:
     # Soft warning if far from expected (~-10*nheavy)
     expected = -10.0 * nheavy
     if abs(hof - expected) > 300.0:
-        LOG.warning(f"HOF {hof:.2f} deviates significantly from expected ~{expected:.0f}")
+        LOG.warning(
+            f"HOF {hof:.2f} deviates significantly from expected ~{expected:.0f}"
+        )
 
     return True, "OK"
 

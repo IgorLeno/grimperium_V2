@@ -38,7 +38,9 @@ class ValidationResult:
     warnings: list[str] = field(default_factory=list)
 
 
-def _check_executable(name: str, version_flag: str = "--version") -> tuple[bool, Optional[str]]:
+def _check_executable(
+    name: str, version_flag: str = "--version"
+) -> tuple[bool, Optional[str]]:
     """Check if an executable is available and get its version.
 
     Args:
@@ -87,9 +89,7 @@ def validate_environment(config: PM7Config) -> ValidationResult:
     )
     if not result.crest_available:
         result.valid = False
-        result.errors.append(
-            f"CREST executable not found: {config.crest_executable}"
-        )
+        result.errors.append(f"CREST executable not found: {config.crest_executable}")
 
     # Check MOPAC
     result.mopac_available, result.mopac_version = _check_executable(
@@ -97,9 +97,7 @@ def validate_environment(config: PM7Config) -> ValidationResult:
     )
     if not result.mopac_available:
         result.valid = False
-        result.errors.append(
-            f"MOPAC executable not found: {config.mopac_executable}"
-        )
+        result.errors.append(f"MOPAC executable not found: {config.mopac_executable}")
 
     # Check Open Babel (required for XYZ -> SDF conversion)
     result.obabel_available, result.obabel_version = _check_executable(
@@ -143,11 +141,8 @@ def validate_environment_strict(config: PM7Config) -> ValidationResult:
         result.valid = False
         # Remove existing Open Babel warning to avoid duplication
         result.warnings = [
-            w for w in result.warnings
-            if "Open Babel" not in w and "obabel" not in w
+            w for w in result.warnings if "Open Babel" not in w and "obabel" not in w
         ]
-        result.errors.append(
-            "Open Babel (obabel) required for strict validation"
-        )
+        result.errors.append("Open Babel (obabel) required for strict validation")
 
     return result

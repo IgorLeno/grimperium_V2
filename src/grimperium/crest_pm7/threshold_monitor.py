@@ -143,10 +143,12 @@ class ThresholdMonitor:
         """Emit an alert to all registered callbacks."""
         self.alerts.append(alert)
         LOG.log(
-            logging.CRITICAL if alert.level == AlertLevel.CRITICAL else
-            logging.WARNING if alert.level == AlertLevel.WARNING else
-            logging.INFO,
-            f"[{alert.level.value}] {alert.pattern}: {alert.message}"
+            logging.CRITICAL
+            if alert.level == AlertLevel.CRITICAL
+            else logging.WARNING
+            if alert.level == AlertLevel.WARNING
+            else logging.INFO,
+            f"[{alert.level.value}] {alert.pattern}: {alert.message}",
         )
         for callback in self._alert_callbacks:
             try:
@@ -163,7 +165,10 @@ class ThresholdMonitor:
             True if critical conditions are met
         """
         # Check consecutive failures
-        if self.metrics.consecutive_failures >= self.config.consecutive_failures_critical:
+        if (
+            self.metrics.consecutive_failures
+            >= self.config.consecutive_failures_critical
+        ):
             return True
 
         # Check success rate
@@ -249,31 +254,35 @@ class ThresholdMonitor:
         if len(self.recent_successes) < self.window_size:
             return alerts
 
-        window_rate = sum(self.recent_successes[-self.window_size:]) / self.window_size
+        window_rate = sum(self.recent_successes[-self.window_size :]) / self.window_size
 
         if window_rate < self.config.success_rate_critical:
-            alerts.append(Alert(
-                level=AlertLevel.CRITICAL,
-                pattern="success_rate_drop",
-                message=f"Success rate critically low: {window_rate:.1%} < {self.config.success_rate_critical:.1%}",
-                metrics={
-                    "window_rate": window_rate,
-                    "threshold": self.config.success_rate_critical,
-                    "window_size": len(self.recent_successes),
-                },
-            ))
+            alerts.append(
+                Alert(
+                    level=AlertLevel.CRITICAL,
+                    pattern="success_rate_drop",
+                    message=f"Success rate critically low: {window_rate:.1%} < {self.config.success_rate_critical:.1%}",
+                    metrics={
+                        "window_rate": window_rate,
+                        "threshold": self.config.success_rate_critical,
+                        "window_size": len(self.recent_successes),
+                    },
+                )
+            )
             self._emit_alert(alerts[-1])
 
         elif window_rate < self.config.success_rate_warning:
-            alerts.append(Alert(
-                level=AlertLevel.WARNING,
-                pattern="success_rate_drop",
-                message=f"Success rate below warning: {window_rate:.1%} < {self.config.success_rate_warning:.1%}",
-                metrics={
-                    "window_rate": window_rate,
-                    "threshold": self.config.success_rate_warning,
-                },
-            ))
+            alerts.append(
+                Alert(
+                    level=AlertLevel.WARNING,
+                    pattern="success_rate_drop",
+                    message=f"Success rate below warning: {window_rate:.1%} < {self.config.success_rate_warning:.1%}",
+                    metrics={
+                        "window_rate": window_rate,
+                        "threshold": self.config.success_rate_warning,
+                    },
+                )
+            )
             self._emit_alert(alerts[-1])
 
         return alerts
@@ -286,18 +295,22 @@ class ThresholdMonitor:
         if len(self.recent_hof_extractions) < self.config.hof_extraction_min_samples:
             return alerts
 
-        recent_rate = sum(self.recent_hof_extractions) / len(self.recent_hof_extractions)
+        recent_rate = sum(self.recent_hof_extractions) / len(
+            self.recent_hof_extractions
+        )
 
         if recent_rate < self.config.hof_extraction_threshold:
-            alerts.append(Alert(
-                level=AlertLevel.WARNING,
-                pattern="hof_extraction_failure",
-                message=f"HOF extraction rate low: {recent_rate:.1%}",
-                metrics={
-                    "extraction_rate": recent_rate,
-                    "threshold": self.config.hof_extraction_threshold,
-                },
-            ))
+            alerts.append(
+                Alert(
+                    level=AlertLevel.WARNING,
+                    pattern="hof_extraction_failure",
+                    message=f"HOF extraction rate low: {recent_rate:.1%}",
+                    metrics={
+                        "extraction_rate": recent_rate,
+                        "threshold": self.config.hof_extraction_threshold,
+                    },
+                )
+            )
             self._emit_alert(alerts[-1])
 
         return alerts
@@ -306,22 +319,32 @@ class ThresholdMonitor:
         """Pattern 3: Check for consecutive failures."""
         alerts = []
 
-        if self.metrics.consecutive_failures >= self.config.consecutive_failures_critical:
-            alerts.append(Alert(
-                level=AlertLevel.CRITICAL,
-                pattern="consecutive_failures",
-                message=f"{self.metrics.consecutive_failures} consecutive failures",
-                metrics={"consecutive_failures": self.metrics.consecutive_failures},
-            ))
+        if (
+            self.metrics.consecutive_failures
+            >= self.config.consecutive_failures_critical
+        ):
+            alerts.append(
+                Alert(
+                    level=AlertLevel.CRITICAL,
+                    pattern="consecutive_failures",
+                    message=f"{self.metrics.consecutive_failures} consecutive failures",
+                    metrics={"consecutive_failures": self.metrics.consecutive_failures},
+                )
+            )
             self._emit_alert(alerts[-1])
 
-        elif self.metrics.consecutive_failures >= self.config.consecutive_failures_warning:
-            alerts.append(Alert(
-                level=AlertLevel.WARNING,
-                pattern="consecutive_failures",
-                message=f"{self.metrics.consecutive_failures} consecutive failures",
-                metrics={"consecutive_failures": self.metrics.consecutive_failures},
-            ))
+        elif (
+            self.metrics.consecutive_failures
+            >= self.config.consecutive_failures_warning
+        ):
+            alerts.append(
+                Alert(
+                    level=AlertLevel.WARNING,
+                    pattern="consecutive_failures",
+                    message=f"{self.metrics.consecutive_failures} consecutive failures",
+                    metrics={"consecutive_failures": self.metrics.consecutive_failures},
+                )
+            )
             self._emit_alert(alerts[-1])
 
         return alerts
@@ -333,19 +356,23 @@ class ThresholdMonitor:
         if len(self.recent_grades) < self.config.grade_degradation_min_samples:
             return alerts
 
-        ab_count = sum(1 for g in self.recent_grades if g in (QualityGrade.A, QualityGrade.B))
+        ab_count = sum(
+            1 for g in self.recent_grades if g in (QualityGrade.A, QualityGrade.B)
+        )
         ab_rate = ab_count / len(self.recent_grades)
 
         if ab_rate < self.config.grade_degradation_threshold:
-            alerts.append(Alert(
-                level=AlertLevel.WARNING,
-                pattern="grade_degradation",
-                message=f"Quality grade degradation: {ab_rate:.1%} A/B grades",
-                metrics={
-                    "ab_rate": ab_rate,
-                    "threshold": self.config.grade_degradation_threshold,
-                },
-            ))
+            alerts.append(
+                Alert(
+                    level=AlertLevel.WARNING,
+                    pattern="grade_degradation",
+                    message=f"Quality grade degradation: {ab_rate:.1%} A/B grades",
+                    metrics={
+                        "ab_rate": ab_rate,
+                        "threshold": self.config.grade_degradation_threshold,
+                    },
+                )
+            )
             self._emit_alert(alerts[-1])
 
         return alerts
@@ -361,27 +388,31 @@ class ThresholdMonitor:
         scf_rate = self.metrics.scf_failure_count / self.metrics.total_processed
 
         if timeout_rate > self.config.timeout_pattern_threshold:
-            alerts.append(Alert(
-                level=AlertLevel.WARNING,
-                pattern="timeout_pattern",
-                message=f"High timeout rate: {timeout_rate:.1%}",
-                metrics={
-                    "timeout_rate": timeout_rate,
-                    "timeout_count": self.metrics.timeout_count,
-                },
-            ))
+            alerts.append(
+                Alert(
+                    level=AlertLevel.WARNING,
+                    pattern="timeout_pattern",
+                    message=f"High timeout rate: {timeout_rate:.1%}",
+                    metrics={
+                        "timeout_rate": timeout_rate,
+                        "timeout_count": self.metrics.timeout_count,
+                    },
+                )
+            )
             self._emit_alert(alerts[-1])
 
         if scf_rate > self.config.scf_pattern_threshold:
-            alerts.append(Alert(
-                level=AlertLevel.WARNING,
-                pattern="scf_failure_pattern",
-                message=f"High SCF failure rate: {scf_rate:.1%}",
-                metrics={
-                    "scf_rate": scf_rate,
-                    "scf_count": self.metrics.scf_failure_count,
-                },
-            ))
+            alerts.append(
+                Alert(
+                    level=AlertLevel.WARNING,
+                    pattern="scf_failure_pattern",
+                    message=f"High SCF failure rate: {scf_rate:.1%}",
+                    metrics={
+                        "scf_rate": scf_rate,
+                        "scf_count": self.metrics.scf_failure_count,
+                    },
+                )
+            )
             self._emit_alert(alerts[-1])
 
         return alerts
@@ -406,8 +437,12 @@ class ThresholdMonitor:
             "timeout_count": self.metrics.timeout_count,
             "scf_failure_count": self.metrics.scf_failure_count,
             "alert_count": len(self.alerts),
-            "critical_alerts": sum(1 for a in self.alerts if a.level == AlertLevel.CRITICAL),
-            "warning_alerts": sum(1 for a in self.alerts if a.level == AlertLevel.WARNING),
+            "critical_alerts": sum(
+                1 for a in self.alerts if a.level == AlertLevel.CRITICAL
+            ),
+            "warning_alerts": sum(
+                1 for a in self.alerts if a.level == AlertLevel.WARNING
+            ),
         }
 
     def should_pause(self) -> bool:

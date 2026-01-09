@@ -18,15 +18,15 @@ _RESERVED_KEYS = {"timestamp", "level", "logger", "message"}
 
 def _sanitize_session_name(session_name: str) -> str:
     """Sanitize session name to avoid logger hierarchy issues.
-    
+
     Args:
         session_name: Raw session name (may contain dots, special chars)
-    
+
     Returns:
         Sanitized session name (alphanumeric, underscore, hyphen only)
     """
     # Replace non-alphanumeric characters (except underscore and hyphen) with underscores
-    sanitized = re.sub(r'[^a-zA-Z0-9_-]', '_', session_name).strip('_-')
+    sanitized = re.sub(r"[^a-zA-Z0-9_-]", "_", session_name).strip("_-")
     # Return "default" if empty after sanitization
     return sanitized if sanitized else "default"
 
@@ -48,7 +48,9 @@ class StructuredLogHandler(logging.Handler):
         """Write a log record as JSONL."""
         try:
             log_entry = {
-                "timestamp": datetime.now(timezone.utc).isoformat(timespec="milliseconds"),
+                "timestamp": datetime.now(timezone.utc).isoformat(
+                    timespec="milliseconds"
+                ),
                 "level": record.levelname,
                 "logger": record.name,
                 "message": record.getMessage(),
@@ -69,7 +71,8 @@ class StructuredLogHandler(logging.Handler):
             # Merge extra_data filtering out reserved keys
             if hasattr(record, "extra_data"):
                 filtered = {
-                    k: v for k, v in record.extra_data.items()
+                    k: v
+                    for k, v in record.extra_data.items()
                     if k not in _RESERVED_KEYS and k not in log_entry
                 }
                 log_entry.update(filtered)

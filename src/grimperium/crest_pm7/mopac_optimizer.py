@@ -97,7 +97,7 @@ def _create_mopac_input(
             f.write("\n")  # Blank line
 
             # Write coordinates
-            for line in lines[2:2 + n_atoms]:
+            for line in lines[2 : 2 + n_atoms]:
                 parts = line.split()
                 if len(parts) >= 4:
                     element = parts[0]
@@ -221,7 +221,9 @@ def run_mopac(
                 f"cmd: {' '.join(cmd)}, stdout: {proc.stdout[:200] if proc.stdout else 'N/A'}, "
                 f"stderr: {proc.stderr[:200] if proc.stderr else 'N/A'}"
             )
-            LOG.warning(f"MOPAC non-zero exit for {mol_id} conf{conf_index}: {error_msg}")
+            LOG.warning(
+                f"MOPAC non-zero exit for {mol_id} conf{conf_index}: {error_msg}"
+            )
             # Continue to attempt HOF extraction instead of returning immediately
 
         # MOPAC creates output with same name but .out extension

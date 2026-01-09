@@ -29,7 +29,9 @@ TIMEOUT_MIN = 60.0  # Minimum timeout (1 minute)
 TIMEOUT_MAX = 3600.0  # Maximum timeout (1 hour)
 
 
-def _clamp(value: float, min_val: float = TIMEOUT_MIN, max_val: float = TIMEOUT_MAX) -> float:
+def _clamp(
+    value: float, min_val: float = TIMEOUT_MIN, max_val: float = TIMEOUT_MAX
+) -> float:
     """Clamp value to [min, max] range."""
     return max(min_val, min(max_val, value))
 
@@ -137,7 +139,9 @@ class TimeoutPredictor:
             True if fitting succeeded, False otherwise
         """
         if self.n_samples < MIN_SAMPLES_FOR_FIT:
-            LOG.debug(f"Not enough samples to fit: {self.n_samples} < {MIN_SAMPLES_FOR_FIT}")
+            LOG.debug(
+                f"Not enough samples to fit: {self.n_samples} < {MIN_SAMPLES_FOR_FIT}"
+            )
             return False
 
         try:
@@ -181,14 +185,18 @@ class TimeoutPredictor:
 
         # Validate prediction
         if not np.isfinite(pred) or pred < 0:
-            LOG.warning(f"Invalid prediction {pred} for nheavy={nheavy}, using heuristic fallback")
+            LOG.warning(
+                f"Invalid prediction {pred} for nheavy={nheavy}, using heuristic fallback"
+            )
             timeout = (120 + 5 * nheavy) * (1 + 0.2 * (num_conformers - 1))
             return _clamp(timeout), TimeoutConfidence.LOW
 
         timeout = pred * num_conformers * margin
         return _clamp(timeout), confidence
 
-    def predict(self, nheavy: int, num_conformers: int = 1) -> tuple[float, TimeoutConfidence]:
+    def predict(
+        self, nheavy: int, num_conformers: int = 1
+    ) -> tuple[float, TimeoutConfidence]:
         """Predict optimal timeout for a molecule.
 
         Args:
@@ -207,11 +215,15 @@ class TimeoutPredictor:
 
         elif n < 50:
             # Phase B: Model + 50% margin
-            return self._predict_with_model(nheavy, num_conformers, 1.5, TimeoutConfidence.MEDIUM)
+            return self._predict_with_model(
+                nheavy, num_conformers, 1.5, TimeoutConfidence.MEDIUM
+            )
 
         else:
             # Phase C+: Model + 30% margin
-            return self._predict_with_model(nheavy, num_conformers, 1.3, TimeoutConfidence.HIGH)
+            return self._predict_with_model(
+                nheavy, num_conformers, 1.3, TimeoutConfidence.HIGH
+            )
 
     def save(self, filepath: Path) -> bool:
         """Save predictor state to file using joblib.
@@ -263,7 +275,9 @@ class TimeoutPredictor:
                 expected_checksum = checksum_file.read_text().strip()
                 actual_checksum = _compute_checksum(filepath)
                 if expected_checksum != actual_checksum:
-                    LOG.warning(f"Checksum mismatch for {filepath}, file may be corrupted")
+                    LOG.warning(
+                        f"Checksum mismatch for {filepath}, file may be corrupted"
+                    )
                     return False
 
             state = joblib.load(filepath)
@@ -292,7 +306,9 @@ class TimeoutPredictor:
             # Verify recalibration interval
             loaded_interval = state.get("recalibrate_interval", 50)
             if not isinstance(loaded_interval, int) or loaded_interval <= 0:
-                LOG.warning(f"Invalid recalibrate_interval: {loaded_interval}, using default")
+                LOG.warning(
+                    f"Invalid recalibrate_interval: {loaded_interval}, using default"
+                )
                 loaded_interval = 50
 
             # Verify model

@@ -86,10 +86,14 @@ class ConformerData:
             "index": self.index,
             "mol_id": self.mol_id,
             "crest_status": self.crest_status.value,
-            "crest_geometry_file": str(self.crest_geometry_file) if self.crest_geometry_file else None,
+            "crest_geometry_file": str(self.crest_geometry_file)
+            if self.crest_geometry_file
+            else None,
             "crest_error_message": self.crest_error_message,
             "mopac_status": self.mopac_status.value,
-            "mopac_output_file": str(self.mopac_output_file) if self.mopac_output_file else None,
+            "mopac_output_file": str(self.mopac_output_file)
+            if self.mopac_output_file
+            else None,
             "mopac_execution_time": self.mopac_execution_time,
             "mopac_timeout_used": self.mopac_timeout_used,
             "mopac_error_message": self.mopac_error_message,
@@ -217,7 +221,9 @@ class PM7Result:
             "delta_e_13": self.delta_e_13,
             "delta_e_15": self.delta_e_15,
             "timeout_predicted": self.timeout_predicted,
-            "timeout_confidence": self.timeout_confidence.value if self.timeout_confidence else None,
+            "timeout_confidence": self.timeout_confidence.value
+            if self.timeout_confidence
+            else None,
             "decisions": self.decisions,
             "quality_grade": self.quality_grade.value,
             "issues": self.issues,
@@ -256,10 +262,7 @@ def compute_molecular_descriptors(smiles: str) -> dict[str, Any]:
 
         # Check for heteroatoms (N, O, S, P, etc.)
         hetero_atoms = {"N", "O", "S", "P", "F", "Cl", "Br", "I"}
-        has_hetero = any(
-            atom.GetSymbol() in hetero_atoms
-            for atom in mol.GetAtoms()
-        )
+        has_hetero = any(atom.GetSymbol() in hetero_atoms for atom in mol.GetAtoms())
         result["has_heteroatoms"] = has_hetero
 
     except Exception as e:
@@ -294,7 +297,10 @@ def _collect_issues(result: PM7Result) -> list[str]:
         issues.append("no_high_confidence_hof")
 
     # Check conformer coverage
-    if result.num_conformers_selected and len(successful) < result.num_conformers_selected:
+    if (
+        result.num_conformers_selected
+        and len(successful) < result.num_conformers_selected
+    ):
         issues.append("incomplete_conformer_coverage")
 
     # Check timeout
@@ -304,7 +310,9 @@ def _collect_issues(result: PM7Result) -> list[str]:
     return issues
 
 
-def _grade_from_issues(issues: list[str], success: bool, has_conformers: bool) -> QualityGrade:
+def _grade_from_issues(
+    issues: list[str], success: bool, has_conformers: bool
+) -> QualityGrade:
     """Determine quality grade based on issues.
 
     Pure helper function that returns grade based solely on input parameters.
@@ -371,7 +379,7 @@ class MoleculeProcessor:
         return _grade_from_issues(
             issues,
             success=result.success,
-            has_conformers=len(result.successful_conformers) > 0
+            has_conformers=len(result.successful_conformers) > 0,
         )
 
     def process(
@@ -393,7 +401,11 @@ class MoleculeProcessor:
         start_time = time.time()
 
         # Get phase value for string representation
-        phase_value = self.config.phase.value if hasattr(self.config.phase, 'value') else str(self.config.phase)
+        phase_value = (
+            self.config.phase.value
+            if hasattr(self.config.phase, "value")
+            else str(self.config.phase)
+        )
 
         result = PM7Result(
             mol_id=mol_id,
@@ -463,7 +475,9 @@ class MoleculeProcessor:
 
         # Select conformers
         conformers_to_process = crest_result.conformer_files[:num_conformers]
-        result.decisions.append(f"processing {len(conformers_to_process)} of {crest_result.conformers_found} conformers")
+        result.decisions.append(
+            f"processing {len(conformers_to_process)} of {crest_result.conformers_found} conformers"
+        )
 
         # Run MOPAC on each conformer with dynamic timeout redistribution
         remaining_timeout = timeout
@@ -512,8 +526,7 @@ class MoleculeProcessor:
 
         # Calculate energy differences - is_successful guarantees energy_hof is not None
         successful_energies = [
-            c.energy_hof for c in result.conformers
-            if c.is_successful
+            c.energy_hof for c in result.conformers if c.is_successful
         ]
         if successful_energies:
             deltas = calculate_delta_e(successful_energies)
@@ -571,13 +584,13 @@ class MoleculeProcessor:
             optim_result = AllChem.MMFFOptimizeMolecule(mol)
             if optim_result == -1:
                 # -1 means missing force field parameters
-                mol_name = mol.GetProp('_Name') if mol.HasProp('_Name') else smiles[:50]
+                mol_name = mol.GetProp("_Name") if mol.HasProp("_Name") else smiles[:50]
                 LOG.warning(
                     f"MMFF optimization failed for '{mol_name}' (return code -1): "
                     "missing force field parameters. Geometry may be unreliable."
                 )
             elif optim_result != 0:
-                mol_name = mol.GetProp('_Name') if mol.HasProp('_Name') else smiles[:50]
+                mol_name = mol.GetProp("_Name") if mol.HasProp("_Name") else smiles[:50]
                 LOG.warning(
                     f"MMFF optimization returned non-zero code {optim_result} for '{mol_name}'. "
                     "Geometry may not be fully optimized."

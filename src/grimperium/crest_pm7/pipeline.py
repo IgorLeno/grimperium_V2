@@ -73,7 +73,11 @@ class CRESTPM7Pipeline:
         Returns:
             Phase value as string
         """
-        return self.config.phase.value if isinstance(self.config.phase, Enum) else str(self.config.phase)
+        return (
+            self.config.phase.value
+            if isinstance(self.config.phase, Enum)
+            else str(self.config.phase)
+        )
 
     def setup(self, session_name: Optional[str] = None) -> None:
         """Set up pipeline for a processing session.
@@ -142,12 +146,10 @@ class CRESTPM7Pipeline:
 
         # Record in monitor (use direct comparison with enum members)
         timeout_occurred = any(
-            c.mopac_status == MOPACStatus.TIMEOUT
-            for c in result.conformers
+            c.mopac_status == MOPACStatus.TIMEOUT for c in result.conformers
         )
         scf_failed = any(
-            c.mopac_status == MOPACStatus.SCF_FAILED
-            for c in result.conformers
+            c.mopac_status == MOPACStatus.SCF_FAILED for c in result.conformers
         )
 
         alerts = self.monitor.record_result(
@@ -245,7 +247,9 @@ class CRESTPM7Pipeline:
             True if saved successfully
         """
         if output_path is None:
-            output_path = self.config.output_dir.parent / "models" / "timeout_predictor.pkl"
+            output_path = (
+                self.config.output_dir.parent / "models" / "timeout_predictor.pkl"
+            )
 
         return self.timeout_predictor.save(output_path)
 

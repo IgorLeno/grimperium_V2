@@ -111,8 +111,12 @@ class PM7Config:
     mopac_executable: str = "mopac"
 
     # Paths - using cross-platform tempdir and absolute output path
-    temp_dir: Path = field(default_factory=lambda: Path(tempfile.gettempdir()) / "crest_pm7")
-    output_dir: Path = field(default_factory=lambda: Path.cwd() / "data/molecules_pm7/computed")
+    temp_dir: Path = field(
+        default_factory=lambda: Path(tempfile.gettempdir()) / "crest_pm7"
+    )
+    output_dir: Path = field(
+        default_factory=lambda: Path.cwd() / "data/molecules_pm7/computed"
+    )
 
     # CREST settings
     max_conformers: int = 10

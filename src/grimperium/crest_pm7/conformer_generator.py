@@ -79,7 +79,7 @@ def _parse_xyz_file(xyz_path: Path) -> tuple[list[tuple[float, float, float]], i
         )
 
     # Skip comment line (line 1) and parse coordinates
-    for line_idx, line in enumerate(lines[2:2 + n_atoms], start=2):
+    for line_idx, line in enumerate(lines[2 : 2 + n_atoms], start=2):
         parts = line.split()
         if len(parts) < 4:
             raise ValueError(
@@ -266,7 +266,7 @@ def _split_crest_conformers(
         try:
             n_atoms = int(lines[i].strip())
             # Collect n_atoms + 2 lines (count, comment, atoms)
-            conformer_lines = lines[i:i + n_atoms + 2]
+            conformer_lines = lines[i : i + n_atoms + 2]
             if len(conformer_lines) == n_atoms + 2:
                 conformers.append("\n".join(conformer_lines))
                 i += n_atoms + 2
@@ -333,7 +333,8 @@ def run_crest(
             config.crest_executable,
             str(input_copy),
             "--quick",
-            f"--ewin", str(config.energy_window),
+            f"--ewin",
+            str(config.energy_window),
         ]
 
         LOG.info(f"Running CREST for {mol_id}: {' '.join(cmd)}")
@@ -350,7 +351,9 @@ def run_crest(
 
         if proc.returncode != 0:
             result.status = CRESTStatus.FAILED
-            result.error_message = f"CREST returned {proc.returncode}: {proc.stderr[:500]}"
+            result.error_message = (
+                f"CREST returned {proc.returncode}: {proc.stderr[:500]}"
+            )
             LOG.warning(f"CREST failed for {mol_id}: {result.error_message}")
             return result
 

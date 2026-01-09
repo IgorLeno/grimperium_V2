@@ -214,10 +214,15 @@ class ResultEvaluator:
         # Grade check
         eval_result.grade_expected = expected.get("quality_grade_expected")
         eval_result.grade_actual = result.quality_grade.value
-        eval_result.grade_acceptable = result.quality_grade in (QualityGrade.A, QualityGrade.B)
+        eval_result.grade_acceptable = result.quality_grade in (
+            QualityGrade.A,
+            QualityGrade.B,
+        )
 
         if not eval_result.grade_acceptable:
-            eval_result.issues.append(f"grade_not_acceptable: {eval_result.grade_actual}")
+            eval_result.issues.append(
+                f"grade_not_acceptable: {eval_result.grade_actual}"
+            )
 
         # Determine pass/fail
         eval_result.passed = (
@@ -266,8 +271,7 @@ class ResultEvaluator:
         eval_result.baseline_pass_rate = n_baseline_pass / n_total
 
         n_grade_ab = sum(
-            1 for r in results
-            if r.quality_grade in (QualityGrade.A, QualityGrade.B)
+            1 for r in results if r.quality_grade in (QualityGrade.A, QualityGrade.B)
         )
         eval_result.grade_ab_rate = n_grade_ab / n_total
 
