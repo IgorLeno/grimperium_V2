@@ -1,0 +1,37 @@
+{
+  "generation_date": "2026-01-09",
+  "source": "MOPAC PM7 literature values",
+  "tolerance_kcal_mol": 2.5,
+
+  "molecules": {
+    "methane": {
+      "hof_value": -17.93,
+      "hof_min": -20.43,
+      "hof_max": -15.43,
+      "quality_grade_expected": "A",
+      "success_expected": true
+    },
+    "ethane": {
+      "hof_value": -20.24,
+      "hof_min": -22.74,
+      "hof_max": -17.74,
+      "quality_grade_expected": "A",
+      "success_expected": true
+    },
+    "benzene": {
+      "hof_value": 25.68,
+      "hof_min": 23.18,
+      "hof_max": 28.18,
+      "quality_grade_expected": "A",
+      "success_expected": true
+    }
+  },
+
+  "phase_a_success_criteria": {
+    "min_success_rate": 1.0,
+    "min_hof_extraction_rate": 1.0,
+    "min_baseline_pass_rate": 1.0,
+    "min_grade_ab_rate": 0.67,
+    "require_zero_crashes": true
+  }
+}
