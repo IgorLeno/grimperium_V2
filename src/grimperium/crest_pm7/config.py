@@ -95,6 +95,12 @@ class PM7Config:
         monitor_window_size: Window size for monitoring metrics
         hof_extraction_min_samples: Minimum samples for HOF extraction rate check
         hof_extraction_threshold: Threshold for HOF extraction rate
+        grade_degradation_min_samples: Minimum samples for grade degradation check
+        grade_degradation_threshold: Threshold for grade degradation detection
+        timeout_pattern_threshold: Threshold for timeout pattern detection
+        scf_pattern_threshold: Threshold for SCF failure pattern detection
+        consecutive_failures_warning: Consecutive failures for warning alert
+        consecutive_failures_critical: Consecutive failures for critical alert
     """
 
     # Phase control
@@ -178,6 +184,19 @@ class PM7Config:
         if not (0 <= self.scf_pattern_threshold <= 1):
             raise ValueError(
                 f"scf_pattern_threshold must be between 0 and 1, got {self.scf_pattern_threshold}"
+            )
+        if not (0 <= self.success_rate_warning <= 1):
+            raise ValueError(
+                f"success_rate_warning must be between 0 and 1, got {self.success_rate_warning}"
+            )
+        if not (0 <= self.success_rate_critical <= 1):
+            raise ValueError(
+                f"success_rate_critical must be between 0 and 1, got {self.success_rate_critical}"
+            )
+        if self.success_rate_warning <= self.success_rate_critical:
+            raise ValueError(
+                f"success_rate_warning ({self.success_rate_warning}) must be greater than "
+                f"success_rate_critical ({self.success_rate_critical})"
             )
 
         # Validate min_samples fields

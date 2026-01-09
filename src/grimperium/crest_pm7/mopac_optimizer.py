@@ -16,7 +16,7 @@ from .energy_extractor import extract_hof
 
 LOG = logging.getLogger("grimperium.crest_pm7.mopac_optimizer")
 
-# Mapeamento de multiplicidade para keywords do MOPAC
+# Mapping of multiplicity to MOPAC keywords
 _MULTIPLICITY_KEYWORDS = {
     2: "DOUBLET",
     3: "TRIPLET",
@@ -213,6 +213,7 @@ def run_mopac(
 
         # Check returncode of subprocess
         had_nonzero_exit = False
+        error_msg = ""
         if proc.returncode != 0:
             had_nonzero_exit = True
             error_msg = (
@@ -297,7 +298,7 @@ def run_mopac(
         else:
             # Success with HOF
             result.status = MOPACStatus.SUCCESS
-        
+
         result.hof = hof
         result.hof_method = method
         result.hof_confidence = confidence

@@ -5,6 +5,7 @@ Provides JSONL logging for analysis and text logging for debugging.
 
 import json
 import logging
+import re
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
@@ -13,6 +14,21 @@ from .config import PM7Config
 
 # Reserved keys that should not be overwritten by extra_data
 _RESERVED_KEYS = {"timestamp", "level", "logger", "message"}
+
+
+def _sanitize_session_name(session_name: str) -> str:
+    """Sanitize session name to avoid logger hierarchy issues.
+    
+    Args:
+        session_name: Raw session name (may contain dots, special chars)
+    
+    Returns:
+        Sanitized session name (alphanumeric, underscore, hyphen only)
+    """
+    # Replace non-alphanumeric characters (except underscore and hyphen) with underscores
+    sanitized = re.sub(r'[^a-zA-Z0-9_-]', '_', session_name).strip('_-')
+    # Return "default" if empty after sanitization
+    return sanitized if sanitized else "default"
 
 
 class StructuredLogHandler(logging.Handler):
@@ -84,6 +100,9 @@ def setup_logging(
         timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
         session_name = f"phase_{config.phase.value if hasattr(config.phase, 'value') else config.phase}_{timestamp}"
 
+    # Sanitize session name to avoid logger hierarchy issues
+    sanitized_name = _sanitize_session_name(session_name)
+
     log_dir = config.output_dir / "logs"
     log_dir.mkdir(parents=True, exist_ok=True)
 
@@ -94,7 +113,7 @@ def setup_logging(
     text_file = log_dir / f"{session_name}.log"
 
     # Create a child logger specific to this session to avoid clearing shared logger handlers
-    logger = logging.getLogger(f"grimperium.crest_pm7.{session_name}")
+    logger = logging.getLogger(f"grimperium.crest_pm7.{sanitized_name}")
     logger.setLevel(logging.DEBUG)
 
     # Disable propagation to parent loggers (prevents duplicate entries)

@@ -55,14 +55,14 @@ def _parse_xyz_file(xyz_path: Path) -> tuple[list[tuple[float, float, float]], i
     with open(xyz_path, encoding="utf-8") as f:
         lines = f.readlines()
 
-    # Verificar que o arquivo tem pelo menos 2 linhas
+    # Verify file has minimum lines
     if len(lines) < 2:
         raise ValueError(
             f"XYZ file '{xyz_path}' has insufficient lines ({len(lines)}). "
             "Expected at least 2 lines (atom count + comment)."
         )
 
-    # Parsear n_atoms com tratamento de erro
+    # Parse atom count
     try:
         n_atoms = int(lines[0].strip())
     except ValueError as e:
@@ -70,6 +70,13 @@ def _parse_xyz_file(xyz_path: Path) -> tuple[list[tuple[float, float, float]], i
             f"XYZ file '{xyz_path}' has invalid atom count header: '{lines[0].strip()}'. "
             f"Expected an integer. Error: {e}"
         ) from e
+
+    # Validate n_atoms is positive
+    if n_atoms <= 0:
+        raise ValueError(
+            f"XYZ file '{xyz_path}' has invalid atom count: {n_atoms}. "
+            "Expected a positive integer."
+        )
 
     # Skip comment line (line 1) and parse coordinates
     for line_idx, line in enumerate(lines[2:2 + n_atoms], start=2):
@@ -88,7 +95,7 @@ def _parse_xyz_file(xyz_path: Path) -> tuple[list[tuple[float, float, float]], i
                 f"'{line.strip()}'. Error: {e}"
             ) from e
 
-    # Verificar que temos o número correto de coordenadas
+    # Verify coordinate count matches
     if len(coords) != n_atoms:
         raise ValueError(
             f"XYZ file '{xyz_path}' coordinate count mismatch: "

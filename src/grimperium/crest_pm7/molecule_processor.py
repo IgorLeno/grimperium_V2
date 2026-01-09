@@ -187,8 +187,6 @@ class PM7Result:
             return None
         # is_successful guarantees energy_hof is not None
         energies: list[float] = [c.energy_hof for c in successful]  # type: ignore[misc]
-        if not energies:
-            return None
         return min(energies)
 
     @property
@@ -508,7 +506,7 @@ class MoleculeProcessor:
 
             result.conformers.append(conf_data)
 
-            # Atualizar tempo restante para próximos conformers
+            # Update remaining time for next conformers
             remaining_timeout = max(0, remaining_timeout - mopac_result.execution_time)
             remaining_conformers -= 1
 

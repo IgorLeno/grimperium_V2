@@ -43,7 +43,7 @@ def load_test_molecules(csv_path: Path) -> list[tuple[str, str]]:
     with open(csv_path, encoding="utf-8") as f:
         reader = csv.DictReader(f)
 
-        # Validar que as colunas necessárias existem
+        # Validate that required columns exist
         fieldnames = reader.fieldnames or []
         missing_columns = []
         if "mol_id" not in fieldnames:
@@ -75,7 +75,7 @@ def main() -> int:
     # Paths
     base_dir = Path(__file__).parent.parent
     molecules_csv = base_dir / "data/molecules_pm7/testing/baselines/phase_a_molecules.csv"
-    expected_json = base_dir / "data/molecules_pm7/testing/baselines/phase_a_expected.json"
+    expected_json = base_dir / "data/molecules_pm7/testing/baselines/phase_a_baseline.json"
     output_dir = base_dir / "data/molecules_pm7/computed"
     results_json = output_dir / "phase_a_results.json"
 

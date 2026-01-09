@@ -124,9 +124,9 @@ class TimeoutPredictor:
 
         LOG.debug(f"Added observation: nheavy={nheavy}, time={execution_time:.1f}s")
 
-        # Check if recalibration needed - sempre resetar counter
+        # Check if recalibration needed - always reset counter
         if self._molecules_since_recalibration >= self.recalibrate_interval:
-            self._molecules_since_recalibration = 0  # Reset antes de fit
+            self._molecules_since_recalibration = 0  # Reset counter before fitting
             if self.n_samples >= MIN_SAMPLES_FOR_FIT:
                 self.fit()
 
@@ -235,10 +235,10 @@ class TimeoutPredictor:
             }
             joblib.dump(state, filepath, compress=3)
 
-            # Salvar checksum para detecção de tampering
+            # Save checksum for tamper detection
             checksum = _compute_checksum(filepath)
             checksum_file = filepath.with_suffix(".sha256")
-            checksum_file.write_text(checksum)
+            checksum_file.write_text(checksum + "\n")
 
             LOG.info(f"Predictor saved to {filepath}")
             return True
@@ -258,7 +258,7 @@ class TimeoutPredictor:
             True if load succeeded
         """
         try:
-            # Verificar checksum se existir
+            # Verify checksum if exists
             checksum_file = filepath.with_suffix(".sha256")
             if checksum_file.exists():
                 expected_checksum = checksum_file.read_text().strip()
@@ -269,11 +269,11 @@ class TimeoutPredictor:
 
             state = joblib.load(filepath)
 
-            # Validar estado carregado
+            # Validate loaded state
             loaded_nheavy = state.get("samples_nheavy", [])
             loaded_time = state.get("samples_time", [])
 
-            # Verificar que listas têm comprimento igual
+            # Verify lists have equal length
             if len(loaded_nheavy) != len(loaded_time):
                 LOG.warning(
                     f"Corrupted state: samples_nheavy ({len(loaded_nheavy)}) "
@@ -290,19 +290,19 @@ class TimeoutPredictor:
                 LOG.warning("Corrupted state: samples_time contains invalid values")
                 return False
 
-            # Verificar recalibrate_interval
+            # Verify recalibration interval
             loaded_interval = state.get("recalibrate_interval", 50)
             if not isinstance(loaded_interval, int) or loaded_interval <= 0:
                 LOG.warning(f"Invalid recalibrate_interval: {loaded_interval}, using default")
                 loaded_interval = 50
 
-            # Verificar modelo
+            # Verify model
             loaded_model = state.get("model")
             if loaded_model is not None and not hasattr(loaded_model, "predict"):
                 LOG.warning("Loaded model does not have predict method")
                 return False
 
-            # Atribuir valores validados
+            # Assign validated values
             self.model = loaded_model
             self.samples_nheavy = loaded_nheavy
             self.samples_time = loaded_time

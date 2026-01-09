@@ -166,10 +166,10 @@ class ThresholdMonitor:
         if self.metrics.consecutive_failures >= self.config.consecutive_failures_critical:
             return True
 
-        # Check success rate (guard against division by zero)
+        # Check success rate
         half_window = max(1, self.window_size // 2)
-        if len(self.recent_successes) >= half_window and len(self.recent_successes) > 0:
-            window_rate = sum(self.recent_successes) / len(self.recent_successes)
+        if len(self.recent_successes) >= half_window:
+            window_rate = sum(self.recent_successes[-half_window:]) / half_window
             if window_rate < self.config.success_rate_critical:
                 return True
 

@@ -5,6 +5,7 @@ Coordinates the full processing pipeline for multiple molecules.
 
 import json
 import logging
+from enum import Enum
 from pathlib import Path
 from typing import Callable, Iterator, Optional
 
@@ -72,7 +73,7 @@ class CRESTPM7Pipeline:
         Returns:
             Phase value as string
         """
-        return self.config.phase.value if hasattr(self.config.phase, 'value') else self.config.phase
+        return self.config.phase.value if isinstance(self.config.phase, Enum) else str(self.config.phase)
 
     def setup(self, session_name: Optional[str] = None) -> None:
         """Set up pipeline for a processing session.
@@ -286,8 +287,9 @@ class CRESTPM7Pipeline:
             if grade_name in grade_counts:
                 grade_counts[grade_name] += 1
             else:
-                grade_counts.setdefault("UNKNOWN", 0)
-                grade_counts["UNKNOWN"] += 1
+                # Track unexpected grades individually instead of collapsing to "UNKNOWN"
+                grade_counts.setdefault(grade_name, 0)
+                grade_counts[grade_name] += 1
 
         return {
             "phase": self._get_phase_value(),
