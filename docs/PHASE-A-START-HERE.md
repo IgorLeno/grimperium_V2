@@ -81,33 +81,7 @@ pytest tests/ -v --cov=src/grimperium --cov-report=term-missing
 
 ---
 
-## PASSO 4: Monitorar Alertas (10 min)
-
-```bash
-# Ver logs de alertas
-tail -f data/molecules_pm7/logs/phase_a_real_test/alerts.log
-
-# Checks:
-# Threshold violations: [0 abnormal]
-# Timeout predictions: [within bounds]
-# Log structure: [valid JSON]
-```
-
----
-
-## PASSO 5: Coletar Métricas (10 min)
-
-```bash
-python -c "
-from grimperium.core.metrics import compute_metrics
-metrics = compute_metrics('data/molecules_pm7/logs/phase_a_real_test/')
-print(f'Success rate: {metrics[\"success_rate\"]:.1%}')
-"
-```
-
----
-
-## PASSO 6: Validar Sucesso (5 min)
+## PASSO 4: Final Validation (Phase A completion)
 
 **Success Criteria:**
 - 100% testes passam
@@ -115,14 +89,32 @@ print(f'Success rate: {metrics[\"success_rate\"]:.1%}')
 - Zero alertas anormais
 - Métricas baseline estabelecidas
 
-```bash
-# Checklist final
-./scripts/validate_phase_a.sh
+**Note:** Após completar PASSO 1, 2 e 3, você terá validado os componentes core do Phase A. Os passos de monitoramento avançado (alert logs, metrics collection, automated validation) serão implementados durante a execução completa do Phase A.
 
-# Expected:
-# PHASE A VALIDATION: PASSED
-# Ready for Phase B
-```
+---
+
+## Phase A Advanced (After Core Steps Complete)
+
+Os seguintes recursos serão implementados durante a execução completa do Phase A:
+
+### Alert Monitoring
+- Arquivo: `data/molecules_pm7/logs/phase_a_real_test/alerts.log`
+- Monitoramento de threshold violations e timeout predictions
+- Estrutura de logs em JSON
+
+### Metrics Collection
+- Módulo: `grimperium.core.metrics.compute_metrics()`
+- Cálculo automático de success rate e outras métricas
+- Geração de relatórios
+
+### Automated Validation
+- Script: `./scripts/validate_phase_a.sh`
+- Validação automatizada dos success criteria
+- Checklist completo de Phase A
+
+Para detalhes do checklist completo de Phase A, veja `docs/PHASE-A-RESULTS.md`.
+
+**Full Phase A execution guide:** see `docs/phase-a-complete-guide.md`
 
 ---
 
@@ -137,6 +129,7 @@ Após Phase A:
 ## Troubleshooting
 
 ### Import Error
+
 ```bash
 pip install -e .
 ```
@@ -147,6 +140,7 @@ pytest tests/ -v --tb=long
 ```
 
 ### Coverage Baixo
+
 ```bash
 pytest tests/ --cov=src/grimperium --cov-report=html
 # Abrir htmlcov/index.html
@@ -157,5 +151,5 @@ pytest tests/ --cov=src/grimperium --cov-report=html
 ## Recursos
 
 - [CLAUDE.md](./CLAUDE.md) - Guia de comportamento
-- [PHASE-A-RESULTS.md](./PHASE-A-RESULTS.md) - Template para resultados
+- [PHASE-A-RESULTS.md](./PHASE-A-RESULTS.md) - modelo para resultados
 - [architecture.md](./architecture.md) - Visão da arquitetura

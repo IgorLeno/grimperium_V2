@@ -3,23 +3,30 @@
 ## Before Completing Any Task
 
 ### 1. Run Linting
+
 ```bash
 ruff check . --fix
 black .
 ```
+
 Ensure no linting errors remain.
 
 ### 2. Run Type Checking
+
 ```bash
 mypy src/ --ignore-missing-imports
 ```
+
 Fix any type errors before proceeding.
 
 ### 3. Run Tests
+
 ```bash
 pytest -v
 ```
+
 All tests must pass. If modifying core functionality, run:
+
 ```bash
 pytest --cov=src/grimperium --cov-report=term-missing
 ```
@@ -28,6 +35,7 @@ pytest --cov=src/grimperium --cov-report=term-missing
 ```bash
 pre-commit run --all-files
 ```
+
 This runs all quality checks automatically.
 
 ## For Code Changes
@@ -36,7 +44,7 @@ This runs all quality checks automatically.
 - [ ] Added appropriate type hints
 - [ ] Added docstring with Parameters/Returns/Example
 - [ ] Added unit tests in `tests/unit/`
-- [ ] Updated relevant README in `READMEs/`
+- [ ] Updated relevant README.md
 
 ### Modified Existing Code
 - [ ] Existing tests still pass
@@ -67,6 +75,7 @@ type: brief description
 - `chore`: Maintenance tasks
 
 ## Final Verification Sequence
+
 ```bash
 # Full verification before committing
 ruff check . --fix && black . && mypy src/ && pytest -v

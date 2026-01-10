@@ -17,6 +17,8 @@ Grimperium is an **ML Ensemble Framework** for molecular thermodynamic property 
 ## Architecture
 
 ```
+grimperium/
+├── src/grimperium/config.py    # Global configuration (ConfigManager)
 src/grimperium/
 ├── core/              # Delta Learning algorithm
 │   ├── delta_learning.py   # DeltaLearner class
@@ -25,16 +27,24 @@ src/grimperium/
 │   ├── loader.py           # DataLoader class
 │   ├── semiempirical.py    # PM6/PM7 data interface
 │   └── fusion.py           # Data fusion system
-├── models/            # ML models
-│   ├── base.py             # BaseModel abstract class
-│   ├── kernel_ridge.py     # KRR model
-│   ├── xgboost_model.py    # XGBoost model
-│   └── delta_ensemble.py   # Ensemble system
-├── crest_pm7/         # CREST + PM7 pipeline
-│   ├── pipeline.py         # Main orchestration
-│   ├── conformer_generator.py
-│   ├── mopac_optimizer.py
-│   └── threshold_monitor.py
+├── models/            # ML models (Phase B - Available but not yet integrated)
+│   ├── base_model.py       # BaseModel abstract class
+│   ├── kernel_ridge.py     # KernelRidgeModel (KRR)
+│   ├── xgboost_model.py    # XGBoostModel
+│   └── delta_ensemble.py   # DeltaEnsemble system
+├── crest_pm7/         # CREST + PM7 pipeline (Phase A - Production Ready)
+│   ├── pipeline.py                # Main orchestration
+│   ├── conformer_generator.py     # Conformer generation
+│   ├── conformer_selector.py      # Conformer selection logic
+│   ├── mopac_optimizer.py         # MOPAC optimization wrapper
+│   ├── threshold_monitor.py       # Threshold monitoring system
+│   ├── timeout_predictor.py       # Timeout prediction logic
+│   ├── energy_extractor.py        # Energy extraction utilities
+│   ├── molecule_processor.py      # Molecule processing pipeline
+│   ├── result_evaluator.py        # Result evaluation logic
+│   ├── config.py                  # CREST PM7 configuration
+│   ├── logging_utils.py           # Logging utilities
+│   └── validation.py              # Validation logic
 ├── utils/             # Utilities
 │   ├── validation.py
 │   ├── logging.py

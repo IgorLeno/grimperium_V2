@@ -18,7 +18,7 @@ Framework de Delta Learning para predição de propriedades moleculares usando:
 
 ## Estrutura do Projeto
 
-```
+```text
 grimperium/
 ├── src/grimperium/          <- Código principal
 │   ├── core/                <- Delta Learning, Metrics
@@ -51,11 +51,13 @@ pip install -e .
 ```
 
 ### 2. Teste Rápido
+
 ```bash
 pytest tests/ -v
 ```
 
 ### 3. Uso Básico
+
 ```python
 from grimperium import DeltaLearning
 from grimperium.models import XGBoostDelta
@@ -74,7 +76,7 @@ predictions = model.predict(X_test)
 |-----------|-----------|
 | `docs/CLAUDE.md` | Guia comportamento Claude Code |
 | `docs/PHASE-A-START-HERE.md` | Comece aqui para Phase A |
-| `docs/PHASE-A-RESULTS.md` | Template para resultados |
+| `docs/PHASE-A-RESULTS.md` | modelo para resultados |
 | `docs/architecture.md` | Visão da arquitetura |
 | `docs/feature_engineering.md` | Guia de features |
 | `docs/delta_learning_guide.md` | Guia de Delta Learning |

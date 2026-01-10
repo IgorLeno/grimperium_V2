@@ -65,25 +65,30 @@ Antes de submeter:
 
 ## NUNCA FAÇA ISTO
 
-**Testes Incompletos**
+#### Testes Incompletos
+
 - Não deixe testes com `@pytest.mark.skip`
 - Testes devem passar 100% ou não existir
 
-**Lógica Não Documentada**
+#### Lógica Não Documentada
+
 - Sem docstrings em funções públicas
 - Sem type hints
 - Sem exemplos de uso em docstrings
 
-**Ignorar Linting**
+#### Ignorar Linting
+
 - Não commite com erros ruff/black/mypy
 - Pre-commit hooks devem passar
 
-**Mudar Estrutura**
+#### Mudar Estrutura
+
 - Não crie diretórios fora do plano
 - Não renomeie pastas sem aprovação
 - Não delete código sem justificar
 
-**Código Incompleto**
+#### Código Incompleto
+
 - Sem TODOs ou XXX comments
 - Sem placeholders
 - Tudo deve funcionar 100%
@@ -92,7 +97,8 @@ Antes de submeter:
 
 ## SEMPRE FAÇA ISTO
 
-**Type Hints Completas**
+#### Type Hints Completas
+
 ```python
 def process_molecules(
     data: pd.DataFrame,
@@ -102,7 +108,8 @@ def process_molecules(
     pass
 ```
 
-**Docstrings Google Style**
+#### Docstrings Google Style
+
 ```python
 def threshold_alert(
     value: float,
@@ -127,7 +134,8 @@ def threshold_alert(
     pass
 ```
 
-**Testes Estruturados**
+#### Testes Estruturados
+
 ```python
 # tests/unit/test_threshold_monitor.py
 import pytest
@@ -155,7 +163,7 @@ black . && ruff check --fix .
 
 ## ESTRUTURA ATUAL
 
-```
+```bash
 src/grimperium/
 ├── core/                   ← Delta Learning, Metrics
 │   ├── delta_learning.py

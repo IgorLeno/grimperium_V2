@@ -11,8 +11,8 @@
 
 ### Execução Geral
 
-| Métrica | Valor | Target | Status |
-|---------|-------|--------|--------|
+| Métrica | Valor | Alvo | Status |
+|---------|-------|------|--------|
 | Testes Passaram | [__]% | 100% |  |
 | Taxa Sucesso | [__]% | >=95% |  |
 | Alertas Anormais | [__] | 0 |  |
@@ -20,8 +20,8 @@
 
 ### Cobertura de Testes
 
-| Módulo | Coverage | Target |
-|--------|----------|--------|
+| Módulo | Coverage | Alvo |
+|--------|----------|------|
 | core/ | [__]% | 85% |
 | data/ | [__]% | 85% |
 | models/ | [__]% | 85% |
@@ -42,7 +42,7 @@
 
 ### Arquivos Gerados
 
-```
+```text
 data/molecules_pm7/logs/phase_a_real_test/
 ├── alerts.log              [Eventos de alerta]
 ├── threshold_violations.json [Violações capturadas]
@@ -95,7 +95,7 @@ Exemplo:
 - [ ] Documentar anomalias encontradas
 - [ ] Começar Phase B
 - [ ] Expandir para 50+ moléculas
-- [ ] Calibrar thresholds baseado em dados reais
+- [ ] Calibrar thresholds baseados em dados reais
 
 ---
 
