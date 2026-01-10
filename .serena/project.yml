@@ -88,11 +88,11 @@ initial_prompt: |
   Name: Grimperium - CREST PM7 Optimization Framework
   Phase: Phase A (Threshold Monitoring + Timeout Prediction - ACTIVE)
   Language: Python 3.10+
-  Status: Production-Ready (core Phase A components implemented)
+  Status: Phase A active (core components implemented; Phase B not yet available)
   
   ARCHITECTURE:
   - src/grimperium/crest_pm7/ = Core Phase A (conformer_generator, threshold_monitor, timeout_predictor, validation, pipeline)
-  - src/grimperium/models/ = Delta-learning ML models (BaseModel, KernelRidgeModel, XGBoostModel, delta_ensemble) - Phase B
+  - src/grimperium/models/ = Delta-learning ML models - Planned for future phases (not yet present)
   - src/grimperium/utils/ = Helpers and utilities
   - tests/unit/ + tests/integration/ = Test suite (85%+ coverage required)
   - docs/ = CLAUDE.md (your guide), PHASE-A-* (execution guides)
@@ -129,12 +129,8 @@ initial_prompt: |
   ✅ TEST: Unit + integration tests for Phase A components
   ✅ DO NOT: Data loading (Phase B), Model training (Phase B), MOPAC integration (Phase B)
   
-  PHASE B AVAILABLE (Not yet integrated):
-  - src/grimperium/models/base_model.py
-  - src/grimperium/models/kernel_ridge.py
-  - src/grimperium/models/xgboost_model.py
-  - src/grimperium/models/delta_ensemble.py
-  These are production-ready but Phase A focus is on core workflow validation.
+  PHASE B STATUS:
+  Phase B modules (e.g., src/grimperium/models/base_model.py, kernel_ridge.py, xgboost_model.py, delta_ensemble.py) are not present in the repo and are planned for future phases.
   
   KEY WORKFLOWS:
   - Git: Branch naming = feature/*, fix/*, refactor/*

@@ -10,17 +10,22 @@
 
 ## TL;DR (Quick Start - 5 min)
 
+From the repository root, run:
+
 ```bash
-# 1. Setup
-cd ~/Projetos/grimperium
+# 1. Setup (Clone if needed, then enter the repo)
+# git clone <repo-url> && cd grimperium
+cd <repo-root>
+
+# 2. Virtual Environment
 python -m venv venv
 source venv/bin/activate
 pip install -e .
 
-# 2. Teste Rápido (5 min)
+# 3. Teste Rápido (5 min)
 python scripts/phase_a_quick_test.py
 
-# 3. Resultado esperado
+# 4. Resultado esperado
 # Tests Pass: 100%
 # Success Rate: >=95%
 # Alertas Normais: 0 anormais
@@ -34,8 +39,10 @@ python scripts/phase_a_quick_test.py
 
 ## PASSO 1: Setup Environment (5 min)
 
+From the repository root, run:
+
 ```bash
-cd ~/Projetos/grimperium
+cd <repo-root>
 python --version  # Expected: 3.10+
 
 # Criar virtual env
@@ -111,13 +118,13 @@ Os seguintes recursos serão implementados durante a execução completa do Phas
 
 ### Automated Validation
 
-- Script: `./scripts/validate_phase_a.sh`
+- Script: `python scripts/phase_a_quick_test.py`
 - Validação automatizada dos success criteria
 - Checklist completo de Phase A
 
 Para detalhes do checklist completo de Phase A, veja `docs/PHASE-A-RESULTS.md`.
 
-**Full Phase A execution guide:** see `docs/phase-a-complete-guide.md`
+**Full Phase A execution guide:** see `docs/PHASE-A-RESULTS.md` for success criteria and recording results.
 
 ---
 

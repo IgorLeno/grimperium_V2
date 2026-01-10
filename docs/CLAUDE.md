@@ -21,7 +21,7 @@ Você é um **implementador de código production-ready** com responsabilidades 
 
 #### 3. PADRÕES
 - Black formatting (line-width: 88)
-- Ruff linting (sem warnings críticos)
+- Ruff linting (NO WARNINGS)
 - Mypy strict type checking
 - Pre-commit hooks validation
 
@@ -57,8 +57,8 @@ Antes de submeter:
 - [ ] Rodou: `ruff check src/`
 - [ ] Rodou: `black src/ tests/`
 - [ ] Rodou: `mypy src/`
-- [ ] Sem erros críticos (warnings ok)
-- [ ] Commit message: "feat/fix: ISSUE-XX - descrição concisa"
+- [ ] Sem erros ou warnings (NO WARNINGS)
+- [ ] Commit message: "type(scope): description"
 - [ ] Pronto para produção (nada de TODOs)
 
 ---
@@ -100,12 +100,24 @@ Antes de submeter:
 #### Type Hints Completas
 
 ```python
+import numpy as np
+import pandas as pd
+
 def process_molecules(
     data: pd.DataFrame,
     threshold: float = 0.95
 ) -> tuple[np.ndarray, dict[str, float]]:
-    """Process molecules with quality threshold."""
-    pass
+    """Process molecules with quality threshold.
+    
+    Note: Example implementation for documentation only.
+    """
+    if not (0.0 <= threshold <= 1.0):
+        raise ValueError("Threshold must be between 0 and 1")
+    
+    # Exemplo: retorna dados vazios para demonstração
+    results = np.array([])
+    metrics = {"threshold": threshold}
+    return results, metrics
 ```
 
 #### Docstrings Google Style
@@ -116,6 +128,8 @@ def threshold_alert(
     threshold: float
 ) -> bool:
     """Check if value exceeds threshold and raise alert.
+    
+    Note: Example implementation for documentation only.
     
     Args:
         value: Current measurement value
@@ -131,7 +145,9 @@ def threshold_alert(
         >>> threshold_alert(0.95, 0.90)
         True
     """
-    pass
+    if threshold < 0:
+        raise ValueError("Threshold cannot be negative")
+    return value > threshold
 ```
 
 #### Testes Estruturados

@@ -41,8 +41,6 @@ grimperium/
 ---
 
 ## Quick Start
-
-
 ### 1. Setup (5 min)
 
 ```bash
