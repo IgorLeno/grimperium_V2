@@ -205,8 +205,9 @@ def real_data_1k() -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     from grimperium.data.loader import ChemperiumLoader
 
     # Load real CBS data (UNFILTERED - contains extreme outliers!)
+    # Note: Using deprecated method with explicit path for legacy fixture
     loader = ChemperiumLoader()
-    df = loader.load_thermo_cbs_opt()
+    df = loader.load_thermo_cbs_opt(path="data/thermo_cbs_opt.csv")
 
     # Sample 1000 rows (reproducible but includes outliers)
     df = df.sample(n=1000, random_state=42)

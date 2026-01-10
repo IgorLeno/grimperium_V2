@@ -8,6 +8,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Dataset Migration System** (2026-01-10)
+  - Added `ChemperiumLoader.load_thermo_cbs_clean()` as primary method for Phase A onwards
+  - Created comprehensive dataset migration documentation (`docs/DATASET_MIGRATION.md`)
+  - Implemented proper deprecation warnings for `load_thermo_cbs_opt()`
+  - Added extensive docstrings explaining dataset versions and filtering rationale
+  
 - Module-specific documentation (READMEs)
   - `READMEs/README_core.md` - Core module documentation
   - `READMEs/README_data.md` - Data module documentation
@@ -15,16 +21,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `READMEs/README_utils.md` - Utils module documentation
   - `READMEs/README.md` - Consolidated documentation index
 
+### Changed
+- **Dataset Migration: thermo_cbs_opt.csv → thermo_cbs_clean.csv** (2026-01-10)
+  - Default dataset changed from `data/thermo_cbs_opt.csv` (original) to `data/thermo_cbs_clean.csv` (filtered)
+  - Filtering applied:
+    - ❌ Halogenated molecules removed (Cl, Br, F, I compounds - not in Phase A scope)
+    - ❌ Sulfur-containing molecules removed (S compounds - not in Phase A scope)
+    - ❌ Non-essential columns removed (keeping only Phase A relevant data)
+  - ✅ ~30,026 molecules (filtered subset for Phase A validation)
+  - Migration path: Use `load_thermo_cbs_clean()` for new code, or explicit `path="data/thermo_cbs_opt.csv"` for original dataset
+
+- Test fixtures refactoring for improved readability
+- CI documentation updates for Type/Test error handling workflows
+- Enhanced CI error reporting and status normalization
+
+### Deprecated
+- **ChemperiumLoader.load_thermo_cbs_opt()** (2026-01-10)
+  - Default behavior changed: now points to `data/thermo_cbs_clean.csv` instead of `data/thermo_cbs_opt.csv`
+  - Reason: Phase A validation requires filtered dataset (no halogens/sulfur)
+  - Replacement: Use `load_thermo_cbs_clean()` explicitly for new code
+  - Legacy access: Pass `path="data/thermo_cbs_opt.csv"` to load original dataset
+  - Timeline:
+    - 2026-01-10: Deprecation warning added
+    - 2026-06-10: Official deprecation notice
+    - 2026-12-10: Possible removal (TBD)
+
 ### Enhanced
 - Sphinx documentation build system
   - Generated complete HTML documentation in `docs/build/html/`
   - Updated API documentation for all modules
   - Configured ReadTheDocs theme
-
-### Changed
-- Test fixtures refactoring for improved readability
-- CI documentation updates for Type/Test error handling workflows
-- Enhanced CI error reporting and status normalization
 
 ### Fixed
 - Improved DeltaLearner initialization and internal state management

@@ -173,9 +173,9 @@ def real_data_1k_filtered() -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
     from grimperium.data.loader import ChemperiumLoader
 
-    # Load all data
+    # Load all data (filtered dataset - Phase A onwards)
     loader = ChemperiumLoader()
-    df = loader.load_thermo_cbs_opt()
+    df = loader.load_thermo_cbs_clean()
 
     # Log original statistics
     print(f"\n[FIXTURE] Original data: {len(df)} molecules")
@@ -261,9 +261,10 @@ def real_data_1k_extreme() -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
     from grimperium.data.loader import ChemperiumLoader
 
-    # Load all data (no filter!)
+    # Load all data (no filter - STRESS TEST!)
+    # Using deprecated method with explicit path for unfiltered data
     loader = ChemperiumLoader()
-    df = loader.load_thermo_cbs_opt()
+    df = loader.load_thermo_cbs_opt(path="data/thermo_cbs_opt.csv")
 
     print("\n[STRESS FIXTURE] Loading EXTREME distribution (unfiltered)")
     print(f"  Total molecules: {len(df)}")
