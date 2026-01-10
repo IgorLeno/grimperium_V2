@@ -339,28 +339,28 @@ class ChemperiumLoader:
     @classmethod
     def load_thermo_cbs_opt(
         cls,
-        path: Union[str, Path] = "thermo_cbs_opt.csv",
+        path: Union[str, Path] = "data/thermo_cbs_clean.csv",
         max_nheavy: Optional[int] = None,
         validate: bool = True,
     ) -> pd.DataFrame:
         """
-        Load thermo_cbs_opt.csv dataset.
+        Load thermo_cbs_clean.csv dataset.
 
         Convenience method for loading the standard Grimperium dataset
         with proper column handling.
 
         Args:
-            path: Path to thermo_cbs_opt.csv
+            path: Path to thermo_cbs_clean.csv
             max_nheavy: Filter molecules with nheavy <= this value
             validate: Whether to validate data on load
 
         Returns:
-            Loaded DataFrame with 52,837 molecules (or filtered subset)
+            Loaded DataFrame with 30,026 molecules (or filtered subset)
 
         Example:
             >>> df = ChemperiumLoader.load_thermo_cbs_opt()
             >>> print(f"Loaded {len(df)} molecules")
-            Loaded 52837 molecules
+            Loaded 30026 molecules
 
         """
         loader = cls(validate=validate)
