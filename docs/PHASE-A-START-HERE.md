@@ -112,7 +112,7 @@ Os seguintes recursos serão implementados durante a execução completa do Phas
 
 ### Metrics Collection
 
-- Módulo: `grimperium.core.metrics.compute_metrics()`
+- Módulo: `grimperium.core.metrics.compute_all_metrics()`
 - Cálculo automático de success rate e outras métricas
 - Geração de relatórios
 
