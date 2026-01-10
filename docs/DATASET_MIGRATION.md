@@ -106,8 +106,8 @@ A: Timeline: 2026-01-10 (deprecated) → 2026-06-10 (formal deprecation) → 202
 **Q: Why remove halogenated molecules?**  
 A: Phase A scope focuses on organic molecules without halogens. Simplifies initial validation.
 
-**Q: How many molecules were filtered out?**  
-A: Yes, the filtered dataset contains exactly 30,026 molecules (see Statistics section above for full breakdown)
+**Q: How many molecules were filtered out?**
+A: 22,811 molecules were removed (43.2% of the original 52,837). The filtered dataset contains 30,026 molecules (see Statistics section above for full breakdown).
 
 **Q: Does this affect my Phase B code?**  
 A: Phase B models should train on clean dataset. If you need original data, use explicit path.

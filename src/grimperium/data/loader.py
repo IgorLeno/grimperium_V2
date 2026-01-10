@@ -1,4 +1,4 @@
-"""
+In @src/grimperium/data/loader.py around lines 446 - 449, Docstring example misleads and the row-count assertion is fragile: change the example to call the classmethod directly as ChemperiumLoader.load_thermo_cbs_clean() (not via instance) and replace the strict length check with a more robust assertion that validates required columns and optionally checks a minimal row count or that filtering parameters like max_nheavy can reduce rows; update the example to show calling ChemperiumLoader.load_thermo_cbs_clean(...) and asserting set(df.columns) >= {'smiles','charge','multiplicity','nheavy','H298_cbs'} (and if you want a row check, use len(df) >= 1 or omit exact 30026)."""
 Chemperium dataset loader.
 
 This module provides the ChemperiumLoader class for loading and
@@ -443,10 +443,9 @@ class ChemperiumLoader:
             docs/DATASET_MIGRATION.md: Dataset filtering details and statistics
 
         Example:
-            >>> loader = ChemperiumLoader()
-            >>> df = loader.load_thermo_cbs_clean()
-            >>> assert len(df) == 30026
+            >>> df = ChemperiumLoader.load_thermo_cbs_clean()
             >>> assert set(df.columns) >= {'smiles', 'charge', 'multiplicity', 'nheavy', 'H298_cbs'}
+            >>> assert len(df) >= 1  # Actual count depends on filtering (e.g., max_nheavy)
         """
         loader = cls(validate=validate)
         df = loader.load(THERMO_CBS_CLEAN_PATH, max_nheavy=max_nheavy)
