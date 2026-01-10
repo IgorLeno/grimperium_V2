@@ -98,16 +98,19 @@ pytest tests/ -v --cov=src/grimperium --cov-report=term-missing
 Os seguintes recursos serão implementados durante a execução completa do Phase A:
 
 ### Alert Monitoring
+
 - Arquivo: `data/molecules_pm7/logs/phase_a_real_test/alerts.log`
 - Monitoramento de threshold violations e timeout predictions
 - Estrutura de logs em JSON
 
 ### Metrics Collection
+
 - Módulo: `grimperium.core.metrics.compute_metrics()`
 - Cálculo automático de success rate e outras métricas
 - Geração de relatórios
 
 ### Automated Validation
+
 - Script: `./scripts/validate_phase_a.sh`
 - Validação automatizada dos success criteria
 - Checklist completo de Phase A
@@ -134,7 +137,9 @@ Após Phase A:
 pip install -e .
 ```
 
+
 ### Testes Falhando
+
 ```bash
 pytest tests/ -v --tb=long
 ```

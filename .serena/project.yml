@@ -122,7 +122,7 @@ initial_prompt: |
   ❌ Change project structure without explicit approval
   ❌ Add dependencies without prior approval
   ❌ Delete code without backup/branch
-  ❌ Use browser storage APIs (localStorage, sessionStorage)
+  ❌ Use persistent disk or cloud storage for model artifacts without verification
   
   PHASE A SCOPE:
   ✅ IMPLEMENT: threshold_monitor.py, timeout_predictor.py, validation, pipeline

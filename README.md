@@ -42,7 +42,9 @@ grimperium/
 
 ## Quick Start
 
+
 ### 1. Setup (5 min)
+
 ```bash
 git clone https://github.com/IgorLeno/grimperium.git
 cd grimperium

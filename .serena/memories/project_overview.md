@@ -1,3 +1,4 @@
+
 # Grimperium - Project Overview
 
 ## Purpose
@@ -16,7 +17,7 @@ Grimperium is an **ML Ensemble Framework** for molecular thermodynamic property 
 
 ## Architecture
 
-```
+```text
 grimperium/
 ├── src/grimperium/config.py    # Global configuration (ConfigManager)
 src/grimperium/
@@ -59,5 +60,5 @@ src/grimperium/
 
 ## Status
 - Version: 0.2.0
-- Status: Production Ready
+- Status: Production-Ready
 - Test Coverage: ~95%

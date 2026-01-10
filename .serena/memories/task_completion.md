@@ -31,7 +31,9 @@ All tests must pass. If modifying core functionality, run:
 pytest --cov=src/grimperium --cov-report=term-missing
 ```
 
+
 ### 4. Pre-commit Hooks
+
 ```bash
 pre-commit run --all-files
 ```
@@ -40,7 +42,9 @@ This runs all quality checks automatically.
 
 ## For Code Changes
 
+
 ### Added New Functionality
+
 - [ ] Added appropriate type hints
 - [ ] Added docstring with Parameters/Returns/Example
 - [ ] Added unit tests in `tests/unit/`
@@ -58,7 +62,9 @@ This runs all quality checks automatically.
 
 ## Commit Guidelines
 
+
 ### Commit Message Format
+
 ```
 type: brief description
 

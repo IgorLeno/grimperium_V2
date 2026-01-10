@@ -172,21 +172,23 @@ src/grimperium/
 │   ├── loader.py
 │   ├── semiempirical.py
 │   └── fusion.py
-├── models/                 ← ML Models
-│   ├── base.py
-│   ├── xgboost_model.py
-│   ├── kernel_ridge.py
-│   └── delta_ensemble.py
+├── crest_pm7/              ← Phase A Pipeline (Ativo)
+│   ├── pipeline.py
+│   ├── conformer_generator.py
+│   ├── mopac_optimizer.py
+│   └── threshold_monitor.py
+├── models/                 ← ML Models (OBSOLETO/Phase B)
+│   └── (obsoleto: base.py, xgboost_model.py, etc.)
 ├── utils/                  ← Helpers
-│   ├── logging.py
-│   ├── validation.py
-│   └── feature_engineering.py
+│   └── feature_engineering.py (logging/validation movidos para crest_pm7)
 ├── config.py               ← Configurações globais
 └── api.py                  ← Interface pública
 
 tests/
 ├── unit/                   ← Testes isolados
 ├── integration/            ← Testes pipeline
+├── fixtures/               ← Mock & Real data (mock_data.py, real_data.py)
+├── experiments/            ← Testes de hipóteses
 └── conftest.py             ← Fixtures compartilhadas
 ```
 
