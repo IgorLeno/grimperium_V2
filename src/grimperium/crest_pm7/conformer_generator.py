@@ -333,7 +333,7 @@ def run_crest(
             config.crest_executable,
             str(input_copy),
             "--quick",
-            f"--ewin",
+            "--ewin",
             str(config.energy_window),
         ]
 

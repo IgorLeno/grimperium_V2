@@ -5,11 +5,12 @@ Coordinates the full processing pipeline for multiple molecules.
 
 import json
 import logging
+from collections.abc import Iterator
 from enum import Enum
 from pathlib import Path
-from typing import Callable, Iterator, Optional
+from typing import Callable, Optional
 
-from .config import MOPACStatus, PM7Config, QualityGrade
+from .config import MOPACStatus, PM7Config
 from .logging_utils import log_molecule_complete, log_molecule_start, setup_logging
 from .molecule_processor import MoleculeProcessor, PM7Result
 from .result_evaluator import PhaseAEvaluation, ResultEvaluator
