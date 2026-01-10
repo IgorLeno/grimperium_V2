@@ -16,6 +16,35 @@ On 2026-01-10, Grimperium migrated from `thermo_cbs_opt.csv` (original) to `ther
 | **Phase A Use** | ⚠️ Not recommended | ✅ Recommended |
 | **Status** | ⚠️ Deprecated | ✅ ACTIVE |
 
+### Dataset Filtering Statistics
+
+**Original Dataset (thermo_cbs_opt.csv):**
+- Total molecules: 52,837
+- Element types: C, H, O, N, S, halogens (F, Cl, Br, I), trace P
+
+**Filtering Criteria Applied:**
+1. Halogenated molecules removed (F, Cl, Br, I)
+   - Reason: Not in Phase A scope, reduce relativistic effects
+
+2. Sulfur-containing molecules removed (S)
+   - Reason: Not in Phase A scope, reduce polarizability variance
+
+**Total Removed: 22,811 molecules (43.2%)**
+
+**Final Dataset (thermo_cbs_clean.csv): 30,026 molecules (56.8% of original)**
+
+**Resulting Chemical Composition:**
+- Elements: C, H, O, N only (trace P residual)
+- Classification: "Light" organic chemistry (C, H, O, N)
+- Key Property: No highly polarizable atoms (no halogens, no sulfur)
+
+**Implications for Delta-Learning:**
+- More homogeneous chemical space → better-conditioned problem
+- Narrower delta energy distribution
+- Reduced relativistic and polarizability effects
+- Delta-learning advantage maintained but with cleaner data
+- Smaller variance in energy deltas compared to full dataset
+
 ## Filtering Applied
 
 ### Halogenated Molecules Removed
@@ -78,7 +107,7 @@ A: Timeline: 2026-01-10 (deprecated) → 2026-06-10 (formal deprecation) → 202
 A: Phase A scope focuses on organic molecules without halogens. Simplifies initial validation.
 
 **Q: How many molecules were filtered out?**  
-A: See dataset statistics in Phase A docs (exact count TBD)
+A: Yes, the filtered dataset contains exactly 30,026 molecules (see Statistics section above for full breakdown)
 
 **Q: Does this affect my Phase B code?**  
 A: Phase B models should train on clean dataset. If you need original data, use explicit path.

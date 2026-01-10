@@ -10,6 +10,9 @@ Tests cover:
 
 """
 
+import contextlib
+import warnings
+
 import pandas as pd
 import pytest
 
@@ -295,8 +298,6 @@ class TestChemperiumLoaderValidation:
         """Test deprecated convenience method for thermo_cbs_opt dataset."""
         # Test 1: Using default path triggers deprecation warning
         # (Testing the actual behavior without file existence)
-        import contextlib
-        import warnings
 
         # This will fail to find the file but should still show the warning
         with warnings.catch_warnings(record=True) as w:
@@ -358,8 +359,6 @@ class TestChemperiumLoaderValidation:
     def test_load_thermo_cbs_clean_convenience(self, tmp_path):
         """Test new convenience method for thermo_cbs_clean dataset."""
         # Test without warnings (will fail on missing file but that's OK)
-        import contextlib
-        import warnings
 
         with warnings.catch_warnings(record=True) as w:
             warnings.simplefilter("always")

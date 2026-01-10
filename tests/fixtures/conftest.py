@@ -202,12 +202,25 @@ def real_data_1k() -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
         stacklevel=2,
     )
 
+    from pathlib import Path
+
     from grimperium.data.loader import ChemperiumLoader
 
     # Load real CBS data (UNFILTERED - contains extreme outliers!)
     # Note: Using deprecated method with explicit path for legacy fixture
+
+    # Resolve absolute path from test file location
+    test_dir = Path(__file__).parent.parent.parent  # grimperium/
+    dataset_path = test_dir / "data" / "thermo_cbs_opt.csv"
+
+    if not dataset_path.exists():
+        raise FileNotFoundError(
+            f"Legacy dataset not found: {dataset_path}\n"
+            f"Expected: data/thermo_cbs_opt.csv (original, 52,837 molecules)"
+        )
+
     loader = ChemperiumLoader()
-    df = loader.load_thermo_cbs_opt(path="data/thermo_cbs_opt.csv")
+    df = loader.load_thermo_cbs_opt(path=str(dataset_path))
 
     # Sample 1000 rows (reproducible but includes outliers)
     df = df.sample(n=1000, random_state=42)

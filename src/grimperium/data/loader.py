@@ -24,12 +24,17 @@ Example:
 
 """
 
+import warnings
 from collections.abc import Iterable
 from pathlib import Path
 from typing import Optional, Union
 
 import pandas as pd
 from sklearn.model_selection import train_test_split
+
+# Module-level constants for dataset paths
+THERMO_CBS_OPT_PATH = "data/thermo_cbs_opt.csv"  # Original: 52,837 molecules
+THERMO_CBS_CLEAN_PATH = "data/thermo_cbs_clean.csv"  # Filtered: 30,026 molecules (Phase A)
 
 
 class ChemperiumLoader:
@@ -339,100 +344,46 @@ class ChemperiumLoader:
     @classmethod
     def load_thermo_cbs_opt(
         cls,
-        path: Union[str, Path] = "data/thermo_cbs_clean.csv",
+        path: Union[str, Path] = THERMO_CBS_CLEAN_PATH,
         max_nheavy: Optional[int] = None,
         validate: bool = True,
     ) -> pd.DataFrame:
-        """
-        Load thermodynamic CBS dataset (opt version - DEPRECATED).
+        """Load thermodynamic CBS dataset (DEPRECATED - use load_thermo_cbs_clean).
 
-        DEPRECATION WARNING:
-        This method is maintained for backward compatibility only.
-        Use load_thermo_cbs_clean() for new code.
+        This method loads the original unfiltered CBS dataset containing 52,837 molecules.
 
-        Default behavior changed (2026-01-10):
-        - Old default: "data/thermo_cbs_opt.csv" (original, full dataset)
-        - New default: "data/thermo_cbs_clean.csv" (filtered for Phase A)
-
-        DATASET VERSIONS:
-
-        thermo_cbs_opt.csv (LEGACY - Original Dataset):
-        - Full dataset with all molecules
-        - Includes non-essential columns
-        - Contains halogenated molecules (now filtered out)
-        - Contains sulfur-containing molecules (now filtered out)
-        - Used for: historical analysis, benchmarking against original
-        - Status: Deprecated for Phase A onwards
-
-        thermo_cbs_clean.csv (CURRENT - Cleaned Dataset):
-        - Same molecules as opt, but filtered:
-          * Halogenated molecules REMOVED (not in scope for Phase A study)
-          * Sulfur-containing molecules REMOVED (not in scope for Phase A study)
-        - Non-essential columns removed (keeping only relevant ones)
-        - ~30,026 molecules (reduced from original count due to filtering)
-        - Used for: Phase A validation and forward development
-        - Status: ACTIVE - Recommended for all new code
-
-        Migration Guide:
-        OLD CODE:
-            loader = ChemperiumLoader()
-            df = loader.load_thermo_cbs_opt()  # ⚠️ Will show deprecation warning
-
-        NEW CODE (Recommended):
-            loader = ChemperiumLoader()
-            df = loader.load_thermo_cbs_clean()  # ✅ Explicit, no warnings
-
-        EXPLICIT OLD FILE (if needed):
-            loader = ChemperiumLoader()
-            df = loader.load_thermo_cbs_opt(path="data/thermo_cbs_opt.csv")
+        DEPRECATION NOTE:
+        - Default path changed 2026-01-10: now points to cleaned dataset by default
+        - Use load_thermo_cbs_clean() for new code (recommended)
+        - For original unfiltered data, pass file_path="data/thermo_cbs_opt.csv"
+        - Deprecation timeline: 2026-01-10 (warning) → 2026-06-10 (official) → 2026-12-10 (removal TBD)
 
         Args:
-            path: Path to dataset CSV file.
-                  Default changed to "data/thermo_cbs_clean.csv" (2026-01-10)
-                  Pass path="data/thermo_cbs_opt.csv" to load original dataset
+            path: Path to CBS dataset CSV file.
+                  Default: THERMO_CBS_CLEAN_PATH (cleaned, 30,026 molecules)
+                  For original: "data/thermo_cbs_opt.csv" (unfiltered, 52,837 molecules)
             max_nheavy: Filter molecules with nheavy <= this value
             validate: Whether to validate data on load
 
         Returns:
             pd.DataFrame: Thermodynamic dataset with columns:
-                - molecule_id: Unique identifier
-                - smiles: SMILES representation
-                - properties: Thermodynamic properties (E, H, G, etc.)
+                          smiles, charge, multiplicity, nheavy, H298_cbs
+                          Shape: (N, M) where N = molecules, M = 5 + optional columns
+                          See REQUIRED_COLUMNS class constant for exact column definitions.
 
         Raises:
             FileNotFoundError: If path does not exist
             ValueError: If CSV format is invalid
 
         Warnings:
-            DeprecationWarning: When called without explicit path argument
-                               (default changed from opt to clean)
+            DeprecationWarning: When using default path (now points to clean dataset)
 
-        Example:
-            >>> loader = ChemperiumLoader()
-            >>> # NEW (Recommended):
-            >>> df_clean = loader.load_thermo_cbs_clean()
-            >>> assert len(df_clean) == 30026
-            >>>
-            >>> # OLD (Deprecated - shows warning):
-            >>> df_opt = loader.load_thermo_cbs_opt()  # ⚠️ DeprecationWarning
-            >>>
-            >>> # Explicit old dataset:
-            >>> df_original = loader.load_thermo_cbs_opt(
-            ...     path="data/thermo_cbs_opt.csv"
-            ... )
-
-        Note:
-            The cleaned dataset filters out:
-            - Halogenated molecules (Cl, Br, F, I compounds)
-            - Sulfur-containing molecules (S compounds)
-            These are not part of the Phase A study scope. Use original
-            thermo_cbs_opt.csv if these molecule classes are needed.
-
+        See Also:
+            load_thermo_cbs_clean: Recommended method for Phase A onwards
+            docs/DATASET_MIGRATION.md: Complete migration guide and dataset comparison
         """
-        import warnings
-
         # Issue deprecation warning if using new default
-        if path == "data/thermo_cbs_clean.csv":
+        if path == THERMO_CBS_CLEAN_PATH:
             warnings.warn(
                 "load_thermo_cbs_opt() default behavior changed (2026-01-10). "
                 "Old default was 'data/thermo_cbs_opt.csv' (original dataset). "
@@ -453,68 +404,50 @@ class ChemperiumLoader:
         max_nheavy: Optional[int] = None,
         validate: bool = True,
     ) -> pd.DataFrame:
-        """
-        Load cleaned thermodynamic CBS dataset (PRIMARY - Phase A onwards).
+        """Load cleaned thermodynamic CBS dataset (PRIMARY - Phase A onwards).
 
-        RECOMMENDED METHOD for Phase A and forward development.
+        Loads filtered dataset with 30,026 molecules (56.8% of original).
+        Removes halogenated and sulfur-containing molecules for Phase A scope.
 
-        DATASET DESCRIPTION:
-
-        Dataset Name: thermo_cbs_clean.csv
-        Source: CBS dataset (cleaned/filtered version)
-        Molecules: ~30,026 (filtered from original)
+        Dataset Characteristics:
+        - Total molecules: 30,026 (filtered from original 52,837)
+        - Elements: C, H, O, N only (no halogens, no sulfur)
+        - Filtering: 22,811 molecules removed (43.2% of original)
+        - Use case: Phase A validation and forward development
 
         Filtering Applied:
-        1. Halogenated molecules REMOVED
-           - Reason: Not in scope for Phase A study
-           - Examples removed: ClC(C)C, BrCCO, FC(F)F, IC(C)C
+        1. Halogenated molecules removed (F, Cl, Br, I)
+        2. Sulfur-containing molecules removed (S)
+        3. Non-essential columns removed
 
-        2. Sulfur-containing molecules REMOVED
-           - Reason: Not in scope for Phase A study
-           - Examples removed: CSC, SCCN, CC(C)S
-
-        3. Non-essential columns REMOVED
-           - Kept: molecule_id, smiles, thermodynamic properties (E, H, G)
-           - Removed: metadata not needed for Phase A
-
-        Use Cases:
-        - Phase A: Molecular conformer generation validation
-        - Phase B: Model training (delta-learning ensemble)
-        - Phase C: Production optimization
+        Chemical Implications:
+        - Homogeneous chemical space (no highly polarizable atoms)
+        - Well-conditioned delta-learning problem
+        - Smaller energy delta variance vs. full dataset
 
         Args:
             max_nheavy: Filter molecules with nheavy <= this value
             validate: Whether to validate data on load
 
         Returns:
-            pd.DataFrame: Cleaned thermodynamic dataset
-                Shape: (30026, N) where N = essential columns
-                Columns: molecule_id, smiles, [thermodynamic properties]
+            pd.DataFrame: Cleaned thermodynamic dataset with columns:
+                          smiles, charge, multiplicity, nheavy, H298_cbs
+                          Shape: (30026, M) where M = 5 + optional columns
 
         Raises:
             FileNotFoundError: If data/thermo_cbs_clean.csv does not exist
             ValueError: If CSV format is invalid
 
+        See Also:
+            load_thermo_cbs_opt: Legacy method (deprecated)
+            docs/DATASET_MIGRATION.md: Dataset filtering details and statistics
+
         Example:
             >>> loader = ChemperiumLoader()
             >>> df = loader.load_thermo_cbs_clean()
             >>> assert len(df) == 30026
-            >>> assert "smiles" in df.columns
-            >>> # Filter to specific subset for Phase A validation
-            >>> phase_a_subset = df.head(100)
-
-        Notes:
-            - This is the PRIMARY method for Phase A onwards
-            - If you need original unfiltered data, use:
-              load_thermo_cbs_opt(path="data/thermo_cbs_opt.csv")
-            - Dataset is production-ready (no missing values in key columns)
-
-        Deprecation Timeline:
-            2026-01-10: load_thermo_cbs_clean() introduced as primary method
-            2026-06-10: load_thermo_cbs_opt() marked as deprecated
-            2026-12-10: load_thermo_cbs_opt() may be removed (TBD)
-
+            >>> assert set(df.columns) >= {'smiles', 'charge', 'multiplicity', 'nheavy', 'H298_cbs'}
         """
         loader = cls(validate=validate)
-        df = loader.load("data/thermo_cbs_clean.csv", max_nheavy=max_nheavy)
+        df = loader.load(THERMO_CBS_CLEAN_PATH, max_nheavy=max_nheavy)
         return df

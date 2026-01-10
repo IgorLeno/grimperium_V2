@@ -235,10 +235,18 @@ def real_data_1k_filtered() -> tuple[np.ndarray, np.ndarray, np.ndarray]:
 
 @pytest.fixture
 def real_data_1k_extreme() -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """
-    Load 1000 molecules with EXTREME distribution (unfiltered).
+    """Load 1000 molecules with EXTREME distribution (unfiltered).
 
     WARNING: This fixture creates pathological data for STRESS TESTING ONLY!
+
+    Note: Uses load_thermo_cbs_opt with explicit path because load_thermo_cbs_clean
+    currently does not support a 'filtered=False' parameter to load unfiltered data.
+
+    For stress tests, we need the ORIGINAL unfiltered dataset (52,837 molecules)
+    to validate behavior on full distribution (includes halogenated & sulfur molecules).
+
+    Future improvement: Add parameter to load_thermo_cbs_clean (e.g., filtered=True/False)
+    to avoid using deprecated method.
 
     Characteristics:
     - H298_cbs range: [-325407, +164949] kcal/mol
@@ -258,13 +266,29 @@ def real_data_1k_extreme() -> tuple[np.ndarray, np.ndarray, np.ndarray]:
         >>> def test_stress(real_data_1k_extreme):
         ...     X, y_cbs, y_pm7 = real_data_1k_extreme
         ...     # Expect RMSE ~1000 for direct model!
+
+    References: ChemperiumLoader, load_thermo_cbs_opt, load_thermo_cbs_clean, THERMO_CBS_OPT_PATH
     """
+    from pathlib import Path
+
     from grimperium.data.loader import ChemperiumLoader
 
     # Load all data (no filter - STRESS TEST!)
     # Using deprecated method with explicit path for unfiltered data
+
+    # Resolve absolute path from test file location
+    test_dir = Path(__file__).parent.parent.parent  # grimperium/
+    dataset_path = test_dir / "data" / "thermo_cbs_opt.csv"
+
+    if not dataset_path.exists():
+        raise FileNotFoundError(
+            f"Original dataset not found: {dataset_path}\n"
+            f"Expected: data/thermo_cbs_opt.csv (52,837 molecules, unfiltered)\n"
+            f"Reason: Stress tests require full distribution including halogenated/sulfur molecules"
+        )
+
     loader = ChemperiumLoader()
-    df = loader.load_thermo_cbs_opt(path="data/thermo_cbs_opt.csv")
+    df = loader.load_thermo_cbs_opt(path=str(dataset_path))
 
     print("\n[STRESS FIXTURE] Loading EXTREME distribution (unfiltered)")
     print(f"  Total molecules: {len(df)}")
