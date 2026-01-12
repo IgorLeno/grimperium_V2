@@ -4,6 +4,7 @@ Databases view for GRIMPERIUM CLI.
 Displays and manages molecular databases.
 """
 
+from datetime import date, datetime
 from typing import TYPE_CHECKING, Optional
 
 from rich.panel import Panel
@@ -56,10 +57,20 @@ class DatabasesView(BaseView):
                     f"[{COLORS['in_dev']}]{ICONS['in_dev']} In Dev[/{COLORS['in_dev']}]"
                 )
 
+            # Format last_updated consistently
+            if isinstance(db.last_updated, datetime):
+                last_updated_str = db.last_updated.strftime("%Y-%m-%d %H:%M:%S")
+            elif isinstance(db.last_updated, date):
+                last_updated_str = db.last_updated.strftime("%Y-%m-%d")
+            elif db.last_updated is None:
+                last_updated_str = "-"
+            else:
+                last_updated_str = str(db.last_updated)
+
             table.add_row(
                 db.name,
                 f"{db.molecules:,}" if db.molecules > 0 else "-",
-                str(db.last_updated),
+                last_updated_str,
                 status,
             )
 
@@ -165,10 +176,18 @@ class DatabasesView(BaseView):
 
         if action.startswith("view_"):
             db_name = action.replace("view_", "")
+            found = False
             for db in DATABASES:
                 if db.name == db_name:
                     self.selected_db = db
-                    return None
+                    found = True
+                    break
+            
+            if not found:
+                self.selected_db = None
+                # Could log a warning here if logging was set up
+            
+            return None
 
         # Handle in-development features
         if action in ["calculate", "add", "edit", "delete"]:

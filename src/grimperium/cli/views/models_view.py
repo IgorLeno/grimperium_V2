@@ -52,8 +52,16 @@ class ModelsView(BaseView):
         for model in MODELS:
             if model.status == "ready":
                 status = f"[{COLORS['success']}]{ICONS['success']} Ready[/{COLORS['success']}]"
-                mae = f"{model.mae:.2f}" if model.mae else "-"
-                r2 = f"{model.r2:.3f}" if model.r2 else "-"
+                # Distinguish 0.0 from None
+                if model.mae is not None:
+                    mae = f"{model.mae:.2f}"
+                else:
+                    mae = "-"
+                
+                if model.r2 is not None:
+                    r2 = f"{model.r2:.3f}"
+                else:
+                    r2 = "-"
             else:
                 status = (
                     f"[{COLORS['in_dev']}]{ICONS['in_dev']} In Dev[/{COLORS['in_dev']}]"
@@ -93,6 +101,10 @@ class ModelsView(BaseView):
             else f"[{COLORS['in_dev']}]{ICONS['in_dev']} In Development[/{COLORS['in_dev']}]"
         )
 
+        # Format metrics with proper None handling
+        mae_str = f"{model.mae:.2f}" if model.mae is not None else "N/A"
+        r2_str = f"{model.r2:.4f}" if model.r2 is not None else "N/A"
+        
         info = f"""
 [bold]Name:[/bold]          {model.name}
 [bold]Algorithm:[/bold]     {model.algorithm}
@@ -101,21 +113,21 @@ class ModelsView(BaseView):
         if model.status == "ready":
             info += f"""
 [bold]Performance Metrics:[/bold]
-  MAE:             {model.mae:.2f} kcal/mol
-  R² Score:        {model.r2:.4f}
+  MAE:             {mae_str} kcal/mol
+  R² Score:        {r2_str}
   Training Date:   {model.training_date}
   File Size:       {model.file_size}
 
 [bold]Hyperparameters:[/bold]
 """
-            for key, value in model.hyperparameters.items():
-                info += f"  {key}: {value}\n"
         else:
             info += """
 [bold]Hyperparameters:[/bold] (planned)
 """
-            for key, value in model.hyperparameters.items():
-                info += f"  {key}: {value}\n"
+        
+        # Render hyperparameters once, outside the conditional
+        for key, value in model.hyperparameters.items():
+            info += f"  {key}: {value}\n"
 
         self.console.print(
             Panel(
@@ -202,16 +214,17 @@ class ModelsView(BaseView):
 
         return options
 
-    def handle_action(self, action: str) -> Optional[str]:
+    def handle_action(self, action: Optional[str]) -> Optional[str]:
         """Handle menu actions."""
-        if action == "back":
+        # Handle None or "back" action
+        if action is None or action == "back":
             if self.selected_model:
                 self.selected_model = None
-                return None
+                return "models"  # Stay in models view, just return to list
             return "main"
 
-        if action.startswith("view_"):
-            model_name = action.replace("view_", "")
+        if action and action.startswith("view_"):
+            model_name = action.removeprefix("view_")
             for model in MODELS:
                 if model.name == model_name:
                     self.selected_model = model
@@ -245,12 +258,7 @@ class ModelsView(BaseView):
                     title="Select Model",
                 )
 
-            if result is None or result == "back":  # Ctrl+C
-                if self.selected_model:
-                    self.selected_model = None
-                else:
-                    return "main"
-            else:
-                next_view = self.handle_action(result)
-                if next_view:
-                    return next_view
+            # Always delegate to handle_action
+            next_view = self.handle_action(result)
+            if next_view:
+                return next_view

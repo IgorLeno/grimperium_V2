@@ -45,36 +45,41 @@ class ResultsView(BaseView):
         table.add_column("R²", justify="right")
         table.add_column("Rank", justify="center")
 
-        # Sort models by MAE (best first)
-        ready_models = [m for m in MODELS if m.status == "ready" and m.mae is not None]
+        # Sort models by MAE (best first), filter for ready models with mae and r2
+        ready_models = [
+            m for m in MODELS 
+            if m.status == "ready" and m.mae is not None and m.r2 is not None
+        ]
         sorted_models = sorted(ready_models, key=lambda x: x.mae or float("inf"))
 
         for rank, model in enumerate(sorted_models, 1):
-            # Highlight best model
+            # Format model data once at the top of the loop
+            name = model.name
+            mae_str = f"{model.mae:.2f}"
+            r2_str = f"{model.r2:.4f}" if model.r2 is not None else "-"
+            
+            # Choose rank string based on position
             if rank == 1:
-                name = (
-                    f"[bold {COLORS['success']}]{model.name}[/bold {COLORS['success']}]"
-                )
-                mae = f"[bold {COLORS['success']}]{model.mae:.2f}[/bold {COLORS['success']}]"
-                r2 = f"[bold {COLORS['success']}]{model.r2:.4f}[/bold {COLORS['success']}]"
-                rank_str = f"[bold {COLORS['success']}]🥇 1[/bold {COLORS['success']}]"
+                rank_str = "🥇"
             elif rank == 2:
-                name = model.name
-                mae = f"{model.mae:.2f}"
-                r2 = f"{model.r2:.4f}"
-                rank_str = "🥈 2"
+                rank_str = "🥈"
             elif rank == 3:
-                name = model.name
-                mae = f"{model.mae:.2f}"
-                r2 = f"{model.r2:.4f}"
-                rank_str = "🥉 3"
+                rank_str = "🥉"
             else:
-                name = model.name
-                mae = f"{model.mae:.2f}"
-                r2 = f"{model.r2:.4f}"
                 rank_str = str(rank)
+            
+            # Apply highlighting only for rank 1
+            if rank == 1:
+                name = f"[bold {COLORS['success']}]{name}[/bold {COLORS['success']}]"
+                mae_str = f"[bold {COLORS['success']}]{mae_str}[/bold {COLORS['success']}]"
+                r2_str = f"[bold {COLORS['success']}]{r2_str}[/bold {COLORS['success']}]"
+                rank_str = f"[bold {COLORS['success']}]{rank_str} 1[/bold {COLORS['success']}]"
+            elif rank == 2:
+                rank_str = f"{rank_str} 2"
+            elif rank == 3:
+                rank_str = f"{rank_str} 3"
 
-            table.add_row(name, model.algorithm, mae, r2, rank_str)
+            table.add_row(name, model.algorithm, mae_str, r2_str, rank_str)
 
         self.console.print(table)
         self.console.print()
@@ -97,7 +102,7 @@ class ResultsView(BaseView):
         severity_colors = {
             "LOW": COLORS["success"],
             "MEDIUM": COLORS["warning"],
-            "HIGH": "#FF8800",
+            "HIGH": COLORS["high"],
             "CRITICAL": COLORS["error"],
         }
 
@@ -106,9 +111,13 @@ class ResultsView(BaseView):
         for stat in DIVERGENCE_STATS:
             color = severity_colors.get(stat.severity, COLORS["muted"])
 
-            # Create visual bar
-            bar_length = int(stat.percentage / 5)  # Scale to max ~20 chars
-            bar = f"[{color}]{'█' * bar_length}{'░' * (20 - bar_length)}[/{color}]"
+            # Clamp percentage to [0, 100] before creating bar
+            pct = max(0, min(stat.percentage, 100))
+            bar_length = int(pct / 5)  # Scale to max ~20 chars
+            bar_length = max(0, min(bar_length, 20))
+            fill_count = bar_length
+            empty_count = 20 - fill_count
+            bar = f"[{color}]{'█' * fill_count}{'░' * empty_count}[/{color}]"
 
             table.add_row(
                 f"[{color}]{stat.severity}[/{color}]",
@@ -140,7 +149,7 @@ class ResultsView(BaseView):
 
 • [{COLORS['success']}]LOW (0-10%)[/{COLORS['success']}]: PM7 predictions are accurate, small corrections needed
 • [{COLORS['warning']}]MEDIUM (10-25%)[/{COLORS['warning']}]: Moderate corrections, ML performs well
-• [#FF8800]HIGH (25-50%)[/#FF8800]: Significant corrections needed, challenging cases
+• [{COLORS['high']}]HIGH (25-50%)[/{COLORS['high']}]: Significant corrections needed, challenging cases
 • [{COLORS['error']}]CRITICAL (>50%)[/{COLORS['error']}]: Large deviations, may require special handling
 """
         self.console.print(

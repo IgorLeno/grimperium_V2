@@ -4,8 +4,16 @@ Styles and theming for the GRIMPERIUM CLI.
 This module defines colors, themes, and ASCII art for the CLI interface.
 """
 
+from importlib.metadata import version
+
 from rich.style import Style
 from rich.theme import Theme
+
+# Get package version dynamically
+try:
+    _grim_version = version("grimperium")
+except Exception:
+    _grim_version = "0.2.0"  # Fallback version
 
 # Color palette
 COLORS = {
@@ -18,6 +26,7 @@ COLORS = {
     "error": "#FF4444",  # Red
     "success": "#44FF44",  # Green
     "warning": "#FFAA00",  # Orange
+    "high": "#FF8800",  # Orange-red - high severity
     "in_dev": "#888888",  # Gray - in development
     "muted": "#666666",  # Dark gray
     "highlight": "#FFFFFF",  # White
@@ -83,7 +92,7 @@ BANNER_COMPACT = r"""
 
 # Welcome screen subtitle
 SUBTITLE = "[muted]ML-Enhanced PM7 Molecular Property Predictor[/muted]"
-VERSION_LINE = "[muted]Delta-Learning Framework v1.0.0-beta[/muted]"
+VERSION_LINE = f"[muted]Delta-Learning Framework v{_grim_version}[/muted]"
 
 # Menu icons
 ICONS = {

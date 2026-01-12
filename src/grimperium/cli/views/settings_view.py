@@ -65,4 +65,5 @@ class SettingsView(BaseView):
     def run(self) -> Optional[str]:
         """Run the settings view."""
         self.render()
+        self.wait_for_enter()
         return "main"

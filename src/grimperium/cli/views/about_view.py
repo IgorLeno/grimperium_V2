@@ -69,11 +69,15 @@ Learning Δ = (y_cbs - y_pm7) is easier than learning y_cbs directly.
         # Databases status
         db_ready = len(get_ready_databases())
         db_total = SYSTEM_INFO["databases_total"]
-        db_status = (
-            f"[{COLORS['success']}]{ICONS['success']} Ready[/{COLORS['success']}]"
-            if db_ready > 0
-            else f"[{COLORS['warning']}]{ICONS['warning']} Partial[/{COLORS['warning']}]"
-        )
+        
+        # Determine database status: Ready / Not Ready / Partial
+        if db_ready == db_total and db_total > 0:
+            db_status = f"[{COLORS['success']}]{ICONS['success']} Ready[/{COLORS['success']}]"
+        elif db_ready == 0:
+            db_status = f"[{COLORS['error']}]{ICONS['error']} Not Ready[/{COLORS['error']}]"
+        else:
+            db_status = f"[{COLORS['warning']}]{ICONS['warning']} Partial[/{COLORS['warning']}]"
+        
         status_table.add_row(
             f"{ICONS['databases']} Databases",
             db_status,
@@ -83,11 +87,15 @@ Learning Δ = (y_cbs - y_pm7) is easier than learning y_cbs directly.
         # Models status
         models_ready = len(get_ready_models())
         models_total = SYSTEM_INFO["models_total"]
-        models_status = (
-            f"[{COLORS['success']}]{ICONS['success']} Ready[/{COLORS['success']}]"
-            if models_ready > 0
-            else f"[{COLORS['warning']}]{ICONS['warning']} Partial[/{COLORS['warning']}]"
-        )
+        
+        # Determine models status: Ready / Not Ready / Partial
+        if models_ready == models_total and models_total > 0:
+            models_status = f"[{COLORS['success']}]{ICONS['success']} Ready[/{COLORS['success']}]"
+        elif models_ready == 0:
+            models_status = f"[{COLORS['error']}]{ICONS['error']} Not Ready[/{COLORS['error']}]"
+        else:
+            models_status = f"[{COLORS['warning']}]{ICONS['warning']} Partial[/{COLORS['warning']}]"
+        
         status_table.add_row(
             f"{ICONS['models']} Models",
             models_status,
@@ -129,9 +137,9 @@ Learning Δ = (y_cbs - y_pm7) is easier than learning y_cbs directly.
         """Return menu options for the about view."""
         return []  # Only back option (added by show_back_menu)
 
-    def handle_action(self, action: str) -> Optional[str]:
+    def handle_action(self, action: Optional[str]) -> Optional[str]:
         """Handle menu actions."""
-        if action == "back":
+        if action == "back" or action is None:
             return "main"
         return None
 
@@ -144,6 +152,4 @@ Learning Δ = (y_cbs - y_pm7) is easier than learning y_cbs directly.
             title="",
         )
 
-        if result == "back" or result is None:
-            return "main"
-        return None
+        return self.handle_action(result)

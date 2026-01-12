@@ -163,12 +163,13 @@ def confirm(
         True if confirmed, False otherwise
     """
     try:
-        return questionary.confirm(
+        result = questionary.confirm(
             message=message,
             default=default,
             style=QUESTIONARY_STYLE,
             qmark="",
         ).ask()
+        return bool(result)  # Coerce None to False
     except KeyboardInterrupt:
         return False
 
@@ -291,8 +292,14 @@ def show_back_menu(
 
     all_options = options + [back_option]
 
+    # Only add separator if there are options before "Back"
+    if len(options) == 0:
+        separator_after: list[int] = []
+    else:
+        separator_after = [len(options) - 1]
+
     return show_menu_with_separator(
         options=all_options,
         title=title,
-        separator_after=[len(options) - 1],  # Separator before Back
+        separator_after=separator_after,
     )

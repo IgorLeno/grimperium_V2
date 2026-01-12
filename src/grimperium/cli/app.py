@@ -66,7 +66,7 @@ class GrimperiumCLI:
         )
         self.console.print()
 
-    def show_main_menu(self) -> Optional[str]:
+    def display_main_menu(self) -> Optional[str]:
         """
         Display and handle the main menu.
 
@@ -120,11 +120,10 @@ class GrimperiumCLI:
             while self.controller.is_running():
                 # Show welcome screen and main menu
                 self.show_welcome()
-                selection = self.show_main_menu()
+                selection = self.display_main_menu()
 
                 if selection is None:
-                    # User pressed Ctrl+C at main menu
-                    self.controller.stop()
+                    # User pressed Ctrl+C at main menu - just break, stop() in finally
                     break
 
                 # Navigate to selected view

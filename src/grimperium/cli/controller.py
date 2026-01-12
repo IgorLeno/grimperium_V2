@@ -4,7 +4,9 @@ CLI Controller for GRIMPERIUM.
 Manages navigation state and view transitions.
 """
 
-from typing import TYPE_CHECKING, Any, Optional
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, Optional
 
 from rich.console import Console
 
@@ -33,10 +35,10 @@ class CliController:
         self.current_model: str = DEFAULT_MODEL
         self.status: str = "Ready"
         self.console = Console(theme=CLI_THEME)
-        self._views: dict[str, Any] = {}
+        self._views: dict[str, BaseView] = {}
         self._running: bool = False
 
-    def register_view(self, name: str, view: "BaseView") -> None:  # type: ignore
+    def register_view(self, name: str, view: BaseView) -> None:
         """
         Register a view with the controller.
 
@@ -46,7 +48,7 @@ class CliController:
         """
         self._views[name] = view
 
-    def get_view(self, name: str) -> Optional["BaseView"]:  # type: ignore
+    def get_view(self, name: str) -> Optional[BaseView]:
         """
         Get a registered view by name.
 
@@ -65,9 +67,15 @@ class CliController:
         Args:
             view: Name of the view to navigate to
         """
-        if self.current_view != "main":
-            self.history.append(self.current_view)
-        self.current_view = view
+        if view == "main":
+            # Navigating to main clears history, consistent with go_to_main()
+            self.history.clear()
+            self.current_view = "main"
+        else:
+            # For other views, append current view to history
+            if self.current_view != "main":
+                self.history.append(self.current_view)
+            self.current_view = view
 
     def go_back(self) -> bool:
         """
@@ -127,9 +135,14 @@ class CliController:
         """
         self.status = status
 
-    def is_running(self) -> bool:
+    @property
+    def running(self) -> bool:
         """Check if the application is running."""
         return self._running
+
+    def is_running(self) -> bool:
+        """Check if the application is running (compatibility wrapper)."""
+        return self.running
 
     def start(self) -> None:
         """Start the application."""

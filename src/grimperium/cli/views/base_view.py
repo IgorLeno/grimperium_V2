@@ -5,7 +5,7 @@ All view modules inherit from this abstract base class.
 """
 
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, ClassVar, Optional
 
 from rich.console import Console
 from rich.panel import Panel
@@ -28,10 +28,10 @@ class BaseView(ABC):
     """
 
     # View metadata (override in subclasses)
-    name: str = "base"
-    title: str = "Base View"
-    icon: str = ""
-    color: str = "#FFFFFF"
+    name: ClassVar[str] = "base"
+    title: ClassVar[str] = "Base View"
+    icon: ClassVar[str] = ""
+    color: ClassVar[str] = "#FFFFFF"
 
     def __init__(self, controller: "CliController") -> None:
         """
@@ -80,7 +80,10 @@ class BaseView(ABC):
         header_text = f"{self.icon}  {self.title}" if self.icon else self.title
         self.console.print()
         self.console.print(f"[bold {self.color}]{header_text}[/bold {self.color}]")
-        self.console.print(f"[{COLORS['muted']}]{'─' * 50}[/{COLORS['muted']}]")
+        
+        # Adaptive separator width based on console width
+        width = max(20, min(self.console.width, 80))
+        self.console.print(f"[{COLORS['muted']}]{'─' * width}[/{COLORS['muted']}]")
         self.console.print()
 
     def show_in_development(self, feature: str) -> None:
@@ -102,9 +105,7 @@ class BaseView(ABC):
             )
         )
         self.console.print()
-        self.console.input(
-            f"[{COLORS['muted']}]Press Enter to continue...[/{COLORS['muted']}]"
-        )
+        self.wait_for_enter()
 
     def show_error(self, message: str) -> None:
         """

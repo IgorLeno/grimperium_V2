@@ -5,7 +5,6 @@ This module provides mock data for the CLI interface before
 real integration with the ML models and databases.
 """
 
-import random
 from dataclasses import dataclass
 from datetime import date
 from typing import Optional
@@ -229,11 +228,14 @@ def mock_predict(smiles: str, model_name: str = DEFAULT_MODEL) -> PredictionResu
     Will be replaced with real model inference later.
     """
     # Generate deterministic but varied values based on SMILES
-    seed = sum(ord(c) for c in smiles)
-    random.seed(seed)
+    # Use a local RNG to avoid mutating global random state
+    from random import Random
 
-    predicted_value = random.uniform(-100, 50)
-    confidence = random.uniform(0.85, 0.99)
+    seed = sum(ord(c) for c in smiles)
+    rnd = Random(seed)
+
+    predicted_value = rnd.uniform(-100, 50)
+    confidence = rnd.uniform(0.85, 0.99)
 
     return PredictionResult(
         smiles=smiles,
