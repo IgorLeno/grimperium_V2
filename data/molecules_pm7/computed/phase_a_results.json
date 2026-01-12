@@ -1,0 +1,198 @@
+{
+  "phase": "A",
+  "n_molecules": 3,
+  "monitor_summary": {
+    "total_processed": 3,
+    "success_rate": 1.0,
+    "hof_extraction_rate": 1.0,
+    "grade_ab_rate": 1.0,
+    "grade_distribution": {
+      "A": 0,
+      "B": 3,
+      "C": 0,
+      "FAILED": 0
+    },
+    "timeout_count": 0,
+    "scf_failure_count": 0,
+    "alert_count": 0,
+    "critical_alerts": 0,
+    "warning_alerts": 0
+  },
+  "timeout_predictor_stats": {
+    "n_samples": 3,
+    "is_fitted": false,
+    "molecules_since_recalibration": 3,
+    "nheavy_range": [
+      1,
+      6
+    ],
+    "time_range": [
+      0.06188702583312988,
+      0.21734619140625
+    ]
+  },
+  "results": [
+    {
+      "mol_id": "methane",
+      "smiles": "C",
+      "timestamp": "2026-01-11T05:26:44.176105+00:00",
+      "phase": "A",
+      "nheavy": 1,
+      "nrotbonds": 0,
+      "tpsa": 0.0,
+      "aromatic_rings": 0,
+      "has_heteroatoms": false,
+      "crest_status": "SUCCESS",
+      "crest_conformers_generated": 1,
+      "crest_time": 15.503741979598999,
+      "crest_error": null,
+      "conformers": [
+        {
+          "index": 0,
+          "mol_id": "methane",
+          "crest_status": "SUCCESS",
+          "crest_geometry_file": "/tmp/crest_pm7/methane/methane_conf000.xyz",
+          "crest_error_message": null,
+          "mopac_status": "SUCCESS",
+          "mopac_output_file": "/tmp/crest_pm7/methane/methane_conf000.out",
+          "mopac_execution_time": 0.06188702583312988,
+          "mopac_timeout_used": 125.0,
+          "mopac_error_message": null,
+          "energy_hof": -14.40409,
+          "hof_confidence": "HIGH",
+          "hof_extraction_method": "FINAL_HEAT_OF_FORMATION",
+          "hof_extraction_successful": true,
+          "is_successful": true
+        }
+      ],
+      "num_conformers_selected": 1,
+      "total_execution_time": 15.63936185836792,
+      "delta_e_12": null,
+      "delta_e_13": null,
+      "delta_e_15": null,
+      "timeout_predicted": 125.0,
+      "timeout_confidence": "LOW",
+      "decisions": [
+        "nheavy=1, nrotbonds=0",
+        "conformers=1: rigid molecule (nrotbonds=0<=1)",
+        "timeout=125s (LOW)",
+        "processing 1 of 1 conformers"
+      ],
+      "quality_grade": "B",
+      "issues": [
+        "low_timeout_confidence"
+      ],
+      "success": true,
+      "error_message": null,
+      "most_stable_hof": -14.40409
+    },
+    {
+      "mol_id": "ethane",
+      "smiles": "CC",
+      "timestamp": "2026-01-11T05:26:59.816433+00:00",
+      "phase": "A",
+      "nheavy": 2,
+      "nrotbonds": 0,
+      "tpsa": 0.0,
+      "aromatic_rings": 0,
+      "has_heteroatoms": false,
+      "crest_status": "SUCCESS",
+      "crest_conformers_generated": 1,
+      "crest_time": 46.25514531135559,
+      "crest_error": null,
+      "conformers": [
+        {
+          "index": 0,
+          "mol_id": "ethane",
+          "crest_status": "SUCCESS",
+          "crest_geometry_file": "/tmp/crest_pm7/ethane/ethane_conf000.xyz",
+          "crest_error_message": null,
+          "mopac_status": "SUCCESS",
+          "mopac_output_file": "/tmp/crest_pm7/ethane/ethane_conf000.out",
+          "mopac_execution_time": 0.10320401191711426,
+          "mopac_timeout_used": 130.0,
+          "mopac_error_message": null,
+          "energy_hof": -18.19796,
+          "hof_confidence": "HIGH",
+          "hof_extraction_method": "FINAL_HEAT_OF_FORMATION",
+          "hof_extraction_successful": true,
+          "is_successful": true
+        }
+      ],
+      "num_conformers_selected": 1,
+      "total_execution_time": 46.38859677314758,
+      "delta_e_12": null,
+      "delta_e_13": null,
+      "delta_e_15": null,
+      "timeout_predicted": 130.0,
+      "timeout_confidence": "LOW",
+      "decisions": [
+        "nheavy=2, nrotbonds=0",
+        "conformers=1: rigid molecule (nrotbonds=0<=1)",
+        "timeout=130s (LOW)",
+        "processing 1 of 1 conformers"
+      ],
+      "quality_grade": "B",
+      "issues": [
+        "low_timeout_confidence"
+      ],
+      "success": true,
+      "error_message": null,
+      "most_stable_hof": -18.19796
+    },
+    {
+      "mol_id": "benzene",
+      "smiles": "c1ccccc1",
+      "timestamp": "2026-01-11T05:27:46.206943+00:00",
+      "phase": "A",
+      "nheavy": 6,
+      "nrotbonds": 0,
+      "tpsa": 0.0,
+      "aromatic_rings": 1,
+      "has_heteroatoms": false,
+      "crest_status": "SUCCESS",
+      "crest_conformers_generated": 1,
+      "crest_time": 161.5790309906006,
+      "crest_error": null,
+      "conformers": [
+        {
+          "index": 0,
+          "mol_id": "benzene",
+          "crest_status": "SUCCESS",
+          "crest_geometry_file": "/tmp/crest_pm7/benzene/benzene_conf000.xyz",
+          "crest_error_message": null,
+          "mopac_status": "SUCCESS",
+          "mopac_output_file": "/tmp/crest_pm7/benzene/benzene_conf000.out",
+          "mopac_execution_time": 0.21734619140625,
+          "mopac_timeout_used": 150.0,
+          "mopac_error_message": null,
+          "energy_hof": 22.9565,
+          "hof_confidence": "HIGH",
+          "hof_extraction_method": "FINAL_HEAT_OF_FORMATION",
+          "hof_extraction_successful": true,
+          "is_successful": true
+        }
+      ],
+      "num_conformers_selected": 1,
+      "total_execution_time": 161.83014750480652,
+      "delta_e_12": null,
+      "delta_e_13": null,
+      "delta_e_15": null,
+      "timeout_predicted": 150.0,
+      "timeout_confidence": "LOW",
+      "decisions": [
+        "nheavy=6, nrotbonds=0",
+        "conformers=1: rigid molecule (nrotbonds=0<=1)",
+        "timeout=150s (LOW)",
+        "processing 1 of 1 conformers"
+      ],
+      "quality_grade": "B",
+      "issues": [
+        "low_timeout_confidence"
+      ],
+      "success": true,
+      "error_message": null,
+      "most_stable_hof": 22.9565
+    }
+  ]
+}
