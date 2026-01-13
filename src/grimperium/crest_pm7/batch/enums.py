@@ -31,7 +31,7 @@ class MoleculeStatus(str, Enum):
     RUNNING = "Running"
     """Molecule currently being processed."""
 
-    OK = "OK"
+    OK = "Ok"
     """Processing completed successfully."""
 
     RERUN = "Rerun"

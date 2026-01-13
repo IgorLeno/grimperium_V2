@@ -41,6 +41,26 @@ class BatchCSVManager:
         df: Pandas DataFrame with molecule data (loaded lazily)
     """
 
+    # Result columns that are cleared when resetting a batch
+    RESULT_COLUMNS = [
+        "crest_status",
+        "crest_conformers_generated",
+        "crest_time",
+        "crest_error",
+        "num_conformers_selected",
+        "most_stable_hof",
+        "quality_grade",
+        "success",
+        "error_message",
+        "total_execution_time",
+        "actual_crest_timeout_used",
+        "actual_mopac_timeout_used",
+        "delta_e_12",
+        "delta_e_13",
+        "delta_e_15",
+        "timestamp",
+    ]
+
     def __init__(self, csv_path: Path) -> None:
         """Initialize CSV manager.
 
@@ -89,7 +109,11 @@ class BatchCSVManager:
         # Validate unique mol_ids
         if self.df["mol_id"].duplicated().any():
             duplicates = self.df[self.df["mol_id"].duplicated()]["mol_id"].tolist()
-            raise ValueError(f"Duplicate mol_ids in CSV: {duplicates[:5]}...")
+            display_list = duplicates[:5]
+            msg = f"Duplicate mol_ids found: {display_list}"
+            if len(duplicates) > 5:
+                msg += f" ... and {len(duplicates) - 5} more"
+            raise ValueError(msg)
 
         LOG.info(f"Loaded {len(self.df)} molecules from {self.csv_path}")
         return self.df
@@ -107,6 +131,20 @@ class BatchCSVManager:
         if self.df is None:
             self.load_csv()
         return self.df  # type: ignore[return-value]
+
+    def _safe_int(self, val: Any, default: int = 0) -> int:
+        """Safely convert to int, handling NaN.
+
+        Args:
+            val: Value to convert
+            default: Default value if NaN
+
+        Returns:
+            Integer value or default
+        """
+        if pd.isna(val):
+            return default
+        return int(val)
 
     def _get_row_index(self, mol_id: str) -> int:
         """Get DataFrame index for mol_id.
@@ -221,9 +259,9 @@ class BatchCSVManager:
                 mol_id=row["mol_id"],
                 smiles=row["smiles"],
                 batch_order=batch_order,
-                nheavy=int(row["nheavy"]),
-                nrotbonds=int(row.get("nrotbonds", 0)),
-                retry_count=int(row.get("retry_count", 0)),
+                nheavy=self._safe_int(row["nheavy"], 0),
+                nrotbonds=self._safe_int(row.get("nrotbonds", 0), 0),
+                retry_count=self._safe_int(row.get("retry_count", 0), 0),
             )
             molecules.append(mol)
 
@@ -279,11 +317,30 @@ class BatchCSVManager:
             return df.sort_values("nheavy")
 
         elif strategy == BatchSortingStrategy.BY_NROTBONDS:
-            return df.sort_values("nrotbonds")
+            if "nrotbonds" in df.columns:
+                return df.sort_values("nrotbonds")
+            else:
+                LOG.warning(
+                    "Column 'nrotbonds' not found, skipping BY_NROTBONDS sorting"
+                )
+                return df
 
         else:
             LOG.warning(f"Unknown strategy {strategy}, using default order")
             return df
+
+    def get_status(self, mol_id: str) -> str:
+        """Get current status for a molecule.
+
+        Args:
+            mol_id: Molecule identifier
+
+        Returns:
+            MoleculeStatus value (string)
+        """
+        self._ensure_loaded()
+        idx = self._get_row_index(mol_id)
+        return str(self.df.at[idx, "status"])
 
     def mark_running(self, mol_id: str) -> None:
         """Mark molecule as currently running.
@@ -369,7 +426,16 @@ class BatchCSVManager:
 
         # Increment retry count
         retry_count = int(df.at[idx, "retry_count"] or 0) + 1
-        max_retries = int(df.at[idx, "max_retries"] or 3)
+
+        # Handle max_retries explicitly (0 is valid)
+        max_retries_val = df.at[idx, "max_retries"]
+        if pd.isna(max_retries_val):
+            max_retries = 3
+        else:
+            max_retries = int(max_retries_val)
+            if max_retries < 0:
+                raise ValueError(f"max_retries must be >= 0, got {max_retries}")
+
         df.at[idx, "retry_count"] = retry_count
         df.at[idx, "last_error_message"] = error_message
 
@@ -380,7 +446,8 @@ class BatchCSVManager:
         else:
             df.at[idx, "status"] = MoleculeStatus.RERUN.value
             LOG.warning(
-                f"Marked {mol_id} as RERUN ({retry_count}/{max_retries}): {error_message}"
+                f"Marked {mol_id} as RERUN "
+                f"({retry_count}/{max_retries}): {error_message}"
             )
 
         # Apply partial results if provided
@@ -476,26 +543,7 @@ class BatchCSVManager:
         """
         df = self._ensure_loaded()
 
-        result_columns = [
-            "crest_status",
-            "crest_conformers_generated",
-            "crest_time",
-            "crest_error",
-            "num_conformers_selected",
-            "most_stable_hof",
-            "quality_grade",
-            "delta_e_12",
-            "delta_e_13",
-            "delta_e_15",
-            "success",
-            "error_message",
-            "total_execution_time",
-            "actual_crest_timeout_used",
-            "actual_mopac_timeout_used",
-            "timestamp",
-        ]
-
-        for col in result_columns:
+        for col in self.RESULT_COLUMNS:
             if col in df.columns:
                 df.at[idx, col] = None
 
@@ -526,7 +574,11 @@ class BatchCSVManager:
         """
         return {
             # CREST Execution
-            "crest_status": result.crest_status.value,
+            "crest_status": (
+                result.crest_status.value
+                if result.crest_status is not None
+                else None
+            ),
             "crest_conformers_generated": result.crest_conformers_generated,
             "crest_time": (
                 round(result.crest_time, 1) if result.crest_time else None
@@ -539,7 +591,11 @@ class BatchCSVManager:
                 if result.most_stable_hof
                 else None
             ),
-            "quality_grade": result.quality_grade.value,
+            "quality_grade": (
+                result.quality_grade.value
+                if result.quality_grade is not None
+                else None
+            ),
             "success": result.success,
             "error_message": result.error_message,
             "total_execution_time": (
@@ -563,7 +619,11 @@ class BatchCSVManager:
             "batch_id": batch_id,
             "batch_order": batch_order,
             # Timestamp
-            "timestamp": result.timestamp.isoformat(),
+            "timestamp": (
+                result.timestamp.isoformat()
+                if result.timestamp is not None
+                else None
+            ),
         }
 
     def get_status_counts(self) -> dict[str, int]:

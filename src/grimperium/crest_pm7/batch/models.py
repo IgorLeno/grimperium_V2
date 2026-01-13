@@ -11,7 +11,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
-from pydantic import BaseModel, Field, computed_field
+from pydantic import BaseModel, Field, computed_field, field_serializer
 
 from grimperium.crest_pm7.batch.enums import (
     BatchFailurePolicy,
@@ -34,8 +34,12 @@ class BatchResult(BaseModel):
     total_count: int = Field(..., description="Total molecules in this batch")
     success_count: int = Field(default=0, description="Molecules with status OK")
     rerun_count: int = Field(default=0, description="Molecules marked for Rerun")
-    skip_count: int = Field(default=0, description="Molecules marked Skip (max retries)")
-    failed_count: int = Field(default=0, description="Molecules that failed processing")
+    skip_count: int = Field(
+        default=0, description="Molecules marked Skip (max retries)"
+    )
+    failed_count: int = Field(
+        default=0, description="Molecules that failed processing"
+    )
 
     # Timing (in seconds)
     total_time: float = Field(default=0.0, description="Total execution time")
@@ -86,9 +90,10 @@ class BatchResult(BaseModel):
             return None
         return self.max_hof - self.min_hof
 
-    model_config = {
-        "json_encoders": {datetime: lambda v: v.isoformat()},
-    }
+    @field_serializer("timestamp_start", "timestamp_end", mode="plain")
+    def serialize_timestamps(self, v: Optional[datetime]) -> Optional[str]:
+        """Serialize datetime to ISO format."""
+        return v.isoformat() if v is not None else None
 
 
 class BatchMolecule(BaseModel):
@@ -262,9 +267,13 @@ class BatchRowCSV(BaseModel):
         default=None, description="Most recent error (kept for audit)"
     )
 
+    @field_serializer("timestamp", mode="plain")
+    def serialize_timestamp(self, v: Optional[datetime]) -> Optional[str]:
+        """Serialize datetime to ISO format."""
+        return v.isoformat() if v is not None else None
+
     model_config = {
         "use_enum_values": True,
-        "json_encoders": {datetime: lambda v: v.isoformat() if v else None},
     }
 
 
@@ -347,6 +356,7 @@ class MoleculeDetail(BaseModel):
         """Get path for JSON detail file."""
         return base_dir / f"{self.mol_id}.json"
 
-    model_config = {
-        "json_encoders": {datetime: lambda v: v.isoformat()},
-    }
+    @field_serializer("timestamp", mode="plain")
+    def serialize_timestamp(self, v: datetime) -> str:
+        """Serialize datetime to ISO format."""
+        return v.isoformat()

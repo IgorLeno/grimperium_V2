@@ -124,7 +124,10 @@ class BatchExecutionManager:
                     hof_values=hof_values,
                 )
             except Exception as e:
-                LOG.error(f"Unexpected error processing {mol.mol_id}: {e}", exc_info=True)
+                LOG.error(
+                    f"Unexpected error processing {mol.mol_id}: {e}",
+                    exc_info=True,
+                )
                 result.failed_count += 1
                 result.failed_mol_ids.append(mol.mol_id)
 
@@ -141,10 +144,14 @@ class BatchExecutionManager:
 
         # Calculate HOF statistics
         if hof_values:
-            result.min_hof = min(h for _, h in hof_values)
-            result.max_hof = max(h for _, h in hof_values)
-            result.min_hof_mol_id = next(m for m, h in hof_values if h == result.min_hof)
-            result.max_hof_mol_id = next(m for m, h in hof_values if h == result.max_hof)
+            # Find min and max simultaneously to avoid floating-point equality issues
+            min_mol_id, min_hof_val = min(hof_values, key=lambda x: x[1])
+            result.min_hof = round(min_hof_val, 2)
+            result.min_hof_mol_id = min_mol_id
+
+            max_mol_id, max_hof_val = max(hof_values, key=lambda x: x[1])
+            result.max_hof = round(max_hof_val, 2)
+            result.max_hof_mol_id = max_mol_id
 
         # Handle ALL_OR_NOTHING policy
         if (
@@ -241,10 +248,8 @@ class BatchExecutionManager:
                 error_msg = pm7_result.error_message or "Unknown error"
                 self.csv_manager.mark_rerun(mol_id, error_msg, csv_update)
 
-                # Check if it became SKIP
-                df = self.csv_manager._ensure_loaded()
-                idx = self.csv_manager._get_row_index(mol_id)
-                new_status = df.at[idx, "status"]
+                # Check if it became SKIP using public method
+                new_status = self.csv_manager.get_status(mol_id)
 
                 if new_status == MoleculeStatus.SKIP.value:
                     result.skip_count += 1
@@ -260,8 +265,14 @@ class BatchExecutionManager:
             LOG.error(f"{mol_id}: {error_msg}", exc_info=True)
 
             self.csv_manager.mark_rerun(mol_id, error_msg)
-            result.failed_count += 1
-            result.failed_mol_ids.append(mol_id)
+
+            # Check final status to update correct counter
+            new_status = self.csv_manager.get_status(mol_id)
+            if new_status == MoleculeStatus.SKIP.value:
+                result.skip_count += 1
+            else:
+                result.rerun_count += 1
+                result.rerun_mol_ids.append(mol_id)
 
     def get_status_summary(self) -> dict[str, int]:
         """Get current status counts from CSV.

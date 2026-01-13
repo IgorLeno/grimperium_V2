@@ -41,6 +41,9 @@ from .threshold_monitor import Alert, MonitoringMetrics, ThresholdMonitor
 from .timeout_predictor import TimeoutPredictor
 from .validation import ValidationResult, validate_environment
 
+# Batch processing module
+from . import batch
+
 __all__ = [
     # Core Pipeline
     "CRESTPM7Pipeline",
@@ -73,8 +76,5 @@ __all__ = [
     # Constants
     "TOLERANCE_ABSOLUTE",
 ]
-
-# Batch processing module
-from . import batch
 
 __version__ = "0.3.2"

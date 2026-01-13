@@ -8,6 +8,7 @@ Used by BatchExecutionManager to process molecules with batch-level timeouts.
 """
 
 import logging
+from collections import deque
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
@@ -30,12 +31,22 @@ class FixedTimeoutPredictor:
     Attributes:
         crest_timeout_seconds: Fixed CREST timeout in seconds
         mopac_timeout_seconds: Fixed MOPAC timeout in seconds
-        observations: List of (nheavy, time) tuples for statistics
+        observations: Bounded deque of (nheavy, time) tuples for statistics
+        max_observations: Maximum observations to keep (default 100)
     """
 
     crest_timeout_seconds: float
     mopac_timeout_seconds: float
-    observations: list[tuple[int, float]] = field(default_factory=list)
+    max_observations: int = 100
+    observations: deque = field(default_factory=lambda: deque(maxlen=100))
+
+    def __post_init__(self):
+        """Initialize deque with proper maxlen."""
+        if not isinstance(self.observations, deque):
+            self.observations = deque(self.observations, maxlen=self.max_observations)
+        elif self.observations.maxlen != self.max_observations:
+            # Rebuild deque with correct maxlen
+            self.observations = deque(self.observations, maxlen=self.max_observations)
 
     # Properties for TimeoutPredictor interface compatibility
     @property
@@ -69,12 +80,19 @@ class FixedTimeoutPredictor:
     def add_observation(self, nheavy: int, execution_time: float) -> None:
         """Record observation for statistics (no model update).
 
+        Automatically evicts old observations if maxlen exceeded.
+
         Args:
             nheavy: Number of heavy atoms
             execution_time: Actual execution time
         """
         self.observations.append((nheavy, execution_time))
         LOG.debug(f"Recorded observation: nheavy={nheavy}, time={execution_time:.1f}s")
+
+    def clear_observations(self) -> None:
+        """Clear observations for new batch."""
+        self.observations.clear()
+        LOG.debug("Cleared timeout observations")
 
     def fit(self) -> bool:
         """No-op for fixed timeout predictor.

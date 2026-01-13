@@ -35,14 +35,15 @@ def compute_descriptors(smiles: str) -> dict:
         smiles: SMILES string
 
     Returns:
-        Dict with nrotbonds, tpsa, aromatic_rings, has_heteroatoms
+        Dict with nrotbonds, tpsa, aromatic_rings, has_heteroatoms.
+        If SMILES is invalid, all values are None.
     """
     mol = Chem.MolFromSmiles(smiles)
     if mol is None:
         return {
-            "nrotbonds": 0,
+            "nrotbonds": None,
             "tpsa": None,
-            "aromatic_rings": 0,
+            "aromatic_rings": None,
             "has_heteroatoms": None,
         }
 
@@ -77,6 +78,17 @@ def initialize_batch_csv(
 
     # Read source CSV
     df_source = pd.read_csv(input_path)
+    
+    # Validate required columns
+    required_cols = ["smiles", "nheavy"]
+    missing_cols = set(required_cols) - set(df_source.columns)
+    
+    if missing_cols:
+        raise ValueError(
+            f"Input CSV missing required columns: {missing_cols}\n"
+            f"Expected: {required_cols}\n"
+            f"Found: {list(df_source.columns)}"
+        )
 
     # Determine mol_id column
     if "Unnamed: 0" in df_source.columns:
@@ -96,11 +108,10 @@ def initialize_batch_csv(
 
     # Compute additional descriptors
     LOG.info("Computing molecular descriptors...")
-    descriptors_list = []
-    for smiles in df_source["smiles"]:
-        descriptors_list.append(compute_descriptors(smiles))
-
-    df_descriptors = pd.DataFrame(descriptors_list)
+    df_descriptors = pd.DataFrame([
+        compute_descriptors(smiles)
+        for smiles in df_source["smiles"]
+    ])
 
     # Create output DataFrame with all BatchRowCSV columns
     df_output = pd.DataFrame()

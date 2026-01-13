@@ -5,15 +5,25 @@ This module provides ConformerDetailManager for:
 - Converting PM7Result to MoleculeDetail
 - Loading existing detail files
 
-Thread-safe: Each molecule has its own JSON file (no conflicts).
+Thread-safety:
+- SAFE for concurrent access to DIFFERENT mol_ids
+- NOT safe for concurrent access to the SAME mol_id
+- Per-mol locking not implemented; serialize access per mol_id in caller
 """
 
 import json
 import logging
+import os
+import tempfile
 from pathlib import Path
-from typing import Any, Optional
+from typing import TYPE_CHECKING, Any, Optional
+
+import pydantic
 
 from grimperium.crest_pm7.batch.models import ConformerDetail, MoleculeDetail
+
+if TYPE_CHECKING:
+    from grimperium.crest_pm7.molecule_processor import PM7Result
 
 LOG = logging.getLogger("grimperium.crest_pm7.batch.detail_manager")
 
@@ -26,7 +36,10 @@ class ConformerDetailManager:
     - Per-conformer MOPAC results
     - Energy values and quality grades
 
-    This is thread-safe as each file is independent.
+    Thread-safety:
+    - SAFE for concurrent access to DIFFERENT mol_ids
+    - NOT safe for concurrent access to the SAME mol_id
+    - Per-mol locking not implemented; serialize access per mol_id in caller
 
     Attributes:
         detail_dir: Directory for JSON detail files
@@ -56,21 +69,47 @@ class ConformerDetailManager:
         return self.detail_dir / f"{safe_id}.json"
 
     def save_detail(self, detail: MoleculeDetail) -> Path:
-        """Save molecule detail to JSON file.
+        """Save molecule detail to JSON file atomically.
+
+        Uses atomic write pattern: write to temp file, fsync, then rename.
+        This prevents corruption if interrupted during write.
 
         Args:
             detail: MoleculeDetail to save
 
         Returns:
             Path to saved file
+
+        Raises:
+            Exception: If write fails (temp file is cleaned up)
         """
-        path = self.get_detail_path(detail.mol_id)
+        detail_path = self.get_detail_path(detail.mol_id)
 
-        with open(path, "w", encoding="utf-8") as f:
-            json.dump(detail.model_dump(mode="json"), f, indent=2)
+        # Write to temp file in same directory (ensure same filesystem)
+        temp_fd, temp_path = tempfile.mkstemp(
+            dir=detail_path.parent,
+            text=True,
+            prefix=".tmp_"
+        )
 
-        LOG.debug(f"Saved detail for {detail.mol_id} to {path}")
-        return path
+        try:
+            with os.fdopen(temp_fd, 'w', encoding='utf-8') as f:
+                json.dump(detail.model_dump(mode="json"), f, indent=2)
+                f.flush()
+                os.fsync(f.fileno())  # Force to disk
+
+            # Atomic rename
+            os.replace(temp_path, detail_path)
+            LOG.debug(f"Saved detail for {detail.mol_id}")
+            return detail_path
+
+        except Exception as e:
+            try:
+                os.unlink(temp_path)  # Clean up temp
+            except FileNotFoundError:
+                pass
+            LOG.error(f"Failed to save detail for {detail.mol_id}: {e}")
+            raise
 
     def load_detail(self, mol_id: str) -> Optional[MoleculeDetail]:
         """Load molecule detail from JSON file.
@@ -79,17 +118,21 @@ class ConformerDetailManager:
             mol_id: Molecule identifier
 
         Returns:
-            MoleculeDetail if file exists, None otherwise
+            MoleculeDetail if file exists and valid, None otherwise
         """
         path = self.get_detail_path(mol_id)
 
         if not path.exists():
             return None
 
-        with open(path, encoding="utf-8") as f:
-            data = json.load(f)
+        try:
+            with open(path, encoding="utf-8") as f:
+                data = json.load(f)
+            return MoleculeDetail.model_validate(data)
 
-        return MoleculeDetail.model_validate(data)
+        except (json.JSONDecodeError, pydantic.ValidationError) as e:
+            LOG.error(f"Failed to load detail for {mol_id} at {path}: {e}")
+            return None
 
     def exists(self, mol_id: str) -> bool:
         """Check if detail file exists for molecule.
@@ -106,7 +149,7 @@ class ConformerDetailManager:
         self,
         mol_id: str,
         smiles: str,
-        result: Any,  # PM7Result - use Any to avoid circular import
+        result: "PM7Result",
         batch_id: str,
     ) -> MoleculeDetail:
         """Convert PM7Result to MoleculeDetail.
@@ -127,7 +170,9 @@ class ConformerDetailManager:
                 conformer_index=i,
                 energy_hof=conf.energy_hof,
                 energy_total=conf.energy_total,
-                mopac_status=conf.mopac_status.value if conf.mopac_status else "NOT_ATTEMPTED",
+                mopac_status=(
+                    conf.mopac_status.value if conf.mopac_status else "NOT_ATTEMPTED"
+                ),
                 mopac_time=conf.mopac_time,
                 mopac_error=conf.mopac_error,
                 geometry_file=str(conf.output_path) if conf.output_path else None,
@@ -178,12 +223,13 @@ class ConformerDetailManager:
         """
         path = self.get_detail_path(mol_id)
 
-        if not path.exists():
+        try:
+            path.unlink()  # Raises FileNotFoundError if not exists
+            LOG.debug(f"Deleted detail for {mol_id}")
+            return True
+        except FileNotFoundError:
+            LOG.debug(f"No detail file found for {mol_id}, nothing to delete")
             return False
-
-        path.unlink()
-        LOG.debug(f"Deleted detail for {mol_id}")
-        return True
 
     def get_summary_stats(self) -> dict[str, Any]:
         """Get summary statistics from all detail files.
