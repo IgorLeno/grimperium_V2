@@ -4,7 +4,7 @@ Styles and theming for the GRIMPERIUM CLI.
 This module defines colors, themes, and ASCII art for the CLI interface.
 """
 
-from importlib.metadata import version
+from importlib.metadata import version, PackageNotFoundError
 
 from rich.style import Style
 from rich.theme import Theme
@@ -12,8 +12,8 @@ from rich.theme import Theme
 # Get package version dynamically
 try:
     _grim_version = version("grimperium")
-except Exception:
-    _grim_version = "0.2.0"  # Fallback version
+except PackageNotFoundError:
+    _grim_version = "unknown"
 
 # Color palette
 COLORS = {

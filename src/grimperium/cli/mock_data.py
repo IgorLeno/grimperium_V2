@@ -7,6 +7,7 @@ real integration with the ML models and databases.
 
 from dataclasses import dataclass
 from datetime import date
+from random import Random
 from typing import Optional
 
 
@@ -229,8 +230,6 @@ def mock_predict(smiles: str, model_name: str = DEFAULT_MODEL) -> PredictionResu
     """
     # Generate deterministic but varied values based on SMILES
     # Use a local RNG to avoid mutating global random state
-    from random import Random
-
     seed = sum(ord(c) for c in smiles)
     rnd = Random(seed)
 

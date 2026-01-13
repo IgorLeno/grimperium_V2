@@ -62,20 +62,24 @@ class CliController:
 
     def navigate_to(self, view: str) -> None:
         """
-        Navigate to a different view.
+        Navigate to a view.
 
-        Args:
-            view: Name of the view to navigate to
+        - If view is the current view, do nothing.
+        - If view is "main", clear history and set current_view.
+        - Otherwise, append current_view to history and navigate.
         """
+        # Guard: same view, no-op
+        if view == self.current_view:
+            return
+
+        # Special case: navigate to main
         if view == "main":
-            # Navigating to main clears history, consistent with go_to_main()
             self.history.clear()
-            self.current_view = "main"
         else:
-            # For other views, append current view to history
-            if self.current_view != "main":
-                self.history.append(self.current_view)
-            self.current_view = view
+            # Normal case: push current to history
+            self.history.append(self.current_view)
+
+        self.current_view = view
 
     def go_back(self) -> bool:
         """

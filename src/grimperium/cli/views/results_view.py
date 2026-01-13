@@ -6,6 +6,7 @@ Displays performance analytics and divergence analysis.
 
 from typing import Optional
 
+from rich.markup import escape
 from rich.panel import Panel
 from rich.table import Table
 
@@ -50,11 +51,12 @@ class ResultsView(BaseView):
             m for m in MODELS 
             if m.status == "ready" and m.mae is not None and m.r2 is not None
         ]
-        sorted_models = sorted(ready_models, key=lambda x: x.mae or float("inf"))
+        sorted_models = sorted(ready_models, key=lambda x: x.mae)
 
         for rank, model in enumerate(sorted_models, 1):
-            # Format model data once at the top of the loop
-            name = model.name
+            # Escape user-provided strings to prevent Rich markup injection
+            name = escape(model.name)
+            algo = escape(model.algorithm)
             mae_str = f"{model.mae:.2f}"
             r2_str = f"{model.r2:.4f}" if model.r2 is not None else "-"
             
@@ -79,7 +81,7 @@ class ResultsView(BaseView):
             elif rank == 3:
                 rank_str = f"{rank_str} 3"
 
-            table.add_row(name, model.algorithm, mae_str, r2_str, rank_str)
+            table.add_row(name, algo, mae_str, r2_str, rank_str)
 
         self.console.print(table)
         self.console.print()

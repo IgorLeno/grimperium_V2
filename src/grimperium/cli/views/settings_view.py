@@ -4,6 +4,7 @@ Settings view for GRIMPERIUM CLI.
 Currently marked as [IN DEVELOPMENT].
 """
 
+import sys
 from typing import Optional
 
 from grimperium.cli.menu import MenuOption
@@ -63,7 +64,16 @@ class SettingsView(BaseView):
         return None
 
     def run(self) -> Optional[str]:
-        """Run the settings view."""
+        """Run the settings view (IN DEVELOPMENT)."""
         self.render()
-        self.wait_for_enter()
+        
+        # Only wait for user acknowledgement in interactive mode
+        if sys.stdin.isatty():
+            try:
+                self.wait_for_enter()
+            except (EOFError, KeyboardInterrupt):
+                # In interactive mode, treat EOFError/Ctrl+C as continue
+                pass
+        # else: non-interactive (CI/piped), skip waiting
+        
         return "main"

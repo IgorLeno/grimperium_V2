@@ -32,6 +32,27 @@ class DatabasesView(BaseView):
         super().__init__(controller)
         self.selected_db: Optional[Database] = None
 
+    def _format_last_updated(self, value: Optional[datetime | date]) -> str:
+        """Format database last_updated timestamp consistently.
+        
+        Args:
+            value: A datetime, date, or None.
+        
+        Returns:
+            Formatted string or "-" if value is None.
+        
+        Note:
+            If the Database.last_updated is timezone-aware, the timezone info
+            is preserved in the formatted output.
+        """
+        if value is None:
+            return "-"
+        if isinstance(value, datetime):
+            return value.strftime("%Y-%m-%d %H:%M:%S")
+        if isinstance(value, date):
+            return value.strftime("%Y-%m-%d")
+        return str(value)
+
     def render(self) -> None:
         """Render the databases overview."""
         self.clear_screen()
@@ -89,11 +110,13 @@ class DatabasesView(BaseView):
             else f"[{COLORS['in_dev']}]{ICONS['in_dev']} In Development[/{COLORS['in_dev']}]"
         )
 
+        last_updated_str = self._format_last_updated(db.last_updated)
+        
         info = f"""
 [bold]Name:[/bold]         {db.name}
 [bold]Description:[/bold]  {db.description}
 [bold]Molecules:[/bold]    {db.molecules:,}
-[bold]Last Updated:[/bold] {db.last_updated}
+[bold]Last Updated:[/bold] {last_updated_str}
 [bold]Status:[/bold]       {status_text}
 
 [bold]Properties:[/bold]
@@ -174,8 +197,8 @@ class DatabasesView(BaseView):
                 return None  # Stay in databases view
             return "main"
 
-        if action.startswith("view_"):
-            db_name = action.replace("view_", "")
+        if action and action.startswith("view_"):
+            db_name = action.removeprefix("view_")
             found = False
             for db in DATABASES:
                 if db.name == db_name:
