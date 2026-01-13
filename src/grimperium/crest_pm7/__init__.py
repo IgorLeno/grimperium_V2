@@ -74,4 +74,7 @@ __all__ = [
     "TOLERANCE_ABSOLUTE",
 ]
 
+# Batch processing module
+from . import batch
+
 __version__ = "0.3.2"

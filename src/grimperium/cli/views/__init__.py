@@ -11,10 +11,12 @@ from grimperium.cli.views.databases_view import DatabasesView
 from grimperium.cli.views.models_view import ModelsView
 from grimperium.cli.views.results_view import ResultsView
 from grimperium.cli.views.settings_view import SettingsView
+from grimperium.cli.views.batch_view import BatchView
 
 __all__ = [
     "BaseView",
     "AboutView",
+    "BatchView",
     "CalcView",
     "DatabasesView",
     "ModelsView",

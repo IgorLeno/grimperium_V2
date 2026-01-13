@@ -20,6 +20,7 @@ from grimperium.cli.styles import (
 )
 from grimperium.cli.views import (
     AboutView,
+    BatchView,
     CalcView,
     DatabasesView,
     ModelsView,
@@ -43,6 +44,7 @@ class GrimperiumCLI:
 
     def _register_views(self) -> None:
         """Register all views with the controller."""
+        self.controller.register_view("batch", BatchView(self.controller))
         self.controller.register_view("calc", CalcView(self.controller))
         self.controller.register_view("databases", DatabasesView(self.controller))
         self.controller.register_view("models", ModelsView(self.controller))
