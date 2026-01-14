@@ -59,7 +59,7 @@ class DatabasesView(BaseView):
                     last_updated_str = timestamp[:10]
 
             last_updated: date | None
-            last_updated: date | None
+            if last_updated_str:
             if last_updated_str:
                 last_updated = date.fromisoformat(last_updated_str)
             else:

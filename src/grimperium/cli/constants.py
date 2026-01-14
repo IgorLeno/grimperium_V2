@@ -47,8 +47,12 @@ def _get_project_root_from_package() -> Path | None:
     Returns:
         Project root path if discoverable, None otherwise.
     """
+    import logging
+    
+    logger = logging.getLogger(__name__)
+    
     try:
-        # Use importlib.resources (Python 3.10+)
+        # Use importlib.resources (Python 3.9+)
         from importlib.resources import files
 
         package_path = files("grimperium")
@@ -59,8 +63,8 @@ def _get_project_root_from_package() -> Path | None:
             for parent in [candidate] + list(candidate.parents):
                 if _validate_project_root(parent):
                     return parent
-    except Exception:
-        pass
+    except (ImportError, TypeError, AttributeError) as e:
+        logger.debug("Package-based project root resolution failed: %s", e)
     return None
 
 
