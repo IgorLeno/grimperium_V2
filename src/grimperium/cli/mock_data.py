@@ -61,6 +61,9 @@ class DivergenceStats:
 
 
 # Mock databases
+# NOTE: CREST PM7 is now loaded dynamically from phase_a_results.json
+# by DatabasesView.load_real_phase_a_results(). This entry serves as
+# fallback when the file doesn't exist (dev/demo mode).
 DATABASES: list[Database] = [
     Database(
         name="CBS Reference",
@@ -73,9 +76,9 @@ DATABASES: list[Database] = [
     Database(
         name="CREST PM7",
         description="CREST conformer search with PM7 optimization",
-        molecules=30026,
-        last_updated=date(2026, 1, 12),
-        status="ready",
+        molecules=0,  # Real count comes from phase_a_results.json
+        last_updated=date(2026, 1, 1),
+        status="in_development",  # Reflects that no calculations done yet
         properties=["H298_pm7", "conformers", "smiles", "quality_grade"],
     ),
     Database(

@@ -4,12 +4,14 @@ Databases view for GRIMPERIUM CLI.
 Displays and manages molecular databases.
 """
 
+import json
 from datetime import date, datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from rich.panel import Panel
 from rich.table import Table
 
+from grimperium.cli.constants import PHASE_A_RESULTS_FILE
 from grimperium.cli.menu import MenuOption, show_back_menu
 from grimperium.cli.mock_data import DATABASES, Database
 from grimperium.cli.styles import COLORS, ICONS
@@ -31,6 +33,64 @@ class DatabasesView(BaseView):
         """Initialize the databases view."""
         super().__init__(controller)
         self.selected_db: Database | None = None
+
+    @staticmethod
+    def load_real_phase_a_results() -> Database | None:
+        """Load real Phase A CREST PM7 results from phase_a_results.json.
+
+        Returns:
+            Database object with real data, or None if file doesn't exist.
+        """
+        if not PHASE_A_RESULTS_FILE.exists():
+            return None
+
+        try:
+            with open(PHASE_A_RESULTS_FILE) as f:
+                data: dict[str, Any] = json.load(f)
+
+            molecules_count = data.get("n_molecules", 0)
+            results = data.get("results", [])
+
+            last_updated_str = None
+            if results:
+                last_result = results[-1]
+                timestamp = last_result.get("timestamp", "")
+                if timestamp:
+                    last_updated_str = timestamp[:10]
+
+            last_updated = (
+                date.fromisoformat(last_updated_str)
+                if last_updated_str
+                else date.today()
+            )
+
+            return Database(
+                name="CREST PM7",
+                description="CREST conformer search with PM7 optimization",
+                molecules=molecules_count,
+                last_updated=last_updated,
+                status="ready" if molecules_count > 0 else "in_development",
+                properties=["H298_pm7", "conformers", "smiles", "quality_grade"],
+            )
+        except (json.JSONDecodeError, OSError, ValueError):
+            return None
+
+    def get_databases(self) -> list[Database]:
+        """Get list of databases, replacing CREST PM7 with real data if available.
+
+        Returns:
+            List of Database objects with CREST PM7 from real calculations.
+        """
+        real_pm7 = self.load_real_phase_a_results()
+        databases = []
+
+        for db in DATABASES:
+            if db.name == "CREST PM7" and real_pm7 is not None:
+                databases.append(real_pm7)
+            else:
+                databases.append(db)
+
+        return databases
 
     def _format_last_updated(self, value: datetime | date | None) -> str:
         """Format database last_updated timestamp consistently.
@@ -70,7 +130,7 @@ class DatabasesView(BaseView):
         table.add_column("Last Updated")
         table.add_column("Status")
 
-        for db in DATABASES:
+        for db in self.get_databases():
             if db.status == "ready":
                 status = f"[{COLORS['success']}]{ICONS['success']} Ready[/{COLORS['success']}]"
             else:
@@ -137,7 +197,7 @@ class DatabasesView(BaseView):
     def get_menu_options(self) -> list[MenuOption]:
         """Return menu options for the databases view."""
         options = []
-        for db in DATABASES:
+        for db in self.get_databases():
             options.append(
                 MenuOption(
                     label=f"View {db.name}",
@@ -146,14 +206,12 @@ class DatabasesView(BaseView):
                 )
             )
 
-        # Additional options (in development)
         options.extend(
             [
                 MenuOption(
                     label="Calculate PM7 Values",
                     value="calculate",
-                    disabled=True,
-                    disabled_reason="In Development",
+                    disabled=False,
                 ),
                 MenuOption(
                     label="Add New Database",
@@ -172,8 +230,7 @@ class DatabasesView(BaseView):
             MenuOption(
                 label="Calculate PM7 Values",
                 value="calculate",
-                disabled=True,
-                disabled_reason="In Development",
+                disabled=False,
             ),
             MenuOption(
                 label="Edit Database",
@@ -200,7 +257,7 @@ class DatabasesView(BaseView):
         if action and action.startswith("view_"):
             db_name = action.removeprefix("view_")
             found = False
-            for db in DATABASES:
+            for db in self.get_databases():
                 if db.name == db_name:
                     self.selected_db = db
                     found = True
@@ -208,16 +265,41 @@ class DatabasesView(BaseView):
 
             if not found:
                 self.selected_db = None
-                # Could log a warning here if logging was set up
 
             return None
 
-        # Handle in-development features
-        if action in ["calculate", "add", "edit", "delete"]:
+        if action == "calculate":
+            self.handle_calculate_pm7()
+            return None
+
+        if action in ["add", "edit", "delete"]:
             self.show_in_development(action.title())
             return None
 
         return None
+
+    def handle_calculate_pm7(self) -> None:
+        """Handle 'Calculate PM7 Values' action.
+
+        Shows instructions for running CREST PM7 batch calculations.
+        """
+        self.console.print()
+        self.console.print(
+            Panel(
+                "[bold]CREST PM7 Batch Calculations[/bold]\n\n"
+                "To run CREST PM7 calculations on your dataset:\n\n"
+                "1. Prepare CSV with molecules (SMILES column)\n"
+                "2. Run: [cyan]python -m grimperium.crest_pm7.batch "
+                "--input batch.csv[/cyan]\n"
+                "3. Results saved to: [cyan]data/molecules_pm7/computed/[/cyan]\n"
+                "4. Reload this view to see updated results\n\n"
+                f"[dim]Current results: {PHASE_A_RESULTS_FILE}[/dim]",
+                title="[bold green]Calculate PM7 Values[/bold green]",
+                border_style="green",
+            )
+        )
+        self.console.print()
+        self.console.input("[dim]Press Enter to continue...[/dim]")
 
     def run(self) -> str | None:
         """Run the databases view interaction loop."""
