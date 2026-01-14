@@ -10,6 +10,7 @@ FUTURE PARALLELIZATION: Add threading.Lock() to protect DataFrame operations.
 """
 
 import logging
+import math
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -138,6 +139,7 @@ class BatchCSVManager:
         WARNING: Truncates decimal values (e.g., 3.9 → 3).
         Use with caution on CSV fields that may contain floats.
         A LOG.warning is emitted when truncation occurs.
+        Uses math.isclose() to avoid spurious warnings from floating-point precision.
 
         Args:
             val: Value to convert (Any type)
@@ -170,7 +172,8 @@ class BatchCSVManager:
                 int_val = int(float_val)
 
                 # Warn if truncating non-integer float
-                if float_val != int_val:
+                # Use math.isclose to avoid spurious float precision warnings
+                if not math.isclose(float_val, int_val, rel_tol=1e-9, abs_tol=1e-9):
                     LOG.warning(
                         f"Truncating float {float_val} to int {int_val}. "
                         f"Original value: {val}. This may cause data loss. "

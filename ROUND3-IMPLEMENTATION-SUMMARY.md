@@ -329,10 +329,26 @@ $ python -c "from grimperium.crest_pm7.batch.enums import MoleculeStatus"
 
 ### 3. Functional Tests
 
-#### Test 1: OK enum value
-```python
-MoleculeStatus.OK.value = 'OK'
-✅ OK enum is correct (uppercase)
+#### Test 1: Verify OK enum value
+
+```bash
+python -c "
+from grimperium.crest_pm7.batch.enums import MoleculeStatus
+import sys
+
+# Verify OK enum value is uppercase
+if MoleculeStatus.OK.value == 'OK':
+    print('✅ MoleculeStatus.OK.value is uppercase: OK')
+    sys.exit(0)
+else:
+    print(f'❌ MoleculeStatus.OK.value is {MoleculeStatus.OK.value}, expected OK')
+    sys.exit(1)
+"
+```
+
+**Output:**
+```
+✅ MoleculeStatus.OK.value is uppercase: OK
 ```
 
 #### Test 2: _safe_int float truncation

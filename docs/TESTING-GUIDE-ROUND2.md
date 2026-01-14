@@ -34,6 +34,20 @@ python scripts/init_batch_csv.py \
 grep -c . data/batch_test_10.csv
 # Output: 11 (header + 10 molecules)
 
+# NOTE: `grep -c .` counts non-empty lines only. Blank lines are NOT counted.
+#
+# PROJECT POLICY: GRIMPERIUM does NOT allow blank lines in batch CSVs.
+# If you find blank lines, they indicate data corruption and should be removed.
+#
+# To detect blank lines:
+#   grep -c '^$' data/batch_test_10.csv  # Should return 0 (no blank lines)
+#
+# To remove blank lines:
+#   sed -i '/^$/d' data/batch_test_10.csv  # In-place removal of blank lines
+#
+# To verify after removal:
+#   grep -c . data/batch_test_10.csv  # Should still show 11
+
 # Option 2: wc -l (counts newlines — may be off-by-1 without trailing newline)
 wc -l data/batch_test_10.csv
 # Output: 10 or 11 (depending on trailing newline in file)
@@ -106,8 +120,8 @@ watch -n 1 'lsof -p $(pgrep -f "grimperium.cli" | head -1) 2>/dev/null | wc -l'
 # Option 2: More specific pattern
 watch -n 1 'lsof -p $(pgrep -f "batch-run" | head -1) 2>/dev/null | wc -l'
 
-# Option 3: If multiple processes, sum all
-watch -n 1 'for pid in $(pgrep -f "grimperium.cli"); do lsof -p $pid 2>/dev/null; done | wc -l'
+# Option 3: If multiple processes, sum all (strips headers per-process)
+watch -n 1 'total=0; for pid in $(pgrep -f "grimperium.cli"); do count=$(lsof -p $pid 2>/dev/null | tail -n +2 | wc -l); total=$((total + count)); done; echo "Total FDs: $total"'
 
 # Option 4: Get PID first, then monitor
 # In one terminal:
@@ -223,9 +237,19 @@ def load_and_analyze_batch(csv_path: str) -> dict:
     """
     try:
         df = pd.read_csv(csv_path)
-    except Exception as e:
-        LOG.error(f"Failed to load CSV {csv_path}: {e}")
+    except FileNotFoundError:
+        LOG.error(f"CSV file not found: {csv_path}")
         return {}
+    except pd.errors.EmptyDataError:
+        LOG.error(f"CSV file is empty: {csv_path}")
+        return {}
+    except pd.errors.ParserError as e:
+        LOG.error(f"CSV parsing error in {csv_path}: {e}")
+        return {}
+    except Exception as e:
+        # Unexpected error — log and re-raise so caller knows
+        LOG.error(f"Unexpected error loading {csv_path}: {e}")
+        raise
     
     # Validate not empty
     if df.empty:
@@ -325,6 +349,30 @@ CREST_TIMEOUT=30
 MOPAC_TIMEOUT=60
 LOG_FILE="production_30k.log"
 
+# Validate configuration variables
+echo "[$(date '+%Y-%m-%d %H:%M:%S')] Validating configuration..."
+
+for var_name in BATCH_SIZE CREST_TIMEOUT MOPAC_TIMEOUT; do
+    var_value="${!var_name}"
+    
+    # Check is numeric
+    if ! [[ "$var_value" =~ ^[0-9]+$ ]]; then
+        echo "ERROR: $var_name must be a positive integer, got '$var_value'"
+        exit 1
+    fi
+    
+    # Check is greater than zero
+    if [ "$var_value" -le 0 ]; then
+        echo "ERROR: $var_name must be > 0, got $var_value"
+        exit 1
+    fi
+    
+    echo "  ✅ $var_name=$var_value (valid)"
+done
+
+echo "✅ Configuration validated successfully"
+echo ""
+
 # Validate CSV exists
 if [ ! -f "$CSV_PATH" ]; then
     echo "ERROR: CSV file not found: $CSV_PATH"
@@ -365,9 +413,13 @@ FAILED_BATCHES=0
 for batch_num in $(seq 1 $NUM_BATCHES); do
     batch_id="batch_30k_$(printf '%03d' $batch_num)"
     
+    # Calculate how many molecules should be in this batch
+    remaining=$((TOTAL_MOLECULES - TOTAL_PROCESSED))
+    batch_actual_size=$(( BATCH_SIZE < remaining ? BATCH_SIZE : remaining ))
+    
     # Display progress
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] Running batch $batch_num/$NUM_BATCHES (ID: $batch_id)"
-    echo "  Expected molecules in this batch: $BATCH_SIZE (actual may be less for last batch)"
+    echo "  Molecules in this batch: $batch_actual_size / $TOTAL_MOLECULES remaining"
     
     # Log batch start
     echo "[Batch $batch_num/$NUM_BATCHES] $batch_id started at $(date)" >> "$LOG_FILE"
@@ -384,7 +436,9 @@ for batch_num in $(seq 1 $NUM_BATCHES); do
         echo "  ✅ Batch completed successfully"
         echo "[Batch $batch_num/$NUM_BATCHES] $batch_id completed successfully at $(date)" >> "$LOG_FILE"
         
-        TOTAL_PROCESSED=$((TOTAL_PROCESSED + BATCH_SIZE))
+        # Increment by actual batch size (not always BATCH_SIZE)
+        TOTAL_PROCESSED=$((TOTAL_PROCESSED + batch_actual_size))
+        echo "  Progress: $TOTAL_PROCESSED / $TOTAL_MOLECULES molecules processed"
     else
         echo "  ⚠️  Batch failed or encountered error"
         echo "[Batch $batch_num/$NUM_BATCHES] $batch_id FAILED at $(date)" >> "$LOG_FILE"
@@ -444,8 +498,7 @@ watch -n 30 "cut -d, -f10 data/batch_30k.csv | sort | uniq -c"
 # Option 2: Using awk (more robust)
 watch -n 30 "awk -F, '{print \$10}' data/batch_30k.csv | sort | uniq -c"
 
-# Option 3: Full path with explicit column name
-watch -n 30 "cat data/batch_30k.csv | cut -d, -f10 | sort | uniq -c"
+# Note: Option 3 removed (was redundant with Option 1 and used useless `cat`)
 ```
 
 ### Verificações Esperadas
