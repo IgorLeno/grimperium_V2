@@ -4,7 +4,7 @@ Models view for GRIMPERIUM CLI.
 Displays and manages trained ML models.
 """
 
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 from rich.panel import Panel
 from rich.table import Table
@@ -29,7 +29,7 @@ class ModelsView(BaseView):
     def __init__(self, controller: "CliController") -> None:
         """Initialize the models view."""
         super().__init__(controller)
-        self.selected_model: Optional[Model] = None
+        self.selected_model: Model | None = None
 
     def render(self) -> None:
         """Render the models overview."""
@@ -214,7 +214,7 @@ class ModelsView(BaseView):
 
         return options
 
-    def handle_action(self, action: Optional[str]) -> Optional[str]:
+    def handle_action(self, action: str | None) -> str | None:
         """Handle menu actions."""
         # Handle None or "back" action
         if action is None or action == "back":
@@ -242,7 +242,7 @@ class ModelsView(BaseView):
 
         return None
 
-    def run(self) -> Optional[str]:
+    def run(self) -> str | None:
         """Run the models view interaction loop."""
         while True:
             if self.selected_model:

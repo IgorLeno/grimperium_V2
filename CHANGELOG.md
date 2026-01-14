@@ -8,6 +8,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **CREST PM7 Unit Tests** (2026-01-14)
+  - Added `tests/unit/test_threshold_monitor.py` - Tests for ThresholdMonitor, MonitoringMetrics, Alert classes
+  - Added `tests/unit/test_timeout_predictor.py` - Tests for TimeoutPredictor with Huber regression, phases A/B/C
+  - Added `tests/unit/test_crest_pm7_models.py` - Tests for ConformerData, PM7Result, grading functions
+  - Tests skip gracefully when rdkit is unavailable (Python 3.13 compatibility)
+
 - **Dataset Migration System** (2026-01-10)
   - Added `ChemperiumLoader.load_thermo_cbs_clean()` as primary method for Phase A onwards
   - Created comprehensive dataset migration documentation (`docs/DATASET_MIGRATION.md`)
@@ -22,6 +28,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `READMEs/README.md` - Consolidated documentation index
 
 ### Changed
+- **Python Version Update** (2026-01-14)
+  - Updated minimum Python version from 3.9 to 3.10 (required for `X | Y` union syntax)
+  - Updated pyproject.toml, mypy config, and black target-version accordingly
+
+- **GitHub Actions CI Improvements** (2026-01-14)
+  - Added pydantic to typecheck job dependencies (fixes mypy failures)
+  - Added proper exit code handling for pytest (ensures failures are detected)
+  - Added optional rdkit installation for Python 3.11 (enables CREST PM7 test coverage)
+  - Improved test failure debugging with log tail output
+
 - **Dataset Migration: thermo_cbs_opt.csv → thermo_cbs_clean.csv** (2026-01-10)
   - Default dataset changed from `data/thermo_cbs_opt.csv` (original) to `data/thermo_cbs_clean.csv` (filtered)
   - Filtering applied:
@@ -53,6 +69,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Configured ReadTheDocs theme
 
 ### Fixed
+- **Critical CI Failures** (2026-01-14)
+  - Fixed `src/grimperium/data/loader.py` syntax error (leftover code review comment on line 1)
+  - Fixed 22 mypy type errors across 8 files:
+    - Added `# type: ignore[prop-decorator]` for pydantic computed_field + property pattern
+    - Fixed wrong attribute names in `detail_manager.py` (mopac_time → mopac_execution_time)
+    - Added type narrowing assertions after `_ensure_loaded()` in csv_manager.py
+    - Fixed return types in `cli/menu.py`
+    - Added missing `run()` method to `BaseView` class
+    - Fixed type casting in `about_view.py`
+  - Fixed ruff config deprecation (migrated from top-level to `[tool.ruff.lint]`)
+  - Added pydantic dependency (was used but not declared)
+
 - Improved DeltaLearner initialization and internal state management
 - Refined CI report script logging for unexpected status cases
 - Enhanced code clarity and consistency across multiple modules

@@ -1,5 +1,4 @@
-In @src/grimperium/data/loader.py around lines 446 - 449, Docstring example misleads and the row-count assertion is fragile: change the example to call the classmethod directly as ChemperiumLoader.load_thermo_cbs_clean() (not via instance) and replace the strict length check with a more robust assertion that validates required columns and optionally checks a minimal row count or that filtering parameters like max_nheavy can reduce rows; update the example to show calling ChemperiumLoader.load_thermo_cbs_clean(...) and asserting set(df.columns) >= {'smiles','charge','multiplicity','nheavy','H298_cbs'} (and if you want a row check, use len(df) >= 1 or omit exact 30026)."""
-Chemperium dataset loader.
+"""Chemperium dataset loader.
 
 This module provides the ChemperiumLoader class for loading and
 preprocessing the Chemperium dataset containing ~52k molecules
@@ -27,14 +26,15 @@ Example:
 import warnings
 from collections.abc import Iterable
 from pathlib import Path
-from typing import Optional, Union
 
 import pandas as pd
 from sklearn.model_selection import train_test_split
 
 # Module-level constants for dataset paths
 THERMO_CBS_OPT_PATH = "data/thermo_cbs_opt.csv"  # Original: 52,837 molecules
-THERMO_CBS_CLEAN_PATH = "data/thermo_cbs_clean.csv"  # Filtered: 30,026 molecules (Phase A)
+THERMO_CBS_CLEAN_PATH = (
+    "data/thermo_cbs_clean.csv"  # Filtered: 30,026 molecules (Phase A)
+)
 
 
 class ChemperiumLoader:
@@ -88,14 +88,14 @@ class ChemperiumLoader:
 
         """
         self.validate = validate
-        self.data: Optional[pd.DataFrame] = None
+        self.data: pd.DataFrame | None = None
 
     def load(
         self,
-        path: Union[str, Path],
-        columns: Optional[list[str]] = None,
-        max_nheavy: Optional[int] = None,
-        allowed_elements: Optional[Iterable[str]] = None,
+        path: str | Path,
+        columns: list[str] | None = None,
+        max_nheavy: int | None = None,
+        allowed_elements: Iterable[str] | None = None,
     ) -> pd.DataFrame:
         """
         Load Chemperium dataset from file.
@@ -141,10 +141,10 @@ class ChemperiumLoader:
 
     def split(
         self,
-        df: Optional[pd.DataFrame] = None,
+        df: pd.DataFrame | None = None,
         test_size: float = 0.2,
         random_state: int = 42,
-        stratify_by: Optional[str] = None,
+        stratify_by: str | None = None,
     ) -> tuple[pd.DataFrame, pd.DataFrame]:
         """
         Split data into train and test sets.
@@ -181,7 +181,7 @@ class ChemperiumLoader:
 
     def train_val_test_split(
         self,
-        df: Optional[pd.DataFrame] = None,
+        df: pd.DataFrame | None = None,
         test_size: float = 0.2,
         val_size: float = 0.1,
         random_state: int = 42,
@@ -233,7 +233,7 @@ class ChemperiumLoader:
 
     def get_features(
         self,
-        df: Optional[pd.DataFrame] = None,
+        df: pd.DataFrame | None = None,
         include_cp: bool = False,
     ) -> pd.DataFrame:
         """
@@ -266,7 +266,7 @@ class ChemperiumLoader:
 
     def get_targets(
         self,
-        df: Optional[pd.DataFrame] = None,
+        df: pd.DataFrame | None = None,
         target: str = "H298_cbs",
     ) -> pd.Series:
         """
@@ -311,8 +311,8 @@ class ChemperiumLoader:
     def _apply_filters(
         self,
         df: pd.DataFrame,
-        max_nheavy: Optional[int],
-        allowed_elements: Optional[Iterable[str]],
+        max_nheavy: int | None,
+        allowed_elements: Iterable[str] | None,
     ) -> pd.DataFrame:
         """
         Apply optional filters to DataFrame.
@@ -344,8 +344,8 @@ class ChemperiumLoader:
     @classmethod
     def load_thermo_cbs_opt(
         cls,
-        path: Union[str, Path] = THERMO_CBS_CLEAN_PATH,
-        max_nheavy: Optional[int] = None,
+        path: str | Path = THERMO_CBS_CLEAN_PATH,
+        max_nheavy: int | None = None,
         validate: bool = True,
     ) -> pd.DataFrame:
         """Load thermodynamic CBS dataset (DEPRECATED - use load_thermo_cbs_clean).
@@ -401,7 +401,7 @@ class ChemperiumLoader:
     @classmethod
     def load_thermo_cbs_clean(
         cls,
-        max_nheavy: Optional[int] = None,
+        max_nheavy: int | None = None,
         validate: bool = True,
     ) -> pd.DataFrame:
         """Load cleaned thermodynamic CBS dataset (PRIMARY - Phase A onwards).

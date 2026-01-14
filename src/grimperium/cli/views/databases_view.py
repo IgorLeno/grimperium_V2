@@ -5,7 +5,7 @@ Displays and manages molecular databases.
 """
 
 from datetime import date, datetime
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 from rich.panel import Panel
 from rich.table import Table
@@ -30,9 +30,9 @@ class DatabasesView(BaseView):
     def __init__(self, controller: "CliController") -> None:
         """Initialize the databases view."""
         super().__init__(controller)
-        self.selected_db: Optional[Database] = None
+        self.selected_db: Database | None = None
 
-    def _format_last_updated(self, value: Optional[datetime | date]) -> str:
+    def _format_last_updated(self, value: datetime | date | None) -> str:
         """Format database last_updated timestamp consistently.
 
         Args:
@@ -189,7 +189,7 @@ class DatabasesView(BaseView):
             ),
         ]
 
-    def handle_action(self, action: str) -> Optional[str]:
+    def handle_action(self, action: str) -> str | None:
         """Handle menu actions."""
         if action == "back":
             if self.selected_db:
@@ -219,7 +219,7 @@ class DatabasesView(BaseView):
 
         return None
 
-    def run(self) -> Optional[str]:
+    def run(self) -> str | None:
         """Run the databases view interaction loop."""
         while True:
             if self.selected_db:

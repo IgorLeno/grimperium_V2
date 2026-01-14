@@ -37,7 +37,6 @@ Real PM7 data not available. Mock PM7 simulates realistic error patterns:
 This mock is deterministic (seed=42) for reproducibility.
 """
 
-from typing import Optional
 
 import numpy as np
 import pytest
@@ -46,7 +45,7 @@ import pytest
 def create_realistic_mock_pm7(
     y_cbs: np.ndarray,
     X_basic: np.ndarray,
-    seed: Optional[int] = 42,
+    seed: int | None = 42,
     magnitude_bias_std: float = 0.5,
 ) -> np.ndarray:
     """

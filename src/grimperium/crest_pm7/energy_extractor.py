@@ -6,7 +6,6 @@ with confidence levels.
 
 import logging
 import re
-from typing import Optional
 
 from .config import HOFConfidence
 
@@ -102,8 +101,8 @@ def validate_hof(hof: float, nheavy: int) -> tuple[bool, str]:
 
 def extract_hof(
     content: str,
-    nheavy: Optional[int] = None,
-) -> tuple[Optional[float], Optional[str], Optional[HOFConfidence]]:
+    nheavy: int | None = None,
+) -> tuple[float | None, str | None, HOFConfidence | None]:
     """Extract Heat of Formation from MOPAC output.
 
     Tries 5 patterns in order of confidence, returning the first successful match.
@@ -160,8 +159,8 @@ def extract_hof(
 
 def extract_hof_from_file(
     filepath: str,
-    nheavy: Optional[int] = None,
-) -> tuple[Optional[float], Optional[str], Optional[HOFConfidence]]:
+    nheavy: int | None = None,
+) -> tuple[float | None, str | None, HOFConfidence | None]:
     """Extract HOF from a MOPAC output file.
 
     Args:

@@ -8,7 +8,6 @@ real integration with the ML models and databases.
 from dataclasses import dataclass
 from datetime import date
 from random import Random
-from typing import Optional
 
 
 @dataclass
@@ -29,12 +28,12 @@ class Model:
 
     name: str
     algorithm: str
-    mae: Optional[float]  # Mean Absolute Error
-    r2: Optional[float]  # R² score
-    training_date: Optional[date]
+    mae: float | None  # Mean Absolute Error
+    r2: float | None  # R² score
+    training_date: date | None
     status: str  # "ready" | "in_development"
     hyperparameters: dict[str, str | int | float]
-    file_size: Optional[str]  # e.g., "12.5 MB"
+    file_size: str | None  # e.g., "12.5 MB"
 
 
 @dataclass
@@ -247,7 +246,7 @@ def mock_predict(smiles: str, model_name: str = DEFAULT_MODEL) -> PredictionResu
     )
 
 
-def get_database_by_name(name: str) -> Optional[Database]:
+def get_database_by_name(name: str) -> Database | None:
     """Get a database by name."""
     for db in DATABASES:
         if db.name == name:
@@ -255,7 +254,7 @@ def get_database_by_name(name: str) -> Optional[Database]:
     return None
 
 
-def get_model_by_name(name: str) -> Optional[Model]:
+def get_model_by_name(name: str) -> Model | None:
     """Get a model by name."""
     for model in MODELS:
         if model.name == name:

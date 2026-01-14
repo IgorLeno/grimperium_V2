@@ -7,7 +7,6 @@ configured.
 import shutil
 import subprocess
 from dataclasses import dataclass, field
-from typing import Optional
 
 from .config import PM7Config
 
@@ -30,18 +29,18 @@ class ValidationResult:
 
     valid: bool = True
     crest_available: bool = False
-    crest_version: Optional[str] = None
+    crest_version: str | None = None
     mopac_available: bool = False
-    mopac_version: Optional[str] = None
+    mopac_version: str | None = None
     obabel_available: bool = False
-    obabel_version: Optional[str] = None
+    obabel_version: str | None = None
     errors: list[str] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
 
 
 def _check_executable(
     name: str, version_flag: str = "--version"
-) -> tuple[bool, Optional[str]]:
+) -> tuple[bool, str | None]:
     """Check if an executable is available and get its version.
 
     Args:
@@ -64,7 +63,7 @@ def _check_executable(
         )
         version_str = result.stdout.strip() or result.stderr.strip()
         # Take first line only
-        version: Optional[str] = version_str.split("\n")[0] if version_str else None
+        version: str | None = version_str.split("\n")[0] if version_str else None
         return True, version
     except (subprocess.TimeoutExpired, subprocess.SubprocessError):
         # Subprocess failure means the executable is not functioning correctly

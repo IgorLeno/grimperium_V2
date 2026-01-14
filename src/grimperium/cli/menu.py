@@ -4,8 +4,8 @@ Menu system for GRIMPERIUM CLI.
 This module provides menu rendering and selection using questionary.
 """
 
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Callable, Optional
 
 import questionary
 from prompt_toolkit.styles import Style
@@ -65,8 +65,8 @@ def show_menu(
     title: str = "",
     instruction: str = "",
     pointer: str = ICONS["arrow"],
-    console: Optional[Console] = None,
-) -> Optional[str]:
+    console: Console | None = None,
+) -> str | None:
     """
     Display an interactive menu and return the selected value.
 
@@ -100,7 +100,7 @@ def show_menu(
             use_jk_keys=True,
             use_shortcuts=False,
         ).ask()
-        return result
+        return str(result) if result is not None else None
     except KeyboardInterrupt:
         return None
 
@@ -108,8 +108,8 @@ def show_menu(
 def show_menu_with_separator(
     options: list[MenuOption],
     title: str = "",
-    separator_after: Optional[list[int]] = None,
-) -> Optional[str]:
+    separator_after: list[int] | None = None,
+) -> str | None:
     """
     Display a menu with separators between option groups.
 
@@ -143,7 +143,7 @@ def show_menu_with_separator(
             use_arrow_keys=True,
             use_jk_keys=True,
         ).ask()
-        return result
+        return str(result) if result is not None else None
     except KeyboardInterrupt:
         return None
 
@@ -177,8 +177,8 @@ def confirm(
 def text_input(
     message: str,
     default: str = "",
-    validate: Optional[Callable[[str], bool | str]] = None,
-) -> Optional[str]:
+    validate: Callable[[str], bool | str] | None = None,
+) -> str | None:
     """
     Get text input from the user.
 
@@ -191,13 +191,14 @@ def text_input(
         User input, or None if cancelled
     """
     try:
-        return questionary.text(
+        result = questionary.text(
             message=message,
             default=default,
             style=QUESTIONARY_STYLE,
             qmark="",
             validate=validate,
         ).ask()
+        return str(result) if result is not None else None
     except KeyboardInterrupt:
         return None
 
@@ -205,7 +206,7 @@ def text_input(
 def show_main_menu(
     current_model: str = "DeltaXGB_v1.0",
     status: str = "Ready",
-) -> Optional[str]:
+) -> str | None:
     """
     Display the main application menu.
 
@@ -273,7 +274,7 @@ def show_main_menu(
 def show_back_menu(
     options: list[MenuOption],
     title: str = "",
-) -> Optional[str]:
+) -> str | None:
     """
     Display a menu with a "Back" option at the end.
 

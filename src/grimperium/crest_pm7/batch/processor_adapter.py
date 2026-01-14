@@ -11,7 +11,6 @@ import logging
 from collections import deque
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Optional
 
 from grimperium.crest_pm7.config import PM7Config, TimeoutConfidence
 from grimperium.crest_pm7.molecule_processor import MoleculeProcessor, PM7Result
@@ -182,7 +181,7 @@ class FixedTimeoutProcessor:
         self,
         mol_id: str,
         smiles: str,
-        input_xyz: Optional[Path] = None,
+        input_xyz: Path | None = None,
     ) -> PM7Result:
         """Process molecule with fixed timeouts.
 

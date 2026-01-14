@@ -13,7 +13,6 @@ Example:
 """
 
 from pathlib import Path
-from typing import Optional
 
 import pandas as pd
 from sklearn.model_selection import train_test_split
@@ -25,7 +24,7 @@ def load_real_subset(
     n: int = 1000,
     stratified: bool = True,
     random_state: int = 42,
-    dataset_path: Optional[Path] = None,
+    dataset_path: Path | None = None,
 ) -> pd.DataFrame:
     """
     Load a random subset of the real dataset.
@@ -83,7 +82,7 @@ def load_real_subset(
 
 def load_real_train_test_split(
     test_size: float = 0.2,
-    max_samples: Optional[int] = None,
+    max_samples: int | None = None,
     random_state: int = 42,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     """

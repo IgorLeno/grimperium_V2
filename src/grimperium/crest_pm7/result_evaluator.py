@@ -7,7 +7,7 @@ import json
 import logging
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 from .config import QualityGrade
 from .molecule_processor import PM7Result
@@ -40,13 +40,13 @@ class MoleculeEvaluation:
 
     mol_id: str
     passed: bool = False
-    hof_expected: Optional[float] = None
-    hof_actual: Optional[float] = None
-    hof_min: Optional[float] = None
-    hof_max: Optional[float] = None
+    hof_expected: float | None = None
+    hof_actual: float | None = None
+    hof_min: float | None = None
+    hof_max: float | None = None
     hof_in_range: bool = False
-    grade_expected: Optional[str] = None
-    grade_actual: Optional[str] = None
+    grade_expected: str | None = None
+    grade_actual: str | None = None
     grade_acceptable: bool = False
     success_expected: bool = True
     success_actual: bool = False
@@ -116,7 +116,7 @@ class ResultEvaluator:
 
     def __init__(
         self,
-        baseline_path: Optional[Path] = None,
+        baseline_path: Path | None = None,
         tolerance: float = TOLERANCE_ABSOLUTE,
     ) -> None:
         """Initialize evaluator.
@@ -168,7 +168,7 @@ class ResultEvaluator:
     def evaluate_molecule(
         self,
         result: PM7Result,
-        expected: Optional[dict] = None,
+        expected: dict | None = None,
     ) -> MoleculeEvaluation:
         """Evaluate a single molecule result.
 

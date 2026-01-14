@@ -18,8 +18,6 @@ Example:
 
 """
 
-from typing import Optional, Union
-
 import numpy as np
 import pandas as pd
 
@@ -64,8 +62,8 @@ class FeatureEngineer:
         self,
         morgan_bits: int = 256,
         morgan_radius: int = 2,
-        rdkit_descriptors: Optional[list[str]] = None,
-        tabular_features: Optional[list[str]] = None,
+        rdkit_descriptors: list[str] | None = None,
+        tabular_features: list[str] | None = None,
         use_morgan: bool = True,
         use_rdkit: bool = True,
         use_tabular: bool = True,
@@ -91,13 +89,13 @@ class FeatureEngineer:
         self.use_rdkit = use_rdkit
         self.use_tabular = use_tabular
 
-        self._n_features: Optional[int] = None
-        self._feature_names: Optional[list[str]] = None
+        self._n_features: int | None = None
+        self._feature_names: list[str] | None = None
 
     def fit(
         self,
         smiles: list[str],
-        df: Optional[pd.DataFrame] = None,
+        df: pd.DataFrame | None = None,
     ) -> "FeatureEngineer":
         """
         Fit the feature engineer (compute feature names).
@@ -115,7 +113,7 @@ class FeatureEngineer:
     def transform(
         self,
         smiles: list[str],
-        df: Optional[pd.DataFrame] = None,
+        df: pd.DataFrame | None = None,
     ) -> np.ndarray:
         """
         Transform SMILES to feature matrix.
@@ -133,7 +131,7 @@ class FeatureEngineer:
     def fit_transform(
         self,
         smiles: list[str],
-        df: Optional[pd.DataFrame] = None,
+        df: pd.DataFrame | None = None,
     ) -> np.ndarray:
         """
         Fit and transform in one step.
@@ -169,7 +167,7 @@ class FeatureEngineer:
 
 
 def compute_morgan_fingerprints(
-    smiles: Union[str, list[str]],
+    smiles: str | list[str],
     n_bits: int = 256,
     radius: int = 2,
 ) -> np.ndarray:
@@ -193,8 +191,8 @@ def compute_morgan_fingerprints(
 
 
 def compute_rdkit_descriptors(
-    smiles: Union[str, list[str]],
-    descriptors: Optional[list[str]] = None,
+    smiles: str | list[str],
+    descriptors: list[str] | None = None,
 ) -> np.ndarray:
     """
     Compute RDKit molecular descriptors from SMILES.
@@ -225,7 +223,7 @@ def compute_rdkit_descriptors(
 
 def extract_tabular_features(
     df: pd.DataFrame,
-    features: Optional[list[str]] = None,
+    features: list[str] | None = None,
 ) -> np.ndarray:
     """
     Extract tabular features from DataFrame.

@@ -14,7 +14,6 @@ Example:
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Optional
 
 
 @dataclass
@@ -24,7 +23,7 @@ class ModelConfig:
     # Kernel Ridge Regression
     krr_alpha: float = 1.0
     krr_kernel: str = "rbf"
-    krr_gamma: Optional[float] = None
+    krr_gamma: float | None = None
 
     # XGBoost
     xgb_n_estimators: int = 100
@@ -61,8 +60,8 @@ class DataConfig:
     """Configuration for data loading and processing."""
 
     # Paths
-    chemperium_path: Optional[Path] = None
-    pm7_cache_dir: Optional[Path] = None
+    chemperium_path: Path | None = None
+    pm7_cache_dir: Path | None = None
 
     # Processing
     test_size: float = 0.2

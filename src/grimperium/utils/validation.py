@@ -17,7 +17,7 @@ Example:
 
 """
 
-from typing import TYPE_CHECKING, Optional, Union
+from typing import TYPE_CHECKING
 
 import numpy as np
 import pandas as pd
@@ -27,9 +27,9 @@ if TYPE_CHECKING:
 
 
 def validate_smiles(
-    smiles: Union[str, list[str]],
+    smiles: str | list[str],
     raise_on_invalid: bool = True,
-) -> Union[bool, list[bool]]:
+) -> bool | list[bool]:
     """
     Validate SMILES string(s) using RDKit.
 
@@ -55,8 +55,8 @@ def validate_smiles(
 
 def validate_dataframe(
     df: pd.DataFrame,
-    required_columns: Optional[list[str]] = None,
-    expected_types: Optional[dict[str, type]] = None,
+    required_columns: list[str] | None = None,
+    expected_types: dict[str, type] | None = None,
     allow_missing: bool = False,
 ) -> None:
     """
@@ -84,7 +84,7 @@ def validate_dataframe(
 
 def validate_features(
     X: np.ndarray,
-    n_features: Optional[int] = None,
+    n_features: int | None = None,
     allow_nan: bool = False,
     allow_inf: bool = False,
 ) -> None:
@@ -110,7 +110,7 @@ def validate_features(
 
 def validate_targets(
     y: np.ndarray,
-    n_samples: Optional[int] = None,
+    n_samples: int | None = None,
     allow_nan: bool = False,
 ) -> None:
     """
@@ -145,8 +145,8 @@ def validate_config(
 
 
 def check_array(
-    array: Union[np.ndarray, list],
-    dtype: Optional[type] = None,
+    array: np.ndarray | list,
+    dtype: type | None = None,
     ensure_2d: bool = True,
     allow_nd: bool = False,
 ) -> np.ndarray:

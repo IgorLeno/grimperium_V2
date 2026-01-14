@@ -9,7 +9,6 @@ import subprocess
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
 
 from .config import HOFConfidence, MOPACStatus, PM7Config
 from .energy_extractor import extract_hof
@@ -42,13 +41,13 @@ class MOPACResult:
     """
 
     status: MOPACStatus = MOPACStatus.NOT_ATTEMPTED
-    hof: Optional[float] = None
+    hof: float | None = None
     hof_confidence: HOFConfidence = HOFConfidence.LOW
-    hof_method: Optional[str] = None
+    hof_method: str | None = None
     execution_time: float = 0.0
     timeout_used: float = 0.0
-    output_file: Optional[Path] = None
-    error_message: Optional[str] = None
+    output_file: Path | None = None
+    error_message: str | None = None
 
 
 def _create_mopac_input(
@@ -159,8 +158,8 @@ def run_mopac(
     xyz_file: Path,
     config: PM7Config,
     timeout: float,
-    nheavy: Optional[int] = None,
-    work_dir: Optional[Path] = None,
+    nheavy: int | None = None,
+    work_dir: Path | None = None,
     conf_index: int = 0,
 ) -> MOPACResult:
     """Run MOPAC PM7 optimization on a conformer.
@@ -336,7 +335,7 @@ def optimize_conformer(
     xyz_file: Path,
     config: PM7Config,
     timeout: float,
-    nheavy: Optional[int] = None,
+    nheavy: int | None = None,
     conf_index: int = 0,
 ) -> MOPACResult:
     """Wrapper for run_mopac.

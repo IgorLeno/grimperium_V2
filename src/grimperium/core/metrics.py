@@ -20,15 +20,13 @@ Example:
 
 """
 
-from typing import Optional, Union
-
 import numpy as np
 
 
 def rmse(
-    y_true: Union[np.ndarray, list],
-    y_pred: Union[np.ndarray, list],
-    sample_weight: Optional[np.ndarray] = None,
+    y_true: np.ndarray | list,
+    y_pred: np.ndarray | list,
+    sample_weight: np.ndarray | None = None,
 ) -> float:
     """
     Compute Root Mean Squared Error.
@@ -61,9 +59,9 @@ def rmse(
 
 
 def mae(
-    y_true: Union[np.ndarray, list],
-    y_pred: Union[np.ndarray, list],
-    sample_weight: Optional[np.ndarray] = None,
+    y_true: np.ndarray | list,
+    y_pred: np.ndarray | list,
+    sample_weight: np.ndarray | None = None,
 ) -> float:
     """
     Compute Mean Absolute Error.
@@ -96,9 +94,9 @@ def mae(
 
 
 def r2_score(
-    y_true: Union[np.ndarray, list],
-    y_pred: Union[np.ndarray, list],
-    sample_weight: Optional[np.ndarray] = None,
+    y_true: np.ndarray | list,
+    y_pred: np.ndarray | list,
+    sample_weight: np.ndarray | None = None,
 ) -> float:
     """
     Compute R² (Coefficient of Determination).
@@ -143,8 +141,8 @@ def r2_score(
 
 
 def mean_absolute_percentage_error(
-    y_true: Union[np.ndarray, list],
-    y_pred: Union[np.ndarray, list],
+    y_true: np.ndarray | list,
+    y_pred: np.ndarray | list,
     epsilon: float = 1e-10,
 ) -> float:
     """
@@ -175,8 +173,8 @@ def mean_absolute_percentage_error(
 
 
 def max_error(
-    y_true: Union[np.ndarray, list],
-    y_pred: Union[np.ndarray, list],
+    y_true: np.ndarray | list,
+    y_pred: np.ndarray | list,
 ) -> float:
     """
     Compute Maximum Absolute Error.
@@ -198,9 +196,9 @@ def max_error(
 
 
 def compute_all_metrics(
-    y_true: Union[np.ndarray, list],
-    y_pred: Union[np.ndarray, list],
-    sample_weight: Optional[np.ndarray] = None,
+    y_true: np.ndarray | list,
+    y_pred: np.ndarray | list,
+    sample_weight: np.ndarray | None = None,
 ) -> dict[str, float]:
     """
     Compute all metrics at once.

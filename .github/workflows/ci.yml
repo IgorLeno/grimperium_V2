@@ -93,7 +93,7 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install mypy pandas-stubs types-requests
+          pip install mypy pandas-stubs types-requests pydantic
 
       - name: Run Mypy (capture logs)
         run: |
@@ -161,9 +161,31 @@ jobs:
       - name: Install project
         run: poetry install --no-interaction
 
+      - name: Install rdkit for CREST PM7 tests (Python 3.11 only)
+        if: matrix.python-version == '3.11'
+        continue-on-error: true
+        run: |
+          echo "Installing rdkit for enhanced test coverage..."
+          pip install rdkit || echo "rdkit installation failed, CREST PM7 tests will be skipped"
+
       - name: Run tests (capture logs)
         run: |
+          set +e
           poetry run pytest tests/ -v --cov=src/grimperium --cov-report=xml --tb=short > ${{ github.workspace }}/test-${{ matrix.python-version }}.log 2>&1
+          echo "$?" > ${{ github.workspace }}/pytest.exitcode
+          set -e
+
+      - name: Fail job if tests failed
+        if: always()
+        run: |
+          pytest_ec="$(cat "${{ github.workspace }}/pytest.exitcode" 2>/dev/null || echo 0)"
+          if [ "${pytest_ec}" -ne 0 ]; then
+            echo "❌ Tests failed (pytest exit code=${pytest_ec}). See test-log artifact."
+            # Show last 50 lines of log for quick debugging
+            tail -50 "${{ github.workspace }}/test-${{ matrix.python-version }}.log" || true
+            exit 1
+          fi
+          echo "✅ Tests passed."
 
       - name: Upload test log
         if: always()

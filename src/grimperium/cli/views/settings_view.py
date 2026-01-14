@@ -5,7 +5,6 @@ Currently marked as [IN DEVELOPMENT].
 """
 
 import sys
-from typing import Optional
 
 from grimperium.cli.menu import MenuOption
 from grimperium.cli.styles import COLORS, ICONS
@@ -55,7 +54,7 @@ class SettingsView(BaseView):
             ),
         ]
 
-    def handle_action(self, action: str) -> Optional[str]:
+    def handle_action(self, action: str) -> str | None:
         """Handle menu actions."""
         if action == "back":
             return "main"
@@ -63,7 +62,7 @@ class SettingsView(BaseView):
         self.show_in_development(action.replace("_", " ").title())
         return None
 
-    def run(self) -> Optional[str]:
+    def run(self) -> str | None:
         """Run the settings view (IN DEVELOPMENT)."""
         self.render()
 

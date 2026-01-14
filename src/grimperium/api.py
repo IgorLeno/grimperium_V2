@@ -16,7 +16,6 @@ Example:
 """
 
 from pathlib import Path
-from typing import Optional, Union
 
 import numpy as np
 import pandas as pd
@@ -47,7 +46,7 @@ class GrimperiumAPI:
 
     """
 
-    def __init__(self, config: Optional[GrimperiumConfig] = None) -> None:
+    def __init__(self, config: GrimperiumConfig | None = None) -> None:
         """
         Initialize GrimperiumAPI.
 
@@ -57,15 +56,15 @@ class GrimperiumAPI:
         """
         self.config = config or GrimperiumConfig()
         self.is_fitted = False
-        self._data: Optional[pd.DataFrame] = None
-        self._features: Optional[np.ndarray] = None
-        self._targets: Optional[np.ndarray] = None
+        self._data: pd.DataFrame | None = None
+        self._features: np.ndarray | None = None
+        self._targets: np.ndarray | None = None
         self._model = None
 
     def load_data(
         self,
-        chemperium_path: Union[str, Path],
-        pm7_path: Optional[Union[str, Path]] = None,
+        chemperium_path: str | Path,
+        pm7_path: str | Path | None = None,
     ) -> "GrimperiumAPI":
         """
         Load and fuse Chemperium and PM7 datasets.
@@ -101,8 +100,8 @@ class GrimperiumAPI:
 
     def train(
         self,
-        X: Optional[np.ndarray] = None,
-        y: Optional[np.ndarray] = None,
+        X: np.ndarray | None = None,
+        y: np.ndarray | None = None,
     ) -> "GrimperiumAPI":
         """
         Train the delta-learning ensemble model.
@@ -119,9 +118,9 @@ class GrimperiumAPI:
 
     def predict(
         self,
-        smiles: Optional[list[str]] = None,
-        X: Optional[np.ndarray] = None,
-        h298_pm7: Optional[np.ndarray] = None,
+        smiles: list[str] | None = None,
+        X: np.ndarray | None = None,
+        h298_pm7: np.ndarray | None = None,
     ) -> np.ndarray:
         """
         Predict H298_CBS for new molecules.
@@ -143,8 +142,8 @@ class GrimperiumAPI:
 
     def evaluate(
         self,
-        X_test: Optional[np.ndarray] = None,
-        y_test: Optional[np.ndarray] = None,
+        X_test: np.ndarray | None = None,
+        y_test: np.ndarray | None = None,
     ) -> dict[str, float]:
         """
         Evaluate model performance.
@@ -172,10 +171,10 @@ class GrimperiumAPI:
         """
         raise NotImplementedError("Will be implemented in Batch 4")
 
-    def save(self, path: Union[str, Path]) -> None:
+    def save(self, path: str | Path) -> None:
         """Save trained model to disk."""
         raise NotImplementedError("Will be implemented in Batch 5")
 
-    def load(self, path: Union[str, Path]) -> "GrimperiumAPI":
+    def load(self, path: str | Path) -> "GrimperiumAPI":
         """Load trained model from disk."""
         raise NotImplementedError("Will be implemented in Batch 5")

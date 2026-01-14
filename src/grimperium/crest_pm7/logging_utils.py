@@ -8,7 +8,7 @@ import logging
 import re
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 from .config import PM7Config
 
@@ -85,7 +85,7 @@ class StructuredLogHandler(logging.Handler):
 
 def setup_logging(
     config: PM7Config,
-    session_name: Optional[str] = None,
+    session_name: str | None = None,
 ) -> logging.Logger:
     """Set up logging for a pipeline session.
 
@@ -174,7 +174,7 @@ def log_molecule_complete(
     logger: logging.Logger,
     mol_id: str,
     grade: str,
-    hof: Optional[float],
+    hof: float | None,
     success: bool,
 ) -> None:
     """Log the completion of molecule processing."""

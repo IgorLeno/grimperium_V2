@@ -16,7 +16,7 @@ import logging
 import os
 import tempfile
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, Any
 
 import pydantic
 
@@ -137,7 +137,7 @@ class ConformerDetailManager:
             LOG.error(f"Failed to save detail for {detail.mol_id}: {e}")
             raise
 
-    def load_detail(self, mol_id: str) -> Optional[MoleculeDetail]:
+    def load_detail(self, mol_id: str) -> MoleculeDetail | None:
         """Load molecule detail from JSON file.
 
         Args:
@@ -195,13 +195,15 @@ class ConformerDetailManager:
             detail = ConformerDetail(
                 conformer_index=i,
                 energy_hof=conf.energy_hof,
-                energy_total=conf.energy_total,
+                energy_total=None,  # Not available in ConformerData
                 mopac_status=(
                     conf.mopac_status.value if conf.mopac_status else "NOT_ATTEMPTED"
                 ),
-                mopac_time=conf.mopac_time,
-                mopac_error=conf.mopac_error,
-                geometry_file=str(conf.output_path) if conf.output_path else None,
+                mopac_time=conf.mopac_execution_time,
+                mopac_error=conf.mopac_error_message,
+                geometry_file=(
+                    str(conf.mopac_output_file) if conf.mopac_output_file else None
+                ),
             )
             conformer_details.append(detail)
 

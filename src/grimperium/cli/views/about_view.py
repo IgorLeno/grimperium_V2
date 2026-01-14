@@ -4,7 +4,7 @@ About view for GRIMPERIUM CLI.
 Displays application information, version, and system status.
 """
 
-from typing import Optional
+from typing import cast
 
 from rich.panel import Panel
 from rich.table import Table
@@ -68,7 +68,7 @@ Learning Δ = (y_cbs - y_pm7) is easier than learning y_cbs directly.
 
         # Databases status
         db_ready = len(get_ready_databases())
-        db_total = SYSTEM_INFO["databases_total"]
+        db_total = cast(int, SYSTEM_INFO["databases_total"])
 
         # Determine database status: Ready / Not Ready / Partial
         if db_ready == db_total and db_total > 0:
@@ -92,7 +92,7 @@ Learning Δ = (y_cbs - y_pm7) is easier than learning y_cbs directly.
 
         # Models status
         models_ready = len(get_ready_models())
-        models_total = SYSTEM_INFO["models_total"]
+        models_total = cast(int, SYSTEM_INFO["models_total"])
 
         # Determine models status: Ready / Not Ready / Partial
         if models_ready == models_total and models_total > 0:
@@ -118,7 +118,7 @@ Learning Δ = (y_cbs - y_pm7) is easier than learning y_cbs directly.
         status_table.add_row(
             f"{ICONS['calc']} Default Model",
             f"[{COLORS['success']}]{ICONS['success']} Active[/{COLORS['success']}]",
-            SYSTEM_INFO["default_model"],
+            str(SYSTEM_INFO["default_model"]),
         )
 
         self.console.print(status_table)
@@ -149,13 +149,13 @@ Learning Δ = (y_cbs - y_pm7) is easier than learning y_cbs directly.
         """Return menu options for the about view."""
         return []  # Only back option (added by show_back_menu)
 
-    def handle_action(self, action: Optional[str]) -> Optional[str]:
+    def handle_action(self, action: str | None) -> str | None:
         """Handle menu actions."""
         if action == "back" or action is None:
             return "main"
         return None
 
-    def run(self) -> Optional[str]:
+    def run(self) -> str | None:
         """Run the about view interaction loop."""
         self.render()
 

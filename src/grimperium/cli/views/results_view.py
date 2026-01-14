@@ -4,8 +4,6 @@ Results view for GRIMPERIUM CLI.
 Displays performance analytics and divergence analysis.
 """
 
-from typing import Optional
-
 from rich.markup import escape
 from rich.panel import Panel
 from rich.table import Table
@@ -52,7 +50,8 @@ class ResultsView(BaseView):
             for m in MODELS
             if m.status == "ready" and m.mae is not None and m.r2 is not None
         ]
-        sorted_models = sorted(ready_models, key=lambda x: x.mae)
+        # Type narrowing: mae is guaranteed non-None by filter above
+        sorted_models = sorted(ready_models, key=lambda x: x.mae or 0.0)
 
         for rank, model in enumerate(sorted_models, 1):
             # Escape user-provided strings to prevent Rich markup injection
@@ -194,7 +193,7 @@ class ResultsView(BaseView):
             ),
         ]
 
-    def handle_action(self, action: str) -> Optional[str]:
+    def handle_action(self, action: str) -> str | None:
         """Handle menu actions."""
         if action == "back":
             return "main"
@@ -206,7 +205,7 @@ class ResultsView(BaseView):
 
         return None
 
-    def run(self) -> Optional[str]:
+    def run(self) -> str | None:
         """Run the results view interaction loop."""
         while True:
             self.render()

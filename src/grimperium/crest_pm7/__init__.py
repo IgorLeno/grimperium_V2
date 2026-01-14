@@ -19,6 +19,8 @@ Example:
     ...     print(f"HOF: {result.most_stable_hof}")
 """
 
+# Batch processing module
+from . import batch
 from .config import (
     AlertLevel,
     CRESTStatus,
@@ -40,9 +42,6 @@ from .result_evaluator import (
 from .threshold_monitor import Alert, MonitoringMetrics, ThresholdMonitor
 from .timeout_predictor import TimeoutPredictor
 from .validation import ValidationResult, validate_environment
-
-# Batch processing module
-from . import batch
 
 __all__ = [
     # Core Pipeline

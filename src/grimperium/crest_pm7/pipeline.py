@@ -5,10 +5,9 @@ Coordinates the full processing pipeline for multiple molecules.
 
 import json
 import logging
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from enum import Enum
 from pathlib import Path
-from typing import Callable, Optional
 
 from .config import MOPACStatus, PM7Config
 from .logging_utils import log_molecule_complete, log_molecule_start, setup_logging
@@ -32,7 +31,7 @@ class CRESTPM7Pipeline:
     - Logging
     """
 
-    def __init__(self, config: Optional[PM7Config] = None) -> None:
+    def __init__(self, config: PM7Config | None = None) -> None:
         """Initialize pipeline.
 
         Args:
@@ -46,7 +45,7 @@ class CRESTPM7Pipeline:
         self.processor = MoleculeProcessor(self.config, self.timeout_predictor)
         self.evaluator = ResultEvaluator()
         self.results: list[PM7Result] = []
-        self.logger: Optional[logging.Logger] = None
+        self.logger: logging.Logger | None = None
         self._paused = False
 
     def validate(self) -> bool:
@@ -80,7 +79,7 @@ class CRESTPM7Pipeline:
             else str(self.config.phase)
         )
 
-    def setup(self, session_name: Optional[str] = None) -> None:
+    def setup(self, session_name: str | None = None) -> None:
         """Set up pipeline for a processing session.
 
         Args:
@@ -127,7 +126,7 @@ class CRESTPM7Pipeline:
         self,
         mol_id: str,
         smiles: str,
-        input_xyz: Optional[Path] = None,
+        input_xyz: Path | None = None,
     ) -> PM7Result:
         """Process a single molecule.
 
@@ -238,7 +237,7 @@ class CRESTPM7Pipeline:
             LOG.error(f"Failed to save results: {e}")
             return False
 
-    def save_timeout_predictor(self, output_path: Optional[Path] = None) -> bool:
+    def save_timeout_predictor(self, output_path: Path | None = None) -> bool:
         """Save timeout predictor model.
 
         Args:

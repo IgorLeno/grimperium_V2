@@ -13,7 +13,7 @@ import logging
 import numbers
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 import joblib
 import numpy as np
@@ -66,7 +66,7 @@ class TimeoutPredictor:
         tol: Huber regressor tolerance
     """
 
-    model: Optional[HuberRegressor] = None
+    model: HuberRegressor | None = None
     samples_nheavy: list[int] = field(default_factory=list)
     samples_time: list[float] = field(default_factory=list)
     recalibrate_interval: int = 50

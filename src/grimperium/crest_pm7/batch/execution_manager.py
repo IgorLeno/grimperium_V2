@@ -9,9 +9,9 @@ This module provides BatchExecutionManager for:
 
 import logging
 import time
+from collections.abc import Callable
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Callable, Optional
 
 from grimperium.crest_pm7.batch.csv_manager import BatchCSVManager
 from grimperium.crest_pm7.batch.detail_manager import ConformerDetailManager
@@ -47,7 +47,7 @@ class BatchExecutionManager:
         csv_manager: BatchCSVManager,
         detail_manager: ConformerDetailManager,
         pm7_config: PM7Config,
-        processor_adapter: Optional[FixedTimeoutProcessor] = None,
+        processor_adapter: FixedTimeoutProcessor | None = None,
     ) -> None:
         """Initialize batch execution manager.
 
@@ -67,7 +67,7 @@ class BatchExecutionManager:
     def execute_batch(
         self,
         batch: Batch,
-        progress_callback: Optional[Callable[[str, int, int], None]] = None,
+        progress_callback: Callable[[str, int, int], None] | None = None,
     ) -> BatchResult:
         """Execute a batch of molecules.
 

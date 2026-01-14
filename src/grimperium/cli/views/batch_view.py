@@ -8,7 +8,7 @@ Provides UI for:
 """
 
 from pathlib import Path
-from typing import TYPE_CHECKING, ClassVar, Optional
+from typing import TYPE_CHECKING, Any, ClassVar
 
 from rich.panel import Panel
 from rich.progress import (
@@ -48,8 +48,8 @@ class BatchView(BaseView):
             controller: CLI controller
         """
         super().__init__(controller)
-        self.csv_path: Optional[Path] = None
-        self.detail_dir: Optional[Path] = None
+        self.csv_path: Path | None = None
+        self.detail_dir: Path | None = None
         self.batch_size: int = 10
         self.crest_timeout: int = 30
         self.mopac_timeout: int = 60
@@ -102,6 +102,9 @@ class BatchView(BaseView):
         try:
             from grimperium.crest_pm7.batch import BatchCSVManager
 
+            if self.csv_path is None:
+                self.console.print("[yellow]No CSV path configured[/]")
+                return
             manager = BatchCSVManager(self.csv_path)
             manager.load_csv()
             counts = manager.get_status_counts()
@@ -191,7 +194,7 @@ class BatchView(BaseView):
 
         return options
 
-    def handle_action(self, action: str) -> Optional[str]:
+    def handle_action(self, action: str) -> str | None:
         """Handle menu action."""
         if action == "back":
             return "main"
@@ -348,7 +351,7 @@ class BatchView(BaseView):
         except Exception as e:
             self.show_error(f"Batch execution failed: {e}")
 
-    def _display_batch_result(self, result) -> None:
+    def _display_batch_result(self, result: Any) -> None:
         """Display batch execution result."""
         self.console.print()
 

@@ -9,7 +9,6 @@ This module defines data models for:
 
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional
 
 from pydantic import BaseModel, Field, computed_field, field_serializer
 
@@ -44,17 +43,13 @@ class BatchResult(BaseModel):
     timestamp_start: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc)
     )
-    timestamp_end: Optional[datetime] = Field(default=None)
+    timestamp_end: datetime | None = Field(default=None)
 
     # Energy statistics (from successful molecules in THIS BATCH only)
-    min_hof: Optional[float] = Field(default=None, description="Minimum HOF in batch")
-    max_hof: Optional[float] = Field(default=None, description="Maximum HOF in batch")
-    min_hof_mol_id: Optional[str] = Field(
-        default=None, description="mol_id with min HOF"
-    )
-    max_hof_mol_id: Optional[str] = Field(
-        default=None, description="mol_id with max HOF"
-    )
+    min_hof: float | None = Field(default=None, description="Minimum HOF in batch")
+    max_hof: float | None = Field(default=None, description="Maximum HOF in batch")
+    min_hof_mol_id: str | None = Field(default=None, description="mol_id with min HOF")
+    max_hof_mol_id: str | None = Field(default=None, description="mol_id with max HOF")
 
     # Issues tracking (for debugging)
     failed_mol_ids: list[str] = Field(
@@ -64,7 +59,7 @@ class BatchResult(BaseModel):
         default_factory=list, description="mol_ids marked rerun"
     )
 
-    @computed_field
+    @computed_field  # type: ignore[prop-decorator]
     @property
     def success_rate(self) -> float:
         """Success rate as percentage."""
@@ -72,7 +67,7 @@ class BatchResult(BaseModel):
             return 0.0
         return 100 * self.success_count / self.total_count
 
-    @computed_field
+    @computed_field  # type: ignore[prop-decorator]
     @property
     def avg_time_per_molecule(self) -> float:
         """Average processing time per molecule in seconds."""
@@ -80,9 +75,9 @@ class BatchResult(BaseModel):
             return 0.0
         return self.total_time / self.total_count
 
-    @computed_field
+    @computed_field  # type: ignore[prop-decorator]
     @property
-    def hof_range(self) -> Optional[float]:
+    def hof_range(self) -> float | None:
         """Energy range (max - min) in kcal/mol."""
         if self.min_hof is None or self.max_hof is None:
             return None
@@ -94,7 +89,7 @@ class BatchResult(BaseModel):
         return v.isoformat()
 
     @field_serializer("timestamp_end", mode="plain")
-    def serialize_timestamp_end(self, v: Optional[datetime]) -> Optional[str]:
+    def serialize_timestamp_end(self, v: datetime | None) -> str | None:
         """Serialize optional timestamp_end to ISO format or None."""
         return v.isoformat() if v is not None else None
 
@@ -149,13 +144,13 @@ class Batch(BaseModel):
         description="How to handle failures in this batch",
     )
 
-    @computed_field
+    @computed_field  # type: ignore[prop-decorator]
     @property
     def size(self) -> int:
         """Number of molecules in batch."""
         return len(self.molecules)
 
-    @computed_field
+    @computed_field  # type: ignore[prop-decorator]
     @property
     def is_empty(self) -> bool:
         """Whether batch has no molecules."""
@@ -176,16 +171,16 @@ class BatchRowCSV(BaseModel):
     # === Molecular Descriptors (from input) ===
     nheavy: int = Field(..., description="Number of heavy atoms")
     nrotbonds: int = Field(default=0, description="Number of rotatable bonds")
-    tpsa: Optional[float] = Field(default=None, description="Topological PSA")
-    aromatic_rings: Optional[int] = Field(
+    tpsa: float | None = Field(default=None, description="Topological PSA")
+    aromatic_rings: int | None = Field(
         default=None, description="Number of aromatic rings"
     )
-    has_heteroatoms: Optional[bool] = Field(
+    has_heteroatoms: bool | None = Field(
         default=None, description="Whether has heteroatoms"
     )
 
     # === Reference Data (from input) ===
-    reference_hof: Optional[float] = Field(
+    reference_hof: float | None = Field(
         default=None, description="CBS-QB3 reference HOF (kcal/mol)"
     )
 
@@ -197,79 +192,79 @@ class BatchRowCSV(BaseModel):
     max_retries: int = Field(default=3, description="Max retries before Skip")
 
     # === Batch Assignment ===
-    batch_id: Optional[str] = Field(default=None, description="Current batch ID")
-    batch_order: Optional[int] = Field(
+    batch_id: str | None = Field(default=None, description="Current batch ID")
+    batch_order: int | None = Field(
         default=None, description="Position in batch (1-indexed)"
     )
-    batch_failure_policy: Optional[BatchFailurePolicy] = Field(
+    batch_failure_policy: BatchFailurePolicy | None = Field(
         default=None, description="Failure policy for current batch"
     )
 
     # === Timeout Configuration (per batch) ===
-    assigned_crest_timeout: Optional[float] = Field(
+    assigned_crest_timeout: float | None = Field(
         default=None, description="Assigned CREST timeout (minutes)"
     )
-    assigned_mopac_timeout: Optional[float] = Field(
+    assigned_mopac_timeout: float | None = Field(
         default=None, description="Assigned MOPAC timeout (minutes)"
     )
 
     # === CREST Execution Results ===
-    crest_status: Optional[str] = Field(default=None, description="CREST status")
-    crest_conformers_generated: Optional[int] = Field(
+    crest_status: str | None = Field(default=None, description="CREST status")
+    crest_conformers_generated: int | None = Field(
         default=None, description="Conformers from CREST"
     )
-    crest_time: Optional[float] = Field(
+    crest_time: float | None = Field(
         default=None, description="CREST execution time (s)"
     )
-    crest_error: Optional[str] = Field(default=None, description="CREST error message")
+    crest_error: str | None = Field(default=None, description="CREST error message")
 
     # === MOPAC Execution Results ===
-    num_conformers_selected: Optional[int] = Field(
+    num_conformers_selected: int | None = Field(
         default=None, description="Conformers sent to MOPAC"
     )
-    most_stable_hof: Optional[float] = Field(
+    most_stable_hof: float | None = Field(
         default=None, description="Best HOF (kcal/mol)"
     )
-    quality_grade: Optional[str] = Field(default=None, description="Quality grade")
+    quality_grade: str | None = Field(default=None, description="Quality grade")
 
     # === Delta-E (Energy Spread) ===
-    delta_e_12: Optional[float] = Field(
+    delta_e_12: float | None = Field(
         default=None, description="Energy diff conf1-conf2 (kcal/mol)"
     )
-    delta_e_13: Optional[float] = Field(
+    delta_e_13: float | None = Field(
         default=None, description="Energy diff conf1-conf3 (kcal/mol)"
     )
-    delta_e_15: Optional[float] = Field(
+    delta_e_15: float | None = Field(
         default=None, description="Energy diff conf1-conf5 (kcal/mol)"
     )
 
     # === Final Status ===
-    success: Optional[bool] = Field(default=None, description="Processing succeeded")
-    error_message: Optional[str] = Field(default=None, description="Error if failed")
-    total_execution_time: Optional[float] = Field(
+    success: bool | None = Field(default=None, description="Processing succeeded")
+    error_message: str | None = Field(default=None, description="Error if failed")
+    total_execution_time: float | None = Field(
         default=None, description="Total time (s)"
     )
 
     # === Actual Timeouts Used ===
-    actual_crest_timeout_used: Optional[float] = Field(
+    actual_crest_timeout_used: float | None = Field(
         default=None, description="Actual CREST timeout (min)"
     )
-    actual_mopac_timeout_used: Optional[float] = Field(
+    actual_mopac_timeout_used: float | None = Field(
         default=None, description="Actual MOPAC timeout (min)"
     )
 
     # === Timestamps ===
-    timestamp: Optional[datetime] = Field(
+    timestamp: datetime | None = Field(
         default=None, description="Last processing timestamp"
     )
 
     # === Error Tracking ===
-    last_error_message: Optional[str] = Field(
+    last_error_message: str | None = Field(
         default=None, description="Most recent error (kept for audit)"
     )
 
     @field_serializer("timestamp", mode="plain")
-    def serialize_timestamp(self, v: Optional[datetime]) -> Optional[str]:
+    def serialize_timestamp(self, v: datetime | None) -> str | None:
         """Serialize datetime to ISO format."""
         return v.isoformat() if v is not None else None
 
@@ -285,16 +280,16 @@ class ConformerDetail(BaseModel):
     """
 
     conformer_index: int = Field(..., description="Conformer index (0-based)")
-    energy_hof: Optional[float] = Field(
+    energy_hof: float | None = Field(
         default=None, description="Heat of formation (kcal/mol)"
     )
-    energy_total: Optional[float] = Field(default=None, description="Total energy (eV)")
+    energy_total: float | None = Field(default=None, description="Total energy (eV)")
     mopac_status: str = Field(default="NOT_ATTEMPTED", description="MOPAC status")
-    mopac_time: Optional[float] = Field(
+    mopac_time: float | None = Field(
         default=None, description="MOPAC execution time (s)"
     )
-    mopac_error: Optional[str] = Field(default=None, description="MOPAC error message")
-    geometry_file: Optional[str] = Field(
+    mopac_error: str | None = Field(default=None, description="MOPAC error message")
+    geometry_file: str | None = Field(
         default=None, description="Path to optimized geometry"
     )
 
@@ -321,8 +316,8 @@ class MoleculeDetail(BaseModel):
     crest_conformers_generated: int = Field(
         default=0, description="Total conformers from CREST"
     )
-    crest_time: Optional[float] = Field(default=None, description="CREST time (s)")
-    crest_error: Optional[str] = Field(default=None, description="CREST error")
+    crest_time: float | None = Field(default=None, description="CREST time (s)")
+    crest_error: str | None = Field(default=None, description="CREST error")
 
     # Conformer details
     conformers: list[ConformerDetail] = Field(
@@ -336,7 +331,7 @@ class MoleculeDetail(BaseModel):
     num_conformers_successful: int = Field(
         default=0, description="Conformers with valid HOF"
     )
-    most_stable_hof: Optional[float] = Field(
+    most_stable_hof: float | None = Field(
         default=None, description="Best HOF (kcal/mol)"
     )
 
@@ -346,8 +341,8 @@ class MoleculeDetail(BaseModel):
 
     # Final
     success: bool = Field(default=False, description="Processing succeeded")
-    error_message: Optional[str] = Field(default=None, description="Error if failed")
-    total_execution_time: Optional[float] = Field(
+    error_message: str | None = Field(default=None, description="Error if failed")
+    total_execution_time: float | None = Field(
         default=None, description="Total time (s)"
     )
 

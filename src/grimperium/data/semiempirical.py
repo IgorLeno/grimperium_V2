@@ -24,7 +24,6 @@ Note:
 """
 
 from pathlib import Path
-from typing import Optional, Union
 
 import pandas as pd
 
@@ -61,9 +60,9 @@ class SemiempiricalHandler:
     def __init__(
         self,
         method: str = "PM7",
-        mopac_path: Optional[Union[str, Path]] = None,
-        work_dir: Optional[Union[str, Path]] = None,
-        cache_dir: Optional[Union[str, Path]] = None,
+        mopac_path: str | Path | None = None,
+        work_dir: str | Path | None = None,
+        cache_dir: str | Path | None = None,
         use_crest: bool = True,
     ) -> None:
         """
@@ -154,7 +153,7 @@ class SemiempiricalHandler:
 
     def load_cached(
         self,
-        path: Union[str, Path],
+        path: str | Path,
     ) -> pd.DataFrame:
         """
         Load precomputed PM7 results from cache.

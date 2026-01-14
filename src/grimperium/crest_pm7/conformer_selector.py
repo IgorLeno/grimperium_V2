@@ -4,7 +4,6 @@ Determines optimal number of conformers based on molecular flexibility.
 """
 
 import logging
-from typing import Optional
 
 from .config import PM7Config
 
@@ -32,7 +31,7 @@ def classify_flexibility(nrotbonds: int, config: PM7Config) -> str:
 def get_num_conformers(
     nrotbonds: int,
     config: PM7Config,
-    max_available: Optional[int] = None,
+    max_available: int | None = None,
 ) -> tuple[int, str]:
     """Determine optimal number of conformers to process.
 
@@ -80,7 +79,7 @@ def get_num_conformers(
 
 def calculate_delta_e(
     energies: list[float],
-) -> dict[str, Optional[float]]:
+) -> dict[str, float | None]:
     """Calculate energy differences between conformers.
 
     Computes delta_e values relative to the lowest energy conformer.
@@ -98,7 +97,7 @@ def calculate_delta_e(
     sorted_e = sorted(energies)
     n = len(sorted_e)
 
-    result: dict[str, Optional[float]] = {
+    result: dict[str, float | None] = {
         "delta_e_12": None,
         "delta_e_13": None,
         "delta_e_15": None,

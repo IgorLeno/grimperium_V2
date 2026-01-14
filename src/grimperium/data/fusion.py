@@ -20,7 +20,7 @@ Example:
 """
 
 import warnings
-from typing import Literal, Optional, Union
+from typing import Literal
 
 import numpy as np
 import pandas as pd
@@ -72,7 +72,7 @@ class DataFusion:
         self.target_column = target_column
         self.semiempirical_column = semiempirical_column
         self.delta_column = delta_column
-        self.merged_data: Optional[pd.DataFrame] = None
+        self.merged_data: pd.DataFrame | None = None
 
     def merge(
         self,
@@ -114,7 +114,7 @@ class DataFusion:
 
     def compute_deltas(
         self,
-        df: Optional[pd.DataFrame] = None,
+        df: pd.DataFrame | None = None,
     ) -> pd.DataFrame:
         """
         Compute delta values: delta = CBS - semiempirical.
@@ -155,7 +155,7 @@ class DataFusion:
         self,
         df: pd.DataFrame,
         task: TaskName = "enthalpy",
-    ) -> tuple[pd.DataFrame, Union[pd.Series, pd.DataFrame]]:
+    ) -> tuple[pd.DataFrame, pd.Series | pd.DataFrame]:
         """
         Create a task-specific view of the data.
 
@@ -202,7 +202,7 @@ class DataFusion:
 
     def get_training_data(
         self,
-        df: Optional[pd.DataFrame] = None,
+        df: pd.DataFrame | None = None,
     ) -> tuple[pd.DataFrame, np.ndarray]:
         """
         Get feature DataFrame and delta targets for training.
@@ -237,7 +237,7 @@ class DataFusion:
 
     def analyze_deltas(
         self,
-        df: Optional[pd.DataFrame] = None,
+        df: pd.DataFrame | None = None,
     ) -> dict[str, float]:
         """
         Compute statistics on delta distribution.
@@ -276,7 +276,7 @@ class DataFusion:
     def _validate_merge(
         self,
         merged: pd.DataFrame,
-        expected_rows: Optional[int],
+        expected_rows: int | None,
     ) -> None:
         """
         Validate merge result.
@@ -303,7 +303,7 @@ class DataFusion:
     def _default_feature_columns(
         self,
         df: pd.DataFrame,
-        exclude: Optional[list[str]] = None,
+        exclude: list[str] | None = None,
     ) -> list[str]:
         """
         Get default feature columns from DataFrame.

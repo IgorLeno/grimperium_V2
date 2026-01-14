@@ -18,7 +18,6 @@ Example:
 import logging
 from pathlib import Path
 from types import TracebackType
-from typing import Optional, Union
 
 # Default format
 DEFAULT_FORMAT = "%(asctime)s | %(levelname)-8s | %(name)s | %(message)s"
@@ -26,8 +25,8 @@ DEFAULT_DATE_FORMAT = "%Y-%m-%d %H:%M:%S"
 
 
 def setup_logging(
-    level: Union[str, int] = "INFO",
-    log_file: Optional[Union[str, Path]] = None,
+    level: str | int = "INFO",
+    log_file: str | Path | None = None,
     format_string: str = DEFAULT_FORMAT,
     date_format: str = DEFAULT_DATE_FORMAT,
 ) -> None:
@@ -80,7 +79,7 @@ class ProgressLogger:
     def __init__(
         self,
         description: str,
-        total: Optional[int] = None,
+        total: int | None = None,
         unit: str = "it",
         disable: bool = False,
     ) -> None:
@@ -106,9 +105,9 @@ class ProgressLogger:
 
     def __exit__(
         self,
-        exc_type: Optional[type[BaseException]],
-        exc_val: Optional[BaseException],
-        exc_tb: Optional[TracebackType],
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
     ) -> None:
         """Exit context."""
         raise NotImplementedError("Will be implemented in Batch 5")
@@ -125,7 +124,7 @@ class ProgressLogger:
 def log_metrics(
     metrics: dict[str, float],
     prefix: str = "",
-    logger: Optional[logging.Logger] = None,
+    logger: logging.Logger | None = None,
 ) -> None:
     """
     Log a dictionary of metrics in a formatted way.

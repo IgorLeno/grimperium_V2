@@ -1,5 +1,3 @@
-from typing import Optional
-
 import numpy as np
 
 from grimperium.config import GrimperiumConfig
@@ -27,10 +25,10 @@ class DeltaLearner:
         self,
         w_krr: float = 0.5,
         w_xgb: float = 0.5,
-        krr_params: Optional[dict] = None,
-        xgb_params: Optional[dict] = None,
+        krr_params: dict | None = None,
+        xgb_params: dict | None = None,
         *,
-        config: Optional[GrimperiumConfig] = None,
+        config: GrimperiumConfig | None = None,
     ):
         """
         Initialize DeltaLearner with ensemble.
@@ -51,7 +49,7 @@ class DeltaLearner:
         )
 
         # Estado interno esperado pelos testes/unit (mantido por compatibilidade).
-        self._data: Optional[object] = None
+        self._data: object | None = None
         self._is_trained: bool = False
         self._n_samples: int = 0
 

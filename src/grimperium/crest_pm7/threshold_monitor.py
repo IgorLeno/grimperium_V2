@@ -6,9 +6,9 @@ and generating alerts.
 
 import logging
 from collections import deque
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Callable, Optional
 
 from .config import AlertLevel, PM7Config, QualityGrade
 
@@ -67,7 +67,7 @@ class MonitoringMetrics:
     consecutive_failures: int = 0
 
     @property
-    def success_rate(self) -> Optional[float]:
+    def success_rate(self) -> float | None:
         """Overall success rate.
 
         Returns:
@@ -78,7 +78,7 @@ class MonitoringMetrics:
         return self.success_count / self.total_processed
 
     @property
-    def hof_extraction_rate(self) -> Optional[float]:
+    def hof_extraction_rate(self) -> float | None:
         """HOF extraction success rate.
 
         Returns:
@@ -90,7 +90,7 @@ class MonitoringMetrics:
         return self.hof_extraction_success / total
 
     @property
-    def grade_ab_rate(self) -> Optional[float]:
+    def grade_ab_rate(self) -> float | None:
         """Grade A+B rate.
 
         Returns:
@@ -143,11 +143,15 @@ class ThresholdMonitor:
         """Emit an alert to all registered callbacks."""
         self.alerts.append(alert)
         LOG.log(
-            logging.CRITICAL
-            if alert.level == AlertLevel.CRITICAL
-            else logging.WARNING
-            if alert.level == AlertLevel.WARNING
-            else logging.INFO,
+            (
+                logging.CRITICAL
+                if alert.level == AlertLevel.CRITICAL
+                else (
+                    logging.WARNING
+                    if alert.level == AlertLevel.WARNING
+                    else logging.INFO
+                )
+            ),
             f"[{alert.level.value}] {alert.pattern}: {alert.message}",
         )
         for callback in self._alert_callbacks:
@@ -461,7 +465,4 @@ class ThresholdMonitor:
 
         # Also check if there are recent critical alerts
         recent_alerts = self.alerts[-10:] if len(self.alerts) > 10 else self.alerts
-        if any(a.level == AlertLevel.CRITICAL for a in recent_alerts):
-            return True
-
-        return False
+        return bool(any(a.level == AlertLevel.CRITICAL for a in recent_alerts))

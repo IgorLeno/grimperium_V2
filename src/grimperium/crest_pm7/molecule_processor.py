@@ -8,7 +8,7 @@ import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 from rdkit import Chem
 from rdkit.Chem import AllChem, Descriptors, rdMolDescriptors
@@ -55,20 +55,20 @@ class ConformerData:
 
     # CREST
     crest_status: CRESTStatus = CRESTStatus.NOT_ATTEMPTED
-    crest_geometry_file: Optional[Path] = None
-    crest_error_message: Optional[str] = None
+    crest_geometry_file: Path | None = None
+    crest_error_message: str | None = None
 
     # MOPAC
     mopac_status: MOPACStatus = MOPACStatus.NOT_ATTEMPTED
-    mopac_output_file: Optional[Path] = None
+    mopac_output_file: Path | None = None
     mopac_execution_time: float = 0.0
-    mopac_timeout_used: Optional[float] = None
-    mopac_error_message: Optional[str] = None
+    mopac_timeout_used: float | None = None
+    mopac_error_message: str | None = None
 
     # Energy
-    energy_hof: Optional[float] = None
+    energy_hof: float | None = None
     hof_confidence: HOFConfidence = HOFConfidence.LOW
-    hof_extraction_method: Optional[str] = None
+    hof_extraction_method: str | None = None
     hof_extraction_successful: bool = False
 
     @property
@@ -86,14 +86,14 @@ class ConformerData:
             "index": self.index,
             "mol_id": self.mol_id,
             "crest_status": self.crest_status.value,
-            "crest_geometry_file": str(self.crest_geometry_file)
-            if self.crest_geometry_file
-            else None,
+            "crest_geometry_file": (
+                str(self.crest_geometry_file) if self.crest_geometry_file else None
+            ),
             "crest_error_message": self.crest_error_message,
             "mopac_status": self.mopac_status.value,
-            "mopac_output_file": str(self.mopac_output_file)
-            if self.mopac_output_file
-            else None,
+            "mopac_output_file": (
+                str(self.mopac_output_file) if self.mopac_output_file else None
+            ),
             "mopac_execution_time": self.mopac_execution_time,
             "mopac_timeout_used": self.mopac_timeout_used,
             "mopac_error_message": self.mopac_error_message,
@@ -146,31 +146,31 @@ class PM7Result:
     phase: str = "A"
 
     # Metadata
-    nheavy: Optional[int] = None
-    nrotbonds: Optional[int] = None
-    tpsa: Optional[float] = None
-    aromatic_rings: Optional[int] = None
-    has_heteroatoms: Optional[bool] = None
+    nheavy: int | None = None
+    nrotbonds: int | None = None
+    tpsa: float | None = None
+    aromatic_rings: int | None = None
+    has_heteroatoms: bool | None = None
 
     # CREST
     crest_status: CRESTStatus = CRESTStatus.NOT_ATTEMPTED
     crest_conformers_generated: int = 0
-    crest_time: Optional[float] = None
-    crest_error: Optional[str] = None
+    crest_time: float | None = None
+    crest_error: str | None = None
 
     # MOPAC
     conformers: list[ConformerData] = field(default_factory=list)
-    num_conformers_selected: Optional[int] = None
-    total_execution_time: Optional[float] = None
+    num_conformers_selected: int | None = None
+    total_execution_time: float | None = None
 
     # Energy differences
-    delta_e_12: Optional[float] = None
-    delta_e_13: Optional[float] = None
-    delta_e_15: Optional[float] = None
+    delta_e_12: float | None = None
+    delta_e_13: float | None = None
+    delta_e_15: float | None = None
 
     # Timeout
-    timeout_predicted: Optional[float] = None
-    timeout_confidence: Optional[TimeoutConfidence] = None
+    timeout_predicted: float | None = None
+    timeout_confidence: TimeoutConfidence | None = None
 
     # Decisions (audit)
     decisions: list[str] = field(default_factory=list)
@@ -181,10 +181,10 @@ class PM7Result:
 
     # Final
     success: bool = False
-    error_message: Optional[str] = None
+    error_message: str | None = None
 
     @property
-    def most_stable_hof(self) -> Optional[float]:
+    def most_stable_hof(self) -> float | None:
         """Get HOF of most stable conformer."""
         successful = [c for c in self.conformers if c.is_successful]
         if not successful:
@@ -221,9 +221,9 @@ class PM7Result:
             "delta_e_13": self.delta_e_13,
             "delta_e_15": self.delta_e_15,
             "timeout_predicted": self.timeout_predicted,
-            "timeout_confidence": self.timeout_confidence.value
-            if self.timeout_confidence
-            else None,
+            "timeout_confidence": (
+                self.timeout_confidence.value if self.timeout_confidence else None
+            ),
             "decisions": self.decisions,
             "quality_grade": self.quality_grade.value,
             "issues": self.issues,
@@ -347,7 +347,7 @@ class MoleculeProcessor:
     def __init__(
         self,
         config: PM7Config,
-        timeout_predictor: Optional[TimeoutPredictor] = None,
+        timeout_predictor: TimeoutPredictor | None = None,
     ) -> None:
         """Initialize processor.
 
@@ -388,7 +388,7 @@ class MoleculeProcessor:
         self,
         mol_id: str,
         smiles: str,
-        input_xyz: Optional[Path] = None,
+        input_xyz: Path | None = None,
     ) -> PM7Result:
         """Process a single molecule.
 
@@ -557,7 +557,7 @@ class MoleculeProcessor:
         self,
         mol_id: str,
         smiles: str,
-    ) -> Optional[Path]:
+    ) -> Path | None:
         """Generate initial XYZ coordinates from SMILES.
 
         Args:

@@ -4,7 +4,7 @@ Calc view for GRIMPERIUM CLI.
 Handles molecular property predictions.
 """
 
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 from rich.panel import Panel
 from rich.table import Table
@@ -29,7 +29,7 @@ class CalcView(BaseView):
     def __init__(self, controller: "CliController") -> None:
         """Initialize the calc view."""
         super().__init__(controller)
-        self.last_result: Optional[PredictionResult] = None
+        self.last_result: PredictionResult | None = None
         self.history: list[PredictionResult] = []
 
     def render(self) -> None:
@@ -219,7 +219,7 @@ using the Delta-Learning model.
 
         return options
 
-    def handle_action(self, action: str) -> Optional[str]:
+    def handle_action(self, action: str) -> str | None:
         """Handle menu actions."""
         if action == "back":
             return "main"
@@ -242,7 +242,7 @@ using the Delta-Learning model.
 
         return None
 
-    def run(self) -> Optional[str]:
+    def run(self) -> str | None:
         """Run the calc view interaction loop."""
         while True:
             self.render()

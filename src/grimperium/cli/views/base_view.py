@@ -5,7 +5,7 @@ All view modules inherit from this abstract base class.
 """
 
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING, ClassVar, Optional
+from typing import TYPE_CHECKING, ClassVar
 
 from rich.console import Console
 from rich.panel import Panel
@@ -63,7 +63,7 @@ class BaseView(ABC):
         pass
 
     @abstractmethod
-    def handle_action(self, action: str) -> Optional[str]:
+    def handle_action(self, action: str) -> str | None:
         """
         Handle a selected menu action.
 
@@ -74,6 +74,29 @@ class BaseView(ABC):
             Next view name to navigate to, or None to stay in current view
         """
         pass
+
+    def run(self) -> str | None:
+        """
+        Run the view: render content, show menu, handle action.
+
+        Returns:
+            Next view name to navigate to, or None to exit
+        """
+        from grimperium.cli.menu import show_menu
+
+        self.clear_screen()
+        self.show_header()
+        self.render()
+
+        options = self.get_menu_options()
+        if not options:
+            return None
+
+        choice = show_menu(options)
+        if choice is None:
+            return None
+
+        return self.handle_action(choice)
 
     def show_header(self) -> None:
         """Display the view header with title and icon."""

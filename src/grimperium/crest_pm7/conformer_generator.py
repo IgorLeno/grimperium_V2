@@ -9,7 +9,6 @@ import subprocess
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Optional
 
 from .config import CRESTStatus, PM7Config
 
@@ -35,8 +34,8 @@ class CRESTResult:
     conformer_files: list[Path] = field(default_factory=list)
     sdf_files: list[Path] = field(default_factory=list)
     execution_time: float = 0.0
-    error_message: Optional[str] = None
-    work_dir: Optional[Path] = None
+    error_message: str | None = None
+    work_dir: Path | None = None
 
 
 def _parse_xyz_file(xyz_path: Path) -> tuple[list[tuple[float, float, float]], int]:
@@ -213,7 +212,7 @@ def _convert_xyz_to_sdf_rdkit(
 def convert_xyz_to_sdf(
     xyz_file: Path,
     sdf_file: Path,
-    smiles: Optional[str] = None,
+    smiles: str | None = None,
 ) -> bool:
     """Convert XYZ to SDF with Open Babel + RDKit fallback.
 
@@ -301,7 +300,7 @@ def run_crest(
     mol_id: str,
     input_xyz: Path,
     config: PM7Config,
-    smiles: Optional[str] = None,
+    smiles: str | None = None,
 ) -> CRESTResult:
     """Run CREST conformer generation.
 

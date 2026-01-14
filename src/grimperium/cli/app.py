@@ -5,7 +5,6 @@ This module provides the main entry point and application loop.
 """
 
 import sys
-from typing import Optional
 
 from rich.panel import Panel
 
@@ -68,7 +67,7 @@ class GrimperiumCLI:
         )
         self.console.print()
 
-    def display_main_menu(self) -> Optional[str]:
+    def display_main_menu(self) -> str | None:
         """
         Display and handle the main menu.
 
@@ -89,7 +88,7 @@ class GrimperiumCLI:
             status=self.controller.status,
         )
 
-    def run_view(self, view_name: str) -> Optional[str]:
+    def run_view(self, view_name: str) -> str | None:
         """
         Run a specific view.
 

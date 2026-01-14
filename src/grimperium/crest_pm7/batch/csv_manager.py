@@ -14,7 +14,7 @@ import math
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 import pandas as pd
 
@@ -69,7 +69,7 @@ class BatchCSVManager:
             csv_path: Path to CSV tracking file
         """
         self.csv_path = Path(csv_path)
-        self.df: Optional[pd.DataFrame] = None
+        self.df: pd.DataFrame | None = None
         # FUTURE PARALLELIZATION: Add threading.Lock() here
         # self._lock = threading.Lock()
 
@@ -385,6 +385,7 @@ class BatchCSVManager:
             MoleculeStatus value (string)
         """
         self._ensure_loaded()
+        assert self.df is not None  # Guaranteed by _ensure_loaded()
         idx = self._get_row_index(mol_id)
         return str(self.df.at[idx, "status"])
 
@@ -448,7 +449,7 @@ class BatchCSVManager:
         self,
         mol_id: str,
         error_message: str,
-        result_update: Optional[dict[str, Any]] = None,
+        result_update: dict[str, Any] | None = None,
     ) -> None:
         """Mark molecule for retry.
 

@@ -6,7 +6,7 @@ Manages navigation state and view transitions.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 from rich.console import Console
 
@@ -48,7 +48,7 @@ class CliController:
         """
         self._views[name] = view
 
-    def get_view(self, name: str) -> Optional[BaseView]:
+    def get_view(self, name: str) -> BaseView | None:
         """
         Get a registered view by name.
 
