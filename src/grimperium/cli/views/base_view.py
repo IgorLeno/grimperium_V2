@@ -80,23 +80,26 @@ class BaseView(ABC):
         Run the view: render content, show menu, handle action.
 
         Returns:
-            Next view name to navigate to, or None to exit
+            Next view name to navigate to, or None if no options/user cancelled
         """
         from grimperium.cli.menu import show_menu
 
-        self.clear_screen()
-        self.show_header()
-        self.render()
+        while True:
+            self.clear_screen()
+            self.show_header()
+            self.render()
 
-        options = self.get_menu_options()
-        if not options:
-            return None
+            options = self.get_menu_options()
+            if not options:
+                return None
 
-        choice = show_menu(options)
-        if choice is None:
-            return None
+            choice = show_menu(options)
+            if choice is None:
+                return None
 
-        return self.handle_action(choice)
+            result = self.handle_action(choice)
+            if result is not None:
+                return result
 
     def show_header(self) -> None:
         """Display the view header with title and icon."""

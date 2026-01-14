@@ -143,15 +143,18 @@ class ThresholdMonitor:
         """Emit an alert to all registered callbacks."""
         self.alerts.append(alert)
         LOG.log(
-            (
-                logging.CRITICAL
-                if alert.level == AlertLevel.CRITICAL
-                else (
-                    logging.WARNING
-                    if alert.level == AlertLevel.WARNING
-                    else logging.INFO
-                )
-            ),
+_ALERT_LOG_LEVELS = {
+    AlertLevel.CRITICAL: logging.CRITICAL,
+    AlertLevel.WARNING: logging.WARNING,
+}
+
+def _emit_alert(self, alert: Alert) -> None:
+    """Emit an alert to all registered callbacks."""
+    self.alerts.append(alert)
+    LOG.log(
+        _ALERT_LOG_LEVELS.get(alert.level, logging.INFO),
+        f"[{alert.level.value}] {alert.pattern}: {alert.message}",
+    )
             f"[{alert.level.value}] {alert.pattern}: {alert.message}",
         )
         for callback in self._alert_callbacks:
@@ -465,4 +468,4 @@ class ThresholdMonitor:
 
         # Also check if there are recent critical alerts
         recent_alerts = self.alerts[-10:] if len(self.alerts) > 10 else self.alerts
-        return bool(any(a.level == AlertLevel.CRITICAL for a in recent_alerts))
+        return any(a.level == AlertLevel.CRITICAL for a in recent_alerts)

@@ -153,7 +153,8 @@ class TestThresholdMonitor:
 
         monitor.register_callback(callback)
 
-        # Force an alert by recording many consecutive failures
+        # Force an alert by recording consecutive failures
+        # (default consecutive_failure_threshold is typically 5)
         for _ in range(6):
             monitor.record_result(
                 success=False,
@@ -161,8 +162,8 @@ class TestThresholdMonitor:
                 grade=QualityGrade.C,
             )
 
-        # Should have received at least one alert
-        assert len(alerts_received) > 0
+        # Should have received at least one alert after exceeding failure threshold
+        assert len(alerts_received) >= 1
 
     def test_get_summary(self, monitor: ThresholdMonitor) -> None:
         """Test getting summary."""

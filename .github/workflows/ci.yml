@@ -166,8 +166,7 @@ jobs:
         continue-on-error: true
         run: |
           echo "Installing rdkit for enhanced test coverage..."
-          pip install rdkit || echo "rdkit installation failed, CREST PM7 tests will be skipped"
-
+          poetry run pip install rdkit || echo "rdkit installation failed, CREST PM7 tests will be skipped"
       - name: Run tests (capture logs)
         run: |
           set +e
@@ -176,9 +175,11 @@ jobs:
           set -e
 
       - name: Fail job if tests failed
+      - name: Fail job if tests failed
         if: always()
         run: |
-          pytest_ec="$(cat "${{ github.workspace }}/pytest.exitcode" 2>/dev/null || echo 0)"
+          set -euo pipefail
+          pytest_ec="$(cat "${{ github.workspace }}/pytest.exitcode" 2>/dev/null || echo 1)"
           if [ "${pytest_ec}" -ne 0 ]; then
             echo "❌ Tests failed (pytest exit code=${pytest_ec}). See test-log artifact."
             # Show last 50 lines of log for quick debugging
@@ -186,7 +187,6 @@ jobs:
             exit 1
           fi
           echo "✅ Tests passed."
-
       - name: Upload test log
         if: always()
         uses: actions/upload-artifact@v4
