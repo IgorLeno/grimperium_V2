@@ -8,7 +8,7 @@ from enum import Enum
 
 
 class MoleculeStatus(str, Enum):
-    """Status of a molecule in batch processing.
+    """Molecule processing status in batch pipeline.
 
     State transitions:
         PENDING -> SELECTED (via select_batch)
@@ -25,9 +25,19 @@ class MoleculeStatus(str, Enum):
         - PENDING: "Pending" (Title Case)
         - SELECTED: "Selected" (Title Case)
         - RUNNING: "Running" (Title Case)
-        - OK: "OK" (UPPERCASE - for backward compatibility)
+        - OK: "OK" (UPPERCASE - backward compatible with old CSV format)
         - RERUN: "Rerun" (Title Case)
         - SKIP: "Skip" (Title Case)
+
+    BREAKING CHANGE (Round 2):
+    The OK enum value was changed from "Ok" to "OK" for consistency
+    and backward compatibility with older CSV formats.
+
+    If you have existing CSVs with "Ok" status (title case), they will
+    NOT match the new enum value "OK" (uppercase). You must normalize:
+
+        df['status'] = df['status'].replace({'Ok': 'OK'})
+        df.to_csv(csv_path, index=False)
     """
 
     PENDING = "Pending"
@@ -40,7 +50,7 @@ class MoleculeStatus(str, Enum):
     """Molecule currently being processed."""
 
     OK = "OK"
-    """Processing completed successfully."""
+    """Processing completed successfully. Value: "OK" (uppercase)."""
 
     RERUN = "Rerun"
     """Processing failed, awaiting retry in next batch."""

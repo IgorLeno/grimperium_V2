@@ -41,17 +41,17 @@ class FixedTimeoutPredictor:
     crest_timeout_seconds: float
     mopac_timeout_seconds: float
     max_observations: int = DEFAULT_MAX_OBSERVATIONS
-    observations: deque = field(
-        default_factory=lambda: deque(maxlen=DEFAULT_MAX_OBSERVATIONS)
-    )
+    # Use unbounded deque as placeholder, __post_init__ creates real one
+    observations: deque = field(default_factory=deque)
 
     def __post_init__(self) -> None:
-        """Initialize deque with proper maxlen."""
-        if not isinstance(self.observations, deque):
-            self.observations = deque(self.observations, maxlen=self.max_observations)
-        elif self.observations.maxlen != self.max_observations:
-            # Rebuild deque with correct maxlen
-            self.observations = deque(self.observations, maxlen=self.max_observations)
+        """Initialize observations deque with correct maxlen.
+
+        This is called after dataclass __init__, so max_observations
+        is already set to the provided value (or default).
+        """
+        self.observations = deque(maxlen=self.max_observations)
+        LOG.debug(f"Initialized observations deque with maxlen={self.max_observations}")
 
     # Properties for TimeoutPredictor interface compatibility
     @property

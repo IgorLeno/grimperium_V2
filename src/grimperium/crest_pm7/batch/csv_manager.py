@@ -135,18 +135,24 @@ class BatchCSVManager:
     def _safe_int(self, val: Any, default: int = 0) -> int:
         """Safely convert value to int, handling NaN and invalid types.
 
+        WARNING: Truncates decimal values (e.g., 3.9 → 3).
+        Use with caution on CSV fields that may contain floats.
+        A LOG.warning is emitted when truncation occurs.
+
         Args:
             val: Value to convert (Any type)
             default: Default to return if conversion fails
 
         Returns:
-            int: Converted value, or default
+            int: Converted value (truncated if float), or default
 
-        Logic:
-            1. If NaN/None, return default
-            2. Try direct int(val)
-            3. If that fails, try int(float(val)) to handle "3.0"
-            4. If all fail, log warning and return default
+        Behavior:
+            1. If NaN/None → return default
+            2. Try int(val) → return if succeeds
+            3. Try int(float(val)) → check for fractional part:
+               - If has fraction (e.g., 3.9) → LOG.warning + return truncated int
+               - If no fraction (e.g., 3.0) → return int silently
+            4. If all fail → LOG.warning + return default
         """
         if pd.isna(val):
             return default
@@ -159,10 +165,26 @@ class BatchCSVManager:
             try:
                 if isinstance(val, str):
                     val = val.strip()  # Remove whitespace
-                return int(float(val))
+
+                float_val = float(val)
+                int_val = int(float_val)
+
+                # Warn if truncating non-integer float
+                if float_val != int_val:
+                    LOG.warning(
+                        f"Truncating float {float_val} to int {int_val}. "
+                        f"Original value: {val}. This may cause data loss. "
+                        f"Consider validating or rounding before CSV import."
+                    )
+
+                return int_val
+
             except (ValueError, TypeError):
                 # Last resort: log and return default
-                LOG.warning(f"Cannot convert '{val}' to int, using default {default}")
+                LOG.warning(
+                    f"Cannot convert '{val}' to int, using default {default}. "
+                    f"Type: {type(val).__name__}"
+                )
                 return default
 
     def _get_row_index(self, mol_id: str) -> int:

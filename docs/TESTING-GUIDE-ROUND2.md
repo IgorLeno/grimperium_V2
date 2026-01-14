@@ -29,7 +29,20 @@ python scripts/init_batch_csv.py \
   --limit 10
 
 # 2. Verificar CSV criado
-wc -l data/batch_test_10.csv  # Deve mostrar 11 linhas (header + 10)
+
+# Option 1: grep (reliable — counts non-empty lines)
+grep -c . data/batch_test_10.csv
+# Output: 11 (header + 10 molecules)
+
+# Option 2: wc -l (counts newlines — may be off-by-1 without trailing newline)
+wc -l data/batch_test_10.csv
+# Output: 10 or 11 (depending on trailing newline in file)
+
+# Option 3: Python (most reliable)
+python -c "import pandas as pd; df = pd.read_csv('data/batch_test_10.csv'); print(f'Header + molecules: {len(df) + 1}')"
+# Output: Header + molecules: 11
+
+# Recommended: Use Option 1 (grep) or Option 3 (Python) for accuracy
 head -n 2 data/batch_test_10.csv  # Ver header e primeira linha
 ```
 
@@ -85,8 +98,22 @@ python scripts/init_batch_csv.py \
 
 ### Monitoramento
 ```bash
-# Durante execução, monitorar file descriptors
-watch -n 1 'lsof -p $(pgrep -f python) | wc -l'
+# Durante execução, monitorar file descriptors (process-specific)
+
+# Option 1: Monitor specific grimperium process
+watch -n 1 'lsof -p $(pgrep -f "grimperium.cli" | head -1) 2>/dev/null | wc -l'
+
+# Option 2: More specific pattern
+watch -n 1 'lsof -p $(pgrep -f "batch-run" | head -1) 2>/dev/null | wc -l'
+
+# Option 3: If multiple processes, sum all
+watch -n 1 'for pid in $(pgrep -f "grimperium.cli"); do lsof -p $pid 2>/dev/null; done | wc -l'
+
+# Option 4: Get PID first, then monitor
+# In one terminal:
+ps aux | grep grimperium.cli | grep -v grep  # Get PID
+# In another terminal:
+watch -n 1 'lsof -p <PID> 2>/dev/null | wc -l'  # Replace <PID>
 
 # Verificar se JSON detail files existem
 ls -l data/conformer_details/*.json | wc -l
@@ -116,11 +143,51 @@ python scripts/init_batch_csv.py \
   --output data/batch_test_100.csv \
   --limit 100
 
-# 2. Monitorar recursos
+# 2. Monitorar recursos (platform-aware)
+
+# Linux (GNU time with verbose output)
 /usr/bin/time -v python -m grimperium.cli batch-run \
   --csv data/batch_test_100.csv \
   --batch-size 20 \
   > performance_100.log 2>&1
+
+# macOS/BSD (Option 1: Use built-in time, less verbose)
+time python -m grimperium.cli batch-run \
+  --csv data/batch_test_100.csv \
+  --batch-size 20 \
+  > performance_100.log 2>&1
+
+# macOS/BSD (Option 2: Install GNU time first)
+# brew install gnu-time
+gtime -v python -m grimperium.cli batch-run \
+  --csv data/batch_test_100.csv \
+  --batch-size 20 \
+  > performance_100.log 2>&1
+
+# Universal Python approach (works everywhere)
+python << 'EOF'
+import time, subprocess, sys
+
+start = time.time()
+proc = subprocess.run([
+    sys.executable, '-m', 'grimperium.cli', 'batch-run',
+    '--csv', 'data/batch_test_100.csv',
+    '--batch-size', '20',
+], capture_output=True, text=True)
+elapsed = time.time() - start
+
+# Save output
+with open('performance_100.log', 'w') as f:
+    f.write(proc.stdout)
+    f.write(proc.stderr)
+
+print(f'\n{"="*50}')
+print(f'Execution time: {elapsed:.2f}s')
+print(f'Exit code: {proc.returncode}')
+print(f'{"="*50}')
+
+sys.exit(proc.returncode)
+EOF
 
 # 3. Extrair métricas
 grep "Maximum resident set size" performance_100.log
@@ -134,22 +201,102 @@ grep "File descriptors" performance_100.log
 - ✅ Observations bounded: max 100 - FIX 6
 - ✅ Nenhum crash em CSV corrompido - FIX 3
 
-### Métricas para Coletar
+### Métricas para Coletar (com validação segura)
+
 ```python
-# Após batch processing
 import pandas as pd
-df = pd.read_csv('data/batch_test_100.csv')
+import logging
 
-# Success rate
-success_rate = (df['status'] == 'OK').sum() / len(df) * 100
-print(f"Success rate: {success_rate:.1f}%")
+LOG = logging.getLogger(__name__)
 
-# Average time per molecule
-avg_time = df['total_execution_time'].mean()
-print(f"Average time: {avg_time:.1f}s")
+def load_and_analyze_batch(csv_path: str) -> dict:
+    """Load batch CSV and compute statistics safely.
+    
+    Handles missing columns, invalid types, empty files gracefully.
+    
+    Args:
+        csv_path: Path to batch CSV
+        
+    Returns:
+        dict with keys: total, ok, rerun, skip, avg_time, success_rate, etc.
+        Returns empty dict on error.
+    """
+    try:
+        df = pd.read_csv(csv_path)
+    except Exception as e:
+        LOG.error(f"Failed to load CSV {csv_path}: {e}")
+        return {}
+    
+    # Validate not empty
+    if df.empty:
+        LOG.warning(f"CSV {csv_path} is empty")
+        return {}
+    
+    # Validate required columns
+    required_cols = ['status', 'total_execution_time']
+    missing_cols = set(required_cols) - set(df.columns)
+    if missing_cols:
+        LOG.error(f"Missing required columns: {missing_cols}")
+        return {}
+    
+    try:
+        # Coerce total_execution_time to numeric (handles NaN, invalid)
+        df['total_execution_time'] = pd.to_numeric(
+            df['total_execution_time'],
+            errors='coerce'
+        )
+        
+        # Count statuses
+        status_counts = df['status'].value_counts()
+        
+        stats = {
+            'total': len(df),
+            'ok': status_counts.get('OK', 0),
+            'rerun': status_counts.get('Rerun', 0),
+            'skip': status_counts.get('Skip', 0),
+            'pending': status_counts.get('Pending', 0),
+        }
+        
+        # Calculate timing statistics (safe for NaN)
+        valid_times = df['total_execution_time'].dropna()
+        if len(valid_times) > 0:
+            stats['avg_time'] = float(valid_times.mean())
+            stats['total_time'] = float(valid_times.sum())
+            stats['min_time'] = float(valid_times.min())
+            stats['max_time'] = float(valid_times.max())
+        else:
+            stats['avg_time'] = 0.0
+            stats['total_time'] = 0.0
+            stats['min_time'] = None
+            stats['max_time'] = None
+        
+        # Calculate success rate (safe for zero total)
+        if stats['total'] > 0:
+            stats['success_rate'] = 100.0 * stats['ok'] / stats['total']
+        else:
+            stats['success_rate'] = 0.0
+        
+        return stats
+        
+    except Exception as e:
+        LOG.error(f"Failed to analyze batch: {e}")
+        return {}
 
-# Status distribution
-print(df['status'].value_counts())
+# Usage
+if __name__ == '__main__':
+    logging.basicConfig(level=logging.INFO)
+    
+    stats = load_and_analyze_batch('data/batch_test_100.csv')
+    
+    if stats:
+        print(f"Total molecules: {stats['total']}")
+        print(f"OK: {stats['ok']} ({stats['success_rate']:.1f}%)")
+        print(f"Rerun: {stats['rerun']}")
+        print(f"Skip: {stats['skip']}")
+        print(f"Avg time: {stats['avg_time']:.2f}s")
+        print(f"Total time: {stats['total_time']:.1f}s")
+    else:
+        print("Failed to load/analyze batch")
 ```
 
 ---
@@ -166,22 +313,119 @@ python scripts/init_batch_csv.py \
   --input data/thermo_cbs_clean.csv \
   --output data/batch_30k.csv
 
-# 2. Rodar em batches (exemplo: 500 moléculas por batch)
-# Com checkpointing para poder retomar se falhar
-for i in {1..60}; do
-  echo "Batch $i/60"
-  python -m grimperium.cli batch-run \
-    --csv data/batch_30k.csv \
-    --batch-size 500 \
-    --crest-timeout 30 \
-    --mopac-timeout 60 \
-    >> production_30k.log 2>&1
-  
-  # Checkpoint: verificar status counts
-  cut -d',' -f10 data/batch_30k.csv | sort | uniq -c
-  
-  sleep 5
+#!/bin/bash
+# Production batch orchestration for 30k molecules
+# Dynamically calculates number of batches needed based on CSV size and batch_size
+
+set -e  # Exit on error
+
+CSV_PATH="data/batch_30k.csv"
+BATCH_SIZE=500
+CREST_TIMEOUT=30
+MOPAC_TIMEOUT=60
+LOG_FILE="production_30k.log"
+
+# Validate CSV exists
+if [ ! -f "$CSV_PATH" ]; then
+    echo "ERROR: CSV file not found: $CSV_PATH"
+    exit 1
+fi
+
+# Calculate total molecules
+TOTAL_ROWS=$(wc -l < "$CSV_PATH")
+TOTAL_MOLECULES=$((TOTAL_ROWS - 1))  # Subtract header row
+
+# Calculate number of batches needed (ceiling division)
+NUM_BATCHES=$(( (TOTAL_MOLECULES + BATCH_SIZE - 1) / BATCH_SIZE ))
+
+echo "[$(date '+%Y-%m-%d %H:%M:%S')] Starting batch orchestration"
+echo "  CSV: $CSV_PATH"
+echo "  Total molecules: $TOTAL_MOLECULES"
+echo "  Batch size: $BATCH_SIZE"
+echo "  Expected batches: $NUM_BATCHES"
+echo "  Log file: $LOG_FILE"
+echo ""
+
+# Initialize log
+cat > "$LOG_FILE" << EOF
+=== Batch Orchestration Start ===
+Date: $(date)
+CSV: $CSV_PATH
+Total molecules: $TOTAL_MOLECULES
+Batch size: $BATCH_SIZE
+Expected batches: $NUM_BATCHES
+
+EOF
+
+# Track statistics
+TOTAL_PROCESSED=0
+FAILED_BATCHES=0
+
+# Loop through batches
+for batch_num in $(seq 1 $NUM_BATCHES); do
+    batch_id="batch_30k_$(printf '%03d' $batch_num)"
+    
+    # Display progress
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] Running batch $batch_num/$NUM_BATCHES (ID: $batch_id)"
+    echo "  Expected molecules in this batch: $BATCH_SIZE (actual may be less for last batch)"
+    
+    # Log batch start
+    echo "[Batch $batch_num/$NUM_BATCHES] $batch_id started at $(date)" >> "$LOG_FILE"
+    
+    # Run batch execution
+    if python -m grimperium.cli batch-run \
+        --csv "$CSV_PATH" \
+        --batch-id "$batch_id" \
+        --batch-size $BATCH_SIZE \
+        --crest-timeout $CREST_TIMEOUT \
+        --mopac-timeout $MOPAC_TIMEOUT \
+        >> "$LOG_FILE" 2>&1; then
+        
+        echo "  ✅ Batch completed successfully"
+        echo "[Batch $batch_num/$NUM_BATCHES] $batch_id completed successfully at $(date)" >> "$LOG_FILE"
+        
+        TOTAL_PROCESSED=$((TOTAL_PROCESSED + BATCH_SIZE))
+    else
+        echo "  ⚠️  Batch failed or encountered error"
+        echo "[Batch $batch_num/$NUM_BATCHES] $batch_id FAILED at $(date)" >> "$LOG_FILE"
+        
+        FAILED_BATCHES=$((FAILED_BATCHES + 1))
+    fi
+    
+    # Checkpoint: wait 5 seconds between batches
+    if [ $batch_num -lt $NUM_BATCHES ]; then
+        echo "  Waiting 5 seconds before next batch..."
+        sleep 5
+    fi
 done
+
+# Summary
+echo ""
+echo "[$(date '+%Y-%m-%d %H:%M:%S')] Batch orchestration completed"
+echo "  Total batches: $NUM_BATCHES"
+echo "  Failed batches: $FAILED_BATCHES"
+echo "  Processed molecules: ~$TOTAL_PROCESSED"
+echo "  Log: $LOG_FILE"
+
+# Log summary
+cat >> "$LOG_FILE" << EOF
+
+=== Batch Orchestration Summary ===
+Total batches: $NUM_BATCHES
+Failed batches: $FAILED_BATCHES
+Processed molecules: ~$TOTAL_PROCESSED
+Completed at: $(date)
+
+EOF
+
+# Exit with error if any batch failed
+if [ $FAILED_BATCHES -gt 0 ]; then
+    echo "⚠️  WARNING: $FAILED_BATCHES batches failed"
+    exit 1
+fi
+
+echo "✅ All batches completed successfully!"
+exit 0
 ```
 
 ### Monitoramento Contínuo
@@ -192,8 +436,16 @@ tail -f production_30k.log
 # Terminal 2: Monitorar recursos
 watch -n 10 'ps aux | grep python | grep -v grep'
 
-# Terminal 3: Status dashboard
-watch -n 30 'cut -d"," -f10 data/batch_30k.csv | sort | uniq -c'
+# Terminal 3: Status dashboard (no nested quotes)
+
+# Option 1: Simple (no nested quotes)
+watch -n 30 "cut -d, -f10 data/batch_30k.csv | sort | uniq -c"
+
+# Option 2: Using awk (more robust)
+watch -n 30 "awk -F, '{print \$10}' data/batch_30k.csv | sort | uniq -c"
+
+# Option 3: Full path with explicit column name
+watch -n 30 "cat data/batch_30k.csv | cut -d, -f10 | sort | uniq -c"
 ```
 
 ### Verificações Esperadas

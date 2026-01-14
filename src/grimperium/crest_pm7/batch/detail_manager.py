@@ -73,7 +73,15 @@ class ConformerDetailManager:
 
         Uses atomic write pattern: write to temp file, fsync, then rename.
         This prevents corruption if interrupted during write.
-        Ensures file descriptor always closed, even on exception.
+        Ensures file descriptor is always properly closed, even on exception.
+
+        Process:
+        1. Create temp file with mkstemp
+        2. Try to open as file object (may fail)
+        3. If fdopen fails: close raw FD and re-raise
+        4. If fdopen succeeds: use with-block to handle closing
+        5. After successful write: atomic rename
+        6. On any error: cleanup temp file
 
         Args:
             detail: MoleculeDetail to save
@@ -94,25 +102,38 @@ class ConformerDetailManager:
         )
 
         try:
-            # Try to open FD as file object
+            # Step 1: Try to open FD as file object
+            # This is in its own try/except so fdopen failure doesn't trigger
+            # the double-close issue
+            f = None
             try:
-                with os.fdopen(temp_fd, 'w', encoding='utf-8') as f:
+                f = os.fdopen(temp_fd, 'w', encoding='utf-8')
+            except Exception as e:
+                # fdopen failed — close raw FD before re-raising
+                os.close(temp_fd)
+                LOG.error(f"Failed to open temp file for {detail.mol_id}: {e}")
+                raise
+
+            # Step 2: fdopen succeeded — use with-block to handle closing
+            # Do NOT call os.close(temp_fd) anywhere in this path
+            try:
+                with f:
                     json.dump(detail.model_dump(mode="json"), f, indent=2)
                     f.flush()
                     os.fsync(f.fileno())  # Force to disk
-            except Exception:
-                # If fdopen fails, close raw FD
-                os.close(temp_fd)
+            except Exception as e:
+                LOG.error(f"Failed to write detail for {detail.mol_id}: {e}")
                 raise
 
-            # Atomic rename
+            # Step 3: Atomic rename
             os.replace(temp_path, detail_path)
             LOG.debug(f"Saved detail for {detail.mol_id}")
             return detail_path
 
         except Exception as e:
+            # Cleanup: remove temp file if it exists
             try:
-                os.unlink(temp_path)  # Clean up temp
+                os.unlink(temp_path)
             except FileNotFoundError:
                 pass
             LOG.error(f"Failed to save detail for {detail.mol_id}: {e}")
