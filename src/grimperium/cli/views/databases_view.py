@@ -7,9 +7,18 @@ Displays and manages molecular databases.
 import json
 import os
 from datetime import date, datetime
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from rich.panel import Panel
+from rich.progress import (
+    BarColumn,
+    MofNCompleteColumn,
+    Progress,
+    SpinnerColumn,
+    TextColumn,
+    TimeElapsedColumn,
+)
 from rich.table import Table
 
 from grimperium.cli.constants import PHASE_A_RESULTS_FILE
@@ -284,25 +293,245 @@ class DatabasesView(BaseView):
         return None
 
     def handle_calculate_pm7(self) -> None:
-        """Handle 'Calculate PM7 Values' action.
+        """Interactive handler for CREST PM7 batch calculations.
 
-        Shows instructions for running CREST PM7 batch calculations.
+        Collects user inputs, runs batch processor with progress bar,
+        updates results and returns to database view.
         """
         self.console.print()
         self.console.print(
             Panel(
-                "[bold]CREST PM7 Batch Calculations[/bold]\n\n"
-                "To run CREST PM7 calculations on your dataset:\n\n"
-                "1. Prepare CSV with molecules (SMILES column)\n"
-                "2. Run: [cyan]python -m grimperium.crest_pm7.batch "
-                "--input batch.csv[/cyan]\n"
-                "3. Results saved to: [cyan]data/molecules_pm7/computed/[/cyan]\n"
-                "4. Reload this view to see updated results\n\n"
-                f"[dim]Current results: {PHASE_A_RESULTS_FILE}[/dim]",
-                title="[bold green]Calculate PM7 Values[/bold green]",
-                border_style="green",
+                "[bold cyan]CREST PM7 Batch Calculation Configuration[/bold cyan]",
+                border_style="cyan",
             )
         )
+        self.console.print()
+
+        try:
+            num_molecules = self._prompt_positive_int(
+                "How many molecules to calculate?",
+                default=10,
+                max_value=30026,
+            )
+            if num_molecules is None:
+                return
+
+            crest_timeout = self._prompt_positive_int(
+                "CREST timeout per molecule (minutes)?",
+                default=30,
+            )
+            if crest_timeout is None:
+                return
+
+            mopac_timeout = self._prompt_positive_int(
+                "MOPAC/PM7 timeout per molecule (minutes)?",
+                default=60,
+            )
+            if mopac_timeout is None:
+                return
+
+            batch_size = self._prompt_positive_int(
+                "Batch size (molecules per batch)?",
+                default=10,
+                max_value=100,
+            )
+            if batch_size is None:
+                return
+
+            self.console.print()
+            self.console.print("[bold]Configuration Summary:[/bold]")
+            self.console.print(f"  • Molecules to calculate: {num_molecules}")
+            self.console.print(f"  • CREST timeout: {crest_timeout} min")
+            self.console.print(f"  • MOPAC timeout: {mopac_timeout} min")
+            self.console.print(f"  • Batch size: {batch_size}")
+            self.console.print()
+
+            confirm = self.console.input(
+                "[yellow]Proceed with calculation? (yes/no) [/yellow]"
+            ).strip().lower()
+            if confirm not in ("yes", "y"):
+                self.console.print("[yellow]Calculation cancelled.[/yellow]")
+                self.console.input("[dim]Press Enter to continue...[/dim]")
+                return
+
+            self._run_pm7_batch(
+                num_molecules=num_molecules,
+                crest_timeout_minutes=crest_timeout,
+                mopac_timeout_minutes=mopac_timeout,
+                batch_size=batch_size,
+            )
+
+        except KeyboardInterrupt:
+            self.console.print("\n[yellow]Calculation interrupted.[/yellow]")
+            self.console.input("[dim]Press Enter to continue...[/dim]")
+
+    def _prompt_positive_int(
+        self,
+        prompt: str,
+        default: int,
+        max_value: int | None = None,
+    ) -> int | None:
+        """Prompt user for a positive integer with validation.
+
+        Args:
+            prompt: Question to display
+            default: Default value if user presses Enter
+            max_value: Maximum allowed value (optional)
+
+        Returns:
+            Validated integer or None if user cancelled
+        """
+        while True:
+            try:
+                value_str = self.console.input(
+                    f"[yellow]{prompt} [default: {default}][/yellow] "
+                ).strip()
+
+                if not value_str:
+                    return default
+
+                value = int(value_str)
+                if value <= 0:
+                    self.console.print("[red]✗ Must be a positive number[/red]")
+                    continue
+                if max_value and value > max_value:
+                    self.console.print(f"[red]✗ Cannot exceed {max_value}[/red]")
+                    continue
+                return value
+
+            except ValueError:
+                self.console.print("[red]✗ Invalid number. Please try again.[/red]")
+            except KeyboardInterrupt:
+                return None
+
+    def _run_pm7_batch(
+        self,
+        num_molecules: int,
+        crest_timeout_minutes: int,
+        mopac_timeout_minutes: int,
+        batch_size: int,
+    ) -> None:
+        """Execute PM7 batch processing with progress display.
+
+        Args:
+            num_molecules: Total molecules to process
+            crest_timeout_minutes: CREST timeout per molecule
+            mopac_timeout_minutes: MOPAC timeout per molecule
+            batch_size: Molecules per batch
+        """
+        from grimperium.crest_pm7.batch import (
+            BatchCSVManager,
+            BatchExecutionManager,
+            BatchSortingStrategy,
+            ConformerDetailManager,
+            FixedTimeoutProcessor,
+        )
+        from grimperium.crest_pm7.config import PM7Config
+
+        csv_path = Path("data/test_batch_final.csv")
+        detail_dir = Path("data/molecules_pm7/conformer_details")
+
+        if not csv_path.exists():
+            self.console.print(
+                f"[red]✗ Batch CSV not found: {csv_path}[/red]\n"
+                "[dim]Create a batch CSV with columns: mol_id, smiles, nheavy, status[/dim]"
+            )
+            self.console.input("[dim]Press Enter to continue...[/dim]")
+            return
+
+        try:
+            self.console.print()
+            self.console.print("[bold cyan]Initializing batch processor...[/bold cyan]")
+
+            pm7_config = PM7Config()
+            csv_manager = BatchCSVManager(csv_path)
+            csv_manager.load_csv()
+
+            detail_dir.mkdir(parents=True, exist_ok=True)
+            detail_manager = ConformerDetailManager(detail_dir)
+
+            processor = FixedTimeoutProcessor(
+                config=pm7_config,
+                crest_timeout_minutes=float(crest_timeout_minutes),
+                mopac_timeout_minutes=float(mopac_timeout_minutes),
+            )
+
+            exec_manager = BatchExecutionManager(
+                csv_manager=csv_manager,
+                detail_manager=detail_manager,
+                pm7_config=pm7_config,
+                processor_adapter=processor,
+            )
+
+            batch_id = csv_manager.generate_batch_id()
+            batch = csv_manager.select_batch(
+                batch_id=batch_id,
+                batch_size=min(batch_size, num_molecules),
+                crest_timeout_minutes=crest_timeout_minutes,
+                mopac_timeout_minutes=mopac_timeout_minutes,
+                strategy=BatchSortingStrategy.RERUN_FIRST_THEN_EASY,
+            )
+
+            if batch.is_empty:
+                self.console.print(
+                    "[yellow]No molecules available for processing.[/yellow]\n"
+                    "[dim]All molecules may already be processed or none are PENDING.[/dim]"
+                )
+                self.console.input("[dim]Press Enter to continue...[/dim]")
+                return
+
+            self.console.print(
+                f"[bold cyan]Starting batch {batch_id}: "
+                f"{batch.size} molecules[/bold cyan]"
+            )
+            self.console.print()
+
+            with Progress(
+                SpinnerColumn(),
+                TextColumn("[progress.description]{task.description}"),
+                BarColumn(),
+                MofNCompleteColumn(),
+                TimeElapsedColumn(),
+                console=self.console,
+            ) as progress:
+                task = progress.add_task("Processing", total=batch.size)
+
+                def update_progress(mol_id: str, current: int, total: int) -> None:
+                    progress.update(
+                        task,
+                        completed=current,
+                        description=f"Processing {mol_id}",
+                    )
+
+                result = exec_manager.execute_batch(
+                    batch, progress_callback=update_progress
+                )
+
+            self.console.print()
+            self.console.print("[bold green]✓ Batch completed![/bold green]")
+            self.console.print()
+            self.console.print("[bold]Results Summary:[/bold]")
+            self.console.print(f"  • Total processed: {result.total_count}")
+            self.console.print(f"  • Successful: {result.success_count}")
+            self.console.print(f"  • Failed: {result.failed_count}")
+            self.console.print(f"  • Skipped: {result.skip_count}")
+
+            if result.total_count > 0:
+                rate = result.success_count / result.total_count * 100
+                self.console.print(f"  • Success rate: {rate:.1f}%")
+
+            self.console.print()
+            self.console.print(
+                f"[cyan]Results saved to:[/cyan] {PHASE_A_RESULTS_FILE.parent}"
+            )
+
+        except FileNotFoundError as e:
+            self.console.print(f"[red]✗ File not found: {e}[/red]")
+        except RuntimeError as e:
+            self.console.print(f"[red]✗ Runtime error: {e}[/red]")
+        except Exception as e:
+            self.console.print(f"[red]✗ Unexpected error: {e}[/red]")
+
         self.console.print()
         self.console.input("[dim]Press Enter to continue...[/dim]")
 
