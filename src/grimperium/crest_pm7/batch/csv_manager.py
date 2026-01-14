@@ -267,10 +267,12 @@ class BatchCSVManager:
             )
 
         # Find available molecules (PENDING or RERUN)
-        available_mask = df["status"].isin([
-            MoleculeStatus.PENDING.value,
-            MoleculeStatus.RERUN.value,
-        ])
+        available_mask = df["status"].isin(
+            [
+                MoleculeStatus.PENDING.value,
+                MoleculeStatus.RERUN.value,
+            ]
+        )
         available_df = df[available_mask].copy()
 
         if available_df.empty:
@@ -464,9 +466,7 @@ class BatchCSVManager:
 
         current_status = df.at[idx, "status"]
         if current_status != MoleculeStatus.RUNNING.value:
-            LOG.warning(
-                f"mark_rerun({mol_id}): expected RUNNING, got {current_status}"
-            )
+            LOG.warning(f"mark_rerun({mol_id}): expected RUNNING, got {current_status}")
 
         # Increment retry count
         retry_count = self._safe_int(df.at[idx, "retry_count"], default=0) + 1
@@ -571,9 +571,7 @@ class BatchCSVManager:
             # Keep retry_count and last_error_message for audit
             reset_count += 1
 
-            LOG.debug(
-                f"Reset {df.at[idx, 'mol_id']}: {current_status} -> PENDING"
-            )
+            LOG.debug(f"Reset {df.at[idx, 'mol_id']}: {current_status} -> PENDING")
 
         self.save_csv()
         LOG.info(f"Reset {reset_count} molecules from batch {batch_id}")
@@ -619,26 +617,18 @@ class BatchCSVManager:
         return {
             # CREST Execution
             "crest_status": (
-                result.crest_status.value
-                if result.crest_status is not None
-                else None
+                result.crest_status.value if result.crest_status is not None else None
             ),
             "crest_conformers_generated": result.crest_conformers_generated,
-            "crest_time": (
-                round(result.crest_time, 1) if result.crest_time else None
-            ),
+            "crest_time": (round(result.crest_time, 1) if result.crest_time else None),
             "crest_error": result.crest_error,
             # MOPAC Execution
             "num_conformers_selected": result.num_conformers_selected,
             "most_stable_hof": (
-                round(result.most_stable_hof, 2)
-                if result.most_stable_hof
-                else None
+                round(result.most_stable_hof, 2) if result.most_stable_hof else None
             ),
             "quality_grade": (
-                result.quality_grade.value
-                if result.quality_grade is not None
-                else None
+                result.quality_grade.value if result.quality_grade is not None else None
             ),
             "success": result.success,
             "error_message": result.error_message,
@@ -650,23 +640,15 @@ class BatchCSVManager:
             "actual_crest_timeout_used": round(crest_timeout_used, 1),
             "actual_mopac_timeout_used": round(mopac_timeout_used, 1),
             # Delta-E
-            "delta_e_12": (
-                round(result.delta_e_12, 4) if result.delta_e_12 else None
-            ),
-            "delta_e_13": (
-                round(result.delta_e_13, 4) if result.delta_e_13 else None
-            ),
-            "delta_e_15": (
-                round(result.delta_e_15, 4) if result.delta_e_15 else None
-            ),
+            "delta_e_12": (round(result.delta_e_12, 4) if result.delta_e_12 else None),
+            "delta_e_13": (round(result.delta_e_13, 4) if result.delta_e_13 else None),
+            "delta_e_15": (round(result.delta_e_15, 4) if result.delta_e_15 else None),
             # Batch Tracking
             "batch_id": batch_id,
             "batch_order": batch_order,
             # Timestamp
             "timestamp": (
-                result.timestamp.isoformat()
-                if result.timestamp is not None
-                else None
+                result.timestamp.isoformat() if result.timestamp is not None else None
             ),
         }
 

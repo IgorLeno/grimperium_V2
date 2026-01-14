@@ -80,7 +80,7 @@ class BaseView(ABC):
         header_text = f"{self.icon}  {self.title}" if self.icon else self.title
         self.console.print()
         self.console.print(f"[bold {self.color}]{header_text}[/bold {self.color}]")
-        
+
         # Adaptive separator width based on console width
         width = max(20, min(self.console.width, 80))
         self.console.print(f"[{COLORS['muted']}]{'─' * width}[/{COLORS['muted']}]")

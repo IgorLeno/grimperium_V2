@@ -57,7 +57,7 @@ class ModelsView(BaseView):
                     mae = f"{model.mae:.2f}"
                 else:
                     mae = "-"
-                
+
                 if model.r2 is not None:
                     r2 = f"{model.r2:.3f}"
                 else:
@@ -104,7 +104,7 @@ class ModelsView(BaseView):
         # Format metrics with proper None handling
         mae_str = f"{model.mae:.2f}" if model.mae is not None else "N/A"
         r2_str = f"{model.r2:.4f}" if model.r2 is not None else "N/A"
-        
+
         info = f"""
 [bold]Name:[/bold]          {model.name}
 [bold]Algorithm:[/bold]     {model.algorithm}
@@ -124,7 +124,7 @@ class ModelsView(BaseView):
             info += """
 [bold]Hyperparameters:[/bold] (planned)
 """
-        
+
         # Render hyperparameters once, outside the conditional
         for key, value in model.hyperparameters.items():
             info += f"  {key}: {value}\n"

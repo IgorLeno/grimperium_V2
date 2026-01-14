@@ -154,9 +154,8 @@ class BatchExecutionManager:
             result.max_hof_mol_id = max_mol_id
 
         # Handle ALL_OR_NOTHING policy
-        if (
-            batch.failure_policy == BatchFailurePolicy.ALL_OR_NOTHING
-            and (result.failed_count > 0 or result.rerun_count > 0)
+        if batch.failure_policy == BatchFailurePolicy.ALL_OR_NOTHING and (
+            result.failed_count > 0 or result.rerun_count > 0
         ):
             LOG.warning(
                 f"ALL_OR_NOTHING: Resetting batch {batch.batch_id} due to failures"

@@ -34,13 +34,13 @@ class DatabasesView(BaseView):
 
     def _format_last_updated(self, value: Optional[datetime | date]) -> str:
         """Format database last_updated timestamp consistently.
-        
+
         Args:
             value: A datetime, date, or None.
-        
+
         Returns:
             Formatted string or "-" if value is None.
-        
+
         Note:
             If the Database.last_updated is timezone-aware, the timezone info
             is preserved in the formatted output.
@@ -111,7 +111,7 @@ class DatabasesView(BaseView):
         )
 
         last_updated_str = self._format_last_updated(db.last_updated)
-        
+
         info = f"""
 [bold]Name:[/bold]         {db.name}
 [bold]Description:[/bold]  {db.description}
@@ -205,11 +205,11 @@ class DatabasesView(BaseView):
                     self.selected_db = db
                     found = True
                     break
-            
+
             if not found:
                 self.selected_db = None
                 # Could log a warning here if logging was set up
-            
+
             return None
 
         # Handle in-development features

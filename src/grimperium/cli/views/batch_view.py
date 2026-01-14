@@ -75,12 +75,20 @@ class BatchView(BaseView):
         table.add_column("Setting", style=COLORS["primary"])
         table.add_column("Value", style=COLORS["text"])
 
-        csv_status = "✓ Found" if self.csv_path and self.csv_path.exists() else "✗ Not set"
-        detail_status = "✓ Exists" if self.detail_dir and self.detail_dir.exists() else "✗ Not set"
+        csv_status = (
+            "✓ Found" if self.csv_path and self.csv_path.exists() else "✗ Not set"
+        )
+        detail_status = (
+            "✓ Exists" if self.detail_dir and self.detail_dir.exists() else "✗ Not set"
+        )
 
-        table.add_row("CSV Path", str(self.csv_path) if self.csv_path else "Not configured")
+        table.add_row(
+            "CSV Path", str(self.csv_path) if self.csv_path else "Not configured"
+        )
         table.add_row("CSV Status", csv_status)
-        table.add_row("Detail Dir", str(self.detail_dir) if self.detail_dir else "Not configured")
+        table.add_row(
+            "Detail Dir", str(self.detail_dir) if self.detail_dir else "Not configured"
+        )
         table.add_row("Detail Status", detail_status)
         table.add_row("Batch Size", str(self.batch_size))
         table.add_row("CREST Timeout", f"{self.crest_timeout} min")
@@ -155,20 +163,22 @@ class BatchView(BaseView):
         ]
 
         if self.csv_path and self.csv_path.exists():
-            options.extend([
-                MenuOption(
-                    label="Run Batch",
-                    value="run",
-                    icon="▶️",
-                    description="Execute next batch of molecules",
-                ),
-                MenuOption(
-                    label="View Status",
-                    value="status",
-                    icon="📈",
-                    description="View detailed processing status",
-                ),
-            ])
+            options.extend(
+                [
+                    MenuOption(
+                        label="Run Batch",
+                        value="run",
+                        icon="▶️",
+                        description="Execute next batch of molecules",
+                    ),
+                    MenuOption(
+                        label="View Status",
+                        value="status",
+                        icon="📈",
+                        description="View detailed processing status",
+                    ),
+                ]
+            )
 
         options.append(
             MenuOption(
@@ -214,7 +224,9 @@ class BatchView(BaseView):
         detail_input = self.console.input(
             f"Detail Dir [{COLORS['muted']}][{default_detail}][/{COLORS['muted']}]: "
         ).strip()
-        self.detail_dir = Path(detail_input) if detail_input else self.DEFAULT_DETAIL_DIR
+        self.detail_dir = (
+            Path(detail_input) if detail_input else self.DEFAULT_DETAIL_DIR
+        )
 
         self.show_success("Paths configured successfully")
 
@@ -322,9 +334,13 @@ class BatchView(BaseView):
                 task = progress.add_task("Processing", total=batch.size)
 
                 def update_progress(mol_id: str, current: int, total: int) -> None:
-                    progress.update(task, completed=current, description=f"Processing {mol_id}")
+                    progress.update(
+                        task, completed=current, description=f"Processing {mol_id}"
+                    )
 
-                result = exec_manager.execute_batch(batch, progress_callback=update_progress)
+                result = exec_manager.execute_batch(
+                    batch, progress_callback=update_progress
+                )
 
             # Display result
             self._display_batch_result(result)

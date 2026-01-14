@@ -96,9 +96,7 @@ class ConformerDetailManager:
 
         # Write to temp file in same directory (ensure same filesystem)
         temp_fd, temp_path = tempfile.mkstemp(
-            dir=detail_path.parent,
-            text=True,
-            prefix=".tmp_"
+            dir=detail_path.parent, text=True, prefix=".tmp_"
         )
 
         try:
@@ -107,7 +105,7 @@ class ConformerDetailManager:
             # the double-close issue
             f = None
             try:
-                f = os.fdopen(temp_fd, 'w', encoding='utf-8')
+                f = os.fdopen(temp_fd, "w", encoding="utf-8")
             except Exception as e:
                 # fdopen failed — close raw FD before re-raising
                 os.close(temp_fd)
@@ -236,9 +234,7 @@ class ConformerDetailManager:
         Returns:
             List of mol_ids
         """
-        return [
-            p.stem for p in self.detail_dir.glob("*.json")
-        ]
+        return [p.stem for p in self.detail_dir.glob("*.json")]
 
     def delete_detail(self, mol_id: str) -> bool:
         """Delete detail file for molecule.

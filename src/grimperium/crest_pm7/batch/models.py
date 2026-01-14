@@ -37,9 +37,7 @@ class BatchResult(BaseModel):
     skip_count: int = Field(
         default=0, description="Molecules marked Skip (max retries)"
     )
-    failed_count: int = Field(
-        default=0, description="Molecules that failed processing"
-    )
+    failed_count: int = Field(default=0, description="Molecules that failed processing")
 
     # Timing (in seconds)
     total_time: float = Field(default=0.0, description="Total execution time")
@@ -247,9 +245,7 @@ class BatchRowCSV(BaseModel):
 
     # === Final Status ===
     success: Optional[bool] = Field(default=None, description="Processing succeeded")
-    error_message: Optional[str] = Field(
-        default=None, description="Error if failed"
-    )
+    error_message: Optional[str] = Field(default=None, description="Error if failed")
     total_execution_time: Optional[float] = Field(
         default=None, description="Total time (s)"
     )
@@ -292,9 +288,7 @@ class ConformerDetail(BaseModel):
     energy_hof: Optional[float] = Field(
         default=None, description="Heat of formation (kcal/mol)"
     )
-    energy_total: Optional[float] = Field(
-        default=None, description="Total energy (eV)"
-    )
+    energy_total: Optional[float] = Field(default=None, description="Total energy (eV)")
     mopac_status: str = Field(default="NOT_ATTEMPTED", description="MOPAC status")
     mopac_time: Optional[float] = Field(
         default=None, description="MOPAC execution time (s)"

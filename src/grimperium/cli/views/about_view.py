@@ -69,15 +69,21 @@ Learning Δ = (y_cbs - y_pm7) is easier than learning y_cbs directly.
         # Databases status
         db_ready = len(get_ready_databases())
         db_total = SYSTEM_INFO["databases_total"]
-        
+
         # Determine database status: Ready / Not Ready / Partial
         if db_ready == db_total and db_total > 0:
-            db_status = f"[{COLORS['success']}]{ICONS['success']} Ready[/{COLORS['success']}]"
+            db_status = (
+                f"[{COLORS['success']}]{ICONS['success']} Ready[/{COLORS['success']}]"
+            )
         elif db_ready == 0:
-            db_status = f"[{COLORS['error']}]{ICONS['error']} Not Ready[/{COLORS['error']}]"
+            db_status = (
+                f"[{COLORS['error']}]{ICONS['error']} Not Ready[/{COLORS['error']}]"
+            )
         else:
-            db_status = f"[{COLORS['warning']}]{ICONS['warning']} Partial[/{COLORS['warning']}]"
-        
+            db_status = (
+                f"[{COLORS['warning']}]{ICONS['warning']} Partial[/{COLORS['warning']}]"
+            )
+
         status_table.add_row(
             f"{ICONS['databases']} Databases",
             db_status,
@@ -87,15 +93,21 @@ Learning Δ = (y_cbs - y_pm7) is easier than learning y_cbs directly.
         # Models status
         models_ready = len(get_ready_models())
         models_total = SYSTEM_INFO["models_total"]
-        
+
         # Determine models status: Ready / Not Ready / Partial
         if models_ready == models_total and models_total > 0:
-            models_status = f"[{COLORS['success']}]{ICONS['success']} Ready[/{COLORS['success']}]"
+            models_status = (
+                f"[{COLORS['success']}]{ICONS['success']} Ready[/{COLORS['success']}]"
+            )
         elif models_ready == 0:
-            models_status = f"[{COLORS['error']}]{ICONS['error']} Not Ready[/{COLORS['error']}]"
+            models_status = (
+                f"[{COLORS['error']}]{ICONS['error']} Not Ready[/{COLORS['error']}]"
+            )
         else:
-            models_status = f"[{COLORS['warning']}]{ICONS['warning']} Partial[/{COLORS['warning']}]"
-        
+            models_status = (
+                f"[{COLORS['warning']}]{ICONS['warning']} Partial[/{COLORS['warning']}]"
+            )
+
         status_table.add_row(
             f"{ICONS['models']} Models",
             models_status,

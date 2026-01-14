@@ -48,7 +48,8 @@ class ResultsView(BaseView):
 
         # Sort models by MAE (best first), filter for ready models with mae and r2
         ready_models = [
-            m for m in MODELS 
+            m
+            for m in MODELS
             if m.status == "ready" and m.mae is not None and m.r2 is not None
         ]
         sorted_models = sorted(ready_models, key=lambda x: x.mae)
@@ -59,7 +60,7 @@ class ResultsView(BaseView):
             algo = escape(model.algorithm)
             mae_str = f"{model.mae:.2f}"
             r2_str = f"{model.r2:.4f}" if model.r2 is not None else "-"
-            
+
             # Choose rank string based on position
             if rank == 1:
                 rank_str = "🥇"
@@ -69,13 +70,19 @@ class ResultsView(BaseView):
                 rank_str = "🥉"
             else:
                 rank_str = str(rank)
-            
+
             # Apply highlighting only for rank 1
             if rank == 1:
                 name = f"[bold {COLORS['success']}]{name}[/bold {COLORS['success']}]"
-                mae_str = f"[bold {COLORS['success']}]{mae_str}[/bold {COLORS['success']}]"
-                r2_str = f"[bold {COLORS['success']}]{r2_str}[/bold {COLORS['success']}]"
-                rank_str = f"[bold {COLORS['success']}]{rank_str} 1[/bold {COLORS['success']}]"
+                mae_str = (
+                    f"[bold {COLORS['success']}]{mae_str}[/bold {COLORS['success']}]"
+                )
+                r2_str = (
+                    f"[bold {COLORS['success']}]{r2_str}[/bold {COLORS['success']}]"
+                )
+                rank_str = (
+                    f"[bold {COLORS['success']}]{rank_str} 1[/bold {COLORS['success']}]"
+                )
             elif rank == 2:
                 rank_str = f"{rank_str} 2"
             elif rank == 3:

@@ -66,7 +66,7 @@ class SettingsView(BaseView):
     def run(self) -> Optional[str]:
         """Run the settings view (IN DEVELOPMENT)."""
         self.render()
-        
+
         # Only wait for user acknowledgement in interactive mode
         if sys.stdin.isatty():
             try:
@@ -75,5 +75,5 @@ class SettingsView(BaseView):
                 # In interactive mode, treat EOFError/Ctrl+C as continue
                 pass
         # else: non-interactive (CI/piped), skip waiting
-        
+
         return "main"
