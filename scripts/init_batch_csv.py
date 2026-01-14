@@ -5,8 +5,10 @@ This script creates a batch tracking CSV file from thermo_cbs_clean.csv,
 adding all necessary columns for batch processing status tracking.
 
 Usage:
-    python scripts/init_batch_csv.py --input data/thermo_cbs_clean.csv --output data/batch_tracking.csv
-    python scripts/init_batch_csv.py --input data/thermo_cbs_clean.csv --output data/test_batch.csv --limit 10
+    python scripts/init_batch_csv.py --input data/thermo_cbs_clean.csv \
+        --output data/batch_tracking.csv
+    python scripts/init_batch_csv.py --input data/thermo_cbs_clean.csv \
+        --output data/test_batch.csv --limit 10
 
 The output CSV will have all columns defined in BatchRowCSV model.
 """
@@ -78,16 +80,20 @@ def initialize_batch_csv(
 
     # Read source CSV
     df_source = pd.read_csv(input_path)
-    
+
     # Validate required columns
     required_cols = ["smiles", "nheavy"]
     missing_cols = set(required_cols) - set(df_source.columns)
-    
+
     if missing_cols:
+        missing_sorted = sorted(missing_cols)
+        expected_sorted = sorted(required_cols)
+        found_sorted = sorted(df_source.columns)
+
         raise ValueError(
-            f"Input CSV missing required columns: {missing_cols}\n"
-            f"Expected: {required_cols}\n"
-            f"Found: {list(df_source.columns)}"
+            f"Input CSV missing required columns: {missing_sorted}\n"
+            f"Expected columns: {expected_sorted}\n"
+            f"Found columns: {found_sorted}"
         )
 
     # Determine mol_id column
@@ -188,8 +194,14 @@ def initialize_batch_csv(
     # Summary statistics
     LOG.info("Summary:")
     LOG.info(f"  Total molecules: {len(df_output)}")
-    LOG.info(f"  nheavy range: {df_output['nheavy'].min()} - {df_output['nheavy'].max()}")
-    LOG.info(f"  nrotbonds range: {df_output['nrotbonds'].min()} - {df_output['nrotbonds'].max()}")
+    LOG.info(
+        f"  nheavy range: {df_output['nheavy'].min()} - "
+        f"{df_output['nheavy'].max()}"
+    )
+    LOG.info(
+        f"  nrotbonds range: {df_output['nrotbonds'].min()} - "
+        f"{df_output['nrotbonds'].max()}"
+    )
     if df_output["reference_hof"].notna().any():
         LOG.info(
             f"  reference_hof range: {df_output['reference_hof'].min():.2f} - "

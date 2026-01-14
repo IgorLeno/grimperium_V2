@@ -73,6 +73,7 @@ class ConformerDetailManager:
 
         Uses atomic write pattern: write to temp file, fsync, then rename.
         This prevents corruption if interrupted during write.
+        Ensures file descriptor always closed, even on exception.
 
         Args:
             detail: MoleculeDetail to save
@@ -93,10 +94,16 @@ class ConformerDetailManager:
         )
 
         try:
-            with os.fdopen(temp_fd, 'w', encoding='utf-8') as f:
-                json.dump(detail.model_dump(mode="json"), f, indent=2)
-                f.flush()
-                os.fsync(f.fileno())  # Force to disk
+            # Try to open FD as file object
+            try:
+                with os.fdopen(temp_fd, 'w', encoding='utf-8') as f:
+                    json.dump(detail.model_dump(mode="json"), f, indent=2)
+                    f.flush()
+                    os.fsync(f.fileno())  # Force to disk
+            except Exception:
+                # If fdopen fails, close raw FD
+                os.close(temp_fd)
+                raise
 
             # Atomic rename
             os.replace(temp_path, detail_path)

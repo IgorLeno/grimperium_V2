@@ -20,6 +20,14 @@ class MoleculeStatus(str, Enum):
         OK -> TERMINAL (no changes allowed)
         SKIP -> TERMINAL (no changes allowed)
         * -> PENDING (via reset_batch, only for ALL_OR_NOTHING policy)
+
+    Values:
+        - PENDING: "Pending" (Title Case)
+        - SELECTED: "Selected" (Title Case)
+        - RUNNING: "Running" (Title Case)
+        - OK: "OK" (UPPERCASE - for backward compatibility)
+        - RERUN: "Rerun" (Title Case)
+        - SKIP: "Skip" (Title Case)
     """
 
     PENDING = "Pending"
@@ -31,7 +39,7 @@ class MoleculeStatus(str, Enum):
     RUNNING = "Running"
     """Molecule currently being processed."""
 
-    OK = "Ok"
+    OK = "OK"
     """Processing completed successfully."""
 
     RERUN = "Rerun"

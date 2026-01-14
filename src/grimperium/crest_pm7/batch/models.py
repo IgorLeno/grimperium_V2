@@ -90,9 +90,14 @@ class BatchResult(BaseModel):
             return None
         return self.max_hof - self.min_hof
 
-    @field_serializer("timestamp_start", "timestamp_end", mode="plain")
-    def serialize_timestamps(self, v: Optional[datetime]) -> Optional[str]:
-        """Serialize datetime to ISO format."""
+    @field_serializer("timestamp_start", mode="plain")
+    def serialize_timestamp_start(self, v: datetime) -> str:
+        """Serialize non-optional timestamp_start to ISO format."""
+        return v.isoformat()
+
+    @field_serializer("timestamp_end", mode="plain")
+    def serialize_timestamp_end(self, v: Optional[datetime]) -> Optional[str]:
+        """Serialize optional timestamp_end to ISO format or None."""
         return v.isoformat() if v is not None else None
 
 

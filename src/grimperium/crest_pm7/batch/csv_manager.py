@@ -133,18 +133,37 @@ class BatchCSVManager:
         return self.df  # type: ignore[return-value]
 
     def _safe_int(self, val: Any, default: int = 0) -> int:
-        """Safely convert to int, handling NaN.
+        """Safely convert value to int, handling NaN and invalid types.
 
         Args:
-            val: Value to convert
-            default: Default value if NaN
+            val: Value to convert (Any type)
+            default: Default to return if conversion fails
 
         Returns:
-            Integer value or default
+            int: Converted value, or default
+
+        Logic:
+            1. If NaN/None, return default
+            2. Try direct int(val)
+            3. If that fails, try int(float(val)) to handle "3.0"
+            4. If all fail, log warning and return default
         """
         if pd.isna(val):
             return default
-        return int(val)
+
+        try:
+            # Direct conversion works for integers
+            return int(val)
+        except (ValueError, TypeError):
+            # Try float→int conversion (handles "3.0", 3.5, etc.)
+            try:
+                if isinstance(val, str):
+                    val = val.strip()  # Remove whitespace
+                return int(float(val))
+            except (ValueError, TypeError):
+                # Last resort: log and return default
+                LOG.warning(f"Cannot convert '{val}' to int, using default {default}")
+                return default
 
     def _get_row_index(self, mol_id: str) -> int:
         """Get DataFrame index for mol_id.
@@ -425,7 +444,7 @@ class BatchCSVManager:
             )
 
         # Increment retry count
-        retry_count = int(df.at[idx, "retry_count"] or 0) + 1
+        retry_count = self._safe_int(df.at[idx, "retry_count"], default=0) + 1
 
         # Handle max_retries explicitly (0 is valid)
         max_retries_val = df.at[idx, "max_retries"]

@@ -18,6 +18,9 @@ from grimperium.crest_pm7.molecule_processor import MoleculeProcessor, PM7Result
 
 LOG = logging.getLogger("grimperium.crest_pm7.batch.processor_adapter")
 
+# Default maximum observations to keep for statistics
+DEFAULT_MAX_OBSERVATIONS = 100
+
 
 @dataclass
 class FixedTimeoutPredictor:
@@ -37,10 +40,12 @@ class FixedTimeoutPredictor:
 
     crest_timeout_seconds: float
     mopac_timeout_seconds: float
-    max_observations: int = 100
-    observations: deque = field(default_factory=lambda: deque(maxlen=100))
+    max_observations: int = DEFAULT_MAX_OBSERVATIONS
+    observations: deque = field(
+        default_factory=lambda: deque(maxlen=DEFAULT_MAX_OBSERVATIONS)
+    )
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """Initialize deque with proper maxlen."""
         if not isinstance(self.observations, deque):
             self.observations = deque(self.observations, maxlen=self.max_observations)
