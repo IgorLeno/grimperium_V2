@@ -5,6 +5,7 @@ Displays and manages molecular databases.
 """
 
 import json
+import os
 from datetime import date, datetime
 from typing import TYPE_CHECKING, Any
 
@@ -43,9 +44,9 @@ class DatabasesView(BaseView):
         """
         if not PHASE_A_RESULTS_FILE.exists():
             return None
-
         try:
-            with open(PHASE_A_RESULTS_FILE) as f:
+            with open(PHASE_A_RESULTS_FILE, encoding="utf-8") as f:
+                data: dict[str, Any] = json.load(f)
                 data: dict[str, Any] = json.load(f)
 
             molecules_count = data.get("n_molecules", 0)
@@ -58,11 +59,17 @@ class DatabasesView(BaseView):
                 if timestamp:
                     last_updated_str = timestamp[:10]
 
-            last_updated = (
-                date.fromisoformat(last_updated_str)
-                if last_updated_str
-                else date.today()
-            )
+            last_updated: date | None
+            if last_updated_str:
+                last_updated = date.fromisoformat(last_updated_str)
+            else:
+                # Quando não há timestamp no JSON, inferimos via mtime do arquivo.
+                # Se falhar, deixamos None para o chamador tratar como "desconhecido".
+                try:
+                    file_mtime = os.path.getmtime(PHASE_A_RESULTS_FILE)
+                    last_updated = date.fromtimestamp(file_mtime)
+                except OSError:
+                    last_updated = None
 
             return Database(
                 name="CREST PM7",

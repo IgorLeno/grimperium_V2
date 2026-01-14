@@ -6,7 +6,7 @@ real integration with the ML models and databases.
 """
 
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, datetime
 from random import Random
 
 
@@ -17,7 +17,7 @@ class Database:
     name: str
     description: str
     molecules: int
-    last_updated: date
+    last_updated: datetime | date | None
     status: str  # "ready" | "in_development"
     properties: list[str]
 
@@ -67,7 +67,10 @@ class DivergenceStats:
 DATABASES: list[Database] = [
     Database(
         name="CBS Reference",
-        description="Complete Basis Set (CBS) reference energies from Chemperium",
+        description=(
+            "Complete Basis Set (CBS) reference energies from "
+            "Chemperium"
+        ),
         molecules=30026,
         last_updated=date(2026, 1, 11),
         status="ready",
@@ -223,7 +226,10 @@ def get_molecule_name(smiles: str) -> str:
     return MOLECULE_NAMES.get(smiles, "Unknown Molecule")
 
 
-def mock_predict(smiles: str, model_name: str = DEFAULT_MODEL) -> PredictionResult:
+def mock_predict(
+    smiles: str,
+    model_name: str = DEFAULT_MODEL,
+) -> PredictionResult:
     """
     Generate a mock prediction for a given SMILES string.
 
