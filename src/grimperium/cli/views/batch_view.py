@@ -35,7 +35,7 @@ class BatchView(BaseView):
     name: ClassVar[str] = "batch"
     title: ClassVar[str] = "Batch Processing"
     icon: ClassVar[str] = "📦"
-    color: ClassVar[str] = COLORS["primary"]
+    color: ClassVar[str] = COLORS["batch"]
 
     # Default paths
     DEFAULT_CSV_PATH = Path("data/batch_tracking.csv")
@@ -72,8 +72,8 @@ class BatchView(BaseView):
             show_header=False,
             border_style=COLORS["muted"],
         )
-        table.add_column("Setting", style=COLORS["primary"])
-        table.add_column("Value", style=COLORS["text"])
+        table.add_column("Setting", style=COLORS["batch"])
+        table.add_column("Value", style=COLORS["highlight"])
 
         csv_status = (
             "✓ Found" if self.csv_path and self.csv_path.exists() else "✗ Not set"
@@ -140,13 +140,13 @@ class BatchView(BaseView):
         """Get color for status display."""
         colors = {
             "Pending": COLORS["muted"],
-            "Selected": COLORS["info"],
+            "Selected": COLORS["about"],
             "Running": COLORS["warning"],
             "OK": COLORS["success"],
             "Rerun": COLORS["warning"],
             "Skip": COLORS["error"],
         }
-        return colors.get(status, COLORS["text"])
+        return colors.get(status, COLORS["highlight"])
 
     def get_menu_options(self) -> list[MenuOption]:
         """Get menu options for batch view."""

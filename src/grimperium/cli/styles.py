@@ -23,6 +23,7 @@ COLORS = {
     "results": "#00FF00",  # Green - analytics
     "settings": "#FFFF00",  # Yellow - configuration
     "about": "#F5F5F5",  # White - info
+    "batch": "#00FF80",  # Bright green - batch processing
     "error": "#FF4444",  # Red
     "success": "#44FF44",  # Green
     "warning": "#FFAA00",  # Orange
