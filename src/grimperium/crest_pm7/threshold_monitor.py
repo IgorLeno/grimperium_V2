@@ -14,6 +14,12 @@ from .config import AlertLevel, PM7Config, QualityGrade
 
 LOG = logging.getLogger("grimperium.crest_pm7.threshold_monitor")
 
+# Alert log level mapping
+_ALERT_LOG_LEVELS = {
+    AlertLevel.CRITICAL: logging.CRITICAL,
+    AlertLevel.WARNING: logging.WARNING,
+}
+
 
 @dataclass
 class Alert:
@@ -143,18 +149,7 @@ class ThresholdMonitor:
         """Emit an alert to all registered callbacks."""
         self.alerts.append(alert)
         LOG.log(
-_ALERT_LOG_LEVELS = {
-    AlertLevel.CRITICAL: logging.CRITICAL,
-    AlertLevel.WARNING: logging.WARNING,
-}
-
-def _emit_alert(self, alert: Alert) -> None:
-    """Emit an alert to all registered callbacks."""
-    self.alerts.append(alert)
-    LOG.log(
-        _ALERT_LOG_LEVELS.get(alert.level, logging.INFO),
-        f"[{alert.level.value}] {alert.pattern}: {alert.message}",
-    )
+            _ALERT_LOG_LEVELS.get(alert.level, logging.INFO),
             f"[{alert.level.value}] {alert.pattern}: {alert.message}",
         )
         for callback in self._alert_callbacks:
