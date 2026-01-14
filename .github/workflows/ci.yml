@@ -164,8 +164,8 @@ jobs:
         with:
           path: .venv
           key: >-
-            venv-${{ runner.os }}-${{ matrix.python-version }}-
-            ${{ hashFiles('**/poetry.lock') }}
+            venv-${{ runner.os }}-${{ matrix.python-version }}-${{
+            hashFiles('**/poetry.lock') }}
 
       - name: Install dependencies
         if: steps.cached-poetry-dependencies.outputs.cache-hit != 'true'
