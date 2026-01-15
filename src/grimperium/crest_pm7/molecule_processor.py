@@ -472,11 +472,14 @@ class MoleculeProcessor:
 
         if crest_result.status != CRESTStatus.SUCCESS:
             result.error_message = f"CREST failed: {crest_result.error_message}"
+            result.num_conformers_selected = 0  # No conformers when CREST fails
             result.total_execution_time = time.time() - start_time
             return result
 
         # Select conformers
         conformers_to_process = crest_result.conformer_files[:num_conformers]
+        # Update num_conformers_selected to reflect actual count (may be less than requested)
+        result.num_conformers_selected = len(conformers_to_process)
         result.decisions.append(
             f"processing {len(conformers_to_process)} of {crest_result.conformers_found} conformers"
         )
