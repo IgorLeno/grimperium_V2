@@ -29,7 +29,7 @@ import subprocess
 import sys
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional, TypedDict
+from typing import TypedDict
 
 import numpy as np
 import pandas as pd
@@ -86,7 +86,7 @@ class Env(TypedDict):
     python: str
     platform: str
     cpu: str
-    mem_gb: Optional[float]
+    mem_gb: float | None
     numpy: str
     pandas: str
     sklearn: str
@@ -95,7 +95,7 @@ class Env(TypedDict):
 
 class RegimeConfigJSON(TypedDict):
     filtered: bool
-    filter_range_kcal_mol: Optional[list[int]]
+    filter_range_kcal_mol: list[int] | None
     n_samples: int
     test_size: float
     sample_seed: int
@@ -147,7 +147,7 @@ def _get_cpu_model() -> str:
         return "unknown"
 
 
-def _get_mem_total_gb() -> Optional[float]:
+def _get_mem_total_gb() -> float | None:
     try:
         meminfo = Path("/proc/meminfo").read_text(encoding="utf-8")
         for line in meminfo.splitlines():
@@ -163,7 +163,7 @@ def _create_realistic_mock_pm7(
     y_cbs: np.ndarray,
     X_basic: np.ndarray,
     *,
-    seed: Optional[int] = 42,
+    seed: int | None = 42,
     magnitude_bias_std: float = 0.5,
 ) -> np.ndarray:
     """

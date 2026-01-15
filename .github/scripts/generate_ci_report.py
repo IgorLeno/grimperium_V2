@@ -8,8 +8,8 @@ apenas reportar o estado.
 """
 import os
 import re
-from pathlib import Path
 from datetime import datetime, timezone
+from pathlib import Path
 
 # Limites de exibição no relatório (para evitar reports enormes no GitHub UI).
 MAX_LINT_ERRORS_DISPLAYED = 30

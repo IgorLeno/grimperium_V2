@@ -48,9 +48,9 @@ def _get_project_root_from_package() -> Path | None:
         Project root path if discoverable, None otherwise.
     """
     import logging
-    
+
     logger = logging.getLogger(__name__)
-    
+
     try:
         # Use importlib.resources (Python 3.9+)
         from importlib.resources import files

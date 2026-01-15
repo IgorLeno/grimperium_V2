@@ -330,20 +330,11 @@ class DatabasesView(BaseView):
             if mopac_timeout is None:
                 return
 
-            batch_size = self._prompt_positive_int(
-                "Batch size (molecules per batch)?",
-                default=10,
-                max_value=100,
-            )
-            if batch_size is None:
-                return
-
             self.console.print()
             self.console.print("[bold]Configuration Summary:[/bold]")
             self.console.print(f"  • Molecules to calculate: {num_molecules}")
             self.console.print(f"  • CREST timeout: {crest_timeout} min")
             self.console.print(f"  • MOPAC timeout: {mopac_timeout} min")
-            self.console.print(f"  • Batch size: {batch_size}")
             self.console.print()
 
             confirm = self.console.input(
@@ -358,7 +349,6 @@ class DatabasesView(BaseView):
                 num_molecules=num_molecules,
                 crest_timeout_minutes=crest_timeout,
                 mopac_timeout_minutes=mopac_timeout,
-                batch_size=batch_size,
             )
 
         except KeyboardInterrupt:
@@ -409,15 +399,13 @@ class DatabasesView(BaseView):
         num_molecules: int,
         crest_timeout_minutes: int,
         mopac_timeout_minutes: int,
-        batch_size: int,
     ) -> None:
         """Execute PM7 batch processing with progress display.
 
         Args:
-            num_molecules: Total molecules to process
+            num_molecules: Total molecules to process (also used as batch_size)
             crest_timeout_minutes: CREST timeout per molecule
             mopac_timeout_minutes: MOPAC timeout per molecule
-            batch_size: Molecules per batch
         """
         from grimperium.crest_pm7.batch import (
             BatchCSVManager,
@@ -466,7 +454,7 @@ class DatabasesView(BaseView):
             batch_id = csv_manager.generate_batch_id()
             batch = csv_manager.select_batch(
                 batch_id=batch_id,
-                batch_size=min(batch_size, num_molecules),
+                batch_size=num_molecules,
                 crest_timeout_minutes=crest_timeout_minutes,
                 mopac_timeout_minutes=mopac_timeout_minutes,
                 strategy=BatchSortingStrategy.RERUN_FIRST_THEN_EASY,

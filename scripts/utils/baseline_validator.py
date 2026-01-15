@@ -16,8 +16,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "src"))
 
 from grimperium.crest_pm7 import (
-    QualityGrade,
     TOLERANCE_ABSOLUTE,
+    QualityGrade,
 )
 
 
