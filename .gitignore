@@ -119,3 +119,6 @@ logs/
 # Local work files
 anexos/
 .claude/settings.local.json
+
+# LibreOffice lock files
+.~lock.*

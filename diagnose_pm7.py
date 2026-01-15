@@ -109,6 +109,7 @@ def diagnose():
                 checks_passed += 1
         else:
             print(f"   ⚠️  CSV não encontrado: {csv_path}")
+            checks_failed += 1
     except Exception as e:
         print(f"   ❌ Erro ao verificar CSV: {e}")
         import traceback
@@ -246,6 +247,7 @@ def diagnose():
                 checks_passed += 1  # File format is valid, just no data
         else:
             print(f"   ⚠️  Results file not found: {results_path}")
+            checks_failed += 1
     except Exception as e:
         print(f"   ❌ Error reading results: {e}")
         checks_failed += 1
