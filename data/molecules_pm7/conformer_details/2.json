@@ -1,0 +1,19 @@
+{
+  "mol_id": "2",
+  "smiles": "Pc1ccccc1P",
+  "batch_id": "batch_20260115_013810_3cf8",
+  "timestamp": "2026-01-15T01:38:10.318771+00:00",
+  "crest_status": "FAILED",
+  "crest_conformers_generated": 0,
+  "crest_time": 1.6397945880889893,
+  "crest_error": "CREST returned 156: ",
+  "conformers": [],
+  "num_conformers_selected": 1,
+  "num_conformers_successful": 0,
+  "most_stable_hof": null,
+  "quality_grade": "FAILED",
+  "issues": [],
+  "success": false,
+  "error_message": "CREST failed: CREST returned 156: ",
+  "total_execution_time": 1.745649814605713
+}

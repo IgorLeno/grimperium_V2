@@ -159,6 +159,10 @@ class FixedTimeoutProcessor:
         self.crest_timeout_minutes = crest_timeout_minutes
         self.mopac_timeout_minutes = mopac_timeout_minutes
 
+        # CRITICAL: Update config.crest_timeout to match batch timeout
+        # run_crest() uses config.crest_timeout for subprocess timeout
+        self.config.crest_timeout = crest_timeout_minutes * 60  # Convert to seconds
+
         # Create fixed timeout predictor
         self._timeout_predictor = FixedTimeoutPredictor(
             crest_timeout_seconds=crest_timeout_minutes * 60,
@@ -213,6 +217,10 @@ class FixedTimeoutProcessor:
         self.mopac_timeout_minutes = mopac_timeout_minutes
         self._timeout_predictor.crest_timeout_seconds = crest_timeout_minutes * 60
         self._timeout_predictor.mopac_timeout_seconds = mopac_timeout_minutes * 60
+
+        # CRITICAL: Also update config.crest_timeout for run_crest()
+        # This ensures the subprocess.run() timeout is correct
+        self.config.crest_timeout = crest_timeout_minutes * 60  # Convert to seconds
 
         LOG.debug(
             f"Updated timeouts: CREST={crest_timeout_minutes}min, "

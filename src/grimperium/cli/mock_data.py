@@ -66,10 +66,21 @@ class DivergenceStats:
 # fallback when the file doesn't exist (dev/demo mode).
 DATABASES: list[Database] = [
     Database(
-        name="CBS Reference",
+        name="CBS Reference (CHON-only)",
         description=(
-            "Complete Basis Set (CBS) reference energies from "
-            "Chemperium"
+            "CHON-filtered CBS reference energies (C, H, O, N only). "
+            "Recommended for Phase A - removes B, P, As, Ge for MMFF compatibility."
+        ),
+        molecules=29568,
+        last_updated=date(2026, 1, 15),
+        status="ready",
+        properties=["H298_cbs", "H298_b3", "smiles", "charge", "multiplicity"],
+    ),
+    Database(
+        name="CBS Reference (Original)",
+        description=(
+            "Complete Basis Set (CBS) reference energies from Chemperium. "
+            "Original dataset with all elements including B, P, As, Ge."
         ),
         molecules=30026,
         last_updated=date(2026, 1, 11),

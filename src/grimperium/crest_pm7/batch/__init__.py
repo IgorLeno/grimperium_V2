@@ -8,6 +8,7 @@ through the CREST PM7 pipeline with:
 - Retry logic with configurable policies
 """
 
+from grimperium.crest_pm7.batch.artifact_manager import ArtifactManager, ArtifactPaths
 from grimperium.crest_pm7.batch.csv_manager import BatchCSVManager
 from grimperium.crest_pm7.batch.detail_manager import ConformerDetailManager
 from grimperium.crest_pm7.batch.enums import (
@@ -44,10 +45,12 @@ __all__ = [
     "BatchRowCSV",
     "ConformerDetail",
     "MoleculeDetail",
+    "ArtifactPaths",
     # Managers
     "BatchCSVManager",
     "ConformerDetailManager",
     "BatchExecutionManager",
+    "ArtifactManager",
     # Processor Adapter
     "FixedTimeoutPredictor",
     "FixedTimeoutProcessor",

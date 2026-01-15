@@ -111,3 +111,30 @@ _PROJECT_ROOT = get_project_root()
 # Data paths for Phase A results
 PHASE_A_RESULTS_DIR = _PROJECT_ROOT / "data" / "molecules_pm7" / "computed"
 PHASE_A_RESULTS_FILE = PHASE_A_RESULTS_DIR / "phase_a_results.json"
+
+# Dataset paths
+DATA_DIR = _PROJECT_ROOT / "data"
+
+# Available CBS Reference datasets
+AVAILABLE_DATASETS = {
+    "CBS Reference (CHON-only)": {
+        "file": DATA_DIR / "thermo_cbs_chon.csv",
+        "molecules": 29568,
+        "last_updated": "2026-01-15",
+        "status": "Ready",
+        "description": "Filtered for C, H, O, N only (removed B, P, As, Ge)",
+        "recommended": True,  # Default for Phase A
+    },
+    "CBS Reference (Original)": {
+        "file": DATA_DIR / "thermo_cbs_clean.csv",
+        "molecules": 30026,
+        "last_updated": "2026-01-11",
+        "status": "Ready",
+        "description": "Original dataset with all elements",
+        "recommended": False,
+    },
+}
+
+# Default dataset for batch processing
+DEFAULT_DATASET = "CBS Reference (CHON-only)"
+DEFAULT_DATASET_PATH = AVAILABLE_DATASETS[DEFAULT_DATASET]["file"]

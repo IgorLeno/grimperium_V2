@@ -98,8 +98,18 @@ class BatchCSVManager:
                 "crest_error": str,
                 "error_message": str,
                 "last_error_message": str,
+                # Force string type for timestamp to avoid float64 issues
+                "timestamp": str,
             },
         )
+
+        # Ensure boolean columns use object dtype to avoid FutureWarning
+        # when assigning True/False to columns that may contain NaN
+        bool_columns = ["success"]
+        for col in bool_columns:
+            if col in self.df.columns:
+                # Convert to object dtype to allow mixed bool/NaN values
+                self.df[col] = self.df[col].astype(object)
 
         # Validate required columns
         required_cols = {"mol_id", "smiles", "nheavy", "status"}

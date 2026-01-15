@@ -13,6 +13,7 @@ from collections.abc import Callable
 from datetime import datetime, timezone
 from pathlib import Path
 
+from grimperium.crest_pm7.batch.artifact_manager import ArtifactManager
 from grimperium.crest_pm7.batch.csv_manager import BatchCSVManager
 from grimperium.crest_pm7.batch.detail_manager import ConformerDetailManager
 from grimperium.crest_pm7.batch.enums import BatchFailurePolicy, MoleculeStatus
@@ -48,6 +49,7 @@ class BatchExecutionManager:
         detail_manager: ConformerDetailManager,
         pm7_config: PM7Config,
         processor_adapter: FixedTimeoutProcessor | None = None,
+        artifact_manager: ArtifactManager | None = None,
     ) -> None:
         """Initialize batch execution manager.
 
@@ -56,11 +58,13 @@ class BatchExecutionManager:
             detail_manager: Manager for JSON detail files
             pm7_config: PM7 configuration
             processor_adapter: Optional processor adapter (created if None)
+            artifact_manager: Optional artifact manager for debug/audit files
         """
         self.csv_manager = csv_manager
         self.detail_manager = detail_manager
         self.pm7_config = pm7_config
         self.processor_adapter = processor_adapter or FixedTimeoutProcessor(pm7_config)
+        self.artifact_manager = artifact_manager
 
         LOG.info("BatchExecutionManager initialized")
 
@@ -229,6 +233,29 @@ class BatchExecutionManager:
             )
             self.detail_manager.save_detail(detail)
 
+            # Save artifacts for debug/audit if artifact manager is configured
+            if self.artifact_manager is not None:
+                try:
+                    # Work directories are typically temp_dir/{mol_id}/crest and /mopac
+                    mol_work_dir = self.pm7_config.temp_dir / mol_id
+                    crest_work_dir = mol_work_dir / "crest" if mol_work_dir.exists() else None
+                    mopac_work_dir = mol_work_dir / "mopac" if mol_work_dir.exists() else None
+
+                    self.artifact_manager.save_artifacts(
+                        mol_id=mol_id,
+                        batch_id=batch_id,
+                        crest_work_dir=crest_work_dir,
+                        mopac_work_dir=mopac_work_dir,
+                        success=pm7_result.success,
+                        extra_metadata={
+                            "quality_grade": pm7_result.quality_grade.value,
+                            "most_stable_hof": pm7_result.most_stable_hof,
+                            "error_message": pm7_result.error_message,
+                        },
+                    )
+                except Exception as e:
+                    LOG.warning(f"Failed to save artifacts for {mol_id}: {e}")
+
             # Update status based on success
             if pm7_result.success:
                 self.csv_manager.mark_success(mol_id, csv_update)
@@ -307,6 +334,9 @@ def create_execution_manager(
     pm7_config: PM7Config,
     crest_timeout_minutes: float = 30.0,
     mopac_timeout_minutes: float = 60.0,
+    artifact_dir: Path | None = None,
+    preserve_artifacts_on_success: bool = True,
+    preserve_artifacts_on_failure: bool = True,
 ) -> BatchExecutionManager:
     """Factory function to create BatchExecutionManager with defaults.
 
@@ -316,6 +346,9 @@ def create_execution_manager(
         pm7_config: PM7 configuration
         crest_timeout_minutes: Default CREST timeout
         mopac_timeout_minutes: Default MOPAC timeout
+        artifact_dir: Directory for debug/audit artifacts (None to disable)
+        preserve_artifacts_on_success: Save artifacts for successful molecules
+        preserve_artifacts_on_failure: Save artifacts for failed molecules
 
     Returns:
         Configured BatchExecutionManager
@@ -328,9 +361,19 @@ def create_execution_manager(
         mopac_timeout_minutes=mopac_timeout_minutes,
     )
 
+    # Create artifact manager if directory specified
+    artifact_manager = None
+    if artifact_dir is not None:
+        artifact_manager = ArtifactManager(
+            artifact_dir=artifact_dir,
+            preserve_on_success=preserve_artifacts_on_success,
+            preserve_on_failure=preserve_artifacts_on_failure,
+        )
+
     return BatchExecutionManager(
         csv_manager=csv_manager,
         detail_manager=detail_manager,
         pm7_config=pm7_config,
         processor_adapter=processor,
+        artifact_manager=artifact_manager,
     )
