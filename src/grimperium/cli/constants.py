@@ -124,14 +124,7 @@ AVAILABLE_DATASETS = {
         "status": "Ready",
         "description": "Filtered for C, H, O, N only (removed B, P, As, Ge)",
         "recommended": True,  # Default for Phase A
-    },
-    "CBS Reference (Original)": {
-        "file": DATA_DIR / "thermo_cbs_clean.csv",
-        "molecules": 30026,
-        "last_updated": "2026-01-11",
-        "status": "Ready",
-        "description": "Original dataset with all elements",
-        "recommended": False,
+        "is_source": True,  # Source of truth for DatasetManager
     },
 }
 

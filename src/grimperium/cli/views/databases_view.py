@@ -228,6 +228,12 @@ class DatabasesView(BaseView):
                     disabled=False,
                 ),
                 MenuOption(
+                    label="Refresh Database",
+                    value="refresh",
+                    icon="",
+                    description="Resync working CSV from source",
+                ),
+                MenuOption(
                     label="Add New Database",
                     value="add",
                     disabled=True,
@@ -286,11 +292,37 @@ class DatabasesView(BaseView):
             self.handle_calculate_pm7()
             return None
 
+        if action == "refresh":
+            self._refresh_database()
+            return None
+
         if action in ["add", "edit", "delete"]:
             self.show_in_development(action.title())
             return None
 
         return None
+
+    def _refresh_database(self) -> None:
+        """Trigger database refresh from source.
+
+        Resyncs the working CSV from the source-of-truth CSV,
+        resetting all status fields to PENDING.
+        """
+        from grimperium.cli.constants import DATA_DIR
+        from grimperium.cli.dataset_manager import DatasetManager
+
+        manager = DatasetManager(
+            source_csv=DATA_DIR / "thermo_cbs_chon.csv",
+            working_csv=DATA_DIR / "thermo_batch_final.csv",
+        )
+        try:
+            manager.refresh_database()
+            self.console.print("[green]Database refreshed[/green]")
+        except FileNotFoundError as e:
+            self.console.print(f"[red]Refresh failed: {e}[/red]")
+        except Exception as e:
+            self.console.print(f"[red]Refresh failed: {e}[/red]")
+        self.console.input("[dim]Press Enter to continue...[/dim]")
 
     def handle_calculate_pm7(self) -> None:
         """Interactive handler for CREST PM7 batch calculations.
@@ -337,9 +369,13 @@ class DatabasesView(BaseView):
             self.console.print(f"  • MOPAC timeout: {mopac_timeout} min")
             self.console.print()
 
-            confirm = self.console.input(
-                "[yellow]Proceed with calculation? (yes/no) [/yellow]"
-            ).strip().lower()
+            confirm = (
+                self.console.input(
+                    "[yellow]Proceed with calculation? (yes/no) [/yellow]"
+                )
+                .strip()
+                .lower()
+            )
             if confirm not in ("yes", "y"):
                 self.console.print("[yellow]Calculation cancelled.[/yellow]")
                 self.console.input("[dim]Press Enter to continue...[/dim]")
