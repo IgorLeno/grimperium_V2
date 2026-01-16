@@ -148,12 +148,28 @@ class FixedTimeoutProcessor:
         crest_timeout_minutes: float = 30.0,
         mopac_timeout_minutes: float = 60.0,
     ) -> None:
-        """Initialize processor with fixed timeouts.
+        """Initialize FixedTimeoutProcessor with batch-specific timeout.
+
+        CRITICAL: This adapter mutates the passed config object's crest_timeout
+        field to enforce the batch-specific timeout. This is intentional:
+        run_crest() uses config.crest_timeout for subprocess timeout values.
+
+        If the config object is shared with other components or threads,
+        this mutation could cause unexpected behavior. To prevent this,
+        pass a copy of the config:
+
+            from copy import copy
+            config_copy = copy(config)
+            adapter = ProcessorAdapter(config_copy, timeout_minutes=20)
 
         Args:
-            config: PM7 configuration
+            config: PM7Config instance (will be mutated)
             crest_timeout_minutes: Fixed CREST timeout in minutes
             mopac_timeout_minutes: Fixed MOPAC timeout in minutes
+
+        Side Effects:
+            Modifies config.crest_timeout = crest_timeout_minutes * 60
+            This ensures run_crest() respects the batch timeout.
         """
         self.config = config
         self.crest_timeout_minutes = crest_timeout_minutes

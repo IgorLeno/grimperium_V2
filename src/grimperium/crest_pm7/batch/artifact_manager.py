@@ -187,6 +187,9 @@ class ArtifactManager:
         # Remove .. (prevent directory traversal)
         safe = safe.replace("..", "__")
 
+        # Remove leading/trailing dots (hidden files on Unix, issues on Windows)
+        safe = safe.strip(".")
+
         # Check for Windows reserved names (with or without extension)
         name_part = safe.split(".")[0].upper()
         if name_part in self._WINDOWS_RESERVED:
