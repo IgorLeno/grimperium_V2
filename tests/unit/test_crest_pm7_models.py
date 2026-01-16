@@ -50,7 +50,7 @@ class TestConformerData:
         conf = ConformerData(
             index=0,
             mol_id="TEST_001",
-            mopac_status=MOPACStatus.FAILED,
+            mopac_status=MOPACStatus.ERROR,  # Changed: FAILED -> ERROR
             hof_extraction_successful=True,
             energy_hof=-50.5,
         )
@@ -98,8 +98,8 @@ class TestPM7Result:
         assert result.smiles == "CCO"
         assert result.nheavy == 3
         assert result.conformers == []
-        assert result.grade == QualityGrade.C
-        assert result.crest_time == 0.0
+        assert result.quality_grade == QualityGrade.FAILED  # Changed: grade->quality_grade, C->FAILED (default)
+        assert result.crest_time is None  # Changed: 0.0 -> None (default)
 
     def test_most_stable_hof_empty(self) -> None:
         """Test most_stable_hof with no conformers."""
@@ -129,7 +129,7 @@ class TestPM7Result:
         conf3 = ConformerData(
             index=2,
             mol_id="TEST_001",
-            mopac_status=MOPACStatus.FAILED,
+            mopac_status=MOPACStatus.ERROR,  # Changed: FAILED -> ERROR
             hof_extraction_successful=False,
             energy_hof=None,
         )
@@ -156,7 +156,7 @@ class TestPM7Result:
         conf2 = ConformerData(
             index=1,
             mol_id="TEST_001",
-            mopac_status=MOPACStatus.FAILED,
+            mopac_status=MOPACStatus.ERROR,  # Changed: FAILED -> ERROR
             hof_extraction_successful=False,
             energy_hof=None,
         )
@@ -185,16 +185,16 @@ class TestPM7Result:
             mol_id="TEST_001",
             smiles="CCO",
             nheavy=3,
-            grade=QualityGrade.A,
+            quality_grade=QualityGrade.A,  # Changed: grade -> quality_grade
             crest_time=10.5,
-            total_mopac_time=45.2,
+            total_execution_time=45.2,  # Changed: total_mopac_time -> total_execution_time
         )
         data = result.to_dict()
 
         assert data["mol_id"] == "TEST_001"
         assert data["smiles"] == "CCO"
         assert data["nheavy"] == 3
-        assert data["grade"] == "A"
+        assert data["quality_grade"] == "A"  # Changed: grade -> quality_grade
         assert data["crest_time"] == pytest.approx(10.5)
 
 
@@ -202,7 +202,7 @@ class TestGradingFunctions:
     """Tests for grading helper functions."""
 
     def test_collect_issues_empty(self) -> None:
-        """Test _collect_issues with perfect result."""
+        """Test _collect_issues with perfect result - returns empty list for success."""
         conf = ConformerData(
             index=0,
             mol_id="TEST_001",
@@ -217,32 +217,24 @@ class TestGradingFunctions:
             smiles="CCO",
             nheavy=3,
             conformers=[conf],
+            success=True,  # Required for _collect_issues to return detailed issues
         )
 
         issues = _collect_issues(result)
-        assert isinstance(issues, dict)
+        assert isinstance(issues, list)  # Changed: dict -> list
 
     def test_grade_from_issues_A(self) -> None:
         """Test grade A assignment."""
-        # No issues = Grade A
-        issues = {
-            "no_conformers_success": False,
-            "low_confidence_hof": False,
-            "crest_warnings": 0,
-            "mopac_warnings": 0,
-        }
-        grade = _grade_from_issues(issues)
+        # No issues + success + conformers = Grade A
+        issues: list[str] = []  # Changed: dict -> list
+        grade = _grade_from_issues(issues, success=True, has_conformers=True)
         assert grade == QualityGrade.A
 
     def test_grade_from_issues_C(self) -> None:
-        """Test grade C assignment for critical issues."""
-        issues = {
-            "no_conformers_success": True,  # Critical issue
-            "low_confidence_hof": False,
-            "crest_warnings": 0,
-            "mopac_warnings": 0,
-        }
-        grade = _grade_from_issues(issues)
+        """Test grade C assignment for multiple issues."""
+        # Multiple issues = Grade C
+        issues = ["no_high_confidence_hof", "incomplete_conformer_coverage"]  # 2+ issues
+        grade = _grade_from_issues(issues, success=True, has_conformers=True)
         assert grade == QualityGrade.C
 
 
@@ -270,15 +262,16 @@ class TestStatusEnums:
         assert CRESTStatus.NOT_ATTEMPTED.value == "NOT_ATTEMPTED"
         assert CRESTStatus.SUCCESS.value == "SUCCESS"
         assert CRESTStatus.FAILED.value == "FAILED"
-        assert CRESTStatus.TIMEOUT.value == "TIMEOUT"
+        # Note: CRESTStatus does not have TIMEOUT (removed in API update)
 
     def test_mopac_status_values(self) -> None:
         """Test MOPAC status enum values."""
         assert MOPACStatus.NOT_ATTEMPTED.value == "NOT_ATTEMPTED"
         assert MOPACStatus.SUCCESS.value == "SUCCESS"
-        assert MOPACStatus.FAILED.value == "FAILED"
+        assert MOPACStatus.ERROR.value == "ERROR"  # Changed: FAILED -> ERROR
         assert MOPACStatus.TIMEOUT.value == "TIMEOUT"
         assert MOPACStatus.SCF_FAILED.value == "SCF_FAILED"
+        assert MOPACStatus.GEOMETRY_ERROR.value == "GEOMETRY_ERROR"  # Added: new status
 
     def test_hof_confidence_values(self) -> None:
         """Test HOF confidence enum values."""

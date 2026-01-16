@@ -179,9 +179,11 @@ class TestTimeoutPredictor:
             filepath = Path(tmpdir) / "predictor.joblib"
             predictor.save(filepath)
 
-            # Load into new predictor
-            loaded = TimeoutPredictor.load(filepath)
+            # Load into new predictor (now instance method, not classmethod)
+            loaded = TimeoutPredictor()
+            success = loaded.load(filepath)
 
+            assert success is True
             assert loaded.is_fitted
             assert loaded.n_samples == predictor.n_samples
 
@@ -205,8 +207,11 @@ class TestTimeoutPredictor:
 
         stats = predictor.get_stats()
         assert stats["n_samples"] == 10
-        assert "mean_time" in stats
-        assert "std_time" in stats
+        # API changed: now uses nheavy_range and time_range instead of mean/std
+        assert "nheavy_range" in stats
+        assert "time_range" in stats
+        assert stats["nheavy_range"] == (5, 14)  # min/max nheavy
+        assert stats["time_range"] == (100.0, 190.0)  # min/max time
 
     def test_predictor_phases(self) -> None:
         """Test predictor behavior across phases A, B, C."""
