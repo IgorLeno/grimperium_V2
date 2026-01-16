@@ -4,6 +4,7 @@ Settings Manager for GRIMPERIUM CLI.
 Manages CREST, MOPAC, and xTB configuration with interactive menus.
 """
 
+import os
 from dataclasses import dataclass, field
 from typing import Any, ClassVar
 
@@ -156,6 +157,39 @@ class SettingsManager:
         ),
     }
 
+    @staticmethod
+    def _parse_bool(value: str | int | bool) -> bool:
+        """Parse boolean from string, int, or bool value.
+
+        Handles CSV round-trip correctly: value → to_dict() → CSV → from_dict() → value
+
+        Args:
+            value: Value to parse (string, int, or bool).
+
+        Returns:
+            Parsed boolean value.
+
+        Raises:
+            ValueError: If string value cannot be parsed.
+            TypeError: If value type is not supported.
+        """
+        if isinstance(value, bool):
+            return value
+
+        if isinstance(value, str):
+            lower_val = value.strip().lower()
+            if lower_val in ("true", "yes", "1", "on"):
+                return True
+            elif lower_val in ("false", "no", "0", "off"):
+                return False
+            else:
+                raise ValueError(f"Cannot parse boolean from: '{value}'")
+
+        if isinstance(value, int):
+            return value != 0
+
+        raise TypeError(f"Cannot parse boolean from {type(value).__name__}")
+
     def to_dict(self) -> dict[str, Any]:
         """Convert all settings to a flat dictionary.
 
@@ -186,38 +220,83 @@ class SettingsManager:
         Args:
             settings_dict: Dictionary with prefixed keys for settings.
         """
-        if "crest_v3" in settings_dict:
-            self.crest.v3 = bool(settings_dict["crest_v3"])
-        if "crest_quick" in settings_dict:
-            self.crest.quick = bool(settings_dict["crest_quick"])
-        if "crest_nci" in settings_dict:
-            self.crest.nci = bool(settings_dict["crest_nci"])
-        if "crest_gfnff" in settings_dict:
-            self.crest.gfnff = bool(settings_dict["crest_gfnff"])
+        # CREST boolean fields
+        for key, attr in [
+            ("crest_v3", "v3"),
+            ("crest_quick", "quick"),
+            ("crest_nci", "nci"),
+            ("crest_gfnff", "gfnff"),
+        ]:
+            if key in settings_dict:
+                try:
+                    setattr(self.crest, attr, self._parse_bool(settings_dict[key]))
+                except (ValueError, TypeError):
+                    pass
+
+        # CREST numeric fields
         if "crest_ewin" in settings_dict:
-            self.crest.ewin = float(settings_dict["crest_ewin"])
+            try:
+                self.crest.ewin = float(settings_dict["crest_ewin"])
+            except (ValueError, TypeError):
+                pass
+
         if "crest_rthr" in settings_dict:
-            self.crest.rthr = float(settings_dict["crest_rthr"])
+            try:
+                self.crest.rthr = float(settings_dict["crest_rthr"])
+            except (ValueError, TypeError):
+                pass
+
         if "crest_optlev" in settings_dict:
-            val = str(settings_dict["crest_optlev"])
+            val = str(settings_dict["crest_optlev"]).strip().lower()
             if val in CRESTSettings.OPTLEV_CHOICES:
                 self.crest.optlev = val
+
         if "crest_threads" in settings_dict:
-            self.crest.threads = int(settings_dict["crest_threads"])
-        if "mopac_precise" in settings_dict:
-            self.mopac.precise = bool(settings_dict["mopac_precise"])
+            try:
+                self.crest.threads = int(settings_dict["crest_threads"])
+            except (ValueError, TypeError):
+                pass
+
+        # MOPAC boolean fields
+        for key, attr in [
+            ("mopac_precise", "precise"),
+            ("mopac_pulay", "pulay"),
+            ("mopac_prtall", "prtall"),
+            ("mopac_archive", "archive"),
+        ]:
+            if key in settings_dict:
+                try:
+                    setattr(self.mopac, attr, self._parse_bool(settings_dict[key]))
+                except (ValueError, TypeError):
+                    pass
+
+        # MOPAC numeric fields
         if "mopac_scfcrt" in settings_dict:
-            self.mopac.scfcrt = float(settings_dict["mopac_scfcrt"])
+            try:
+                self.mopac.scfcrt = float(settings_dict["mopac_scfcrt"])
+            except (ValueError, TypeError):
+                pass
+
         if "mopac_itry" in settings_dict:
-            self.mopac.itry = int(settings_dict["mopac_itry"])
-        if "mopac_pulay" in settings_dict:
-            self.mopac.pulay = bool(settings_dict["mopac_pulay"])
-        if "mopac_prtall" in settings_dict:
-            self.mopac.prtall = bool(settings_dict["mopac_prtall"])
-        if "mopac_archive" in settings_dict:
-            self.mopac.archive = bool(settings_dict["mopac_archive"])
+            try:
+                self.mopac.itry = int(settings_dict["mopac_itry"])
+            except (ValueError, TypeError):
+                pass
+
+        # xTB fields
         if "crest_xtb_preopt" in settings_dict:
-            self.xtb.preopt = bool(settings_dict["crest_xtb_preopt"])
+            try:
+                self.xtb.preopt = self._parse_bool(settings_dict["crest_xtb_preopt"])
+            except (ValueError, TypeError):
+                pass
+
+        if "crest_xtb_timeout_seconds" in settings_dict:
+            try:
+                self.xtb.timeout_seconds = int(
+                    settings_dict["crest_xtb_timeout_seconds"]
+                )
+            except (ValueError, TypeError):
+                pass
 
     def reset_crest(self) -> None:
         """Reset CREST settings to defaults."""
@@ -459,7 +538,19 @@ class SettingsManager:
                 ).ask()
                 if val:
                     try:
-                        self.crest.threads = int(val)
+                        threads_val = int(val)
+                        max_threads = os.cpu_count() or 4
+                        if threads_val < 1:
+                            self.console.print("[red]Threads must be >= 1[/red]")
+                        elif threads_val > max_threads:
+                            self.console.print(
+                                f"[red]Threads exceeds system max ({max_threads})[/red]"
+                            )
+                        else:
+                            self.crest.threads = threads_val
+                            self.console.print(
+                                f"[green]✓ Threads set to {threads_val}[/green]"
+                            )
                     except ValueError:
                         self.console.print("[red]Invalid number[/red]")
 

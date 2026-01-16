@@ -133,8 +133,10 @@ class xTBPreOptimizer:
 
             xtbopt_output = work_dir / "xtbopt.xyz"
             if result.returncode == 0 and xtbopt_output.exists():
-                xtbopt_output.rename(output_xyz)
-                LOG.info(f"xTB pre-optimization complete: {output_xyz} ({elapsed:.1f}s)")
+                xtbopt_output.replace(output_xyz)
+                LOG.info(
+                    f"xTB pre-optimization complete: {output_xyz} ({elapsed:.1f}s)"
+                )
                 return xTBPreOptResult(
                     success=True,
                     output_xyz=output_xyz,
@@ -142,7 +144,9 @@ class xTBPreOptimizer:
                     time_seconds=elapsed,
                 )
             else:
-                error_msg = f"xTB failed (rc={result.returncode}): {result.stderr[:200]}"
+                error_msg = (
+                    f"xTB failed (rc={result.returncode}): {result.stderr[:200]}"
+                )
                 LOG.warning(error_msg)
                 return xTBPreOptResult(
                     success=False,
