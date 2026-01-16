@@ -7,6 +7,7 @@ Detecta problemas antes de escalar para 30k
 import sys
 import json
 from pathlib import Path
+import subprocess
 
 # Add src to path
 sys.path.insert(0, str(Path(__file__).parent / "src"))
@@ -119,17 +120,17 @@ def diagnose():
     # CHECK 3: CREST Installation
     print("\n3️⃣  Checking CREST installation...")
     try:
-        import subprocess
         result = subprocess.run(
             ["crest", "--version"],
             capture_output=True,
+            text=True,
             timeout=5
         )
         if result.returncode == 0:
-            print(f"   ✅ CREST found: {result.stdout.decode().strip()}")
+            print(f"   ✅ CREST found: {result.stdout.strip()}")
             checks_passed += 1
         else:
-            print(f"   ❌ CREST error: {result.stderr.decode()}")
+            print(f"   ❌ CREST error: {result.stderr}")
             checks_failed += 1
     except FileNotFoundError:
         print(f"   ❌ CREST not found in PATH")
@@ -141,17 +142,17 @@ def diagnose():
     # CHECK 4: MOPAC Installation
     print("\n4️⃣  Checking MOPAC installation...")
     try:
-        import subprocess
         result = subprocess.run(
             ["mopac", "--version"],
             capture_output=True,
+            text=True,
             timeout=5
         )
         if result.returncode == 0:
-            print(f"   ✅ MOPAC found: {result.stdout.decode().strip()}")
+            print(f"   ✅ MOPAC found: {result.stdout.strip()}")
             checks_passed += 1
         else:
-            print(f"   ❌ MOPAC error: {result.stderr.decode()}")
+            print(f"   ❌ MOPAC error: {result.stderr}")
             checks_failed += 1
     except FileNotFoundError:
         print(f"   ❌ MOPAC not found in PATH")
@@ -197,7 +198,7 @@ def diagnose():
     try:
         results_path = Path("data/molecules_pm7/computed/phase_a_results.json")
         if results_path.exists():
-            with open(results_path) as f:
+            with open(results_path, encoding='utf-8') as f:
                 data = json.load(f)
 
             # Handle both formats:
@@ -240,11 +241,10 @@ def diagnose():
                     checks_passed += 1
                 else:
                     print(f"   ⚠️  No successful molecules in results array")
-                    # Still pass if file exists and is valid JSON
-                    checks_passed += 1
+                    checks_failed += 1
             else:
                 print(f"   ⚠️  Results array is empty or missing")
-                checks_passed += 1  # File format is valid, just no data
+                checks_failed += 1
         else:
             print(f"   ⚠️  Results file not found: {results_path}")
             checks_failed += 1

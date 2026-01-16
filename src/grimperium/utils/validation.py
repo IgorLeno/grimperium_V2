@@ -21,36 +21,33 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 import pandas as pd
+from rdkit import Chem
 
 if TYPE_CHECKING:
     from grimperium.config import GrimperiumConfig
 
 
-def validate_smiles(
-    smiles: str | list[str],
-    raise_on_invalid: bool = True,
-) -> bool | list[bool]:
+def validate_smiles(smiles: str) -> bool:
     """
-    Validate SMILES string(s) using RDKit.
+    Validate a SMILES string using RDKit.
 
     Args:
-        smiles: Single SMILES or list of SMILES
-        raise_on_invalid: Whether to raise on invalid SMILES
+        smiles: SMILES string to validate
 
     Returns:
-        True/False for single SMILES, list for multiple
+        True if SMILES is valid, False otherwise
 
-    Raises:
-        ValueError: If invalid SMILES and raise_on_invalid=True
-
-    Example:
+    Examples:
         >>> validate_smiles("CCO")
         True
-        >>> validate_smiles(["CCO", "invalid"])
-        [True, False]
-
+        >>> validate_smiles("INVALID123")
+        False
     """
-    raise NotImplementedError("Will be implemented in Batch 5")
+    if not smiles or not isinstance(smiles, str):
+        return False
+
+    mol = Chem.MolFromSmiles(smiles)
+    return mol is not None
 
 
 def validate_dataframe(
