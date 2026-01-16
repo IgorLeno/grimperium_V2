@@ -1,78 +1,179 @@
 """
 Settings view for GRIMPERIUM CLI.
 
-Currently marked as [IN DEVELOPMENT].
+Provides interactive configuration for CREST, MOPAC, and xTB settings.
 """
 
-import sys
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
+from rich.panel import Panel
 
 from grimperium.cli.menu import MenuOption
+from grimperium.cli.settings_manager import SettingsManager
 from grimperium.cli.styles import COLORS, ICONS
 from grimperium.cli.views.base_view import BaseView
 
+if TYPE_CHECKING:
+    from grimperium.cli.controller import CliController
+
 
 class SettingsView(BaseView):
-    """View for application settings (currently in development)."""
+    """View for configuring CREST, MOPAC, and xTB settings.
+
+    Provides interactive menus for adjusting computation parameters
+    used in the molecular optimization pipeline.
+    """
 
     name = "settings"
     title = "Settings"
     icon = ICONS["settings"]
     color = COLORS["settings"]
 
+    def __init__(self, controller: CliController) -> None:
+        """Initialize the settings view.
+
+        Args:
+            controller: The CLI controller managing navigation.
+        """
+        super().__init__(controller)
+        self._settings_manager: SettingsManager | None = None
+
+    @property
+    def settings_manager(self) -> SettingsManager:
+        """Get or create the settings manager instance.
+
+        Returns:
+            SettingsManager instance for this view.
+        """
+        if self._settings_manager is None:
+            self._settings_manager = SettingsManager(console=self.console)
+        return self._settings_manager
+
     def render(self) -> None:
-        """Render the settings view."""
-        self.clear_screen()
-        self.show_header()
-        self.show_in_development("Settings")
+        """Render the settings view with current configuration summary."""
+        self.console.print()
+        self.console.print(
+            Panel(
+                "[dim]Configure computational parameters for the molecular "
+                "optimization pipeline.[/dim]",
+                title="[bold]Settings Overview[/bold]",
+                border_style=self.color,
+            )
+        )
+        self.console.print()
 
     def get_menu_options(self) -> list[MenuOption]:
-        """Return menu options for the settings view."""
+        """Return menu options for the settings view.
+
+        Returns:
+            List of MenuOption objects for CREST, MOPAC, xTB configuration.
+        """
         return [
             MenuOption(
-                label="Select Default Model",
-                value="default_model",
-                disabled=True,
-                disabled_reason="In Development",
+                label="CREST Configuration",
+                value="crest",
+                icon="🔬",
+                description="Conformer search settings",
             ),
             MenuOption(
-                label="Theme (Light/Dark)",
-                value="theme",
-                disabled=True,
-                disabled_reason="In Development",
+                label="MOPAC Configuration",
+                value="mopac",
+                icon="⚗️",
+                description="PM7 optimization settings",
             ),
             MenuOption(
-                label="Display Options",
-                value="display",
-                disabled=True,
-                disabled_reason="In Development",
+                label="xTB Pre-optimization",
+                value="xtb",
+                icon="⚡",
+                description="Pre-optimize structures before CREST",
             ),
             MenuOption(
-                label="Data Directory",
-                value="data_dir",
-                disabled=True,
-                disabled_reason="In Development",
+                label="View Current Settings",
+                value="view_all",
+                icon="📋",
+                description="Display all current settings",
+            ),
+            MenuOption(
+                label="Reset All to Defaults",
+                value="reset_all",
+                icon="🔄",
+                description="Reset all settings to default values",
             ),
         ]
 
     def handle_action(self, action: str) -> str | None:
-        """Handle menu actions."""
+        """Handle menu actions for settings.
+
+        Args:
+            action: The action value from the selected menu option.
+
+        Returns:
+            Next view name to navigate to, or None to stay in current view.
+        """
         if action == "back":
             return "main"
-        # All actions are disabled
-        self.show_in_development(action.replace("_", " ").title())
+        if action == "crest":
+            self.settings_manager.display_crest_menu()
+            return None
+        if action == "mopac":
+            self.settings_manager.display_mopac_menu()
+            return None
+        if action == "xtb":
+            self.settings_manager.display_xtb_menu()
+            return None
+        if action == "view_all":
+            self._display_all_settings()
+            return None
+        if action == "reset_all":
+            self._reset_all_settings()
+            return None
         return None
 
-    def run(self) -> str | None:
-        """Run the settings view (IN DEVELOPMENT)."""
-        self.render()
+    def _display_all_settings(self) -> None:
+        """Display a summary of all current settings."""
+        self.console.clear()
+        self.console.print()
+        self.console.print(
+            f"[bold {self.color}]⚙️  Current Settings[/bold {self.color}]"
+        )
+        self.console.print()
 
-        # Only wait for user acknowledgement in interactive mode
-        if sys.stdin.isatty():
-            try:
-                self.wait_for_enter()
-            except (EOFError, KeyboardInterrupt):
-                # In interactive mode, treat EOFError/Ctrl+C as continue
-                pass
-        # else: non-interactive (CI/piped), skip waiting
+        self.console.print(
+            Panel(
+                self.settings_manager.show_crest_summary(),
+                title="[bold]CREST Settings[/bold]",
+                border_style=self.color,
+            )
+        )
 
-        return "main"
+        self.console.print(
+            Panel(
+                self.settings_manager.show_mopac_summary(),
+                title="[bold]MOPAC Settings[/bold]",
+                border_style=self.color,
+            )
+        )
+
+        self.console.print(
+            Panel(
+                self.settings_manager.show_xtb_summary(),
+                title="[bold]xTB Settings[/bold]",
+                border_style=self.color,
+            )
+        )
+
+        self.console.print()
+        self.wait_for_enter()
+
+    def _reset_all_settings(self) -> None:
+        """Reset all settings to defaults with confirmation."""
+        from grimperium.cli.menu import confirm
+
+        if confirm("Reset all settings to defaults?", default=False):
+            self.settings_manager.reset_all()
+            self.show_success("All settings reset to defaults.")
+        else:
+            self.console.print("[dim]Reset cancelled.[/dim]")
+        self.wait_for_enter()

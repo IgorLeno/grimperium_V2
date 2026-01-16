@@ -14,6 +14,7 @@ from pathlib import Path
 
 from grimperium.crest_pm7.config import PM7Config, TimeoutConfidence
 from grimperium.crest_pm7.molecule_processor import MoleculeProcessor, PM7Result
+from grimperium.crest_pm7.preoptimization import xTBPreOptimizer
 
 LOG = logging.getLogger("grimperium.crest_pm7.batch.processor_adapter")
 
@@ -134,12 +135,14 @@ class FixedTimeoutProcessor:
     1. Creates a MoleculeProcessor with FixedTimeoutPredictor
     2. Provides a simpler interface for batch processing
     3. Tracks actual timeouts used
+    4. Optionally runs xTB pre-optimization before CREST
 
     Attributes:
         config: PM7 configuration
         crest_timeout_minutes: Fixed CREST timeout
         mopac_timeout_minutes: Fixed MOPAC timeout
         processor: Underlying MoleculeProcessor
+        preoptimizer: xTB pre-optimizer (enabled via constructor)
     """
 
     def __init__(
@@ -147,6 +150,7 @@ class FixedTimeoutProcessor:
         config: PM7Config,
         crest_timeout_minutes: float = 30.0,
         mopac_timeout_minutes: float = 60.0,
+        enable_xtb_preopt: bool = False,
     ) -> None:
         """Initialize FixedTimeoutProcessor with batch-specific timeout.
 
@@ -166,6 +170,7 @@ class FixedTimeoutProcessor:
             config: PM7Config instance (will be mutated)
             crest_timeout_minutes: Fixed CREST timeout in minutes
             mopac_timeout_minutes: Fixed MOPAC timeout in minutes
+            enable_xtb_preopt: Enable xTB pre-optimization (default: False)
 
         Side Effects:
             Modifies config.crest_timeout = crest_timeout_minutes * 60
@@ -192,9 +197,13 @@ class FixedTimeoutProcessor:
             timeout_predictor=self._timeout_predictor,  # type: ignore[arg-type]
         )
 
+        # Create xTB pre-optimizer
+        self.preoptimizer = xTBPreOptimizer(enabled=enable_xtb_preopt)
+
         LOG.info(
             f"FixedTimeoutProcessor initialized: "
-            f"CREST={crest_timeout_minutes}min, MOPAC={mopac_timeout_minutes}min"
+            f"CREST={crest_timeout_minutes}min, MOPAC={mopac_timeout_minutes}min, "
+            f"xTB_preopt={enable_xtb_preopt}"
         )
 
     def process_with_fixed_timeout(
@@ -206,6 +215,8 @@ class FixedTimeoutProcessor:
         """Process molecule with fixed timeouts.
 
         This is the main entry point for batch processing.
+        If xTB pre-optimization is enabled and input_xyz is provided,
+        the structure will be pre-optimized before CREST processing.
 
         Args:
             mol_id: Molecule identifier
@@ -216,6 +227,21 @@ class FixedTimeoutProcessor:
             PM7Result from processing
         """
         LOG.debug(f"Processing {mol_id} with fixed timeouts")
+
+        # xTB pre-optimization before MoleculeProcessor
+        if input_xyz is not None and self.preoptimizer.enabled:
+            work_dir = self.config.temp_dir / mol_id
+            work_dir.mkdir(parents=True, exist_ok=True)
+
+            preopt_result = self.preoptimizer.preoptimize_structure(
+                mol_id, input_xyz, work_dir
+            )
+            if preopt_result.success and preopt_result.output_xyz:
+                input_xyz = preopt_result.output_xyz
+                LOG.info(f"Using xTB pre-optimized structure: {input_xyz}")
+            else:
+                LOG.warning(f"xTB pre-opt failed for {mol_id}, using original")
+
         return self.processor.process(mol_id, smiles, input_xyz)
 
     def update_timeouts(

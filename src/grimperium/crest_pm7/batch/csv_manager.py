@@ -62,16 +62,90 @@ class BatchCSVManager:
         "timestamp",
     ]
 
-    def __init__(self, csv_path: Path) -> None:
+    # Identity column
+    IDENTITY_COLUMNS = ["mol_id"]
+
+    # Molecular properties columns
+    MOLECULAR_PROPERTIES_COLUMNS = [
+        "smiles",
+        "nheavy",
+        "nrotbonds",
+        "tpsa",
+        "aromatic_rings",
+        "has_heteroatoms",
+        "reference_hof",
+    ]
+
+    # Batch info columns
+    BATCH_INFO_COLUMNS = [
+        "status",
+        "batch_id",
+        "batch_order",
+        "batch_failure_policy",
+    ]
+
+    # CREST configuration columns
+    CREST_CONFIG_COLUMNS = [
+        "crest_v3",
+        "crest_quick",
+        "crest_nci",
+        "crest_gfnff",
+        "crest_ewin",
+        "crest_rthr",
+        "crest_optlev",
+        "crest_threads",
+        "crest_xtb_preopt",
+    ]
+
+    # MOPAC configuration columns
+    MOPAC_CONFIG_COLUMNS = [
+        "mopac_precise",
+        "mopac_scfcrt",
+        "mopac_itry",
+        "mopac_pulay",
+        "mopac_prtall",
+        "mopac_archive",
+    ]
+
+    # Retry tracking columns
+    RETRY_TRACKING_COLUMNS = [
+        "retry_count",
+        "last_error_message",
+    ]
+
+    def __init__(self, csv_path: Path | None) -> None:
         """Initialize CSV manager.
 
         Args:
-            csv_path: Path to CSV tracking file
+            csv_path: Path to CSV tracking file (can be None for schema-only use)
         """
-        self.csv_path = Path(csv_path)
+        self.csv_path = Path(csv_path) if csv_path is not None else None
         self.df: pd.DataFrame | None = None
         # FUTURE PARALLELIZATION: Add threading.Lock() here
         # self._lock = threading.Lock()
+
+    def get_schema(self) -> list[str]:
+        """Get the full CSV schema with all column names.
+
+        Returns:
+            List of 45 column names in order:
+            - Identity (1): mol_id
+            - Molecular properties (7): smiles, nheavy, etc.
+            - Batch info (4): status, batch_id, etc.
+            - CREST configuration (9): crest_v3, crest_xtb_preopt, etc.
+            - MOPAC configuration (6): mopac_precise, etc.
+            - Results (16): crest_status, most_stable_hof, etc.
+            - Retry tracking (2): retry_count, last_error_message
+        """
+        return (
+            self.IDENTITY_COLUMNS
+            + self.MOLECULAR_PROPERTIES_COLUMNS
+            + self.BATCH_INFO_COLUMNS
+            + self.CREST_CONFIG_COLUMNS
+            + self.MOPAC_CONFIG_COLUMNS
+            + self.RESULT_COLUMNS
+            + self.RETRY_TRACKING_COLUMNS
+        )
 
     def load_csv(self) -> pd.DataFrame:
         """Load CSV file into DataFrame.
@@ -81,7 +155,10 @@ class BatchCSVManager:
 
         Raises:
             FileNotFoundError: If CSV file doesn't exist
+            RuntimeError: If csv_path is None
         """
+        if self.csv_path is None:
+            raise RuntimeError("csv_path is None - cannot load CSV")
         if not self.csv_path.exists():
             raise FileNotFoundError(f"CSV file not found: {self.csv_path}")
 
@@ -131,6 +208,8 @@ class BatchCSVManager:
 
     def save_csv(self) -> None:
         """Save DataFrame to CSV file."""
+        if self.csv_path is None:
+            raise RuntimeError("csv_path is None - cannot save CSV")
         if self.df is None:
             raise RuntimeError("No DataFrame loaded - call load_csv() first")
 

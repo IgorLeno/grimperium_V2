@@ -251,8 +251,6 @@ def show_main_menu(
             value="settings",
             icon=ICONS["settings"],
             description="Configuration",
-            disabled=True,
-            disabled_reason="In Development",
             style="settings",
         ),
         MenuOption(
