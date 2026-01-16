@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import shutil
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -153,6 +154,50 @@ class ArtifactManager:
         self.preserve_on_failure = preserve_on_failure
         LOG.debug(f"ArtifactManager initialized at {self.artifact_dir}")
 
+    # Windows reserved names (case-insensitive)
+    _WINDOWS_RESERVED = frozenset({
+        "CON", "PRN", "AUX", "NUL",
+        "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8", "COM9",
+        "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9",
+    })
+
+    def _sanitize_id(self, identifier: str) -> str:
+        """Sanitize molecule or batch ID to prevent path injection attacks.
+
+        Handles:
+        - Directory traversal (../)
+        - Null bytes (\\x00)
+        - Path separators (/, \\)
+        - Shell metacharacters (*, ?, <, >, |, :, ")
+        - Windows reserved names (CON, PRN, etc.)
+        - Filesystem length limits (255 chars)
+
+        Args:
+            identifier: mol_id or batch_id string
+
+        Returns:
+            Safe, filesystem-compatible string
+        """
+        if not identifier:
+            return "_empty_"
+
+        # Remove/replace dangerous characters: / \ : * ? " < > | and null byte
+        safe = re.sub(r'[/\\:*?"<>|\x00]', "_", identifier)
+
+        # Remove .. (prevent directory traversal)
+        safe = safe.replace("..", "__")
+
+        # Check for Windows reserved names (with or without extension)
+        name_part = safe.split(".")[0].upper()
+        if name_part in self._WINDOWS_RESERVED:
+            safe = f"_{safe}"
+
+        # Truncate to 255 chars (filesystem limit)
+        if len(safe) > 255:
+            safe = safe[:255]
+
+        return safe
+
     def get_mol_artifact_dir(self, mol_id: str, batch_id: str) -> Path:
         """Get artifact directory path for a molecule.
 
@@ -163,9 +208,8 @@ class ArtifactManager:
         Returns:
             Path to molecule artifact directory
         """
-        # Sanitize identifiers for filesystem
-        safe_mol_id = mol_id.replace("/", "_").replace("\\", "_")
-        safe_batch_id = batch_id.replace("/", "_").replace("\\", "_")
+        safe_mol_id = self._sanitize_id(mol_id)
+        safe_batch_id = self._sanitize_id(batch_id)
         return self.artifact_dir / safe_batch_id / safe_mol_id
 
     def save_artifacts(
@@ -337,7 +381,7 @@ class ArtifactManager:
         Returns:
             List of mol_ids
         """
-        safe_batch_id = batch_id.replace("/", "_").replace("\\", "_")
+        safe_batch_id = self._sanitize_id(batch_id)
         batch_dir = self.artifact_dir / safe_batch_id
 
         if not batch_dir.exists():
@@ -378,7 +422,7 @@ class ArtifactManager:
             Dict with artifact counts and sizes
         """
         if batch_id:
-            safe_batch_id = batch_id.replace("/", "_").replace("\\", "_")
+            safe_batch_id = self._sanitize_id(batch_id)
             search_dirs = [self.artifact_dir / safe_batch_id]
         else:
             search_dirs = [
@@ -436,7 +480,7 @@ class ArtifactManager:
         Returns:
             Number of molecule directories deleted
         """
-        safe_batch_id = batch_id.replace("/", "_").replace("\\", "_")
+        safe_batch_id = self._sanitize_id(batch_id)
         batch_dir = self.artifact_dir / safe_batch_id
 
         if not batch_dir.exists():

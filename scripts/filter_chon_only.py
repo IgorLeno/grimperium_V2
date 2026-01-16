@@ -150,7 +150,7 @@ def filter_chon(
         if verbose:
             print("\nElement distribution (molecules containing each element):")
             for elem, count in sorted_elems:
-                pct = 100 * count / input_count
+                pct = 100 * count / input_count if input_count > 0 else 0.0
                 marker = " <-- non-CHON" if elem not in {"C", "H", "O", "N"} else ""
                 print(f"  {elem:2s}: {count:6d} ({pct:5.2f}%){marker}")
 
@@ -168,7 +168,8 @@ def filter_chon(
         print(f"\nResults:")
         print(f"  CHON molecules: {output_count:,}")
         print(f"  Removed (non-CHON): {removed:,}")
-        print(f"  Removed proportion: {100 * removed / input_count:.2f}%")
+        removed_pct = 100 * removed / input_count if input_count > 0 else 0.0
+        print(f"  Removed proportion: {removed_pct:.2f}%")
 
     # Save if output provided
     if output_csv:
@@ -245,7 +246,8 @@ Examples:
 
         # Print summary even without verbose
         if not args.verbose:
-            print(f"{input_count} -> {output_count} molecules ({100 * (input_count - output_count) / input_count:.2f}% removed)")
+            removed_pct = 100 * (input_count - output_count) / input_count if input_count > 0 else 0.0
+            print(f"{input_count} -> {output_count} molecules ({removed_pct:.2f}% removed)")
             if args.output:
                 print(f"Saved to: {args.output}")
 
