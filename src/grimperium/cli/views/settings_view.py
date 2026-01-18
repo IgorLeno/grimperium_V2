@@ -68,26 +68,20 @@ class SettingsView(BaseView):
         """Return menu options for the settings view.
 
         Returns:
-            List of MenuOption objects for CREST, MOPAC, xTB configuration.
+            List of MenuOption objects for CREST, MOPAC configuration.
         """
         return [
             MenuOption(
                 label="CREST Configuration",
                 value="crest",
                 icon="🔬",
-                description="Conformer search settings",
+                description="Conformer search settings (includes xTB pre-optimization)",
             ),
             MenuOption(
                 label="MOPAC Configuration",
                 value="mopac",
                 icon="⚗️",
                 description="PM7 optimization settings",
-            ),
-            MenuOption(
-                label="xTB Pre-optimization",
-                value="xtb",
-                icon="⚡",
-                description="Pre-optimize structures before CREST",
             ),
             MenuOption(
                 label="View Current Settings",
@@ -100,6 +94,12 @@ class SettingsView(BaseView):
                 value="reset_all",
                 icon="🔄",
                 description="Reset all settings to default values",
+            ),
+            MenuOption(
+                label="Back to Main Menu",
+                value="back",
+                icon="↩️",
+                description="Return to main menu",
             ),
         ]
 
@@ -120,9 +120,6 @@ class SettingsView(BaseView):
         if action == "mopac":
             self.settings_manager.display_mopac_menu()
             return None
-        if action == "xtb":
-            self.settings_manager.display_xtb_menu()
-            return None
         if action == "view_all":
             self._display_all_settings()
             return None
@@ -134,10 +131,6 @@ class SettingsView(BaseView):
     def _display_all_settings(self) -> None:
         """Display a summary of all current settings."""
         self.console.clear()
-        self.console.print()
-        self.console.print(
-            f"[bold {self.color}]⚙️  Current Settings[/bold {self.color}]"
-        )
         self.console.print()
 
         self.console.print(

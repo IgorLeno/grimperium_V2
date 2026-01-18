@@ -77,17 +77,6 @@ DATABASES: list[Database] = [
         properties=["H298_cbs", "H298_b3", "smiles", "charge", "multiplicity"],
     ),
     Database(
-        name="CBS Reference (Original)",
-        description=(
-            "Complete Basis Set (CBS) reference energies from Chemperium. "
-            "Original dataset with all elements including B, P, As, Ge."
-        ),
-        molecules=30026,
-        last_updated=date(2026, 1, 11),
-        status="ready",
-        properties=["H298_cbs", "H298_b3", "smiles", "charge", "multiplicity"],
-    ),
-    Database(
         name="CREST PM7",
         description="CREST conformer search with PM7 optimization",
         molecules=0,  # Real count comes from phase_a_results.json

@@ -301,10 +301,12 @@ class SettingsManager:
     def reset_crest(self) -> None:
         """Reset CREST settings to defaults."""
         self.crest = CRESTSettings()
+        self.console.print("[green]✓ CREST settings reset to defaults[/green]")
 
     def reset_mopac(self) -> None:
         """Reset MOPAC settings to defaults."""
         self.mopac = MOPACSettings()
+        self.console.print("[green]✓ MOPAC settings reset to defaults[/green]")
 
     def reset_xtb(self) -> None:
         """Reset xTB settings to defaults."""
@@ -343,6 +345,8 @@ class SettingsManager:
         table.add_row("RMSD Threshold", f"{self.crest.rthr} Å")
         table.add_row("Optimization Level", self.crest.optlev)
         table.add_row("Threads", str(self.crest.threads))
+        table.add_row("", "")  # Separator
+        table.add_row("⚡ xTB Pre-optimization", self._status_icon(self.xtb.preopt))
 
         return table
 
@@ -457,15 +461,35 @@ class SettingsManager:
                 )
             )
 
+            # Format toggle labels with current state
+            v3_state = "✓ ON" if self.crest.v3 else "○ OFF"
+            quick_state = "✓ ON" if self.crest.quick else "○ OFF"
+            nci_state = "✓ ON" if self.crest.nci else "○ OFF"
+            gfnff_state = "✓ ON" if self.crest.gfnff else "○ OFF"
+            xtb_state = "✓ ON" if self.xtb.preopt else "○ OFF"
+
             choices = [
-                questionary.Choice("Toggle v3 Algorithm", value="v3"),
-                questionary.Choice("Toggle Quick Mode", value="quick"),
-                questionary.Choice("Toggle NCI Mode", value="nci"),
-                questionary.Choice("Toggle GFN-FF", value="gfnff"),
-                questionary.Choice("Set Energy Window", value="ewin"),
-                questionary.Choice("Set RMSD Threshold", value="rthr"),
-                questionary.Choice("Set Optimization Level", value="optlev"),
-                questionary.Choice("Set Threads", value="threads"),
+                questionary.Choice(f"Toggle v3 Algorithm [{v3_state}]", value="v3"),
+                questionary.Choice(f"Toggle Quick Mode [{quick_state}]", value="quick"),
+                questionary.Choice(f"Toggle NCI Mode [{nci_state}]", value="nci"),
+                questionary.Choice(f"Toggle GFN-FF [{gfnff_state}]", value="gfnff"),
+                questionary.Choice(
+                    f"Set Energy Window (current: {self.crest.ewin})", value="ewin"
+                ),
+                questionary.Choice(
+                    f"Set RMSD Threshold (current: {self.crest.rthr})", value="rthr"
+                ),
+                questionary.Choice(
+                    f"Set Optimization Level (current: {self.crest.optlev})",
+                    value="optlev",
+                ),
+                questionary.Choice(
+                    f"Set Threads (current: {self.crest.threads})", value="threads"
+                ),
+                questionary.Separator(),
+                questionary.Choice(
+                    f"⚡ xTB Pre-optimization [{xtb_state}]", value="xtb_preopt"
+                ),
                 questionary.Separator(),
                 questionary.Choice("❓ Help", value="help"),
                 questionary.Choice("🔄 Reset to Defaults", value="reset"),
@@ -493,12 +517,26 @@ class SettingsManager:
                 self.reset_crest()
             elif choice == "v3":
                 self.crest.v3 = not self.crest.v3
+                state = "ON" if self.crest.v3 else "OFF"
+                self.console.print(
+                    f"[green]✓ Setting updated: v3 Algorithm {state}[/green]"
+                )
             elif choice == "quick":
                 self.crest.quick = not self.crest.quick
+                state = "ON" if self.crest.quick else "OFF"
+                self.console.print(
+                    f"[green]✓ Setting updated: Quick Mode {state}[/green]"
+                )
             elif choice == "nci":
                 self.crest.nci = not self.crest.nci
+                state = "ON" if self.crest.nci else "OFF"
+                self.console.print(
+                    f"[green]✓ Setting updated: NCI Mode {state}[/green]"
+                )
             elif choice == "gfnff":
                 self.crest.gfnff = not self.crest.gfnff
+                state = "ON" if self.crest.gfnff else "OFF"
+                self.console.print(f"[green]✓ Setting updated: GFN-FF {state}[/green]")
             elif choice == "ewin":
                 val = questionary.text(
                     "Energy window (kcal/mol):",
@@ -508,8 +546,11 @@ class SettingsManager:
                 if val:
                     try:
                         self.crest.ewin = float(val)
+                        self.console.print(
+                            f"[green]✓ Energy window set to {self.crest.ewin} kcal/mol[/green]"
+                        )
                     except ValueError:
-                        self.console.print("[red]Invalid number[/red]")
+                        self.console.print("[red]❌ Invalid number[/red]")
             elif choice == "rthr":
                 val = questionary.text(
                     "RMSD threshold (Å):",
@@ -519,8 +560,11 @@ class SettingsManager:
                 if val:
                     try:
                         self.crest.rthr = float(val)
+                        self.console.print(
+                            f"[green]✓ RMSD threshold set to {self.crest.rthr} Å[/green]"
+                        )
                     except ValueError:
-                        self.console.print("[red]Invalid number[/red]")
+                        self.console.print("[red]❌ Invalid number[/red]")
             elif choice == "optlev":
                 opt = questionary.select(
                     "Optimization level:",
@@ -530,6 +574,9 @@ class SettingsManager:
                 ).ask()
                 if opt:
                     self.crest.optlev = opt
+                    self.console.print(
+                        f"[green]✓ Optimization level set to {opt}[/green]"
+                    )
             elif choice == "threads":
                 val = questionary.text(
                     "Number of threads:",
@@ -553,6 +600,12 @@ class SettingsManager:
                             )
                     except ValueError:
                         self.console.print("[red]Invalid number[/red]")
+            elif choice == "xtb_preopt":
+                self.xtb.preopt = not self.xtb.preopt
+                state = "ON" if self.xtb.preopt else "OFF"
+                self.console.print(
+                    f"[green]✓ Setting updated: xTB Pre-optimization {state}[/green]"
+                )
 
     def display_mopac_menu(self) -> bool:
         """Interactive MOPAC settings menu.
@@ -572,13 +625,32 @@ class SettingsManager:
                 )
             )
 
+            # Format toggle labels with current state
+            precise_state = "✓ ON" if self.mopac.precise else "○ OFF"
+            pulay_state = "✓ ON" if self.mopac.pulay else "○ OFF"
+            prtall_state = "✓ ON" if self.mopac.prtall else "○ OFF"
+            archive_state = "✓ ON" if self.mopac.archive else "○ OFF"
+
             choices = [
-                questionary.Choice("Toggle Precise SCF", value="precise"),
-                questionary.Choice("Set SCF Threshold", value="scfcrt"),
-                questionary.Choice("Set Max Iterations", value="itry"),
-                questionary.Choice("Toggle PULAY Acceleration", value="pulay"),
-                questionary.Choice("Toggle Verbose Output", value="prtall"),
-                questionary.Choice("Toggle Archive Output", value="archive"),
+                questionary.Choice(
+                    f"Toggle Precise SCF [{precise_state}]", value="precise"
+                ),
+                questionary.Choice(
+                    f"Set SCF Threshold (current: {self.mopac.scfcrt:.1e})",
+                    value="scfcrt",
+                ),
+                questionary.Choice(
+                    f"Set Max Iterations (current: {self.mopac.itry})", value="itry"
+                ),
+                questionary.Choice(
+                    f"Toggle PULAY Acceleration [{pulay_state}]", value="pulay"
+                ),
+                questionary.Choice(
+                    f"Toggle Verbose Output [{prtall_state}]", value="prtall"
+                ),
+                questionary.Choice(
+                    f"Toggle Archive Output [{archive_state}]", value="archive"
+                ),
                 questionary.Separator(),
                 questionary.Choice("❓ Help", value="help"),
                 questionary.Choice("🔄 Reset to Defaults", value="reset"),
@@ -606,12 +678,28 @@ class SettingsManager:
                 self.reset_mopac()
             elif choice == "precise":
                 self.mopac.precise = not self.mopac.precise
+                state = "ON" if self.mopac.precise else "OFF"
+                self.console.print(
+                    f"[green]✓ Setting updated: Precise SCF {state}[/green]"
+                )
             elif choice == "pulay":
                 self.mopac.pulay = not self.mopac.pulay
+                state = "ON" if self.mopac.pulay else "OFF"
+                self.console.print(
+                    f"[green]✓ Setting updated: PULAY Acceleration {state}[/green]"
+                )
             elif choice == "prtall":
                 self.mopac.prtall = not self.mopac.prtall
+                state = "ON" if self.mopac.prtall else "OFF"
+                self.console.print(
+                    f"[green]✓ Setting updated: Verbose Output {state}[/green]"
+                )
             elif choice == "archive":
                 self.mopac.archive = not self.mopac.archive
+                state = "ON" if self.mopac.archive else "OFF"
+                self.console.print(
+                    f"[green]✓ Setting updated: Archive Output {state}[/green]"
+                )
             elif choice == "scfcrt":
                 val = questionary.text(
                     "SCF threshold (e.g., 1e-4):",
@@ -621,8 +709,11 @@ class SettingsManager:
                 if val:
                     try:
                         self.mopac.scfcrt = float(val)
+                        self.console.print(
+                            f"[green]✓ SCF threshold set to {self.mopac.scfcrt:.1e}[/green]"
+                        )
                     except ValueError:
-                        self.console.print("[red]Invalid number[/red]")
+                        self.console.print("[red]❌ Invalid number[/red]")
             elif choice == "itry":
                 val = questionary.text(
                     "Max iterations:",
@@ -632,8 +723,11 @@ class SettingsManager:
                 if val:
                     try:
                         self.mopac.itry = int(val)
+                        self.console.print(
+                            f"[green]✓ Max iterations set to {self.mopac.itry}[/green]"
+                        )
                     except ValueError:
-                        self.console.print("[red]Invalid number[/red]")
+                        self.console.print("[red]❌ Invalid number[/red]")
 
     def display_xtb_menu(self) -> bool:
         """Interactive xTB pre-optimization menu.
@@ -641,66 +735,41 @@ class SettingsManager:
         Returns:
             True if settings were saved, False if cancelled.
         """
-        self.console.clear()
-        self.console.print()
-        self.console.print(
-            Panel(
-                self.show_xtb_summary(),
-                title="[bold]xTB Pre-optimization[/bold]",
-                subtitle="[dim]Pre-optimize structures before CREST[/dim]",
-                border_style=COLORS["settings"],
-            )
-        )
-
-        self.console.print()
-        self.console.print("[dim]Recommended: Yes (per CREST documentation)[/dim]")
-        self.console.print("[dim]Cost: ~15 seconds per molecule (optional)[/dim]")
-        self.console.print()
-
-        choices = [
-            questionary.Choice(
-                "Enable xTB Pre-optimization",
-                value="enable",
-            ),
-            questionary.Choice(
-                "Disable xTB Pre-optimization",
-                value="disable",
-            ),
-            questionary.Separator(),
-            questionary.Choice("❓ Help", value="help"),
-            questionary.Separator(),
-            questionary.Choice("💾 Save & Return", value="save"),
-            questionary.Choice("◀ Cancel", value="cancel"),
-        ]
-
-        choice = questionary.select(
-            "Select option:",
-            choices=choices,
-            style=SETTINGS_STYLE,
-            qmark="",
-            pointer="❯",
-        ).ask()
-
-        if choice is None or choice == "cancel":
-            return False
-        if choice == "save":
-            return True
-        if choice == "help":
+        while True:
+            self.console.clear()
             self.console.print()
             self.console.print(
                 Panel(
-                    self.HELP_TEXT["xtb_preopt"],
-                    title="[bold]xTB Help[/bold]",
+                    self.show_xtb_summary(),
+                    title="[bold]xTB Configuration[/bold]",
+                    subtitle="[dim]Pre-optimization Settings[/dim]",
                     border_style=COLORS["settings"],
                 )
             )
-            self.console.input("[dim]Press Enter to continue...[/dim]")
-            return self.display_xtb_menu()
-        if choice == "enable":
-            self.xtb.preopt = True
-            return True
-        if choice == "disable":
-            self.xtb.preopt = False
-            return True
 
-        return False
+            choices = [
+                questionary.Choice("Toggle xTB Pre-optimization", value="toggle"),
+                questionary.Separator(),
+                questionary.Choice("❓ Help", value="help"),
+                questionary.Separator(),
+                questionary.Choice("💾 Save & Return", value="save"),
+                questionary.Choice("◀ Cancel", value="cancel"),
+            ]
+
+            choice = questionary.select(
+                "Select option:",
+                choices=choices,
+                style=SETTINGS_STYLE,
+                qmark="",
+                pointer="❯",
+            ).ask()
+
+            if choice is None or choice == "cancel":
+                return False
+            if choice == "save":
+                return True
+            if choice == "help":
+                self.show_help("xTB")
+                self.console.input("[dim]Press Enter to continue...[/dim]")
+            elif choice == "toggle":
+                self.xtb.preopt = not self.xtb.preopt
