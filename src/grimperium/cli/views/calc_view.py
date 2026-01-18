@@ -6,6 +6,7 @@ Handles molecular property predictions.
 
 from typing import TYPE_CHECKING
 
+from rdkit import Chem
 from rich.panel import Panel
 from rich.table import Table
 
@@ -128,20 +129,80 @@ using the Delta-Learning model.
 
     def validate_smiles(self, smiles: str) -> bool | str:
         """
-        Basic SMILES validation.
+        Validate SMILES string using RDKit.
 
-        In MVP, just checks for non-empty string.
-        Real validation would use RDKit.
+        Args:
+            smiles: SMILES string to validate.
+
+        Returns:
+            True if valid, error message string if invalid.
         """
-        if not smiles or not smiles.strip():
+        # Strip whitespace
+        smiles_clean = smiles.strip() if smiles else ""
+
+        # Check for empty string
+        if not smiles_clean:
             return "Please enter a valid SMILES string"
 
-        # Basic character validation
-        valid_chars = set("CNOPSFClBrI[]()=#-+@/\\0123456789cnops")
-        if not all(c in valid_chars for c in smiles):
-            return "Invalid characters in SMILES string"
+        # Use RDKit to validate SMILES
+        try:
+            mol = Chem.MolFromSmiles(smiles_clean)
+            if mol is None:
+                return f"Invalid SMILES: '{smiles_clean}' cannot be parsed by RDKit"
+            return True
+        except Exception as e:
+            return f"Error validating SMILES: {str(e)}"
 
-        return True
+    def validate_molecules(
+        self, molecules: list[dict[str, str]]
+    ) -> tuple[list[dict[str, str]], str]:
+        """
+        Validate a list of molecules and remove duplicates/invalid SMILES.
+
+        Args:
+            molecules: List of dicts with 'smiles' and optional 'name' keys.
+
+        Returns:
+            Tuple of (valid_molecules, summary_message).
+        """
+        if not molecules:
+            return [], "No molecules provided"
+
+        valid: list[dict[str, str]] = []
+        seen_smiles: set[str] = set()
+        rejected_count = 0
+        duplicate_count = 0
+
+        for mol_dict in molecules:
+            smiles = mol_dict.get("smiles", "").strip()
+
+            # Skip empty SMILES
+            if not smiles:
+                rejected_count += 1
+                continue
+
+            # Check for duplicates
+            if smiles in seen_smiles:
+                duplicate_count += 1
+                continue
+
+            # Validate with RDKit
+            validation_result = self.validate_smiles(smiles)
+            if validation_result is True:
+                valid.append(mol_dict)
+                seen_smiles.add(smiles)
+            else:
+                rejected_count += 1
+
+        # Build summary
+        summary_parts = [f"{len(valid)} valid molecule(s)"]
+        if rejected_count > 0:
+            summary_parts.append(f"{rejected_count} rejected (invalid SMILES)")
+        if duplicate_count > 0:
+            summary_parts.append(f"{duplicate_count} duplicate(s) removed")
+
+        summary = ", ".join(summary_parts)
+        return valid, summary
 
     def do_prediction(self) -> bool:
         """
@@ -175,6 +236,9 @@ using the Delta-Learning model.
         self.last_result = result
         self.history.append(result)
 
+        self.console.print(
+            f"[green]✓ Calculation complete for SMILES: {smiles}[/green]"
+        )
         self.render_result(result)
 
         return True

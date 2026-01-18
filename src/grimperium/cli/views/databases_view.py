@@ -10,6 +10,7 @@ from datetime import date, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+import pandas as pd
 from rich.panel import Panel
 from rich.progress import (
     BarColumn,
@@ -21,7 +22,7 @@ from rich.progress import (
 )
 from rich.table import Table
 
-from grimperium.cli.constants import PHASE_A_RESULTS_FILE
+from grimperium.cli.constants import DATA_DIR, PHASE_A_RESULTS_FILE
 from grimperium.cli.menu import MenuOption, show_back_menu
 from grimperium.cli.mock_data import DATABASES, Database
 from grimperium.cli.styles import COLORS, ICONS
@@ -46,48 +47,87 @@ class DatabasesView(BaseView):
 
     @staticmethod
     def load_real_phase_a_results() -> Database | None:
-        """Load real Phase A CREST PM7 results from phase_a_results.json.
+        """Load real Phase A CREST PM7 results with CSV fallback.
+
+        Priority:
+        1. Load from phase_a_results.json if exists and has n_molecules > 0
+        2. Fallback to counting rows in data/thermo_pm7.csv
+        3. Return None if no data source available
 
         Returns:
-            Database object with real data, or None if file doesn't exist.
+            Database object with real data, or None if no data available.
         """
-        if not PHASE_A_RESULTS_FILE.exists():
-            return None
-        try:
-            with open(PHASE_A_RESULTS_FILE, encoding="utf-8") as f:
-                data: dict[str, Any] = json.load(f)
+        molecules_count = 0
+        last_updated: date | None = None
 
-            molecules_count = data.get("n_molecules", 0)
-            results = data.get("results", [])
+        # Strategy 1: Try loading from JSON
+        if PHASE_A_RESULTS_FILE.exists():
+            try:
+                with open(PHASE_A_RESULTS_FILE, encoding="utf-8") as f:
+                    data: dict[str, Any] = json.load(f)
 
-            last_updated_str = None
-            if results:
-                last_result = results[-1]
-                timestamp = last_result.get("timestamp", "")
-                if timestamp:
-                    last_updated_str = timestamp[:10]
+                molecules_count = data.get("n_molecules", 0)
+                results = data.get("results", [])
 
-            last_updated: date | None = None
-            if last_updated_str:
-                last_updated = date.fromisoformat(last_updated_str)
-            else:
-                # When there's no timestamp in the JSON, infer from file mtime.
-                # If that fails, leave as None for caller to treat as "unknown".
+                # Extract timestamp from results
+                last_updated_str = None
+                if results:
+                    last_result = results[-1]
+                    timestamp = last_result.get("timestamp", "")
+                    if timestamp:
+                        last_updated_str = timestamp[:10]
+
+                if last_updated_str:
+                    last_updated = date.fromisoformat(last_updated_str)
+                else:
+                    # Infer from file modification time
+                    try:
+                        file_mtime = os.path.getmtime(PHASE_A_RESULTS_FILE)
+                        last_updated = date.fromtimestamp(file_mtime)
+                    except OSError:
+                        last_updated = None
+
+            except (json.JSONDecodeError, OSError, ValueError):
+                # JSON exists but is corrupted, will fallback to CSV
+                molecules_count = 0
+
+        # Strategy 2: Fallback to CSV if JSON missing or has 0 molecules
+        if molecules_count == 0:
+            csv_path = DATA_DIR / "thermo_pm7.csv"
+            if csv_path.exists():
                 try:
-                    file_mtime = os.path.getmtime(PHASE_A_RESULTS_FILE)
-                    last_updated = date.fromtimestamp(file_mtime)
-                except OSError:
-                    last_updated = None
-            return Database(
-                name="CREST PM7",
-                description="CREST conformer search with PM7 optimization",
-                molecules=molecules_count,
-                last_updated=last_updated,
-                status="ready" if molecules_count > 0 else "in_development",
-                properties=["H298_pm7", "conformers", "smiles", "quality_grade"],
-            )
-        except (json.JSONDecodeError, OSError, ValueError):
+                    df = pd.read_csv(csv_path)
+                    molecules_count = len(df)
+
+                    # Use CSV modification time if no JSON timestamp
+                    if last_updated is None:
+                        try:
+                            file_mtime = os.path.getmtime(csv_path)
+                            last_updated = date.fromtimestamp(file_mtime)
+                        except OSError:
+                            last_updated = None
+
+                except (pd.errors.EmptyDataError, OSError, ValueError):
+                    # CSV exists but is empty or corrupted
+                    molecules_count = 0
+
+        # Strategy 3: Return None if no valid data source
+        if (
+            molecules_count == 0
+            and not PHASE_A_RESULTS_FILE.exists()
+            and not (DATA_DIR / "thermo_pm7.csv").exists()
+        ):
             return None
+
+        # Return Database object with molecule count from JSON or CSV
+        return Database(
+            name="CREST PM7",
+            description="CREST conformer search with PM7 optimization",
+            molecules=molecules_count,
+            last_updated=last_updated,
+            status="ready" if molecules_count > 0 else "in_development",
+            properties=["H298_pm7", "conformers", "smiles", "quality_grade"],
+        )
 
     def get_databases(self) -> list[Database]:
         """Get list of databases, replacing CREST PM7 with real data if available.
@@ -293,7 +333,8 @@ class DatabasesView(BaseView):
             return None
 
         if action == "refresh":
-            self._refresh_database()
+            self.refresh_databases_from_filesystem()
+            self.console.input("[dim]Press Enter to continue...[/dim]")
             return None
 
         if action in ["add", "edit", "delete"]:
@@ -323,6 +364,67 @@ class DatabasesView(BaseView):
         except Exception as e:
             self.console.print(f"[red]Refresh failed: {e}[/red]")
         self.console.input("[dim]Press Enter to continue...[/dim]")
+
+    def refresh_databases_from_filesystem(self) -> int:
+        """Scan data/ directory for CSV files and display database info.
+
+        Discovers available database CSV files in the data/ directory,
+        counts molecules in each file, and displays summary.
+
+        Returns:
+            Number of database CSV files discovered.
+        """
+        try:
+            if not DATA_DIR.exists():
+                self.console.print(
+                    f"[{COLORS['warning']}]⚠️  Data directory not found: {DATA_DIR}[/{COLORS['warning']}]"
+                )
+                return 0
+
+            # Find all CSV files in data/ directory
+            csv_files = list(DATA_DIR.glob("*.csv"))
+
+            if not csv_files:
+                self.console.print(
+                    f"[{COLORS['muted']}]No CSV files found in {DATA_DIR}[/{COLORS['muted']}]"
+                )
+                return 0
+
+            self.console.print()
+            self.console.print(
+                f"[bold {COLORS['databases']}]Discovered {len(csv_files)} database(s):[/bold {COLORS['databases']}]"
+            )
+            self.console.print()
+
+            # Display each database with molecule count
+            for csv_file in sorted(csv_files):
+                try:
+                    df = pd.read_csv(csv_file)
+                    molecule_count = len(df)
+                    self.console.print(
+                        f"  [{COLORS['success']}]✓[/{COLORS['success']}] "
+                        f"[bold]{csv_file.name}[/bold]: "
+                        f"[{COLORS['databases']}]{molecule_count} molecules[/{COLORS['databases']}]"
+                    )
+                except Exception as e:
+                    self.console.print(
+                        f"  [{COLORS['error']}]✗[/{COLORS['error']}] "
+                        f"[bold]{csv_file.name}[/bold]: "
+                        f"[{COLORS['muted']}]Error reading file: {e}[/{COLORS['muted']}]"
+                    )
+
+            self.console.print()
+            self.console.print(
+                f"[{COLORS['success']}]✓ Refresh complete: {len(csv_files)} database(s) found[/{COLORS['success']}]"
+            )
+
+            return len(csv_files)
+
+        except Exception as e:
+            self.console.print(
+                f"[{COLORS['error']}]❌ Refresh failed: {e}[/{COLORS['error']}]"
+            )
+            return 0
 
     def handle_calculate_pm7(self) -> None:
         """Interactive handler for CREST PM7 batch calculations.
