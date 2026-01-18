@@ -1,12 +1,8 @@
 """Tests for databases view module."""
 
 import json
-import tempfile
-from datetime import date
 from pathlib import Path
-from unittest.mock import patch
-
-import pytest
+from unittest.mock import MagicMock, patch
 
 from grimperium.cli.views.databases_view import DatabasesView
 
@@ -144,8 +140,6 @@ def test_refresh_databases_from_filesystem_finds_csvs(tmp_path: Path) -> None:
     Should scan filesystem and return count of discovered databases.
     """
     # Create mock controller
-    from unittest.mock import MagicMock
-
     controller = MagicMock()
     view = DatabasesView(controller)
 
@@ -169,8 +163,6 @@ def test_refresh_databases_from_filesystem_missing_directory(tmp_path: Path) -> 
 
     Should return 0 and not crash when data/ doesn't exist.
     """
-    from unittest.mock import MagicMock
-
     controller = MagicMock()
     view = DatabasesView(controller)
 
@@ -188,8 +180,6 @@ def test_refresh_databases_from_filesystem_empty_directory(tmp_path: Path) -> No
 
     Should return 0 when no CSV files exist.
     """
-    from unittest.mock import MagicMock
-
     controller = MagicMock()
     view = DatabasesView(controller)
 
@@ -209,8 +199,6 @@ def test_refresh_databases_from_filesystem_counts_molecules(tmp_path: Path) -> N
 
     Should display molecule count for each discovered database.
     """
-    from unittest.mock import MagicMock
-
     controller = MagicMock()
     view = DatabasesView(controller)
 

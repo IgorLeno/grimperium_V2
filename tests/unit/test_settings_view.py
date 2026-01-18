@@ -1,6 +1,5 @@
 """Tests for settings view module."""
 
-from io import StringIO
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -34,8 +33,12 @@ def test_display_all_settings_no_duplicate_headers(settings_view: SettingsView) 
 
         # Mock settings manager methods
         settings_view._settings_manager = MagicMock()
-        settings_view._settings_manager.show_crest_summary.return_value = "CREST summary"
-        settings_view._settings_manager.show_mopac_summary.return_value = "MOPAC summary"
+        settings_view._settings_manager.show_crest_summary.return_value = (
+            "CREST summary"
+        )
+        settings_view._settings_manager.show_mopac_summary.return_value = (
+            "MOPAC summary"
+        )
         settings_view._settings_manager.show_xtb_summary.return_value = "xTB summary"
 
         settings_view._display_all_settings()
@@ -45,9 +48,14 @@ def test_display_all_settings_no_duplicate_headers(settings_view: SettingsView) 
         print_output = " ".join(print_calls)
 
         # Should NOT have the top-level "Current Settings" header
-        assert "⚙️  Current Settings" not in print_output or print_output.count("Current Settings") == 0, (
-            "Top-level 'Current Settings' header should be removed"
-        )
+        # Fixed: explicit check without `or` logic that could produce false positives
+        assert (
+            "⚙️  Current Settings" not in print_output
+        ), "Top-level 'Current Settings' header should be removed"
+
+        # Note: Panel titles ("CREST Settings", "MOPAC Settings", "xTB Settings")
+        # are Rich objects and not easily checked in string representation.
+        # The absence of "Current Settings" header is the primary bug fix validation.
 
 
 def test_display_all_settings_shows_all_panels(settings_view: SettingsView) -> None:
@@ -58,8 +66,12 @@ def test_display_all_settings_shows_all_panels(settings_view: SettingsView) -> N
     """
     with patch.object(settings_view, "console") as mock_console:
         settings_view._settings_manager = MagicMock()
-        settings_view._settings_manager.show_crest_summary.return_value = "CREST summary"
-        settings_view._settings_manager.show_mopac_summary.return_value = "MOPAC summary"
+        settings_view._settings_manager.show_crest_summary.return_value = (
+            "CREST summary"
+        )
+        settings_view._settings_manager.show_mopac_summary.return_value = (
+            "MOPAC summary"
+        )
         settings_view._settings_manager.show_xtb_summary.return_value = "xTB summary"
 
         settings_view._display_all_settings()
@@ -70,7 +82,9 @@ def test_display_all_settings_shows_all_panels(settings_view: SettingsView) -> N
         settings_view._settings_manager.show_xtb_summary.assert_called_once()
 
         # Verify console.print was called (panels were displayed)
-        assert mock_console.print.call_count > 0, "Should display panels via console.print"
+        assert (
+            mock_console.print.call_count > 0
+        ), "Should display panels via console.print"
 
 
 def test_get_menu_options_includes_back(settings_view: SettingsView) -> None:
@@ -89,9 +103,9 @@ def test_get_menu_options_includes_back(settings_view: SettingsView) -> None:
     # Find the back option
     back_option = next((opt for opt in options if opt.value == "back"), None)
     assert back_option is not None, "Back option should exist"
-    assert "back" in back_option.label.lower() or "main" in back_option.label.lower(), (
-        "Back option label should indicate return to main menu"
-    )
+    assert (
+        "back" in back_option.label.lower() or "main" in back_option.label.lower()
+    ), "Back option label should indicate return to main menu"
 
 
 def test_handle_action_back_returns_main(settings_view: SettingsView) -> None:
