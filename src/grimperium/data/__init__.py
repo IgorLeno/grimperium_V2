@@ -15,9 +15,9 @@ Classes:
 
 from grimperium.data.fusion import DataFusion
 from grimperium.data.loader import (
-    ChemperiumLoader,
     THERMO_CBS_CHON_PATH,  # Primary dataset: CHON molecules only
     THERMO_PM7_PATH,  # Secondary dataset: PM7 optimization results
+    ChemperiumLoader,
 )
 from grimperium.data.semiempirical import SemiempiricalHandler
 

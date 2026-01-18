@@ -1,6 +1,5 @@
 """Integration tests for Batch 6: File Cleanup & Conformer Details Renaming."""
 
-import pytest
 from pathlib import Path
 
 

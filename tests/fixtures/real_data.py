@@ -17,7 +17,9 @@ from pathlib import Path
 import pandas as pd
 from sklearn.model_selection import train_test_split
 
-_DATASET_PATH = Path(__file__).parent.parent.parent / "data" / "thermo_cbs_chon.csv"  # Primary CHON dataset
+_DATASET_PATH = (
+    Path(__file__).parent.parent.parent / "data" / "thermo_cbs_chon.csv"
+)  # Primary CHON dataset
 
 
 def load_real_subset(
