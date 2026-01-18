@@ -1,5 +1,9 @@
 # Grimperium Architecture
 
+**Version:** 2.1
+**Last Updated:** 2026-01-18
+**Status:** Production (BATCH 12 - CLI fixes in progress)
+
 This document describes the architecture of Grimperium, a delta-learning framework for molecular thermodynamic property prediction.
 
 ## System Overview
@@ -29,47 +33,62 @@ This document describes the architecture of Grimperium, a delta-learning framewo
                     └─────────────────┘
 ```
 
-## Real Dataset
+## Datasets
 
-Grimperium uses the **thermo_cbs_opt.csv** dataset containing 52,837 molecules with CBS-QB3 level thermodynamic properties.
+Grimperium uses two primary datasets for delta-learning:
 
-### Dataset Structure
+### Primary: thermo_cbs_chon.csv
+- **Size:** 29,568 molecules (CHON only: C, H, O, N)
+- **Origin:** CBS-QB3 level thermodynamic properties
+- **Removed:** Halogenes, sulfur, rare heteroatoms (52.8k → 30k → 29.6k)
+- **Purpose:** High-accuracy reference for delta-learning
 
+**Columns:**
 | Column | Type | Description | Range |
 |--------|------|-------------|-------|
+| mol_id | string | Unique molecule identifier | - |
 | smiles | string | SMILES molecular structure | - |
-| multiplicity | int | Spin multiplicity | 1-3 |
 | charge | int | Total molecular charge | -1, 0, +1 |
-| nheavy | int | Number of heavy atoms | 1-22 |
+| multiplicity | int | Spin multiplicity | 1-3 |
+| nheavy | int | Number of heavy atoms | 1-50 |
 | **H298_cbs** | float | CBS-QB3 enthalpy at 298K (kcal/mol) | -325,407 to 164,949 |
-| H298_b3 | float | B3LYP enthalpy at 298K (kcal/mol) | - |
+| H298_b3lyp | float | B3LYP enthalpy at 298K (kcal/mol) | - |
 
-### Statistics
+### Secondary: thermo_pm7.csv
+- **Size:** PM7 semiempirical optimization results
+- **Origin:** CREST conformer search + MOPAC PM7 optimization
+- **Purpose:** Semiempirical baseline for delta-learning validation
 
-- **Total Molecules:** 52,837
-- **H298_cbs Mean:** -320.37 kcal/mol
-- **H298_cbs Std:** 7,230.27 kcal/mol
-- **Molecular Size:** 1-22 heavy atoms (mean: 9.73)
-- **Quality:** No missing values, no duplicates, all SMILES validated
+**Columns:**
+| Column | Type | Description |
+|--------|------|-------------|
+| mol_id | string | Unique molecule identifier |
+| smiles | string | SMILES molecular structure |
+| **H298_pm7** | float | PM7 enthalpy at 298K (kcal/mol) |
+| conformer_details | object | Conformer generation metadata |
+| quality_grade | string | Quality assessment (A, B, C) |
 
-### Usage in Testing
+### Dataset Statistics
 
-For CI performance, use stratified subsets via fixtures:
+#### thermo_cbs_chon.csv (Primary)
+| Metric | Value |
+|--------|-------|
+| Total molecules | 29,568 (CHON only) |
+| Composition | C, H, O, N (no halogenes/sulfur) |
+| H298_cbs mean | -320.37 kcal/mol |
+| H298_cbs std | 7,230.27 kcal/mol |
+| Molecular size | 1-50 heavy atoms (mean: 9.73) |
+| Quality | No missing values, no duplicates |
+| Creation | 52.8k → 30k → 29.6k (CHON filter) |
 
-```python
-from tests.fixtures.real_data import load_real_subset
+#### thermo_pm7.csv (Secondary)
+| Metric | Value |
+|--------|-------|
+| Source | PM7 semiempirical optimization |
+| Properties | H298_pm7, conformer data, quality grades |
+| Purpose | Baseline for delta-learning validation |
 
-# Load 1k stratified subset (fast CI testing)
-df = load_real_subset(n=1000, stratified=True)
-
-# Load train/test split
-train, test = load_real_train_test_split(test_size=0.2, max_samples=5000)
-
-# Get dataset statistics
-stats = get_dataset_stats()
-```
-
-**Note:** H298_b3 is currently used as a proxy for PM7 calculations in integration tests until CREST+MOPAC pipeline is implemented (Batch 6).
+📖 **Full dataset guide:** [docs/DATASETS.md](DATASETS.md)
 
 ## Module Responsibilities
 
@@ -79,25 +98,50 @@ Handles all data loading, preprocessing, and fusion operations.
 
 #### ChemperiumLoader (`loader.py`)
 
-Loads and validates the Chemperium thermochemistry dataset (~52k molecules).
+Loads and validates the Grimperium thermochemistry datasets.
 
-**Supported formats:** CSV, Parquet
-**Required columns:** smiles, charge, multiplicity, nheavy, H298_cbs
-**Optional columns:** xyz, H298_b3, S298, cp_1...cp_45
+**Datasets Available:**
+
+### Primary: thermo_cbs_chon.csv
+- **Molecules:** 29,568 (CHON only)
+- **Origin:** CBS-QB3 level thermochemistry
+- **Removed:** Halogenes, sulfur, rare heteroatoms (52.8k → 30k → 29.6k)
+- **Columns:** mol_id, smiles, charge, multiplicity, nheavy, H298_cbs, H298_b3lyp
+- **Purpose:** High-accuracy reference for delta-learning
+
+### Secondary: thermo_pm7.csv
+- **Origin:** PM7 semiempirical optimization
+- **Columns:** mol_id, smiles, H298_pm7, conformer_details, quality_grade
+- **Purpose:** Semiempirical baseline predictions
 
 **Key methods:**
-- `load(path)` - Load and validate dataset with optional filtering
+- `load_thermo_cbs_chon(max_nheavy)` - Load CHON dataset (primary)
+- `load_thermo_pm7(max_nheavy)` - Load PM7 results (secondary)
 - `split()` - 2-way train/test split
 - `train_val_test_split()` - 3-way train/val/test split
 - `get_features()` / `get_targets()` - Extract X, y for ML
 
+**Example (Primary Dataset):**
 ```python
+from grimperium.data import ChemperiumLoader
+
 loader = ChemperiumLoader()
-df = loader.load("chemperium.csv", max_nheavy=20)
-train, val, test = loader.train_val_test_split(df, test_size=0.2, val_size=0.1)
-features = loader.get_features(include_cp=True)
-targets = loader.get_targets(target="H298_cbs")
+
+# Load CHON dataset (primary)
+df_chon = loader.load_thermo_cbs_chon(max_nheavy=20)
+
+# Load PM7 results (secondary)
+df_pm7 = loader.load_thermo_pm7(max_nheavy=20)
+
+# Train/test split
+train, test = loader.split(df_chon, test_size=0.2)
 ```
+
+**Migration Note:**
+- ❌ `load_thermo_cbs_clean()` → ✅ `load_thermo_cbs_chon()`
+- ❌ `load_thermo_batch_final()` → ✅ `load_thermo_pm7()`
+
+📖 **Full dataset guide:** [docs/DATASETS.md](DATASETS.md)
 
 #### DataFusion (`fusion.py`)
 
@@ -242,11 +286,12 @@ Features = [Tabular] + [Morgan FP] + [RDKit]
 ## Data Flow
 
 ```
-                    ┌──────────────┐
-                    │  Chemperium  │
-                    │   Dataset    │
-                    │  (52k mols)  │
-                    └──────┬───────┘
+                    ┌──────────────────────────────┐
+                    │      Data Layer              │
+                    │  PRIMARY:   thermo_cbs_chon  │
+                    │  (29,568 molecules)          │
+                    │  SECONDARY: thermo_pm7       │
+                    └──────────────┬───────────────┘
                            │
                     ┌──────▼───────┐
                     │   Loader     │
@@ -328,6 +373,31 @@ Training on deltas instead of absolute values:
 - ML only needs to learn the ~20% correction
 - Faster convergence, better generalization
 - Physically meaningful predictions
+
+### 5. Why CHON-Only Dataset?
+
+**Physical Reasoning:**
+- Homogeneous electronic physics (no exotic valence states)
+- No relativistic effects (heavy atoms)
+- No hypervalence extremes
+- Well-described by GFN-xTB and common DFTs
+
+**Statistical Reasoning:**
+- Rare heteroatoms act as structural outliers
+- Few examples prevent generalization
+- Remove without information loss
+
+**Methodological Reasoning (Delta-Learning):**
+- Delta = CBS - B3LYP correction
+- Homogeneous error patterns are learnable
+- Mixing regimes violates delta-learning assumptions
+- Better transferability to new molecules
+
+**Impact:**
+- Original: 52,837 molecules (all heteroatoms)
+- Filtered: 30,026 molecules (no halogenes/sulfur)
+- Final: 29,568 molecules (no rare heteroatoms: B, P, As, Ge)
+- Result: More consistent delta predictions
 
 ## Extension Points
 

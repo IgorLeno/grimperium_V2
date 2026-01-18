@@ -1,8 +1,26 @@
 # Grimperium - Delta Learning Framework
 
-**Status:** Production Ready (Phase A - Active)  
-**Python:** 3.10+  
+**Status:** Production Ready (Phase A - Active)
+**Python:** 3.10+
 **License:** MIT
+**Last Updated:** 2026-01-18
+
+---
+
+## Status do Projeto
+
+| Fase | Status | Descrição |
+|------|--------|-----------|
+| **Phase A** | ✅ Completo | CREST PM7 baseline & validation |
+| **Phase B** | ⏳ Pronto | Delta-Learning training (after BATCH 12) |
+| **Phase C** | 🔧 BATCH 12 | CLI Critical Fixes (11 bugs) |
+
+### Recent Updates (2026-01-18)
+- ✅ Dataset refactoring: CHON (29,568) + PM7 naming clarity
+- ✅ Tests passing: 242/262 (20 skipped)
+- ✅ Quality gates: mypy, ruff, black ✅
+- ✅ Pre-commit hooks: Active
+- 🔄 BATCH 12: Ready to start (11 bugs identified)
 
 ---
 
@@ -29,7 +47,8 @@ grimperium/
 │   └── api.py               <- Interface pública
 ├── tests/                   <- Testes unitários + integração
 ├── data/                    <- Datasets e baselines
-│   └── molecules_pm7/       <- Dados PM7
+│   ├── thermo_cbs_chon.csv  <- 29,568 molecules (CHON only) - PRIMARY
+│   └── thermo_pm7.csv       <- PM7 optimization results - SECONDARY
 ├── docs/                    <- Documentação
 │   ├── CLAUDE.md            <- Guia para Claude Code
 │   ├── PHASE-A-START-HERE.md <- Comece aqui
@@ -103,9 +122,10 @@ print(f"Loaded {len(df)} CHON molecules")
 | Documento | Propósito |
 |-----------|-----------|
 | `docs/CLAUDE.md` | Guia comportamento Claude Code |
+| `docs/architecture.md` | Visão da arquitetura |
+| `docs/DATASETS.md` | **NEW** - Dataset reference guide |
 | `docs/PHASE-A-START-HERE.md` | Comece aqui para Phase A |
 | `docs/PHASE-A-RESULTS.md` | modelo para resultados |
-| `docs/architecture.md` | Visão da arquitetura |
 | `docs/feature_engineering.md` | Guia de features |
 | `docs/delta_learning_guide.md` | Guia de Delta Learning |
 
