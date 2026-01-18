@@ -29,7 +29,7 @@ import shutil
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 LOG = logging.getLogger("grimperium.crest_pm7.batch.artifact_manager")
 
@@ -69,7 +69,9 @@ class ArtifactPaths:
                 "dir": str(self.crest_dir) if self.crest_dir else None,
                 "best_xyz": str(self.crest_best_xyz) if self.crest_best_xyz else None,
                 "conformers_xyz": (
-                    str(self.crest_conformers_xyz) if self.crest_conformers_xyz else None
+                    str(self.crest_conformers_xyz)
+                    if self.crest_conformers_xyz
+                    else None
                 ),
                 "output_log": (
                     str(self.crest_output_log) if self.crest_output_log else None
@@ -155,11 +157,32 @@ class ArtifactManager:
         LOG.debug(f"ArtifactManager initialized at {self.artifact_dir}")
 
     # Windows reserved names (case-insensitive)
-    _WINDOWS_RESERVED = frozenset({
-        "CON", "PRN", "AUX", "NUL",
-        "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8", "COM9",
-        "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9",
-    })
+    _WINDOWS_RESERVED = frozenset(
+        {
+            "CON",
+            "PRN",
+            "AUX",
+            "NUL",
+            "COM1",
+            "COM2",
+            "COM3",
+            "COM4",
+            "COM5",
+            "COM6",
+            "COM7",
+            "COM8",
+            "COM9",
+            "LPT1",
+            "LPT2",
+            "LPT3",
+            "LPT4",
+            "LPT5",
+            "LPT6",
+            "LPT7",
+            "LPT8",
+            "LPT9",
+        }
+    )
 
     def _sanitize_id(self, identifier: str) -> str:
         """Sanitize molecule or batch ID to prevent path injection attacks.
@@ -370,7 +393,7 @@ class ArtifactManager:
 
         try:
             with open(manifest_path, encoding="utf-8") as f:
-                return json.load(f)
+                return cast(dict[str, Any], json.load(f))
         except (json.JSONDecodeError, OSError) as e:
             LOG.warning(f"Failed to load manifest for {mol_id}: {e}")
             return None
@@ -428,9 +451,7 @@ class ArtifactManager:
             safe_batch_id = self._sanitize_id(batch_id)
             search_dirs = [self.artifact_dir / safe_batch_id]
         else:
-            search_dirs = [
-                d for d in self.artifact_dir.iterdir() if d.is_dir()
-            ]
+            search_dirs = [d for d in self.artifact_dir.iterdir() if d.is_dir()]
 
         total_molecules = 0
         total_files = 0

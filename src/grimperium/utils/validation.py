@@ -17,11 +17,12 @@ Example:
 
 """
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
-import numpy as np
 import pandas as pd
 from rdkit import Chem
+
+from grimperium import MatrixFloat
 
 if TYPE_CHECKING:
     from grimperium.config import GrimperiumConfig
@@ -80,7 +81,7 @@ def validate_dataframe(
 
 
 def validate_features(
-    X: np.ndarray,
+    X: MatrixFloat,
     n_features: int | None = None,
     allow_nan: bool = False,
     allow_inf: bool = False,
@@ -106,7 +107,7 @@ def validate_features(
 
 
 def validate_targets(
-    y: np.ndarray,
+    y: MatrixFloat,
     n_samples: int | None = None,
     allow_nan: bool = False,
 ) -> None:
@@ -142,11 +143,11 @@ def validate_config(
 
 
 def check_array(
-    array: np.ndarray | list,
+    array: MatrixFloat | list[Any],
     dtype: type | None = None,
     ensure_2d: bool = True,
     allow_nd: bool = False,
-) -> np.ndarray:
+) -> MatrixFloat:
     """
     Check and convert array-like to numpy array.
 

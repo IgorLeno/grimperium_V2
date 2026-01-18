@@ -19,6 +19,8 @@ import joblib
 import numpy as np
 from sklearn.linear_model import HuberRegressor
 
+from grimperium import DictStrAny
+
 from .config import TimeoutConfidence
 
 LOG = logging.getLogger("grimperium.crest_pm7.timeout_predictor")
@@ -335,7 +337,7 @@ class TimeoutPredictor:
             LOG.warning(f"Failed to load predictor: {e}")
             return False
 
-    def get_stats(self) -> dict:
+    def get_stats(self) -> DictStrAny:
         """Get predictor statistics.
 
         Returns:

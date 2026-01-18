@@ -21,11 +21,35 @@ __version__ = "0.2.0"
 __author__ = "Grimperium Team"
 __license__ = "MIT"
 
-from grimperium.api import GrimperiumAPI
-from grimperium.config import GrimperiumConfig
+# Standard library imports
+from collections import deque
+from typing import Any
+
+# Third-party imports
+import numpy as np
+from numpy.typing import NDArray
+
+# Type aliases for mypy --strict compliance
+MatrixFloat = NDArray[np.floating[Any]]
+MatrixInt = NDArray[np.signedinteger[Any]]
+Vector = NDArray[np.floating[Any]]
+DictStrAny = dict[str, Any]
+ListAny = list[Any]
+DequeAny = deque[Any]
+
+# Local module imports (must be after type aliases to avoid circular imports)
+from grimperium.api import GrimperiumAPI  # noqa: E402
+from grimperium.config import GrimperiumConfig  # noqa: E402
 
 __all__ = [
     "GrimperiumAPI",
     "GrimperiumConfig",
     "__version__",
+    # Type aliases
+    "MatrixFloat",
+    "MatrixInt",
+    "Vector",
+    "DictStrAny",
+    "ListAny",
+    "DequeAny",
 ]

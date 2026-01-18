@@ -7,6 +7,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **MAJOR: Dataset Refactoring & Cleanup** (2026-01-18)
+  - **File Renamings:**
+    - `thermo_cbs_clean.csv` → `thermo_cbs_chon.csv` (more descriptive: CHON = C, H, O, N only)
+    - `thermo_batch_final.csv` → `thermo_pm7.csv` (clearer semantics: PM7 = semiempirical method)
+  - **Files Removed:**
+    - ❌ `thermo_cbs_opt.csv` (unused in delta-learning workflow)
+    - ❌ `test_batch_final.csv` (test fixtures used instead)
+  - **Code Updates:**
+    - `src/grimperium/data/loader.py`:
+      - Renamed: `load_thermo_cbs_clean()` → `load_thermo_cbs_chon()`
+      - Replaced: `load_thermo_cbs_opt()` → `load_thermo_pm7()`
+      - Updated: Constants `THERMO_CBS_CHON_PATH`, `THERMO_PM7_PATH`
+      - Enhanced docstrings with delta-learning justification (physics, statistics, methodology)
+    - `tests/fixtures/real_data.py`: Updated dataset path references
+    - `src/grimperium/data/__init__.py`: Updated exports
+  - **Documentation:**
+    - **NEW:** `docs/DATASETS.md` - Comprehensive dataset reference guide
+    - Updated: `README.md` - Dataset section aligned with code
+    - Updated: `architecture.md` - Data flow diagram
+  - **Migration Required:**
+    ```python
+    # OLD (deprecated)
+    df = loader.load_thermo_cbs_clean()
+    
+    # NEW (use this)
+    df = loader.load_thermo_cbs_chon()
+    ```
+  - **Benefits:**
+    - ✅ Clearer dataset semantics (CHON = element composition, not processing step)
+    - ✅ Aligned naming (PM7 = method, not batch phase)
+    - ✅ Reduced confusion from deprecated files
+    - ✅ Better documentation for new contributors
+    - ✅ Delta-learning justification embedded in code (physics + statistics + methodology)
+
 ### Added
 - **CREST PM7 Unit Tests** (2026-01-14)
   - Added `tests/unit/test_threshold_monitor.py` - Tests for ThresholdMonitor, MonitoringMetrics, Alert classes
@@ -412,3 +448,46 @@ grimperium/
 | 0.4.0 | TBD | Model implementation |
 | 0.5.0 | TBD | PM7 pipeline |
 | 1.0.0 | TBD | Production release |
+
+## [Unreleased] - Phase C Setup Complete (2026-01-17)
+
+### Added
+- ✅ awesome-claude-code integration (specification-driven dev, progressive disclosure)
+- ✅ Git pre-commit hooks (mypy, ruff, black, pytest validation)
+- ✅ Serena memory system (session persistence, batch tracking)
+- ✅ 15 slash commands for Grimperium workflow
+- ✅ VALIDATION_CHECKLIST.md (pre-BATCH 12 validation)
+- ✅ Claude Code v2.1.12 setup with 65+ plugins (curated for Python/ML/testing focus)
+- ✅ Documentation update script (2026-01-17)
+
+### Updated
+- ✅ CLAUDE.md v2.0 (awesome-claude-code patterns integrated)
+- ✅ WORKFLOW.md (new Phase C workflow documentation)
+- ✅ CREST_INTEGRATION.md (Phase A complete, Phase B ready)
+- ✅ TESTING_GUIDE.md (TDD patterns, 145 tests, 82% coverage)
+- ✅ MOPAC_INTEGRATION.md (PM7 pipeline status)
+- ✅ DATASET_MIGRATION.md (CBS → PM7 transition complete)
+- ✅ README.md (Phase C overview added)
+- ✅ architecture.md (v2.0 with CLI redesign)
+
+### Fixed
+- N/A (BATCH 12 will address 11 CLI critical bugs)
+
+### Status
+- **Phase C Ready:** BATCH 12 (11 critical CLI bugs) ready to execute
+- **Quality Baseline:** 82% coverage, 145 passing tests
+- **Tools:** mypy strict, ruff, black, pytest all passing
+- **Timeline:** ~2-3 hours estimated for BATCH 12 completion
+- **Next:** Execute BATCH 12, reach 85%+ coverage, complete Phase C
+
+---
+
+### How This Release Helps
+1. **Specification-Driven:** Every bug has ANTES/DEPOIS format
+2. **TDD-First:** Tests written before code fixes
+3. **Quality Gates:** Pre-commit hooks + quality-gate validation
+4. **Session Memory:** Serena tracks progress across sessions
+5. **Documentation:** All docs synced with current state
+6. **Agent Orchestration:** Multi-agent workflow for parallel tasks
+
+---

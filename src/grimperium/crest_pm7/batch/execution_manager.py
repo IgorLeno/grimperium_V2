@@ -238,8 +238,12 @@ class BatchExecutionManager:
                 try:
                     # Work directories are typically temp_dir/{mol_id}/crest and /mopac
                     mol_work_dir = self.pm7_config.temp_dir / mol_id
-                    crest_work_dir = mol_work_dir / "crest" if mol_work_dir.exists() else None
-                    mopac_work_dir = mol_work_dir / "mopac" if mol_work_dir.exists() else None
+                    crest_work_dir = (
+                        mol_work_dir / "crest" if mol_work_dir.exists() else None
+                    )
+                    mopac_work_dir = (
+                        mol_work_dir / "mopac" if mol_work_dir.exists() else None
+                    )
 
                     self.artifact_manager.save_artifacts(
                         mol_id=mol_id,

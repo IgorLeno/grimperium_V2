@@ -1,5 +1,4 @@
-import numpy as np
-
+from grimperium import DictStrAny, MatrixFloat
 from grimperium.config import GrimperiumConfig
 from grimperium.core.metrics import compute_all_metrics
 from grimperium.models.delta_ensemble import DeltaLearningEnsemble
@@ -25,8 +24,8 @@ class DeltaLearner:
         self,
         w_krr: float = 0.5,
         w_xgb: float = 0.5,
-        krr_params: dict | None = None,
-        xgb_params: dict | None = None,
+        krr_params: DictStrAny | None = None,
+        xgb_params: DictStrAny | None = None,
         *,
         config: GrimperiumConfig | None = None,
     ):
@@ -61,7 +60,7 @@ class DeltaLearner:
         return f"DeltaLearner(n_samples={self._n_samples}, {status})"
 
     def fit(
-        self, X: np.ndarray, y_cbs: np.ndarray, y_pm7: np.ndarray
+        self, X: MatrixFloat, y_cbs: MatrixFloat, y_pm7: MatrixFloat
     ) -> "DeltaLearner":
         """
         Fit DeltaLearner.
@@ -97,7 +96,7 @@ class DeltaLearner:
         self.is_fitted = True
         return self
 
-    def predict(self, X: np.ndarray, y_pm7: np.ndarray) -> np.ndarray:
+    def predict(self, X: MatrixFloat, y_pm7: MatrixFloat) -> MatrixFloat:
         """
         Predict H298_CBS using delta-learning.
 
@@ -119,14 +118,16 @@ class DeltaLearner:
             raise ValueError("DeltaLearner not fitted. Call fit() first.")
 
         # STEP 1: Predict delta
-        delta_pred: np.ndarray = self.ensemble.predict(X)
+        delta_pred: MatrixFloat = self.ensemble.predict(X)
 
         # STEP 2: Compose with PM7 EXPLICITLY
-        y_pred: np.ndarray = y_pm7 + delta_pred
+        y_pred: MatrixFloat = y_pm7 + delta_pred
 
         return y_pred
 
-    def evaluate(self, X: np.ndarray, y_cbs: np.ndarray, y_pm7: np.ndarray) -> dict:
+    def evaluate(
+        self, X: MatrixFloat, y_cbs: MatrixFloat, y_pm7: MatrixFloat
+    ) -> DictStrAny:
         """
         Evaluate model and return all metrics.
 

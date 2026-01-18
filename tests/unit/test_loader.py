@@ -294,33 +294,17 @@ class TestChemperiumLoaderValidation:
         assert "H298_b3" in df.columns
         assert df["nheavy"].tolist() == [3, 4]
 
-    def test_load_thermo_cbs_opt_convenience(self, tmp_path):
-        """Test deprecated convenience method for thermo_cbs_opt dataset."""
-        # Test 1: Using default path triggers deprecation warning
-        # (Testing the actual behavior without file existence)
+    def test_load_thermo_pm7_convenience(self, tmp_path):
+        """Test convenience method for thermo_pm7 dataset (replaces load_thermo_cbs_opt)."""
+        # Test that the new method exists and can be called
+        # (will fail on missing file but that's OK for this test)
 
-        # This will fail to find the file but should still show the warning
         with warnings.catch_warnings(record=True) as w:
             warnings.simplefilter("always")
             with contextlib.suppress(FileNotFoundError):
-                ChemperiumLoader.load_thermo_cbs_opt()
+                ChemperiumLoader.load_thermo_pm7()
 
-            # Should get deprecation warning even if file not found
-            deprecation_warnings = [
-                warning
-                for warning in w
-                if issubclass(warning.category, DeprecationWarning)
-            ]
-            assert len(deprecation_warnings) == 1
-            assert "load_thermo_cbs_clean()" in str(deprecation_warnings[0].message)
-
-        # Test 2: Using explicit old path should NOT trigger warning
-        with warnings.catch_warnings(record=True) as w:
-            warnings.simplefilter("always")
-            with contextlib.suppress(FileNotFoundError):
-                ChemperiumLoader.load_thermo_cbs_opt(path="data/thermo_cbs_opt.csv")
-
-            # Should NOT get deprecation warning with explicit path
+            # Should not raise deprecation warning (it's the new method)
             deprecation_warnings = [
                 warning
                 for warning in w
@@ -328,42 +312,19 @@ class TestChemperiumLoaderValidation:
             ]
             assert len(deprecation_warnings) == 0
 
-        # Test 3: Using custom path works without warnings
-        csv_path = tmp_path / "custom.csv"
-        csv_path.write_text(
-            "smiles,multiplicity,charge,nheavy,H298_cbs,H298_b3\n"
-            "CCO,1,0,3,-56.12,15.23\n"
-            "CC(=O)O,1,0,4,-103.45,-82.11\n"
-            "CCCC,1,0,4,-30.11,-8.52\n"
-        )
+        # Test that old method no longer exists
+        with pytest.raises(AttributeError):
+            ChemperiumLoader.load_thermo_cbs_opt()  # type: ignore  # type: ignore
 
-        with warnings.catch_warnings(record=True) as w:
-            warnings.simplefilter("always")
-            df = ChemperiumLoader.load_thermo_cbs_opt(path=csv_path)
+    def test_load_thermo_cbs_chon_convenience(self, tmp_path):
+        """Test convenience method for thermo_cbs_chon dataset (renamed from load_thermo_cbs_clean)."""
+        # Test that the new load_thermo_cbs_chon method works correctly
 
-            # Should NOT get deprecation warning with custom path
-            deprecation_warnings = [
-                warning
-                for warning in w
-                if issubclass(warning.category, DeprecationWarning)
-            ]
-            assert len(deprecation_warnings) == 0
-
-        assert len(df) == 3
-
-        # Test 4: With nheavy filter
-        df_filtered = ChemperiumLoader.load_thermo_cbs_opt(path=csv_path, max_nheavy=3)
-        assert len(df_filtered) == 1
-        assert df_filtered["smiles"].iloc[0] == "CCO"
-
-    def test_load_thermo_cbs_clean_convenience(self, tmp_path):
-        """Test new convenience method for thermo_cbs_clean dataset."""
         # Test without warnings (will fail on missing file but that's OK)
-
         with warnings.catch_warnings(record=True) as w:
             warnings.simplefilter("always")
             with contextlib.suppress(FileNotFoundError):
-                ChemperiumLoader.load_thermo_cbs_clean()
+                ChemperiumLoader.load_thermo_cbs_chon()
 
             # Should not raise deprecation warning
             deprecation_warnings = [
@@ -372,3 +333,7 @@ class TestChemperiumLoaderValidation:
                 if issubclass(warning.category, DeprecationWarning)
             ]
             assert len(deprecation_warnings) == 0
+
+        # Test that old method no longer exists
+        with pytest.raises(AttributeError):
+            ChemperiumLoader.load_thermo_cbs_clean()  # type: ignore

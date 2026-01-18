@@ -531,7 +531,9 @@ class MoleculeProcessor:
 
         # Calculate energy differences - is_successful guarantees energy_hof is not None
         successful_energies: list[float] = [
-            c.energy_hof for c in result.conformers if c.is_successful and c.energy_hof is not None  # type: ignore[misc]
+            c.energy_hof
+            for c in result.conformers
+            if c.is_successful and c.energy_hof is not None
         ]
         if successful_energies:
             deltas = calculate_delta_e(successful_energies)

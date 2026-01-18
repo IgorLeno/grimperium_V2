@@ -2,8 +2,8 @@
 Real dataset fixtures for integration testing.
 
 This module provides functions to load subsets of the real
-thermo_cbs_clean.csv dataset for CI testing without requiring
-the full dataset.
+thermo_cbs_chon.csv dataset (29,568 CHON molecules) for CI testing
+without requiring the full dataset.
 
 Example:
     >>> from tests.fixtures.real_data import load_real_subset
@@ -17,7 +17,7 @@ from pathlib import Path
 import pandas as pd
 from sklearn.model_selection import train_test_split
 
-_DATASET_PATH = Path(__file__).parent.parent.parent / "data" / "thermo_cbs_clean.csv"
+_DATASET_PATH = Path(__file__).parent.parent.parent / "data" / "thermo_cbs_chon.csv"  # Primary CHON dataset
 
 
 def load_real_subset(
@@ -51,7 +51,8 @@ def load_real_subset(
     if not path.exists():
         raise FileNotFoundError(
             f"Real dataset not found at {path}. "
-            "Please ensure thermo_cbs_clean.csv is in data/ directory."
+            f"Expected: data/thermo_cbs_chon.csv (29,568 CHON molecules)\n"
+            f"Note: thermo_cbs_clean.csv and thermo_cbs_opt.csv are no longer used"
         )
 
     # Load full dataset

@@ -70,6 +70,34 @@ predictions = model.predict(X_test)
 
 ---
 
+## Datasets
+
+Grimperium uses two primary datasets:
+
+### Primary: thermo_cbs_chon.csv
+- **29,568 molecules** (CHON only: C, H, O, N)
+- **High-accuracy CBS enthalpies** + B3LYP baseline
+- **Optimized for delta-learning:** Homogeneous chemistry, learnable corrections
+- **Use case:** Model training, validation, benchmarking
+
+### Secondary: thermo_pm7.csv
+- **PM7-optimized results** from CREST conformer pipeline
+- **Semiempirical baseline** for experimental validation
+- **Use case:** Alternative baseline, production predictions
+
+For detailed information, see [`docs/DATASETS.md`](docs/DATASETS.md).
+
+**Quick load:**
+```python
+from grimperium.data.loader import ChemperiumLoader
+
+loader = ChemperiumLoader()
+df = loader.load_thermo_cbs_chon(max_nheavy=50)
+print(f"Loaded {len(df)} CHON molecules")
+```
+
+---
+
 ## Documentação
 
 | Documento | Propósito |

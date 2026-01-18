@@ -22,8 +22,9 @@ Example:
 import warnings
 from typing import Literal
 
-import numpy as np
 import pandas as pd
+
+from grimperium import MatrixFloat
 
 # Supported task types for task views
 TaskName = Literal["enthalpy", "entropy", "heat_capacity"]
@@ -203,7 +204,7 @@ class DataFusion:
     def get_training_data(
         self,
         df: pd.DataFrame | None = None,
-    ) -> tuple[pd.DataFrame, np.ndarray]:
+    ) -> tuple[pd.DataFrame, MatrixFloat]:
         """
         Get feature DataFrame and delta targets for training.
 

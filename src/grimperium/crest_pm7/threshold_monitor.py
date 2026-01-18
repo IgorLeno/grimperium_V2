@@ -10,6 +10,8 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime
 
+from grimperium import DictStrAny
+
 from .config import AlertLevel, PM7Config, QualityGrade
 
 LOG = logging.getLogger("grimperium.crest_pm7.threshold_monitor")
@@ -37,7 +39,7 @@ class Alert:
     pattern: str
     message: str
     timestamp: datetime = field(default_factory=datetime.now)
-    metrics: dict = field(default_factory=dict)
+    metrics: DictStrAny = field(default_factory=dict)
 
 
 @dataclass
@@ -421,7 +423,7 @@ class ThresholdMonitor:
 
         return alerts
 
-    def get_summary(self) -> dict:
+    def get_summary(self) -> DictStrAny:
         """Get monitoring summary.
 
         Returns:

@@ -12,6 +12,7 @@ from collections import deque
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from grimperium import DequeAny, DictStrAny
 from grimperium.crest_pm7.config import PM7Config, TimeoutConfidence
 from grimperium.crest_pm7.molecule_processor import MoleculeProcessor, PM7Result
 from grimperium.crest_pm7.preoptimization import xTBPreOptimizer
@@ -42,7 +43,7 @@ class FixedTimeoutPredictor:
     mopac_timeout_seconds: float
     max_observations: int = DEFAULT_MAX_OBSERVATIONS
     # Use unbounded deque as placeholder, __post_init__ creates real one
-    observations: deque = field(default_factory=deque)
+    observations: DequeAny = field(default_factory=deque)
 
     def __post_init__(self) -> None:
         """Initialize observations deque with correct maxlen.
@@ -107,7 +108,7 @@ class FixedTimeoutPredictor:
         """
         return True
 
-    def get_stats(self) -> dict:
+    def get_stats(self) -> DictStrAny:
         """Get predictor statistics.
 
         Returns:
@@ -269,7 +270,7 @@ class FixedTimeoutProcessor:
             f"MOPAC={mopac_timeout_minutes}min"
         )
 
-    def get_timeout_stats(self) -> dict:
+    def get_timeout_stats(self) -> DictStrAny:
         """Get timeout statistics from observations.
 
         Returns:

@@ -18,8 +18,9 @@ Example:
 
 """
 
-import numpy as np
 import pandas as pd
+
+from grimperium import MatrixFloat
 
 
 class FeatureEngineer:
@@ -114,7 +115,7 @@ class FeatureEngineer:
         self,
         smiles: list[str],
         df: pd.DataFrame | None = None,
-    ) -> np.ndarray:
+    ) -> MatrixFloat:
         """
         Transform SMILES to feature matrix.
 
@@ -132,7 +133,7 @@ class FeatureEngineer:
         self,
         smiles: list[str],
         df: pd.DataFrame | None = None,
-    ) -> np.ndarray:
+    ) -> MatrixFloat:
         """
         Fit and transform in one step.
 
@@ -170,7 +171,7 @@ def compute_morgan_fingerprints(
     smiles: str | list[str],
     n_bits: int = 256,
     radius: int = 2,
-) -> np.ndarray:
+) -> MatrixFloat:
     """
     Compute Morgan fingerprints from SMILES.
 
@@ -193,7 +194,7 @@ def compute_morgan_fingerprints(
 def compute_rdkit_descriptors(
     smiles: str | list[str],
     descriptors: list[str] | None = None,
-) -> np.ndarray:
+) -> MatrixFloat:
     """
     Compute RDKit molecular descriptors from SMILES.
 
@@ -224,7 +225,7 @@ def compute_rdkit_descriptors(
 def extract_tabular_features(
     df: pd.DataFrame,
     features: list[str] | None = None,
-) -> np.ndarray:
+) -> MatrixFloat:
     """
     Extract tabular features from DataFrame.
 

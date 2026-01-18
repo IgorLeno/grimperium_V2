@@ -25,7 +25,9 @@ class TestMonitoringMetrics:
         metrics = MonitoringMetrics()
         assert metrics.total_processed == 0
         assert metrics.success_count == 0  # Changed: total_successful -> success_count
-        assert metrics.hof_extraction_success == 0  # Changed: hof_extractions -> hof_extraction_success
+        assert (
+            metrics.hof_extraction_success == 0
+        )  # Changed: hof_extractions -> hof_extraction_success
         assert metrics.grade_a_count == 0  # Changed: grades_a -> grade_a_count
         assert metrics.grade_b_count == 0  # Changed: grades_b -> grade_b_count
         assert metrics.grade_c_count == 0  # Changed: grades_c -> grade_c_count
@@ -112,8 +114,12 @@ class TestThresholdMonitor:
         )
 
         assert monitor.metrics.total_processed == 1
-        assert monitor.metrics.success_count == 1  # Changed: total_successful -> success_count
-        assert monitor.metrics.hof_extraction_success == 1  # Changed: hof_extractions -> hof_extraction_success
+        assert (
+            monitor.metrics.success_count == 1
+        )  # Changed: total_successful -> success_count
+        assert (
+            monitor.metrics.hof_extraction_success == 1
+        )  # Changed: hof_extractions -> hof_extraction_success
         assert monitor.metrics.grade_a_count == 1  # Changed: grades_a -> grade_a_count
 
     def test_record_result_failure(self, monitor: ThresholdMonitor) -> None:
@@ -125,8 +131,12 @@ class TestThresholdMonitor:
         )
 
         assert monitor.metrics.total_processed == 1
-        assert monitor.metrics.success_count == 0  # Changed: total_successful -> success_count
-        assert monitor.metrics.hof_extraction_failure == 1  # Changed: hof_extractions == 0 -> hof_extraction_failure == 1
+        assert (
+            monitor.metrics.success_count == 0
+        )  # Changed: total_successful -> success_count
+        assert (
+            monitor.metrics.hof_extraction_failure == 1
+        )  # Changed: hof_extractions == 0 -> hof_extraction_failure == 1
         assert monitor.metrics.grade_c_count == 1  # Changed: grades_c -> grade_c_count
 
     def test_record_multiple_results(self, monitor: ThresholdMonitor) -> None:
@@ -146,9 +156,13 @@ class TestThresholdMonitor:
             )
 
         assert monitor.metrics.total_processed == 10
-        assert monitor.metrics.success_count == 5  # Changed: total_successful -> success_count
+        assert (
+            monitor.metrics.success_count == 5
+        )  # Changed: total_successful -> success_count
         # Returns ratio (0-1), not percentage (0-100)
-        assert monitor.metrics.success_rate == pytest.approx(0.5)  # Changed: 50.0 -> 0.5
+        assert monitor.metrics.success_rate == pytest.approx(
+            0.5
+        )  # Changed: 50.0 -> 0.5
 
     def test_alert_callback(self, monitor: ThresholdMonitor) -> None:
         """Test alert callback registration and triggering."""
@@ -210,4 +224,6 @@ class TestThresholdMonitor:
         assert monitor.metrics.grade_b_count == 1  # Changed: grades_b -> grade_b_count
         assert monitor.metrics.grade_c_count == 1  # Changed: grades_c -> grade_c_count
         # A+B rate should be 75% -> 0.75 (ratio)
-        assert monitor.metrics.grade_ab_rate == pytest.approx(0.75)  # Changed: 75.0 -> 0.75
+        assert monitor.metrics.grade_ab_rate == pytest.approx(
+            0.75
+        )  # Changed: 75.0 -> 0.75

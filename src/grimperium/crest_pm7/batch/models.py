@@ -30,21 +30,13 @@ class BatchResult(BaseModel):
     batch_id: str = Field(..., description="Batch identifier")
 
     # Counts (from batch ONLY, not entire dataset)
-    total_count: int = Field(
-        ..., description="Total molecules in this batch"
-    )
-    success_count: int = Field(
-        default=0, description="Molecules with status OK"
-    )
-    rerun_count: int = Field(
-        default=0, description="Molecules marked for Rerun"
-    )
+    total_count: int = Field(..., description="Total molecules in this batch")
+    success_count: int = Field(default=0, description="Molecules with status OK")
+    rerun_count: int = Field(default=0, description="Molecules marked for Rerun")
     skip_count: int = Field(
         default=0, description="Molecules marked Skip (max retries)"
     )
-    failed_count: int = Field(
-        default=0, description="Molecules that failed processing"
-    )
+    failed_count: int = Field(default=0, description="Molecules that failed processing")
 
     # Timing (in seconds)
     total_time: float = Field(default=0.0, description="Total execution time")
@@ -54,18 +46,10 @@ class BatchResult(BaseModel):
     timestamp_end: datetime | None = Field(default=None)
 
     # Energy statistics (from successful molecules in THIS BATCH only)
-    min_hof: float | None = Field(
-        default=None, description="Minimum HOF in batch"
-    )
-    max_hof: float | None = Field(
-        default=None, description="Maximum HOF in batch"
-    )
-    min_hof_mol_id: str | None = Field(
-        default=None, description="mol_id with min HOF"
-    )
-    max_hof_mol_id: str | None = Field(
-        default=None, description="mol_id with max HOF"
-    )
+    min_hof: float | None = Field(default=None, description="Minimum HOF in batch")
+    max_hof: float | None = Field(default=None, description="Maximum HOF in batch")
+    min_hof_mol_id: str | None = Field(default=None, description="mol_id with min HOF")
+    max_hof_mol_id: str | None = Field(default=None, description="mol_id with max HOF")
 
     # Issues tracking (for debugging)
     failed_mol_ids: list[str] = Field(
@@ -122,14 +106,10 @@ class BatchMolecule(BaseModel):
 
     # Molecular descriptors (for timeout prediction)
     nheavy: int = Field(..., description="Number of heavy atoms")
-    nrotbonds: int = Field(
-        default=0, description="Number of rotatable bonds"
-    )
+    nrotbonds: int = Field(default=0, description="Number of rotatable bonds")
 
     # Retry tracking
-    retry_count: int = Field(
-        default=0, description="Number of previous attempts"
-    )
+    retry_count: int = Field(default=0, description="Number of previous attempts")
 
 
 class Batch(BaseModel):
@@ -230,18 +210,14 @@ class BatchRowCSV(BaseModel):
     )
 
     # === CREST Execution Results ===
-    crest_status: str | None = Field(
-        default=None, description="CREST status"
-    )
+    crest_status: str | None = Field(default=None, description="CREST status")
     crest_conformers_generated: int | None = Field(
         default=None, description="Conformers from CREST"
     )
     crest_time: float | None = Field(
         default=None, description="CREST execution time (s)"
     )
-    crest_error: str | None = Field(
-        default=None, description="CREST error message"
-    )
+    crest_error: str | None = Field(default=None, description="CREST error message")
 
     # === MOPAC Execution Results ===
     num_conformers_selected: int | None = Field(
@@ -250,9 +226,7 @@ class BatchRowCSV(BaseModel):
     most_stable_hof: float | None = Field(
         default=None, description="Best HOF (kcal/mol)"
     )
-    quality_grade: str | None = Field(
-        default=None, description="Quality grade"
-    )
+    quality_grade: str | None = Field(default=None, description="Quality grade")
 
     # === Delta-E (Energy Spread) ===
     delta_e_12: float | None = Field(
@@ -266,12 +240,8 @@ class BatchRowCSV(BaseModel):
     )
 
     # === Final Status ===
-    success: bool | None = Field(
-        default=None, description="Processing succeeded"
-    )
-    error_message: str | None = Field(
-        default=None, description="Error if failed"
-    )
+    success: bool | None = Field(default=None, description="Processing succeeded")
+    error_message: str | None = Field(default=None, description="Error if failed")
     total_execution_time: float | None = Field(
         default=None, description="Total time (s)"
     )
@@ -310,24 +280,16 @@ class ConformerDetail(BaseModel):
     Stored in JSON files per molecule for detailed analysis.
     """
 
-    conformer_index: int = Field(
-        ..., description="Conformer index (0-based)"
-    )
+    conformer_index: int = Field(..., description="Conformer index (0-based)")
     energy_hof: float | None = Field(
         default=None, description="Heat of formation (kcal/mol)"
     )
-    energy_total: float | None = Field(
-        default=None, description="Total energy (eV)"
-    )
-    mopac_status: str = Field(
-        default="NOT_ATTEMPTED", description="MOPAC status"
-    )
+    energy_total: float | None = Field(default=None, description="Total energy (eV)")
+    mopac_status: str = Field(default="NOT_ATTEMPTED", description="MOPAC status")
     mopac_time: float | None = Field(
         default=None, description="MOPAC execution time (s)"
     )
-    mopac_error: str | None = Field(
-        default=None, description="MOPAC error message"
-    )
+    mopac_error: str | None = Field(default=None, description="MOPAC error message")
     geometry_file: str | None = Field(
         default=None, description="Path to optimized geometry"
     )
@@ -344,9 +306,7 @@ class MoleculeDetail(BaseModel):
     smiles: str = Field(..., description="SMILES string")
 
     # Processing metadata
-    batch_id: str = Field(
-        ..., description="Batch that processed this molecule"
-    )
+    batch_id: str = Field(..., description="Batch that processed this molecule")
     timestamp: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),
         description="Processing timestamp",
@@ -357,12 +317,8 @@ class MoleculeDetail(BaseModel):
     crest_conformers_generated: int = Field(
         default=0, description="Total conformers from CREST"
     )
-    crest_time: float | None = Field(
-        default=None, description="CREST time (s)"
-    )
-    crest_error: str | None = Field(
-        default=None, description="CREST error"
-    )
+    crest_time: float | None = Field(default=None, description="CREST time (s)")
+    crest_error: str | None = Field(default=None, description="CREST error")
 
     # Conformer details
     conformers: list[ConformerDetail] = Field(
@@ -381,20 +337,12 @@ class MoleculeDetail(BaseModel):
     )
 
     # Quality
-    quality_grade: str = Field(
-        default="FAILED", description="Quality grade"
-    )
-    issues: list[str] = Field(
-        default_factory=list, description="Issues found"
-    )
+    quality_grade: str = Field(default="FAILED", description="Quality grade")
+    issues: list[str] = Field(default_factory=list, description="Issues found")
 
     # Final
-    success: bool = Field(
-        default=False, description="Processing succeeded"
-    )
-    error_message: str | None = Field(
-        default=None, description="Error if failed"
-    )
+    success: bool = Field(default=False, description="Processing succeeded")
+    error_message: str | None = Field(default=None, description="Error if failed")
     total_execution_time: float | None = Field(
         default=None, description="Total time (s)"
     )

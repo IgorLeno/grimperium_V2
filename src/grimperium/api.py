@@ -17,9 +17,9 @@ Example:
 
 from pathlib import Path
 
-import numpy as np
 import pandas as pd
 
+from grimperium import MatrixFloat
 from grimperium.config import GrimperiumConfig
 
 
@@ -57,8 +57,8 @@ class GrimperiumAPI:
         self.config = config or GrimperiumConfig()
         self.is_fitted = False
         self._data: pd.DataFrame | None = None
-        self._features: np.ndarray | None = None
-        self._targets: np.ndarray | None = None
+        self._features: MatrixFloat | None = None
+        self._targets: MatrixFloat | None = None
         self._model = None
 
     def load_data(
@@ -100,8 +100,8 @@ class GrimperiumAPI:
 
     def train(
         self,
-        X: np.ndarray | None = None,
-        y: np.ndarray | None = None,
+        X: MatrixFloat | None = None,
+        y: MatrixFloat | None = None,
     ) -> "GrimperiumAPI":
         """
         Train the delta-learning ensemble model.
@@ -119,9 +119,9 @@ class GrimperiumAPI:
     def predict(
         self,
         smiles: list[str] | None = None,
-        X: np.ndarray | None = None,
-        h298_pm7: np.ndarray | None = None,
-    ) -> np.ndarray:
+        X: MatrixFloat | None = None,
+        h298_pm7: MatrixFloat | None = None,
+    ) -> MatrixFloat:
         """
         Predict H298_CBS for new molecules.
 
@@ -142,8 +142,8 @@ class GrimperiumAPI:
 
     def evaluate(
         self,
-        X_test: np.ndarray | None = None,
-        y_test: np.ndarray | None = None,
+        X_test: MatrixFloat | None = None,
+        y_test: MatrixFloat | None = None,
     ) -> dict[str, float]:
         """
         Evaluate model performance.

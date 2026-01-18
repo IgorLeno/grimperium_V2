@@ -9,6 +9,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from grimperium import DictStrAny
+
 from .config import QualityGrade
 from .molecule_processor import PM7Result
 
@@ -76,7 +78,7 @@ class PhaseAEvaluation:
     baseline_pass_rate: float = 0.0
     grade_ab_rate: float = 0.0
     crash_count: int = 0
-    criteria: dict = field(default_factory=dict)
+    criteria: DictStrAny = field(default_factory=dict)
     issues: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
@@ -130,8 +132,8 @@ class ResultEvaluator:
                 Downstream callers should check baseline_loaded before relying on baseline validation.
         """
         self.tolerance = tolerance
-        self.baseline: dict = {}
-        self.criteria: dict = {}
+        self.baseline: DictStrAny = {}
+        self.criteria: DictStrAny = {}
         self.baseline_loaded: bool = False
 
         if baseline_path and baseline_path.exists():
@@ -168,7 +170,7 @@ class ResultEvaluator:
     def evaluate_molecule(
         self,
         result: PM7Result,
-        expected: dict | None = None,
+        expected: DictStrAny | None = None,
     ) -> MoleculeEvaluation:
         """Evaluate a single molecule result.
 

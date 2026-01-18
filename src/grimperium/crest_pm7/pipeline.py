@@ -9,6 +9,8 @@ from collections.abc import Callable, Iterator
 from enum import Enum
 from pathlib import Path
 
+from grimperium import DictStrAny
+
 from .config import MOPACStatus, PM7Config
 from .logging_utils import log_molecule_complete, log_molecule_start, setup_logging
 from .molecule_processor import MoleculeProcessor, PM7Result
@@ -267,7 +269,7 @@ class CRESTPM7Pipeline:
             return True
         return False
 
-    def get_summary(self) -> dict:
+    def get_summary(self) -> DictStrAny:
         """Get pipeline execution summary.
 
         Uses single-pass aggregation for efficiency.

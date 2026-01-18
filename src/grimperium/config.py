@@ -15,6 +15,8 @@ Example:
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from grimperium import DictStrAny
+
 
 @dataclass
 class ModelConfig:
@@ -98,12 +100,12 @@ class GrimperiumConfig:
     verbose: bool = True
     n_jobs: int = -1
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> DictStrAny:
         """Convert configuration to dictionary."""
         raise NotImplementedError("Will be implemented in future batch")
 
     @classmethod
-    def from_dict(cls, config_dict: dict) -> "GrimperiumConfig":
+    def from_dict(cls, config_dict: DictStrAny) -> "GrimperiumConfig":
         """Create configuration from dictionary."""
         raise NotImplementedError("Will be implemented in future batch")
 

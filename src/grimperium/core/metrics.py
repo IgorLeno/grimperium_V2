@@ -22,11 +22,13 @@ Example:
 
 import numpy as np
 
+from grimperium import MatrixFloat
+
 
 def rmse(
-    y_true: np.ndarray | list,
-    y_pred: np.ndarray | list,
-    sample_weight: np.ndarray | None = None,
+    y_true: MatrixFloat | list[float],
+    y_pred: MatrixFloat | list[float],
+    sample_weight: MatrixFloat | None = None,
 ) -> float:
     """
     Compute Root Mean Squared Error.
@@ -46,22 +48,22 @@ def rmse(
         0.0816...
 
     """
-    y_true_arr: np.ndarray = np.asarray(y_true)
-    y_pred_arr: np.ndarray = np.asarray(y_pred)
+    y_true_arr: MatrixFloat = np.asarray(y_true)
+    y_pred_arr: MatrixFloat = np.asarray(y_pred)
 
     squared_errors = (y_true_arr - y_pred_arr) ** 2
 
     if sample_weight is not None:
-        sample_weight_arr: np.ndarray = np.asarray(sample_weight)
+        sample_weight_arr: MatrixFloat = np.asarray(sample_weight)
         return float(np.sqrt(np.average(squared_errors, weights=sample_weight_arr)))
 
     return float(np.sqrt(np.mean(squared_errors)))
 
 
 def mae(
-    y_true: np.ndarray | list,
-    y_pred: np.ndarray | list,
-    sample_weight: np.ndarray | None = None,
+    y_true: MatrixFloat | list[float],
+    y_pred: MatrixFloat | list[float],
+    sample_weight: MatrixFloat | None = None,
 ) -> float:
     """
     Compute Mean Absolute Error.
@@ -81,22 +83,22 @@ def mae(
         0.0666...
 
     """
-    y_true_arr: np.ndarray = np.asarray(y_true)
-    y_pred_arr: np.ndarray = np.asarray(y_pred)
+    y_true_arr: MatrixFloat = np.asarray(y_true)
+    y_pred_arr: MatrixFloat = np.asarray(y_pred)
 
     absolute_errors = np.abs(y_true_arr - y_pred_arr)
 
     if sample_weight is not None:
-        sample_weight_arr: np.ndarray = np.asarray(sample_weight)
+        sample_weight_arr: MatrixFloat = np.asarray(sample_weight)
         return float(np.average(absolute_errors, weights=sample_weight_arr))
 
     return float(np.mean(absolute_errors))
 
 
 def r2_score(
-    y_true: np.ndarray | list,
-    y_pred: np.ndarray | list,
-    sample_weight: np.ndarray | None = None,
+    y_true: MatrixFloat | list[float],
+    y_pred: MatrixFloat | list[float],
+    sample_weight: MatrixFloat | None = None,
 ) -> float:
     """
     Compute R² (Coefficient of Determination).
@@ -119,11 +121,11 @@ def r2_score(
         0.985...
 
     """
-    y_true_arr: np.ndarray = np.asarray(y_true)
-    y_pred_arr: np.ndarray = np.asarray(y_pred)
+    y_true_arr: MatrixFloat = np.asarray(y_true)
+    y_pred_arr: MatrixFloat = np.asarray(y_pred)
 
     if sample_weight is not None:
-        sample_weight_arr: np.ndarray = np.asarray(sample_weight)
+        sample_weight_arr: MatrixFloat = np.asarray(sample_weight)
         y_mean = np.average(y_true_arr, weights=sample_weight_arr)
         ss_res: float = float(
             np.sum(sample_weight_arr * (y_true_arr - y_pred_arr) ** 2)
@@ -141,8 +143,8 @@ def r2_score(
 
 
 def mean_absolute_percentage_error(
-    y_true: np.ndarray | list,
-    y_pred: np.ndarray | list,
+    y_true: MatrixFloat | list[float],
+    y_pred: MatrixFloat | list[float],
     epsilon: float = 1e-10,
 ) -> float:
     """
@@ -162,8 +164,8 @@ def mean_absolute_percentage_error(
         MAPE can be misleading when y_true contains values near zero.
 
     """
-    y_true_arr: np.ndarray = np.asarray(y_true)
-    y_pred_arr: np.ndarray = np.asarray(y_pred)
+    y_true_arr: MatrixFloat = np.asarray(y_true)
+    y_pred_arr: MatrixFloat = np.asarray(y_pred)
 
     # Avoid division by zero
     denominator = np.maximum(np.abs(y_true_arr), epsilon)
@@ -173,8 +175,8 @@ def mean_absolute_percentage_error(
 
 
 def max_error(
-    y_true: np.ndarray | list,
-    y_pred: np.ndarray | list,
+    y_true: MatrixFloat | list[float],
+    y_pred: MatrixFloat | list[float],
 ) -> float:
     """
     Compute Maximum Absolute Error.
@@ -187,8 +189,8 @@ def max_error(
         Maximum absolute error
 
     """
-    y_true_arr: np.ndarray = np.asarray(y_true)
-    y_pred_arr: np.ndarray = np.asarray(y_pred)
+    y_true_arr: MatrixFloat = np.asarray(y_true)
+    y_pred_arr: MatrixFloat = np.asarray(y_pred)
 
     absolute_errors = np.abs(y_true_arr - y_pred_arr)
 
@@ -196,9 +198,9 @@ def max_error(
 
 
 def compute_all_metrics(
-    y_true: np.ndarray | list,
-    y_pred: np.ndarray | list,
-    sample_weight: np.ndarray | None = None,
+    y_true: MatrixFloat | list[float],
+    y_pred: MatrixFloat | list[float],
+    sample_weight: MatrixFloat | None = None,
 ) -> dict[str, float]:
     """
     Compute all metrics at once.
@@ -232,8 +234,8 @@ def compute_all_metrics(
 
 
 def compare_methods(
-    y_true: np.ndarray,
-    predictions: dict[str, np.ndarray],
+    y_true: MatrixFloat,
+    predictions: dict[str, MatrixFloat],
 ) -> dict[str, dict[str, float]]:
     """
     Compare multiple prediction methods.

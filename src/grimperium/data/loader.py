@@ -31,10 +31,15 @@ import pandas as pd
 from sklearn.model_selection import train_test_split
 
 # Module-level constants for dataset paths
-THERMO_CBS_OPT_PATH = "data/thermo_cbs_opt.csv"  # Original: 52,837 molecules
-THERMO_CBS_CLEAN_PATH = (
-    "data/thermo_cbs_clean.csv"  # Filtered: 30,026 molecules (Phase A)
-)
+# PRIMARY dataset (CHON molecules only - delta-learning optimized)
+THERMO_CBS_CHON_PATH = "data/thermo_cbs_chon.csv"  # Primary: 29,568 molecules (CHON only)
+
+# SECONDARY dataset (PM7 optimization results)
+THERMO_PM7_PATH = "data/thermo_pm7.csv"  # Secondary: PM7-optimized results from CREST pipeline
+
+# DEPRECATED paths (kept for reference only - DO NOT USE)
+# THERMO_CBS_OPT_PATH = "data/thermo_cbs_opt.csv"  # ❌ REMOVED (superseded by THERMO_CBS_CHON_PATH)
+# THERMO_CBS_CLEAN_PATH = "data/thermo_cbs_clean.csv"  # ❌ REMOVED (superseded by THERMO_CBS_CHON_PATH)
 
 
 class ChemperiumLoader:
@@ -342,111 +347,128 @@ class ChemperiumLoader:
         return f"ChemperiumLoader(n_molecules={n_rows})"
 
     @classmethod
-    def load_thermo_cbs_opt(
+    def load_thermo_pm7(
         cls,
-        path: str | Path = THERMO_CBS_CLEAN_PATH,
         max_nheavy: int | None = None,
         validate: bool = True,
     ) -> pd.DataFrame:
-        """Load thermodynamic CBS dataset (DEPRECATED - use load_thermo_cbs_clean).
-
-        This method loads the original unfiltered CBS dataset containing 52,837 molecules.
-
-        DEPRECATION NOTE:
-        - Default path changed 2026-01-10: now points to cleaned dataset by default
-        - Use load_thermo_cbs_clean() for new code (recommended)
-        - For original unfiltered data, pass file_path="data/thermo_cbs_opt.csv"
-        - Deprecation timeline: 2026-01-10 (warning) → 2026-06-10 (official) → 2026-12-10 (removal TBD)
-
+        """Load PM7-optimized results dataset (secondary).
+        
+        File: thermo_pm7.csv
+        Size: Results from CREST + PM7 optimization pipeline
+        
+        Properties:
+        - PM7 enthalpy (semiempirical optimization)
+        - Conformer details
+        - Quality grades
+        - Batch processing metadata
+        
+        Delta-learning context:
+        Used as experimental validation target or alternative cheap baseline
+        when validating delta-learning models trained on CBS/B3LYP delta.
+        
+        Dataset Characteristics:
+        - Source: CREST conformer generation + PM7 optimization
+        - Method: Semiempirical (PM7)
+        - Use case: Experimental validation, semiempirical baseline
+        
         Args:
-            path: Path to CBS dataset CSV file.
-                  Default: THERMO_CBS_CLEAN_PATH (cleaned, 30,026 molecules)
-                  For original: "data/thermo_cbs_opt.csv" (unfiltered, 52,837 molecules)
             max_nheavy: Filter molecules with nheavy <= this value
             validate: Whether to validate data on load
-
+        
         Returns:
-            pd.DataFrame: Thermodynamic dataset with columns:
-                          smiles, charge, multiplicity, nheavy, H298_cbs
-                          Shape: (N, M) where N = molecules, M = 5 + optional columns
-                          See REQUIRED_COLUMNS class constant for exact column definitions.
-
+            pd.DataFrame: PM7 properties and conformer data
+        
         Raises:
-            FileNotFoundError: If path does not exist
+            FileNotFoundError: If data/thermo_pm7.csv not found
             ValueError: If CSV format is invalid
-
-        Warnings:
-            DeprecationWarning: When using default path (now points to clean dataset)
-
+        
         See Also:
-            load_thermo_cbs_clean: Recommended method for Phase A onwards
-            docs/DATASET_MIGRATION.md: Complete migration guide and dataset comparison
+            load_thermo_cbs_chon: Primary CHON dataset (recommended)
+            docs/DATASETS.md: Comprehensive dataset documentation
+            docs/CREST_INTEGRATION.md: CREST + PM7 pipeline details
+        
+        Example:
+            >>> df = ChemperiumLoader.load_thermo_pm7()
+            >>> assert 'pm7_enthalpy' in df.columns or 'H298_pm7' in df.columns
         """
-        # Issue deprecation warning if using new default
-        if path == THERMO_CBS_CLEAN_PATH:
-            warnings.warn(
-                "load_thermo_cbs_opt() default behavior changed (2026-01-10). "
-                "Old default was 'data/thermo_cbs_opt.csv' (original dataset). "
-                "New default is 'data/thermo_cbs_clean.csv' (filtered dataset). "
-                "For new code, use load_thermo_cbs_clean() explicitly. "
-                "To load original dataset, pass path='data/thermo_cbs_opt.csv'.",
-                DeprecationWarning,
-                stacklevel=2,
+        if not Path(THERMO_PM7_PATH).exists():
+            raise FileNotFoundError(
+                f"Secondary dataset not found: {THERMO_PM7_PATH}\n"
+                f"This file contains PM7-optimized results from CREST pipeline\n"
+                f"Note: thermo_batch_final.csv was renamed to thermo_pm7.csv"
             )
-
+        
         loader = cls(validate=validate)
-        df = loader.load(path, max_nheavy=max_nheavy)
+        df = loader.load(THERMO_PM7_PATH, max_nheavy=max_nheavy)
         return df
 
     @classmethod
-    def load_thermo_cbs_clean(
+    def load_thermo_cbs_chon(
         cls,
         max_nheavy: int | None = None,
         validate: bool = True,
     ) -> pd.DataFrame:
-        """Load cleaned thermodynamic CBS dataset (PRIMARY - Phase A onwards).
-
-        Loads filtered dataset with 30,026 molecules (56.8% of original).
-        Removes halogenated and sulfur-containing molecules for Phase A scope.
-
+        """Load CHON thermochemistry dataset (primary).
+        
+        File: thermo_cbs_chon.csv
+        Size: 29,568 molecules
+        Composition: C, H, O, N only (no halogens, sulfur, or rare heteroatoms)
+        
+        Properties:
+        - CBS-level enthalpy (high-accuracy reference)
+        - B3LYP-level enthalpy (cheap alternative for delta-learning)
+        - Molecular properties: mass, n_heavy_atoms, etc.
+        
+        Delta-learning context:
+        This dataset is specifically curated for delta-learning models where
+        the target is the correction (delta) between B3LYP (cheap) and CBS (accurate).
+        The CHON-only constraint ensures:
+        - Homogeneous electronic physics
+        - No exotic valence states or relativistic effects
+        - Learnable correction patterns
+        
         Dataset Characteristics:
-        - Total molecules: 30,026 (filtered from original 52,837)
-        - Elements: C, H, O, N only (no halogens, no sulfur)
-        - Filtering: 22,811 molecules removed (43.2% of original)
-        - Use case: Phase A validation and forward development
-
-        Filtering Applied:
-        1. Halogenated molecules removed (F, Cl, Br, I)
-        2. Sulfur-containing molecules removed (S)
-        3. Non-essential columns removed
-
+        - Total molecules: 29,568 (filtered from original 52,837)
+        - Elements: C, H, O, N only
+        - Removed: Halogens (F, Cl, Br, I), sulfur (S), rare heteroatoms (B, P, As, Ge)
+        - Use case: Delta-learning model training and validation
+        
         Chemical Implications:
         - Homogeneous chemical space (no highly polarizable atoms)
         - Well-conditioned delta-learning problem
         - Smaller energy delta variance vs. full dataset
-
+        - No hypervalence extremes or relativistic effects
+        
         Args:
             max_nheavy: Filter molecules with nheavy <= this value
             validate: Whether to validate data on load
-
+        
         Returns:
-            pd.DataFrame: Cleaned thermodynamic dataset with columns:
-                          smiles, charge, multiplicity, nheavy, H298_cbs
-                          Shape: (30026, M) where M = 5 + optional columns
-
+            pd.DataFrame: Thermochemistry dataset with columns:
+                          smiles, charge, multiplicity, nheavy, H298_cbs, H298_b3
+                          Shape: (29568, M) where M = 5+ columns
+        
         Raises:
-            FileNotFoundError: If data/thermo_cbs_clean.csv does not exist
+            FileNotFoundError: If data/thermo_cbs_chon.csv not found
             ValueError: If CSV format is invalid
-
+        
         See Also:
-            load_thermo_cbs_opt: Legacy method (deprecated)
-            docs/DATASET_MIGRATION.md: Dataset filtering details and statistics
-
+            load_thermo_pm7: PM7-optimized results (secondary dataset)
+            docs/DATASETS.md: Comprehensive dataset documentation
+        
         Example:
-            >>> df = ChemperiumLoader.load_thermo_cbs_clean()
+            >>> df = ChemperiumLoader.load_thermo_cbs_chon()
             >>> assert set(df.columns) >= {'smiles', 'charge', 'multiplicity', 'nheavy', 'H298_cbs'}
-            >>> assert len(df) >= 1  # Actual count depends on filtering (e.g., max_nheavy)
+            >>> assert len(df) == 29568  # Full dataset (before max_nheavy filter)
         """
+        if not Path(THERMO_CBS_CHON_PATH).exists():
+            raise FileNotFoundError(
+                f"Primary dataset not found: {THERMO_CBS_CHON_PATH}\n"
+                f"Expected: 29,568 CHON molecules with CBS and B3LYP enthalpies\n"
+                f"Note: thermo_cbs_clean.csv and thermo_cbs_opt.csv are no longer used"
+            )
+        
         loader = cls(validate=validate)
-        df = loader.load(THERMO_CBS_CLEAN_PATH, max_nheavy=max_nheavy)
+        df = loader.load(THERMO_CBS_CHON_PATH, max_nheavy=max_nheavy)
         return df

@@ -174,7 +174,7 @@ def real_data_1k_filtered() -> tuple[np.ndarray, np.ndarray, np.ndarray]:
 
     # Load all data (filtered dataset - Phase A onwards)
     loader = ChemperiumLoader()
-    df = loader.load_thermo_cbs_clean()
+    df = loader.load_thermo_cbs_chon()
 
     # Log original statistics
     print(f"\n[FIXTURE] Original data: {len(df)} molecules")
@@ -234,72 +234,51 @@ def real_data_1k_filtered() -> tuple[np.ndarray, np.ndarray, np.ndarray]:
 
 @pytest.fixture
 def real_data_1k_extreme() -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """Load 1000 molecules with EXTREME distribution (unfiltered).
+    """Real data: 1000 molecules from CHON dataset (29,568 molecules).
 
-    WARNING: This fixture creates pathological data for STRESS TESTING ONLY!
+    Note: Stress tests now use CHON-only dataset.
+    Halogenated/sulfur molecules were removed for delta-learning consistency.
 
-    Note: Uses load_thermo_cbs_opt with explicit path because load_thermo_cbs_clean
-    currently does not support a 'filtered=False' parameter to load unfiltered data.
-
-    For stress tests, we need the ORIGINAL unfiltered dataset (52,837 molecules)
-    to validate behavior on full distribution (includes halogenated & sulfur molecules).
-
-    Future improvement: Add parameter to load_thermo_cbs_clean (e.g., filtered=True/False)
-    to avoid using deprecated method.
-
-    Characteristics:
-    - H298_cbs range: [-325407, +164949] kcal/mol
-    - std: ~7230 kcal/mol
-    - Random sample creates severe distribution shift
-    - Train/test means can differ by 500+ kcal/mol
-
-    Purpose:
-    - Test delta-learning robustness to outliers
-    - NOT for hypothesis validation
-    - Demonstrates PM7 baseline stability
+    This fixture provides a random sample from the full CHON dataset for stress testing.
+    Unlike real_data_1k_filtered, this does NOT apply the [-1000, +1000] filter,
+    allowing the full range of enthalpies in the CHON dataset.
 
     Returns:
         Tuple of (X_enriched, y_cbs, y_pm7_mock)
+        - X_enriched: Features (1000, 10)
+        - y_cbs: True CBS energies (1000,)
+        - y_pm7_mock: Mock PM7 energies (1000,)
 
     Example:
         >>> def test_stress(real_data_1k_extreme):
         ...     X, y_cbs, y_pm7 = real_data_1k_extreme
-        ...     # Expect RMSE ~1000 for direct model!
+        ...     # Tests with full range of CHON dataset
 
-    References: ChemperiumLoader, load_thermo_cbs_opt, load_thermo_cbs_clean, THERMO_CBS_OPT_PATH
+    References: ChemperiumLoader, load_thermo_cbs_chon
     """
-    from pathlib import Path
-
     from grimperium.data.loader import ChemperiumLoader
 
-    # Load all data (no filter - STRESS TEST!)
-    # Using deprecated method with explicit path for unfiltered data
+    # Load CHON dataset (29,568 molecules)
+    loader = ChemperiumLoader()
+    df = loader.load_thermo_cbs_chon()
 
-    # Resolve absolute path from test file location
-    test_dir = Path(__file__).parent.parent.parent  # grimperium/
-    dataset_path = test_dir / "data" / "thermo_cbs_opt.csv"
+    print("\n[STRESS FIXTURE] Loading from CHON dataset")
+    print(f"  Total molecules: {len(df)}")
 
-    if not dataset_path.exists():
-        raise FileNotFoundError(
-            f"Original dataset not found: {dataset_path}\n"
-            f"Expected: data/thermo_cbs_opt.csv (52,837 molecules, unfiltered)\n"
-            f"Reason: Stress tests require full distribution including halogenated/sulfur molecules"
+    if len(df) < 1000:
+        raise ValueError(
+            f"Dataset too small for stress tests: {len(df)} molecules\n"
+            f"Expected: >= 1000 molecules from data/thermo_cbs_chon.csv"
         )
 
-    loader = ChemperiumLoader()
-    df = loader.load_thermo_cbs_opt(path=str(dataset_path))
-
-    print("\n[STRESS FIXTURE] Loading EXTREME distribution (unfiltered)")
-    print(f"  Total molecules: {len(df)}")
     h_mean = df["H298_cbs"].mean()
     h_std = df["H298_cbs"].std()
     h_min = df["H298_cbs"].min()
     h_max = df["H298_cbs"].max()
     print(f"  H298_cbs: mean={h_mean:.1f}, std={h_std:.1f}")
     print(f"  H298_cbs: range=[{h_min:.1f}, {h_max:.1f}]")
-    print("  WARNING: Distribution shift expected between train/test!")
 
-    # Sample 1000 (includes outliers)
+    # Sample 1000 with reproducibility
     df_sample = df.sample(n=1000, random_state=42)
 
     print(f"\n[STRESS FIXTURE] Sample: {len(df_sample)} molecules")

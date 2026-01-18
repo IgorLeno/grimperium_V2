@@ -98,7 +98,9 @@ class TestPM7Result:
         assert result.smiles == "CCO"
         assert result.nheavy == 3
         assert result.conformers == []
-        assert result.quality_grade == QualityGrade.FAILED  # Changed: grade->quality_grade, C->FAILED (default)
+        assert (
+            result.quality_grade == QualityGrade.FAILED
+        )  # Changed: grade->quality_grade, C->FAILED (default)
         assert result.crest_time is None  # Changed: 0.0 -> None (default)
 
     def test_most_stable_hof_empty(self) -> None:
@@ -233,7 +235,10 @@ class TestGradingFunctions:
     def test_grade_from_issues_C(self) -> None:
         """Test grade C assignment for multiple issues."""
         # Multiple issues = Grade C
-        issues = ["no_high_confidence_hof", "incomplete_conformer_coverage"]  # 2+ issues
+        issues = [
+            "no_high_confidence_hof",
+            "incomplete_conformer_coverage",
+        ]  # 2+ issues
         grade = _grade_from_issues(issues, success=True, has_conformers=True)
         assert grade == QualityGrade.C
 

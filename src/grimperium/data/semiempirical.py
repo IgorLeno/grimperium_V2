@@ -27,6 +27,8 @@ from pathlib import Path
 
 import pandas as pd
 
+from grimperium import DictStrAny
+
 
 class SemiempiricalHandler:
     """
@@ -171,7 +173,7 @@ class SemiempiricalHandler:
         """Run CREST conformational search."""
         raise NotImplementedError("Will be implemented in Batch 6")
 
-    def _run_mopac(self, xyz: str, charge: int, multiplicity: int) -> dict:
+    def _run_mopac(self, xyz: str, charge: int, multiplicity: int) -> DictStrAny:
         """Run MOPAC calculation."""
         raise NotImplementedError("Will be implemented in Batch 6")
 

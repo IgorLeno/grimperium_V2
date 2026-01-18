@@ -5,6 +5,8 @@ Determines optimal number of conformers based on molecular flexibility.
 
 import logging
 
+from grimperium import DictStrAny
+
 from .config import PM7Config
 
 LOG = logging.getLogger("grimperium.crest_pm7.conformer_selector")
@@ -118,7 +120,7 @@ def calculate_delta_e(
 def analyze_conformer_distribution(
     energies: list[float],
     energy_window: float = 6.0,
-) -> dict:
+) -> DictStrAny:
     """Analyze conformer energy distribution.
 
     Args:

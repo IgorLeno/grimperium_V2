@@ -220,7 +220,7 @@ class BatchCSVManager:
         """Ensure DataFrame is loaded."""
         if self.df is None:
             self.load_csv()
-        return self.df  # type: ignore[return-value]
+        return self.df
 
     def _safe_int(self, val: Any, default: int = 0) -> int:
         """Safely convert value to int, handling NaN and invalid types.

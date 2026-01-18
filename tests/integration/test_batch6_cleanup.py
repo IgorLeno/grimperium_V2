@@ -15,13 +15,18 @@ class TestBatch6Cleanup:
 
     def test_required_csvs_exist(self):
         """Verify required CSV files still exist."""
-        assert Path("data/thermo_cbs_chon.csv").exists()
-        assert Path("data/test_batch_final.csv").exists()
+        assert Path("data/thermo_cbs_chon.csv").exists(), "Primary dataset missing"
+        assert Path("data/thermo_pm7.csv").exists(), "Secondary dataset (PM7) missing"
 
     def test_csv_count_exactly_two(self):
-        """Verify exactly 2 CSV files in data/."""
+        """Verify exactly 2 CSV files in data/ (no orphaned CSVs)."""
         csv_files = list(Path("data").glob("*.csv"))
-        assert len(csv_files) == 2, f"Expected 2 CSV files, found {len(csv_files)}: {csv_files}"
+        expected = {"thermo_cbs_chon.csv", "thermo_pm7.csv"}
+        actual = {f.name for f in csv_files}
+        assert actual == expected, (
+            f"Expected {expected}, got {actual}. "
+            f"Found {len(csv_files)} CSV files: {csv_files}"
+        )
 
     def test_conformer_details_renamed(self):
         """Verify all JSON files renamed to mol_XXXXX format."""
@@ -35,7 +40,9 @@ class TestBatch6Cleanup:
 
         # Should have exactly 3 mol_XXXXX files
         mol_files = list(conformer_dir.glob("mol_*.json"))
-        assert len(mol_files) == 3, f"Expected 3 mol_XXXXX files, found {len(mol_files)}"
+        assert (
+            len(mol_files) == 3
+        ), f"Expected 3 mol_XXXXX files, found {len(mol_files)}"
 
         # All should be in 5-digit format
         for f in mol_files:
