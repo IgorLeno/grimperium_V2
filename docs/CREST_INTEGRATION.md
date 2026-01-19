@@ -41,9 +41,8 @@
 
 ### Database Files
 
-- `thermo_cbs_clean.csv` - Primary (CBS calculations)
-- `crest_pm7_results.csv` - PM7 geometries & descriptors
-- Backup: `thermo_original.csv` (deprecated CBS Original)
+- `thermo_cbs_chon.csv` - Primary (29,568 CHON-only molecules, CBS-QB3 level)
+- `thermo_pm7.csv` - PM7 optimization results for batch processing
 
 ---
 
