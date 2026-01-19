@@ -275,7 +275,7 @@ crest complex.xyz --cmetal 0.05
           |
           v
 5. Aggregate to CSV
-   crest_pm7_results.csv
+   thermo_pm7.csv
 ```
 
 ### Why Both CREST + PM7?
