@@ -355,7 +355,6 @@ class DatabasesView(BaseView):
         Resyncs the working CSV from the source-of-truth CSV,
         resetting all status fields to PENDING.
         """
-        from grimperium.cli.constants import DATA_DIR
         from grimperium.cli.dataset_manager import DatasetManager
 
         manager = DatasetManager(
