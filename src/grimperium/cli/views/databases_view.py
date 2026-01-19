@@ -7,7 +7,6 @@ Displays and manages molecular databases.
 import json
 import os
 from datetime import date, datetime
-from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import pandas as pd
@@ -97,7 +96,14 @@ class DatabasesView(BaseView):
             if csv_path.exists():
                 try:
                     df = pd.read_csv(csv_path)
-                    molecules_count = len(df)
+
+                    # ✅ FIX: Count ONLY molecules with status="OK"
+                    # (calculated molecules, not PENDING)
+                    if "status" in df.columns:
+                        molecules_count = len(df[df["status"] == "OK"])
+                    else:
+                        # Legacy CSV without status column
+                        molecules_count = len(df)
 
                     # Use CSV modification time if no JSON timestamp
                     if last_updated is None:
@@ -354,7 +360,7 @@ class DatabasesView(BaseView):
 
         manager = DatasetManager(
             source_csv=DATA_DIR / "thermo_cbs_chon.csv",
-            working_csv=DATA_DIR / "thermo_batch_final.csv",
+            working_csv=DATA_DIR / "thermo_pm7.csv",
         )
         try:
             manager.refresh_database()
@@ -400,11 +406,27 @@ class DatabasesView(BaseView):
             for csv_file in sorted(csv_files):
                 try:
                     df = pd.read_csv(csv_file)
-                    molecule_count = len(df)
+
+                    # ✅ FIX: Show breakdown of calculated (OK) vs pending
+                    if "status" in df.columns:
+                        ok_count = len(df[df["status"] == "OK"])
+                        total_count = len(df)
+                        pending_count = total_count - ok_count
+
+                        if ok_count > 0:
+                            msg = f"{ok_count} calculated"
+                            if pending_count > 0:
+                                msg += f" ({pending_count} pending)"
+                        else:
+                            msg = f"{total_count} pending (none calculated)"
+                    else:
+                        # Legacy CSV without status - just show total
+                        msg = f"{len(df)} molecules"
+
                     self.console.print(
                         f"  [{COLORS['success']}]✓[/{COLORS['success']}] "
                         f"[bold]{csv_file.name}[/bold]: "
-                        f"[{COLORS['databases']}]{molecule_count} molecules[/{COLORS['databases']}]"
+                        f"[{COLORS['databases']}]{msg}[/{COLORS['databases']}]"
                     )
                 except Exception as e:
                     self.console.print(
@@ -554,8 +576,8 @@ class DatabasesView(BaseView):
         )
         from grimperium.crest_pm7.config import PM7Config
 
-        csv_path = Path("data/test_batch_final.csv")
-        detail_dir = Path("data/molecules_pm7/conformer_details")
+        csv_path = DATA_DIR / "thermo_pm7.csv"
+        detail_dir = DATA_DIR / "molecules_pm7" / "conformer_details"
 
         if not csv_path.exists():
             self.console.print(
