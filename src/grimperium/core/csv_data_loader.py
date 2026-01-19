@@ -29,9 +29,6 @@ logger = logging.getLogger(__name__)
 class CSVDataLoaderError(Exception):
     """CSV data loader error."""
 
-    pass
-
-
 @dataclass
 class ValidationError:
     """A single validation error."""
@@ -146,10 +143,10 @@ class CSVDataLoader:
         try:
             df = pd.read_csv(self.csv_path)
         except Exception as e:
+        try:
+            df = pd.read_csv(self.csv_path)
+        except (pd.errors.ParserError, pd.errors.EmptyDataError, OSError) as e:
             raise CSVDataLoaderError(f"Failed to parse CSV: {e}") from e
-
-        logger.info(f"Loaded {len(df)} rows from {self.csv_path}")
-
         # Validate columns
         self._validate_columns(df)
 

@@ -127,7 +127,7 @@ class BatchScheduler:
         }
 
         for mol in molecules:
-            if mol.is_failed and mol.reruns >= max_reruns:
+            if mol.is_failed and not mol.can_rerun(max_reruns):
                 reasons["max_reruns_exceeded"] += 1
             elif mol.is_complete:
                 reasons["complete"] += 1
@@ -195,13 +195,18 @@ class BatchScheduler:
                 'skipped': permanently skipped,
             }
         """
-        failed_rerunnable = sum(
-            1 for m in molecules if m.is_failed and m.can_rerun(max_reruns)
-        )
-        pending = sum(1 for m in molecules if m.is_pending)
-        complete = sum(1 for m in molecules if m.is_complete)
-        skipped = sum(1 for m in molecules if m.is_skipped)
-        running = sum(1 for m in molecules if m.is_running)
+        failed_rerunnable = pending = complete = skipped = running = 0
+        for m in molecules:
+            if m.is_failed and m.can_rerun(max_reruns):
+                failed_rerunnable += 1
+            if m.is_pending:
+                pending += 1
+            if m.is_complete:
+                complete += 1
+            if m.is_skipped:
+                skipped += 1
+            if m.is_running:
+                running += 1
 
         return {
             "total": len(molecules),

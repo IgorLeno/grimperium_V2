@@ -291,6 +291,12 @@ class Molecule:
         timestamp_added, _ = MoleculeValueConverter.to_datetime(
             row.get("timestamp_added"), "timestamp_added"
         )
+        timestamp_started, _ = MoleculeValueConverter.to_datetime(
+            row.get("timestamp_started"), "timestamp_started"
+        )
+        timestamp_completed, _ = MoleculeValueConverter.to_datetime(
+            row.get("timestamp_completed"), "timestamp_completed"
+        )
 
         # Results (all optional)
         crest_status, _ = MoleculeValueConverter.to_string(
@@ -350,6 +356,8 @@ class Molecule:
                 status=status,
                 reruns=reruns,
                 timestamp_added=timestamp_added,
+                timestamp_started=timestamp_started,
+                timestamp_completed=timestamp_completed,
             ),
         )
 
@@ -368,7 +376,7 @@ class Molecule:
             "nheavy": self.properties.nheavy,
             "charge": self.properties.charge,
             "multiplicity": self.properties.multiplicity,
-            "H298_cbs": self.properties.H298_cbs or "",
+            "H298_cbs": self.properties.H298_cbs if self.properties.H298_cbs is not None else "",
             "nrotbonds": self.properties.nrotbonds,
             # Meta
             "status": self.meta.status.value,
@@ -389,14 +397,14 @@ class Molecule:
                 else ""
             ),
             # Results
-            "crest_status": self.results.crest_status or "",
-            "crest_conformers_generated": self.results.crest_conformers_generated or "",
-            "crest_time": self.results.crest_time or "",
-            "mopac_status": self.results.mopac_status or "",
-            "mopac_time": self.results.mopac_time or "",
-            "delta_1": self.results.delta_1 or "",
-            "delta_2": self.results.delta_2 or "",
-            "delta_3": self.results.delta_3 or "",
-            "most_stable_hof": self.results.most_stable_hof or "",
-            "error_message": self.results.error_message or "",
+            "crest_status": self.results.crest_status or "",  # strings OK with `or`
+            "crest_conformers_generated": self.results.crest_conformers_generated if self.results.crest_conformers_generated is not None else "",
+            "crest_time": self.results.crest_time if self.results.crest_time is not None else "",
+            "mopac_status": self.results.mopac_status or "",  # strings OK with `or`
+            "mopac_time": self.results.mopac_time if self.results.mopac_time is not None else "",
+            "delta_1": self.results.delta_1 if self.results.delta_1 is not None else "",
+            "delta_2": self.results.delta_2 if self.results.delta_2 is not None else "",
+            "delta_3": self.results.delta_3 if self.results.delta_3 is not None else "",
+            "most_stable_hof": self.results.most_stable_hof if self.results.most_stable_hof is not None else "",
+            "error_message": self.results.error_message or "",  # strings OK with `or`
         }

@@ -41,8 +41,6 @@ console = Console()
 class BatchOrchestratorError(Exception):
     """Batch orchestration error."""
 
-    pass
-
 
 @dataclass
 class CalculationSettings:
@@ -394,7 +392,7 @@ class BatchOrchestrator:
         """Save batch summary to log file (append)."""
         self.log_dir.mkdir(parents=True, exist_ok=True)
 
-        with open(self.summary_log, "a") as f:
+        with open(self.summary_log, "a", encoding="utf-8") as f:
             f.write(f"\n{'=' * 70}\n")
             f.write(f"{datetime.now(timezone.utc).isoformat()}\n")
             f.write(f"Total:     {self.summary.total}\n")

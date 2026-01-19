@@ -29,8 +29,6 @@ T = TypeVar("T", bound=Enum)
 class ConversionError(Exception):
     """Value conversion error."""
 
-    pass
-
 
 class MoleculeValueConverter:
     """
@@ -73,7 +71,7 @@ class MoleculeValueConverter:
         Args:
             value: Value to convert
             field_name: Field name (for logging)
-            allow_zero: If False, log debug when value is 0.0 (but still valid!)
+            allow_zero: If False, log debug when value is 0.0 (still valid)
 
         Returns:
             (float_value, error_reason) where:
@@ -109,16 +107,21 @@ class MoleculeValueConverter:
         try:
             result = float(value)
 
+            # Reject infinity as invalid
+            if result == float('inf') or result == float('-inf'):
+                return None, "invalid"
+
             # Log zero values (noteworthy but valid)
             if result == 0.0 and not allow_zero:
-                logger.debug(f"Field '{field_name}' = 0.0 (valid but noteworthy)")
+                logger.debug(
+                    f"Field '{field_name}' = 0.0 (valid but noteworthy)"
+                )
 
             return result, None
 
         except (ValueError, TypeError):
             return None, "invalid"
 
-    @staticmethod
     def to_int(
         value: Any,
         field_name: str = "unknown",
@@ -258,16 +261,21 @@ class MoleculeValueConverter:
         if value is None or value == "":
             return None, "empty"
 
+        if pd.isna(value):
+            return None, "empty"
+
         str_val = str(value).strip().lower()
 
         # Try to match enum value
         for member in enum_class:
-            if member.value.lower() == str_val:
+            if str(member.value).lower() == str_val:
                 return member, None
 
         # No match
-        valid_values = [m.value for m in enum_class]
-        logger.warning(f"Field '{field_name}': '{value}' not in {valid_values}")
+        valid_values = [str(m.value) for m in enum_class]
+        logger.warning(
+            f"Field '{field_name}': '{value}' not in {valid_values}"
+        )
         return None, "invalid"
 
     @staticmethod

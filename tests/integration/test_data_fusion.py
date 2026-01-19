@@ -14,6 +14,12 @@ import numpy as np
 from tests.fixtures.real_data import load_real_subset
 
 
+import numpy as np
+import pandas as pd
+
+from tests.fixtures.real_data import load_real_subset
+
+
 def _create_synthetic_pm7(df: "pd.DataFrame", random_state: int = 42) -> "pd.DataFrame":
     """Create synthetic PM7 values with realistic noise for testing."""
     rng = np.random.default_rng(random_state)

@@ -248,7 +248,10 @@ for mol in scheduled:
 ```python
 # Separate responsibility:
 
-class ReruntimeManager:
+class RerunManager:
+     """Handle retry logic only"""
+     def mark_retry(self, mol_id):
+         self.retries[mol_id] += 1
     """Handle retry logic only"""
     def mark_retry(self, mol_id):
         self.retries[mol_id] += 1
@@ -429,7 +432,7 @@ crest_time,mopac_status,mopac_time,delta_1,delta_2,delta_3,most_stable_hof,error
        self.persister.save_molecule(mol)
    ```
 
-2. **Extract Reruns Logic (MANDATORY)**
+   class RerunTracker:
    ```python
    # Separate thread-safe retry tracking
    class ReruntimeTracker:
@@ -454,14 +457,7 @@ crest_time,mopac_status,mopac_time,delta_1,delta_2,delta_3,most_stable_hof,error
            self.summary[event['key']] += event['value']
    ```
 
-4. **Add File Locking (MANDATORY)**
-   ```python
-   # For concurrent CSV access
-   with FileLock(self.csv_path + ".lock"):
-       df = pd.read_csv(self.csv_path)
-       df.loc[...] = update
-       df.to_csv(self.csv_path)
-   ```
+
 
 ### If You Need to Scale Beyond CSV
 
