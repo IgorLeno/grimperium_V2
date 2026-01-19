@@ -17,7 +17,7 @@
 Lines of Code: ~3,500 (src/)
 Test Coverage Target: 85%+
 Type Hints: 100% required
-CLI Modules: 6 (CALC, DATABASES, MODELS, RESULTS, SETTINGS, ABOUT)
+CLI Modules: 7 (CALC, DATABASES, MODELS, RESULTS, SETTINGS, ABOUT, BATCH)
 Open Bugs: 11 (BATCH 12)
 Estimated Fix Time: 90-120 minutes
 ```
@@ -296,7 +296,8 @@ src/grimperium/cli/
    ├─ models_view.py           (ML model management)
    ├─ results_view.py          (Analytics display)
    ├─ settings_view.py         ← BUGS: headers, back button
-   └─ about_view.py            (Info display)
+   ├─ about_view.py            (Info display)
+   └─ batch_view.py            (Batch processing management)
 
 Data Management
 src/grimperium/crest_pm7/
