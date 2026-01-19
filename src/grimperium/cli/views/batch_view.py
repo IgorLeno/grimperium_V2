@@ -21,6 +21,7 @@ from rich.progress import (
 )
 from rich.table import Table
 
+from grimperium.cli.constants import DATA_DIR
 from grimperium.cli.menu import MenuOption
 from grimperium.cli.styles import COLORS, ICONS
 from grimperium.cli.views.base_view import BaseView
@@ -38,7 +39,7 @@ class BatchView(BaseView):
     color: ClassVar[str] = COLORS["batch"]
 
     # Default paths
-    DEFAULT_CSV_PATH = Path("data/batch_tracking.csv")
+    DEFAULT_CSV_PATH = DATA_DIR / "batch_tracking.csv"
     DEFAULT_DETAIL_DIR = Path("data/conformer_details")
 
     def __init__(self, controller: "CliController") -> None:
