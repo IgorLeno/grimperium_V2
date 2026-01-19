@@ -11,8 +11,6 @@ FUTURE PARALLELIZATION: Add threading.Lock() to protect DataFrame operations.
 
 import logging
 import math
-import uuid
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -194,6 +192,18 @@ class BatchCSVManager:
         if missing:
             raise ValueError(f"CSV missing required columns: {missing}")
 
+        # Normalize status column (case-insensitive mapping to enum values)
+        status_map = {s.value.lower(): s.value for s in MoleculeStatus}
+        self.df["status"] = self.df["status"].str.strip().str.lower().map(status_map)
+        invalid_status = self.df["status"].isna()
+        if invalid_status.any():
+            first_invalid_idx = self.df[invalid_status].index[0]
+            LOG.warning(
+                f"Found {invalid_status.sum()} rows with invalid status values "
+                f"(first at row {first_invalid_idx}). Setting to PENDING."
+            )
+            self.df.loc[invalid_status, "status"] = MoleculeStatus.PENDING.value
+
         # Validate unique mol_ids
         if self.df["mol_id"].duplicated().any():
             duplicates = self.df[self.df["mol_id"].duplicated()]["mol_id"].tolist()
@@ -298,14 +308,31 @@ class BatchCSVManager:
         return int(df[mask].index[0])
 
     def generate_batch_id(self) -> str:
-        """Generate unique batch ID.
+        """Generate unique batch ID with sequential numbering.
 
         Returns:
-            Batch ID in format 'batch_YYYYMMDD_HHMMSS_xxxx'
+            Batch ID in format 'batch_NNNN' where NNNN is 4-digit counter
+            (e.g., 'batch_0001', 'batch_0002', ...)
         """
-        timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
-        short_uuid = uuid.uuid4().hex[:4]
-        return f"batch_{timestamp}_{short_uuid}"
+        df = self._ensure_loaded()
+
+        # Extract existing batch numbers from batch_id column
+        existing_batches = df["batch_id"].dropna().unique()
+        batch_numbers = []
+
+        for batch_id in existing_batches:
+            # Extract number from format 'batch_NNNN'
+            if isinstance(batch_id, str) and batch_id.startswith("batch_"):
+                try:
+                    num = int(batch_id.replace("batch_", ""))
+                    batch_numbers.append(num)
+                except ValueError:
+                    # Skip malformed batch IDs
+                    pass
+
+        # Get next number
+        next_number = max(batch_numbers, default=0) + 1
+        return f"batch_{next_number:04d}"
 
     def select_batch(
         self,
@@ -428,6 +455,8 @@ class BatchCSVManager:
     ) -> pd.DataFrame:
         """Apply sorting strategy to available molecules.
 
+        Respects mol_id order within each priority group.
+
         Args:
             df: DataFrame of available molecules
             strategy: Sorting strategy to apply
@@ -436,12 +465,12 @@ class BatchCSVManager:
             Sorted DataFrame
         """
         if strategy == BatchSortingStrategy.RERUN_FIRST_THEN_EASY:
-            # RERUN first, then PENDING sorted by nheavy (ascending)
+            # RERUN first (sorted by mol_id), then PENDING (sorted by mol_id)
             df = df.copy()
             df["_sort_priority"] = df["status"].apply(
                 lambda x: 0 if x == MoleculeStatus.RERUN.value else 1
             )
-            return df.sort_values(["_sort_priority", "nheavy"]).drop(
+            return df.sort_values(["_sort_priority", "mol_id"]).drop(
                 columns=["_sort_priority"]
             )
 
@@ -738,7 +767,9 @@ class BatchCSVManager:
             "batch_order": batch_order,
             # Timestamp
             "timestamp": (
-                result.timestamp.isoformat() if result.timestamp is not None else None
+                result.timestamp.strftime("%d/%m-%H:%M")
+                if result.timestamp is not None
+                else None
             ),
         }
 
