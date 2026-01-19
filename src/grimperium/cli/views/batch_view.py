@@ -40,7 +40,7 @@ class BatchView(BaseView):
 
     # Default paths
     DEFAULT_CSV_PATH = DATA_DIR / "batch_tracking.csv"
-    DEFAULT_DETAIL_DIR = Path("data/conformer_details")
+    DEFAULT_DETAIL_DIR = DATA_DIR / "conformer_details"
 
     def __init__(self, controller: "CliController") -> None:
         """Initialize batch view.
