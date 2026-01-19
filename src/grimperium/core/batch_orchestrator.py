@@ -21,12 +21,11 @@ See: docs/ARCHITECTURE.md → "If You Need to Parallelize"
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+import logging
+from collections.abc import Callable
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Callable, Dict, List, Optional
-
-import logging
 
 from rich.console import Console
 from rich.table import Table
@@ -87,7 +86,7 @@ class BatchSummary:
     elapsed_total: float = 0.0
     """Total elapsed time in seconds."""
 
-    def to_dict(self) -> Dict[str, int | float]:
+    def to_dict(self) -> dict[str, int | float]:
         """Convert to dictionary."""
         return {
             "total": self.total,
@@ -118,8 +117,8 @@ class BatchOrchestrator:
         self,
         csv_path: Path,
         strict: bool = False,
-        workdir: Optional[Path] = None,
-        settings: Optional[CalculationSettings] = None,
+        workdir: Path | None = None,
+        settings: CalculationSettings | None = None,
     ):
         """
         Initialize orchestrator.
@@ -147,7 +146,7 @@ class BatchOrchestrator:
 
     def run(
         self,
-        callback: Optional[Callable[[Molecule, str], None]] = None,
+        callback: Callable[[Molecule, str], None] | None = None,
         dry_run: bool = False,
     ) -> BatchSummary:
         """
@@ -186,18 +185,14 @@ class BatchOrchestrator:
                 self._print_validation_report()
 
             # Step 3: Schedule
-            scheduled = BatchScheduler.schedule(
-                molecules, self.settings.max_reruns
-            )
+            scheduled = BatchScheduler.schedule(molecules, self.settings.max_reruns)
             self.summary.pending = len(scheduled)
 
             # Get skip reasons for reporting
             skip_reasons = BatchScheduler.get_skip_reasons(
                 molecules, self.settings.max_reruns
             )
-            self.summary.failed_rerunnable = skip_reasons.get(
-                "max_reruns_exceeded", 0
-            )
+            self.summary.failed_rerunnable = skip_reasons.get("max_reruns_exceeded", 0)
 
             if not scheduled:
                 console.print("[yellow]ℹ️  No molecules to process[/yellow]")
@@ -214,17 +209,12 @@ class BatchOrchestrator:
             else:
                 # Process each molecule
                 for idx, mol in enumerate(scheduled, 1):
-                    logger.info(
-                        f"Processing {idx}/{len(scheduled)}: {mol.mol_id}"
-                    )
+                    logger.info(f"Processing {idx}/{len(scheduled)}: {mol.mol_id}")
 
                     self._process_molecule(mol)
 
                     if callback:
-                        callback(
-                            mol,
-                            f"{mol.status.value} ({idx}/{len(scheduled)})"
-                        )
+                        callback(mol, f"{mol.status.value} ({idx}/{len(scheduled)})")
 
             # Step 5: Finalize and print summary
             elapsed = (datetime.now(timezone.utc) - start_time).total_seconds()
@@ -262,9 +252,7 @@ class BatchOrchestrator:
 
         # Print to console (prominent)
         console.print("\n" + "=" * 70)
-        console.print(
-            "[yellow]⚠️  DATA QUALITY WARNING (Permissive Mode)[/yellow]"
-        )
+        console.print("[yellow]⚠️  DATA QUALITY WARNING (Permissive Mode)[/yellow]")
         console.print("=" * 70)
         console.print(
             f"[red]{report.total_errors}[/red] rows skipped due to validation errors:"
@@ -282,9 +270,7 @@ class BatchOrchestrator:
             remaining = len(report.errors) - 5
             console.print(f"  [dim]... and {remaining} more[/dim]")
 
-        console.print(
-            f"[yellow]📝 Full report: {self.validation_log}[/yellow]"
-        )
+        console.print(f"[yellow]📝 Full report: {self.validation_log}[/yellow]")
         console.print("=" * 70 + "\n")
 
         # Save to file (for monitoring)
@@ -301,10 +287,7 @@ class BatchOrchestrator:
             f.write(f"{'=' * 70}\n")
 
             for error in report.errors:
-                f.write(
-                    f"Row {error.row:4d}: {error.mol_id:20s} "
-                    f"→ {error.error}\n"
-                )
+                f.write(f"Row {error.row:4d}: {error.mol_id:20s} " f"→ {error.error}\n")
 
     def _process_molecule(self, mol: Molecule) -> None:
         """
@@ -350,7 +333,7 @@ class BatchOrchestrator:
             self.summary.errors += 1
             logger.error(f"Error processing {mol.mol_id}: {e}")
 
-    def _print_schedule_preview(self, scheduled: List[Molecule]) -> None:
+    def _print_schedule_preview(self, scheduled: list[Molecule]) -> None:
         """Print preview of scheduled molecules."""
         table = Table(title="Scheduled Molecules (Preview)")
         table.add_column("Position", style="dim")

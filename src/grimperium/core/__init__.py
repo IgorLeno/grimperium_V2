@@ -20,14 +20,6 @@ Batch processing components (v2.2):
 """
 
 # Delta-learning components
-from grimperium.core.delta_learning import DeltaLearner
-from grimperium.core.metrics import (
-    mae,
-    mean_absolute_percentage_error,
-    r2_score,
-    rmse,
-)
-
 # Batch processing components (v2.2)
 from grimperium.core.batch_orchestrator import (
     BatchOrchestrator,
@@ -41,6 +33,13 @@ from grimperium.core.csv_data_loader import (
     CSVDataLoader,
     CSVDataLoaderError,
     ValidationReport,
+)
+from grimperium.core.delta_learning import DeltaLearner
+from grimperium.core.metrics import (
+    mae,
+    mean_absolute_percentage_error,
+    r2_score,
+    rmse,
 )
 from grimperium.core.molecule import (
     Molecule,

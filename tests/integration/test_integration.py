@@ -53,7 +53,7 @@ def test_dataset_stats():
     stats = get_dataset_stats()
 
     assert stats["n_molecules"] == 29568
-    assert stats["n_columns"] == 7
+    assert stats["n_columns"] == 6
     assert "H298_cbs" in stats["columns"]
     assert stats["nheavy_min"] >= 1
     assert stats["nheavy_max"] <= 22

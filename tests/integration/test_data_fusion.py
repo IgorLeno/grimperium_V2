@@ -1,37 +1,46 @@
 """
 Integration tests for DataFusion with real dataset.
 
-This module tests the DataFusion class using the real CBS/B3LYP dataset,
-using H298_b3 as a proxy for PM7 since PM7 calculations are not yet available.
+This module tests the DataFusion class using the real CBS dataset
+with synthetic PM7 values (PM7 calculations not yet available).
 
 Tests:
-    - Real data fusion with CBS and B3LYP
+    - Real data fusion with CBS and synthetic PM7
     - Task view creation with real data
 """
+
+import numpy as np
 
 from tests.fixtures.real_data import load_real_subset
 
 
-def test_datafusion_with_real_cbs_and_b3():
-    """
-    Test DataFusion using real CBS and B3LYP data.
+def _create_synthetic_pm7(df: "pd.DataFrame", random_state: int = 42) -> "pd.DataFrame":
+    """Create synthetic PM7 values with realistic noise for testing."""
+    rng = np.random.default_rng(random_state)
+    pm7_df = df[["smiles"]].copy()
+    pm7_df["H298_pm7"] = df["H298_cbs"] + rng.normal(5.0, 10.0, len(df))
+    return pm7_df
 
-    Note: We use H298_b3 as a proxy for semiempirical PM7
-    since PM7 calculations are not yet available.
+
+def test_datafusion_with_real_cbs_and_synthetic_pm7():
+    """
+    Test DataFusion using real CBS and synthetic PM7 data.
+
+    Note: We use synthetic PM7 values since PM7 calculations
+    are not yet available.
     """
     from grimperium.data import DataFusion
 
     # Load real subset
     df = load_real_subset(n=500, stratified=True)
 
-    # Separate CBS and B3LYP columns (simulating two data sources)
+    # Separate CBS and create synthetic PM7 (simulating two data sources)
     cbs_df = df[["smiles", "charge", "multiplicity", "nheavy", "H298_cbs"]].copy()
-    b3_df = df[["smiles", "H298_b3"]].copy()
-    b3_df.rename(columns={"H298_b3": "H298_pm7"}, inplace=True)
+    pm7_df = _create_synthetic_pm7(df, random_state=42)
 
     # Fuse
     fusion = DataFusion()
-    merged = fusion.merge(cbs_df, b3_df, on="smiles")
+    merged = fusion.merge(cbs_df, pm7_df, on="smiles")
 
     assert len(merged) == 500
     assert "H298_cbs" in merged.columns
@@ -46,8 +55,8 @@ def test_datafusion_with_real_cbs_and_b3():
     # Analyze deltas
     stats = fusion.analyze_deltas(merged_with_delta)
 
-    # B3LYP typically higher than CBS for these molecules
-    assert abs(stats["mean"]) < 200  # Reasonable delta range (B3LYP vs CBS)
+    # Synthetic PM7 has mean offset ~5, std ~10
+    assert abs(stats["mean"]) < 20  # Reasonable delta range
     assert stats["std"] > 0
 
 

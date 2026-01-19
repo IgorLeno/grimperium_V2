@@ -14,11 +14,10 @@ Distinguish:
 
 from __future__ import annotations
 
+import logging
 from datetime import datetime
 from enum import Enum
-from typing import Any, Optional, Tuple, Type, TypeVar
-
-import logging
+from typing import Any, TypeVar
 
 import pandas as pd
 
@@ -67,7 +66,7 @@ class MoleculeValueConverter:
         value: Any,
         field_name: str = "unknown",
         allow_zero: bool = True,
-    ) -> Tuple[Optional[float], Optional[str]]:
+    ) -> tuple[float | None, str | None]:
         """
         Convert to float with clear error semantics.
 
@@ -123,7 +122,7 @@ class MoleculeValueConverter:
     def to_int(
         value: Any,
         field_name: str = "unknown",
-    ) -> Tuple[Optional[int], Optional[str]]:
+    ) -> tuple[int | None, str | None]:
         """
         Convert to int with clear error semantics.
 
@@ -160,9 +159,9 @@ class MoleculeValueConverter:
     @staticmethod
     def to_string(
         value: Any,
-        field_name: str = "unknown",
+        field_name: str = "unknown",  # noqa: ARG004
         allow_empty: bool = False,
-    ) -> Tuple[Optional[str], Optional[str]]:
+    ) -> tuple[str | None, str | None]:
         """
         Convert to string with clear error semantics.
 
@@ -227,9 +226,9 @@ class MoleculeValueConverter:
     @staticmethod
     def to_enum(
         value: Any,
-        enum_class: Type[T],
+        enum_class: type[T],
         field_name: str = "unknown",
-    ) -> Tuple[Optional[T], Optional[str]]:
+    ) -> tuple[T | None, str | None]:
         """
         Convert to enum with validation.
 
@@ -275,7 +274,7 @@ class MoleculeValueConverter:
     def to_datetime(
         value: Any,
         field_name: str = "unknown",
-    ) -> Tuple[Optional[datetime], Optional[str]]:
+    ) -> tuple[datetime | None, str | None]:
         """
         Convert to datetime (ISO 8601) with validation.
 
@@ -322,7 +321,7 @@ class MoleculeValueConverter:
     def to_bool(
         value: Any,
         field_name: str = "unknown",
-    ) -> Tuple[Optional[bool], Optional[str]]:
+    ) -> tuple[bool | None, str | None]:
         """
         Convert to boolean with validation.
 

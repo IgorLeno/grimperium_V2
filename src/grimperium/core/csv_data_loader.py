@@ -14,7 +14,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from grimperium.core.molecule import Molecule
 
 import logging
 
@@ -42,7 +45,7 @@ class ValidationError:
 class ValidationReport:
     """Validation report with all errors."""
 
-    errors: List[ValidationError] = field(default_factory=list)
+    errors: list[ValidationError] = field(default_factory=list)
 
     @property
     def total_errors(self) -> int:
@@ -83,7 +86,7 @@ class CSVDataLoader:
     )
 
     # Optional columns (will be added if missing)
-    OPTIONAL_COLUMNS: Dict[str, Any] = {
+    OPTIONAL_COLUMNS: dict[str, Any] = {
         "charge": 0,
         "multiplicity": 1,
         "H298_cbs": None,
@@ -122,9 +125,7 @@ class CSVDataLoader:
         self.strict = strict
         self.validation_report = ValidationReport()
 
-        logger.info(
-            f"CSVDataLoader initialized: {csv_path} (strict={strict})"
-        )
+        logger.info(f"CSVDataLoader initialized: {csv_path} (strict={strict})")
 
     def load_dataframe(self) -> pd.DataFrame:
         """
@@ -145,7 +146,7 @@ class CSVDataLoader:
         try:
             df = pd.read_csv(self.csv_path)
         except Exception as e:
-            raise CSVDataLoaderError(f"Failed to parse CSV: {e}")
+            raise CSVDataLoaderError(f"Failed to parse CSV: {e}") from e
 
         logger.info(f"Loaded {len(df)} rows from {self.csv_path}")
 
@@ -239,7 +240,7 @@ class CSVDataLoader:
 
         return df_valid
 
-    def _validate_row(self, row: pd.Series, idx: int) -> Optional[str]:
+    def _validate_row(self, row: pd.Series, idx: int) -> str | None:  # noqa: ARG002
         """
         Validate a single row.
 
@@ -350,9 +351,9 @@ class BatchDataManager:
         """
         self.csv_path = Path(csv_path)
         self.loader = CSVDataLoader(csv_path, strict=strict)
-        self._df: Optional[pd.DataFrame] = None
+        self._df: pd.DataFrame | None = None
 
-    def load_batch(self) -> List["Molecule"]:
+    def load_batch(self) -> list[Molecule]:
         """
         Load CSV and convert to Molecule objects.
 
@@ -376,14 +377,14 @@ class BatchDataManager:
             except (ValueError, KeyError) as e:
                 logger.error(f"Row {idx}: Failed to create Molecule: {e}")
                 if self.loader.strict:
-                    raise CSVDataLoaderError(f"Row {idx}: {e}")
+                    raise CSVDataLoaderError(f"Row {idx}: {e}") from e
                 # In permissive mode, skip this row
                 continue
 
         logger.info(f"Created {len(molecules)} Molecule objects")
         return molecules
 
-    def count_by_status(self) -> Dict[str, int]:
+    def count_by_status(self) -> dict[str, int]:
         """
         Count molecules by status.
 
@@ -398,10 +399,6 @@ class BatchDataManager:
         # Normalize keys to lowercase
         return {str(k).lower(): int(v) for k, v in counts.items()}
 
-    def get_dataframe(self) -> Optional[pd.DataFrame]:
+    def get_dataframe(self) -> pd.DataFrame | None:
         """Get the loaded DataFrame (or None if not loaded)."""
         return self._df
-
-
-# Type alias for backwards compatibility
-Molecule = "Molecule"  # Forward reference

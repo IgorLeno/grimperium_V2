@@ -3,7 +3,7 @@ End-to-end pipeline validation with real data.
 
 This test validates the complete flow:
 1. Load real data
-2. Fuse CBS + B3LYP (as PM7 proxy)
+2. Fuse CBS + synthetic PM7 data
 3. Compute deltas
 4. Extract features (tabular only for now)
 5. Train/test split
@@ -18,23 +18,32 @@ from grimperium.data import ChemperiumLoader, DataFusion
 from tests.fixtures.real_data import load_real_subset
 
 
+def _create_synthetic_pm7(df: "pd.DataFrame", random_state: int = 42) -> "pd.DataFrame":
+    """Create synthetic PM7 values with realistic noise for testing."""
+    import pandas as pd
+
+    rng = np.random.default_rng(random_state)
+    pm7_df = df[["smiles"]].copy()
+    # PM7 typically differs from CBS by a systematic offset + noise
+    pm7_df["H298_pm7"] = df["H298_cbs"] + rng.normal(5.0, 10.0, len(df))
+    return pm7_df
+
+
 def test_full_pipeline_real_data():
     """
     End-to-end pipeline test with real CBS data.
 
-    Uses H298_b3 as PM7 proxy (PM7 calculations not yet available).
+    Uses synthetic PM7 values (PM7 calculations not yet available).
     """
     # Step 1: Load real data (small subset for CI speed)
     df = load_real_subset(n=1000, stratified=True, random_state=42)
 
     assert len(df) == 1000
     assert "H298_cbs" in df.columns
-    assert "H298_b3" in df.columns
 
     # Step 2: Simulate CBS + PM7 data sources
     cbs_df = df[["smiles", "charge", "multiplicity", "nheavy", "H298_cbs"]].copy()
-    pm7_df = df[["smiles", "H298_b3"]].copy()
-    pm7_df.rename(columns={"H298_b3": "H298_pm7"}, inplace=True)
+    pm7_df = _create_synthetic_pm7(df, random_state=42)
 
     # Step 3: Fuse datasets
     fusion = DataFusion()
@@ -102,22 +111,22 @@ def test_pipeline_with_different_subset_sizes():
 
 
 def test_pipeline_delta_distribution():
-    """Validate that delta distribution is reasonable."""
+    """Validate that delta distribution is reasonable with synthetic PM7."""
     df = load_real_subset(n=1000, stratified=True)
+    pm7_df = _create_synthetic_pm7(df, random_state=42)
 
-    # Compute delta manually
-    delta = df["H298_cbs"] - df["H298_b3"]
+    # Compute delta manually (CBS - synthetic PM7)
+    delta = df["H298_cbs"] - pm7_df["H298_pm7"]
 
     # Basic sanity checks
     assert delta.notna().all()
     assert np.isfinite(delta).all()
 
-    # B3LYP differs from CBS across a wide range
-    # (std ~11k kcal/mol due to diverse molecular sizes and types)
-    assert abs(delta.mean()) < 1000  # Mean should be bounded
-    assert delta.std() > 0  # Should have variance
+    # Synthetic PM7 has mean offset ~5 kcal/mol from CBS
+    assert abs(delta.mean()) < 20  # Mean should be close to -5 (CBS - PM7)
+    assert delta.std() > 0  # Should have variance (~10 from noise)
 
-    print("\n=== Delta Distribution (CBS - B3LYP) ===")
+    print("\n=== Delta Distribution (CBS - synthetic PM7) ===")
     print(f"Mean: {delta.mean():.2f} kcal/mol")
     print(f"Std: {delta.std():.2f} kcal/mol")
     print(f"Min: {delta.min():.2f} kcal/mol")

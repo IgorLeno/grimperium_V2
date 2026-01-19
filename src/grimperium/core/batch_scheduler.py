@@ -12,8 +12,6 @@ Priority is given to failed molecules (eligible for rerun) before pending ones.
 
 from __future__ import annotations
 
-from typing import Dict, List
-
 import logging
 
 from grimperium.core.molecule import Molecule
@@ -42,9 +40,9 @@ class BatchScheduler:
 
     @staticmethod
     def schedule(
-        molecules: List[Molecule],
+        molecules: list[Molecule],
         max_reruns: int,
-    ) -> List[Molecule]:
+    ) -> list[Molecule]:
         """
         Schedule molecules for processing.
 
@@ -79,15 +77,11 @@ class BatchScheduler:
         """
         # Priority 1: FAILED molecules (eligible for rerun)
         failed_rerunnable = [
-            m for m in molecules
-            if m.is_failed and m.can_rerun(max_reruns)
+            m for m in molecules if m.is_failed and m.can_rerun(max_reruns)
         ]
 
         # Priority 2: PENDING molecules
-        pending = [
-            m for m in molecules
-            if m.is_pending
-        ]
+        pending = [m for m in molecules if m.is_pending]
 
         # Combine (preserves order within each group)
         scheduled = failed_rerunnable + pending
@@ -102,9 +96,9 @@ class BatchScheduler:
 
     @staticmethod
     def get_skip_reasons(
-        molecules: List[Molecule],
+        molecules: list[Molecule],
         max_reruns: int,
-    ) -> Dict[str, int]:
+    ) -> dict[str, int]:
         """
         Get reasons why molecules are skipped.
 
@@ -146,8 +140,8 @@ class BatchScheduler:
 
     @staticmethod
     def partition_by_status(
-        molecules: List[Molecule],
-    ) -> Dict[str, List[Molecule]]:
+        molecules: list[Molecule],
+    ) -> dict[str, list[Molecule]]:
         """
         Partition molecules by their current status.
 
@@ -163,7 +157,7 @@ class BatchScheduler:
             >>> print(f"Pending: {len(partitioned['pending'])}")
             >>> print(f"Complete: {len(partitioned['ok'])}")
         """
-        partitions: Dict[str, List[Molecule]] = {
+        partitions: dict[str, list[Molecule]] = {
             "pending": [],
             "selected": [],
             "running": [],
@@ -181,9 +175,9 @@ class BatchScheduler:
 
     @staticmethod
     def count_schedulable(
-        molecules: List[Molecule],
+        molecules: list[Molecule],
         max_reruns: int,
-    ) -> Dict[str, int]:
+    ) -> dict[str, int]:
         """
         Count how many molecules are schedulable.
 
@@ -202,8 +196,7 @@ class BatchScheduler:
             }
         """
         failed_rerunnable = sum(
-            1 for m in molecules
-            if m.is_failed and m.can_rerun(max_reruns)
+            1 for m in molecules if m.is_failed and m.can_rerun(max_reruns)
         )
         pending = sum(1 for m in molecules if m.is_pending)
         complete = sum(1 for m in molecules if m.is_complete)
