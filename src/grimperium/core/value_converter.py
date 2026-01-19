@@ -108,14 +108,12 @@ class MoleculeValueConverter:
             result = float(value)
 
             # Reject infinity as invalid
-            if result == float('inf') or result == float('-inf'):
+            if result == float("inf") or result == float("-inf"):
                 return None, "invalid"
 
             # Log zero values (noteworthy but valid)
             if result == 0.0 and not allow_zero:
-                logger.debug(
-                    f"Field '{field_name}' = 0.0 (valid but noteworthy)"
-                )
+                logger.debug(f"Field '{field_name}' = 0.0 (valid but noteworthy)")
 
             return result, None
 
@@ -273,9 +271,7 @@ class MoleculeValueConverter:
 
         # No match
         valid_values = [str(m.value) for m in enum_class]
-        logger.warning(
-            f"Field '{field_name}': '{value}' not in {valid_values}"
-        )
+        logger.warning(f"Field '{field_name}': '{value}' not in {valid_values}")
         return None, "invalid"
 
     @staticmethod

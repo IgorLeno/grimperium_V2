@@ -376,7 +376,9 @@ class Molecule:
             "nheavy": self.properties.nheavy,
             "charge": self.properties.charge,
             "multiplicity": self.properties.multiplicity,
-            "H298_cbs": self.properties.H298_cbs if self.properties.H298_cbs is not None else "",
+            "H298_cbs": (
+                self.properties.H298_cbs if self.properties.H298_cbs is not None else ""
+            ),
             "nrotbonds": self.properties.nrotbonds,
             # Meta
             "status": self.meta.status.value,
@@ -398,13 +400,25 @@ class Molecule:
             ),
             # Results
             "crest_status": self.results.crest_status or "",  # strings OK with `or`
-            "crest_conformers_generated": self.results.crest_conformers_generated if self.results.crest_conformers_generated is not None else "",
-            "crest_time": self.results.crest_time if self.results.crest_time is not None else "",
+            "crest_conformers_generated": (
+                self.results.crest_conformers_generated
+                if self.results.crest_conformers_generated is not None
+                else ""
+            ),
+            "crest_time": (
+                self.results.crest_time if self.results.crest_time is not None else ""
+            ),
             "mopac_status": self.results.mopac_status or "",  # strings OK with `or`
-            "mopac_time": self.results.mopac_time if self.results.mopac_time is not None else "",
+            "mopac_time": (
+                self.results.mopac_time if self.results.mopac_time is not None else ""
+            ),
             "delta_1": self.results.delta_1 if self.results.delta_1 is not None else "",
             "delta_2": self.results.delta_2 if self.results.delta_2 is not None else "",
             "delta_3": self.results.delta_3 if self.results.delta_3 is not None else "",
-            "most_stable_hof": self.results.most_stable_hof if self.results.most_stable_hof is not None else "",
+            "most_stable_hof": (
+                self.results.most_stable_hof
+                if self.results.most_stable_hof is not None
+                else ""
+            ),
             "error_message": self.results.error_message or "",  # strings OK with `or`
         }

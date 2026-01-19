@@ -29,6 +29,7 @@ logger = logging.getLogger(__name__)
 class CSVDataLoaderError(Exception):
     """CSV data loader error."""
 
+
 @dataclass
 class ValidationError:
     """A single validation error."""
@@ -140,9 +141,6 @@ class CSVDataLoader:
             raise CSVDataLoaderError(f"CSV file not found: {self.csv_path}")
 
         # Load CSV
-        try:
-            df = pd.read_csv(self.csv_path)
-        except Exception as e:
         try:
             df = pd.read_csv(self.csv_path)
         except (pd.errors.ParserError, pd.errors.EmptyDataError, OSError) as e:
