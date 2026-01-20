@@ -54,6 +54,17 @@ class MOPACStatus(str, Enum):
     ERROR = "ERROR"  # Generic error state for unexpected failures
 
 
+class MoleculeStatus(str, Enum):
+    """Status of molecule in the processing pipeline."""
+
+    PENDING = "Pending"
+    CURRENT_BATCH = "Current Batch"
+    RUNNING = "Running"
+    OK = "OK"
+    RERUN = "Rerun"
+    SKIP = "Skip"
+
+
 class AlertLevel(str, Enum):
     """Alert level for threshold monitoring."""
 
