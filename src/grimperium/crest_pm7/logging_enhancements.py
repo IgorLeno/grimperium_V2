@@ -19,11 +19,20 @@ from contextlib import contextmanager
 from datetime import datetime
 
 import pandas as pd
-from rich.console import Console
-from rich.logging import RichHandler
 
-# Initialize Rich console for colored output
-console = Console()
+# Conditional import of rich (optional dependency, part of 'cli' extra)
+_RICH_AVAILABLE = False
+try:
+    from rich.console import Console
+    from rich.logging import RichHandler
+
+    _RICH_AVAILABLE = True
+except ImportError:
+    Console = None  # type: ignore[assignment, misc]
+    RichHandler = None  # type: ignore[assignment, misc]
+
+# Initialize Rich console for colored output (only if available)
+console = Console() if _RICH_AVAILABLE else None
 
 
 class LoggingConfig:
@@ -45,12 +54,12 @@ class LoggingConfig:
 
 
 def setup_batch_logging(batch_id: str) -> logging.Logger:
-    """
-    Set up logging for a batch of molecules.
+    """Set up logging for a batch of molecules.
 
     Creates a logger that:
-    - Logs to console with Rich formatting
-    - Uses colored output for visibility
+    - Logs to console with Rich formatting (if available)
+    - Falls back to plain StreamHandler if rich is not installed
+    - Uses colored output for visibility (when rich available)
     - Includes timestamp for each entry
     - Shows per-molecule progress
 
@@ -65,7 +74,6 @@ def setup_batch_logging(batch_id: str) -> logging.Logger:
         >>> logger.info(f"[mol_00001] Starting RDKit...")
         [2026-01-20 13:04:26] [INFO] [mol_00001] Starting RDKit...
     """
-
     # Create logger
     logger = logging.getLogger(f"grimperium.{batch_id}")
     logger.setLevel(logging.DEBUG)
@@ -76,15 +84,19 @@ def setup_batch_logging(batch_id: str) -> logging.Logger:
     # Disable propagation to prevent duplicate console output
     logger.propagate = False
 
-    # Add Rich handler for formatted console output
-    handler = RichHandler(
-        console=console,
-        markup=True,
-        rich_tracebacks=True,
-        show_time=True,
-        show_level=True,
-        show_path=False,
-    )
+    # Create handler: Rich if available, otherwise plain StreamHandler
+    handler: logging.Handler
+    if _RICH_AVAILABLE and RichHandler is not None and console is not None:
+        handler = RichHandler(
+            console=console,
+            markup=True,
+            rich_tracebacks=True,
+            show_time=True,
+            show_level=True,
+            show_path=False,
+        )
+    else:
+        handler = logging.StreamHandler()
 
     handler.setFormatter(
         logging.Formatter(
