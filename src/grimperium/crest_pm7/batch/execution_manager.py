@@ -20,6 +20,14 @@ from grimperium.crest_pm7.batch.enums import BatchFailurePolicy, MoleculeStatus
 from grimperium.crest_pm7.batch.models import Batch, BatchResult
 from grimperium.crest_pm7.batch.processor_adapter import FixedTimeoutProcessor
 from grimperium.crest_pm7.config import PM7Config
+from grimperium.crest_pm7.csv_enhancements import (
+    BatchSettingsCapture,
+    CSVManagerExtensions,
+)
+from grimperium.crest_pm7.logging_enhancements import (
+    setup_batch_logging,
+    suppress_pandas_warnings,
+)
 
 LOG = logging.getLogger("grimperium.crest_pm7.batch.execution_manager")
 
@@ -97,6 +105,20 @@ class BatchExecutionManager:
             f"policy={batch.failure_policy.value}"
         )
 
+        # Setup structured logging for this batch
+        batch_logger = setup_batch_logging(batch.batch_id)
+        batch_logger.info(
+            f"🚀 Starting batch {batch.batch_id}: {batch.size} molecules, "
+            f"policy={batch.failure_policy.value}"
+        )
+
+        # Suppress pandas DtypeWarning and FutureWarning
+        suppress_pandas_warnings()
+
+        # Capture batch settings for CSV population
+        batch_settings = BatchSettingsCapture.capture_batch_settings(self.pm7_config)
+        batch_logger.debug(f"Batch settings: {batch_settings}")
+
         # Update processor timeouts
         self.processor_adapter.update_timeouts(
             crest_timeout_minutes=batch.crest_timeout_minutes,
@@ -109,6 +131,10 @@ class BatchExecutionManager:
             total_count=batch.size,
             timestamp_start=datetime.now(timezone.utc),
         )
+
+        # Store logger and settings for use in _process_molecule
+        self._batch_logger = batch_logger
+        self._batch_settings = batch_settings
 
         # Track HOF values for statistics
         hof_values: list[tuple[str, float]] = []  # (mol_id, hof)
@@ -204,6 +230,26 @@ class BatchExecutionManager:
         """
         LOG.info(f"Processing {mol_id} ({batch_order}/{result.total_count})")
 
+        # Safe logger access with fallback chain
+        logger = getattr(
+            self,
+            "_batch_logger",
+            getattr(self, "_logger", logging.getLogger(__name__)),
+        )
+        logger.info(f"[{mol_id}] Processing ({batch_order}/{result.total_count})")
+
+        # TODO: Add RDKit logging if RDKit processing happens here
+        # log_rdkit_start(logger, mol_id)
+        # log_rdkit_done(logger, mol_id, nrotbonds=X, tpsa=Y, aromatic_rings=Z)
+
+        # TODO: Add CREST logging in processor_adapter or here if accessible
+        # log_crest_start(logger, mol_id)
+        # log_crest_done(logger, mol_id, num_conformers=X, time_seconds=Y)
+
+        # TODO: Add MOPAC logging in processor_adapter or here if accessible
+        # log_mopac_start(logger, mol_id, num_conformers=X)
+        # log_mopac_done(logger, mol_id, best_conformer_idx=X, best_delta_energy=Y, time_seconds=Z)
+
         # Mark as running
         self.csv_manager.mark_running(mol_id)
 
@@ -264,6 +310,38 @@ class BatchExecutionManager:
             if pm7_result.success:
                 self.csv_manager.mark_success(mol_id, csv_update)
                 result.success_count += 1
+
+                # Enhance CSV with delta calculations and batch settings
+                # Use PM7Result API correctly: most_stable_hof and conformers
+                h298_cbs = csv_update.get("h298_cbs")  # None if absent
+                h298_pm7 = pm7_result.most_stable_hof  # Property, may be None
+
+                # Get conformer energies from pm7_result.conformers
+                mopac_hof_values: list[float] = []
+                if pm7_result.conformers:
+                    mopac_hof_values = [
+                        c.energy_hof
+                        for c in pm7_result.conformers
+                        if c.is_successful and c.energy_hof is not None
+                    ]
+
+                # Safe access to batch_settings
+                batch_settings = getattr(self, "_batch_settings", {})
+
+                # Update CSV with enhanced fields
+                success = CSVManagerExtensions.update_molecule_with_mopac_results(
+                    csv_manager=self.csv_manager,
+                    mol_id=mol_id,
+                    h298_cbs=h298_cbs,
+                    h298_pm7=h298_pm7,
+                    mopac_hof_values=mopac_hof_values,
+                    batch_settings=batch_settings,
+                )
+
+                if success:
+                    logger.info(f"[{mol_id}] ✓ CSV enhanced with deltas and settings")
+                else:
+                    logger.warning(f"[{mol_id}] ⚠ CSV enhancement failed")
 
                 # Track HOF for statistics
                 if pm7_result.most_stable_hof is not None:
