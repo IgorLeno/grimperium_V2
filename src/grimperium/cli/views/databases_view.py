@@ -95,7 +95,7 @@ class DatabasesView(BaseView):
             csv_path = DATA_DIR / "thermo_pm7.csv"
             if csv_path.exists():
                 try:
-                    df = pd.read_csv(csv_path)
+                    df = pd.read_csv(csv_path, low_memory=False)
 
                     # ✅ FIX: Count ONLY molecules with status="OK"
                     # (calculated molecules, not PENDING)
