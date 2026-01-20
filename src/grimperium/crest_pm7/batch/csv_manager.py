@@ -46,7 +46,9 @@ class BatchCSVManager:
         "crest_conformers_generated",
         "crest_time",
         "crest_error",
+        "mopac_status",  # NEW: Overall MOPAC status
         "num_conformers_selected",
+        "mopac_time",  # NEW: Aggregated MOPAC execution time
         "H298_pm7",  # Renamed from most_stable_hof
         "abs_diff",  # NEW
         "abs_diff_%",  # NEW
@@ -59,6 +61,7 @@ class BatchCSVManager:
         "delta_1",  # Renamed from delta_e_12
         "delta_2",  # Renamed from delta_e_13
         "delta_3",  # Renamed from delta_e_15
+        "conformer_selected",  # NEW: Which conformer was selected (1-3)
         "reruns",  # NEW
         "timestamp",
     ]
@@ -111,6 +114,18 @@ class BatchCSVManager:
         "last_error_message",
     ]
 
+    # Phase B reserved columns (for future ML features)
+    PHASE_B_RESERVED_COLUMNS = [
+        "reserved_42",
+        "reserved_43",
+        "reserved_44",
+        "reserved_45",
+        "reserved_46",
+        "reserved_47",
+        "reserved_48",
+        "reserved_49",
+    ]
+
     def __init__(self, csv_path: Path | None) -> None:
         """Initialize CSV manager.
 
@@ -126,14 +141,15 @@ class BatchCSVManager:
         """Get the full CSV schema with all column names.
 
         Returns:
-            List of 45 column names in order:
+            List of 49 column names in order (Phase A schema):
             - Identity (1): mol_id
-            - Molecular properties (7): smiles, nheavy, etc.
-            - Batch info (4): status, batch_id, etc.
-            - CREST configuration (9): crest_v3, crest_xtb_preopt, etc.
-            - MOPAC configuration (6): mopac_precise, etc.
-            - Results (16): crest_status, most_stable_hof, etc.
+            - Molecular properties (7): smiles, nheavy, nrotbonds, tpsa, etc.
+            - Batch info (4): status, batch_id, batch_order, batch_failure_policy
+            - CREST configuration (9): v3, qm, nci, c_method, energy_window, etc.
+            - MOPAC configuration (2): precise_scf, scf_threshold
+            - Results (18): crest_status, H298_pm7, deltas, mopac_time, etc.
             - Retry tracking (2): retry_count, last_error_message
+            - Phase B reserved (8): reserved_42 through reserved_49
         """
         return (
             self.IDENTITY_COLUMNS
@@ -143,6 +159,7 @@ class BatchCSVManager:
             + self.MOPAC_CONFIG_COLUMNS
             + self.RESULT_COLUMNS
             + self.RETRY_TRACKING_COLUMNS
+            + self.PHASE_B_RESERVED_COLUMNS
         )
 
     def load_csv(self) -> pd.DataFrame:
@@ -744,7 +761,58 @@ class BatchCSVManager:
             if h298_cbs != 0:
                 abs_diff_pct = round((abs_diff / abs(h298_cbs)) * 100, 2)
 
+        # Calculate mopac_time (aggregate from all conformers)
+        mopac_time = None
+        if hasattr(result, "conformers") and result.conformers:
+            times = [
+                c.mopac_execution_time
+                for c in result.conformers
+                if hasattr(c, "mopac_execution_time") and c.mopac_execution_time
+            ]
+            if times:
+                mopac_time = round(sum(times), 1)
+
+        # Calculate mopac_status (overall status based on conformers)
+        mopac_status = None
+        if hasattr(result, "conformers") and result.conformers:
+            successful = [
+                c
+                for c in result.conformers
+                if hasattr(c, "is_successful") and c.is_successful
+            ]
+            if successful:
+                mopac_status = "OK"
+            elif result.conformers:
+                mopac_status = "FAILED"
+
+        # Calculate conformer_selected (which conformer had minimum delta)
+        conformer_selected = None
+        if (
+            result.delta_e_12 is not None
+            or result.delta_e_13 is not None
+            or result.delta_e_15 is not None
+        ):
+            deltas = []
+            if result.delta_e_12 is not None:
+                deltas.append((1, result.delta_e_12))
+            if result.delta_e_13 is not None:
+                deltas.append((2, result.delta_e_13))
+            if result.delta_e_15 is not None:
+                deltas.append((3, result.delta_e_15))
+            if deltas:
+                conformer_selected = min(deltas, key=lambda x: x[1])[0]
+
         return {
+            # RDKit Descriptors (from PM7Result)
+            "nrotbonds": result.nrotbonds if hasattr(result, "nrotbonds") else None,
+            "tpsa": (
+                round(result.tpsa, 2)
+                if hasattr(result, "tpsa") and result.tpsa
+                else None
+            ),
+            "aromatic_rings": (
+                result.aromatic_rings if hasattr(result, "aromatic_rings") else None
+            ),
             # CREST Execution
             "crest_status": (
                 result.crest_status.value if result.crest_status is not None else None
@@ -753,7 +821,9 @@ class BatchCSVManager:
             "crest_time": (round(result.crest_time, 1) if result.crest_time else None),
             "crest_error": result.crest_error,
             # MOPAC Execution
+            "mopac_status": mopac_status,  # NEW: Computed from conformers
             "num_conformers_selected": result.num_conformers_selected,
+            "mopac_time": mopac_time,  # NEW: Aggregated from all conformers
             "H298_pm7": h298_pm7,  # Renamed from most_stable_hof
             "abs_diff": abs_diff,  # NEW: |H298_cbs - H298_pm7|
             "abs_diff_%": abs_diff_pct,  # NEW: Percentage difference
@@ -773,6 +843,7 @@ class BatchCSVManager:
             "delta_1": (round(result.delta_e_12, 4) if result.delta_e_12 else None),
             "delta_2": (round(result.delta_e_13, 4) if result.delta_e_13 else None),
             "delta_3": (round(result.delta_e_15, 4) if result.delta_e_15 else None),
+            "conformer_selected": conformer_selected,  # NEW: Which conformer was selected
             # Batch Tracking
             "batch_id": batch_id,
             "batch_order": batch_order,

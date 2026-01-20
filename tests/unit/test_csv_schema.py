@@ -60,11 +60,13 @@ class TestCSVSchema:
     def test_schema_length(self, manager: BatchCSVManager) -> None:
         """Verify schema has expected column count.
 
-        Current: 44 columns (Phase A core schema)
-        Target: 49 columns (after adding 5 reserved Phase B placeholder columns)
+        Current: 55 columns (Phase A complete schema)
+        - 44 original columns
+        - 3 new Phase A columns (mopac_status, mopac_time, conformer_selected)
+        - 8 reserved Phase B placeholder columns
         """
         schema = manager.get_schema()
-        assert len(schema) == 44, f"Expected 44 columns, got {len(schema)}"
+        assert len(schema) == 55, f"Expected 55 columns, got {len(schema)}"
 
     def test_schema_order(self, manager: BatchCSVManager) -> None:
         """Verify schema column order."""
