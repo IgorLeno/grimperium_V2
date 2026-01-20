@@ -21,9 +21,9 @@ class TestCRESTSettings:
         """Verify CREST default values."""
         settings = CRESTSettings()
         assert settings.v3 is True
-        assert settings.quick is False
         assert settings.nci is False
-        assert settings.gfnff is False
+        assert settings.crest_method == "gfn2"
+        assert settings.quick_mode == "off"
         assert settings.ewin == 5.0
         assert settings.rthr == 0.125
         assert settings.optlev == "normal"
@@ -38,12 +38,14 @@ class TestCRESTSettings:
         """Test setting custom values."""
         settings = CRESTSettings(
             v3=False,
-            quick=True,
+            quick_mode="quick",
+            crest_method="gfnff",
             ewin=10.0,
             threads=8,
         )
         assert settings.v3 is False
-        assert settings.quick is True
+        assert settings.quick_mode == "quick"
+        assert settings.crest_method == "gfnff"
         assert settings.ewin == 10.0
         assert settings.threads == 8
 
@@ -108,9 +110,9 @@ class TestSettingsManager:
 
         expected_keys = [
             "crest_v3",
-            "crest_quick",
             "crest_nci",
-            "crest_gfnff",
+            "crest_method",
+            "crest_quick_mode",
             "crest_ewin",
             "crest_rthr",
             "crest_optlev",
@@ -132,7 +134,8 @@ class TestSettingsManager:
         settings_dict = manager.to_dict()
 
         assert settings_dict["crest_v3"] is True
-        assert settings_dict["crest_quick"] is False
+        assert settings_dict["crest_method"] == "gfn2"
+        assert settings_dict["crest_quick_mode"] == "off"
         assert settings_dict["crest_ewin"] == 5.0
         assert settings_dict["crest_threads"] == 4
         assert settings_dict["mopac_precise"] is False

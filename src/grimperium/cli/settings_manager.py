@@ -23,24 +23,18 @@ class CRESTSettings:
 
     Attributes:
         v3: Use iMTD-GC v3 algorithm (recommended for better conformer sampling).
-        quick: Fast mode - reduces search time but may miss structures.
         nci: NCI mode for molecular complexes and weak interactions.
-        gfnff: Use GFN-FF force field (default: GFN2-xTB).
+        crest_method: Choose CREST quantum method (gfn2/gfnff/gfn2//gfnff).
+        quick_mode: Speed/accuracy tradeoff (off/quick/squick/mquick).
         ewin: Energy window in kcal/mol for conformer selection.
         rthr: RMSD threshold in Angstroms for geometry deduplication.
         optlev: Optimization level (loose/normal/tight/vtight/extreme).
         threads: Number of parallel threads.
     """
 
-    v3: bool = True
-    quick: bool = False
-    nci: bool = False
-    gfnff: bool = False
-    ewin: float = 5.0
-    rthr: float = 0.125
-    optlev: str = "normal"
-    threads: int = 4
-
+    # Valid options for dropdown menus
+    CREST_METHOD_OPTIONS: ClassVar[list[str]] = ["gfn2", "gfnff", "gfn2//gfnff"]
+    QUICK_MODE_OPTIONS: ClassVar[list[str]] = ["off", "quick", "squick", "mquick"]
     OPTLEV_CHOICES: ClassVar[list[str]] = [
         "loose",
         "normal",
@@ -48,6 +42,16 @@ class CRESTSettings:
         "vtight",
         "extreme",
     ]
+
+    # Settings
+    v3: bool = True
+    nci: bool = False
+    crest_method: str = "gfn2"
+    quick_mode: str = "off"
+    ewin: float = 5.0
+    rthr: float = 0.125
+    optlev: str = "normal"
+    threads: int = 4
 
 
 @dataclass
@@ -198,9 +202,9 @@ class SettingsManager:
         """
         return {
             "crest_v3": self.crest.v3,
-            "crest_quick": self.crest.quick,
             "crest_nci": self.crest.nci,
-            "crest_gfnff": self.crest.gfnff,
+            "crest_method": self.crest.crest_method,
+            "crest_quick_mode": self.crest.quick_mode,
             "crest_ewin": self.crest.ewin,
             "crest_rthr": self.crest.rthr,
             "crest_optlev": self.crest.optlev,
@@ -338,9 +342,9 @@ class SettingsManager:
         table.add_column("Value", style=COLORS["settings"])
 
         table.add_row("v3 Algorithm", self._status_icon(self.crest.v3))
-        table.add_row("Quick Mode", self._status_icon(self.crest.quick))
         table.add_row("NCI Mode", self._status_icon(self.crest.nci))
-        table.add_row("GFN-FF Force Field", self._status_icon(self.crest.gfnff))
+        table.add_row("CREST Method", self.crest.crest_method.upper())
+        table.add_row("Quick Mode", self.crest.quick_mode)
         table.add_row("Energy Window", f"{self.crest.ewin} kcal/mol")
         table.add_row("RMSD Threshold", f"{self.crest.rthr} Å")
         table.add_row("Optimization Level", self.crest.optlev)
@@ -463,16 +467,20 @@ class SettingsManager:
 
             # Format toggle labels with current state
             v3_state = "✓ ON" if self.crest.v3 else "○ OFF"
-            quick_state = "✓ ON" if self.crest.quick else "○ OFF"
             nci_state = "✓ ON" if self.crest.nci else "○ OFF"
-            gfnff_state = "✓ ON" if self.crest.gfnff else "○ OFF"
             xtb_state = "✓ ON" if self.xtb.preopt else "○ OFF"
 
             choices = [
                 questionary.Choice(f"Toggle v3 Algorithm [{v3_state}]", value="v3"),
-                questionary.Choice(f"Toggle Quick Mode [{quick_state}]", value="quick"),
                 questionary.Choice(f"Toggle NCI Mode [{nci_state}]", value="nci"),
-                questionary.Choice(f"Toggle GFN-FF [{gfnff_state}]", value="gfnff"),
+                questionary.Choice(
+                    f"Set CREST Method (current: {self.crest.crest_method})",
+                    value="crest_method",
+                ),
+                questionary.Choice(
+                    f"Set Quick Mode (current: {self.crest.quick_mode})",
+                    value="quick_mode",
+                ),
                 questionary.Choice(
                     f"Set Energy Window (current: {self.crest.ewin})", value="ewin"
                 ),
@@ -521,22 +529,34 @@ class SettingsManager:
                 self.console.print(
                     f"[green]✓ Setting updated: v3 Algorithm {state}[/green]"
                 )
-            elif choice == "quick":
-                self.crest.quick = not self.crest.quick
-                state = "ON" if self.crest.quick else "OFF"
-                self.console.print(
-                    f"[green]✓ Setting updated: Quick Mode {state}[/green]"
-                )
+            elif choice == "crest_method":
+                method = questionary.select(
+                    "Choose CREST method:",
+                    choices=CRESTSettings.CREST_METHOD_OPTIONS,
+                    default=self.crest.crest_method,
+                    style=SETTINGS_STYLE,
+                ).ask()
+                if method:
+                    self.crest.crest_method = method
+                    self.console.print(
+                        f"[green]✓ CREST Method set to: {method}[/green]"
+                    )
+            elif choice == "quick_mode":
+                mode = questionary.select(
+                    "Choose quick mode:",
+                    choices=CRESTSettings.QUICK_MODE_OPTIONS,
+                    default=self.crest.quick_mode,
+                    style=SETTINGS_STYLE,
+                ).ask()
+                if mode:
+                    self.crest.quick_mode = mode
+                    self.console.print(f"[green]✓ Quick Mode set to: {mode}[/green]")
             elif choice == "nci":
                 self.crest.nci = not self.crest.nci
                 state = "ON" if self.crest.nci else "OFF"
                 self.console.print(
                     f"[green]✓ Setting updated: NCI Mode {state}[/green]"
                 )
-            elif choice == "gfnff":
-                self.crest.gfnff = not self.crest.gfnff
-                state = "ON" if self.crest.gfnff else "OFF"
-                self.console.print(f"[green]✓ Setting updated: GFN-FF {state}[/green]")
             elif choice == "ewin":
                 val = questionary.text(
                     "Energy window (kcal/mol):",
