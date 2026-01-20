@@ -25,45 +25,46 @@ class TestCSVSchema:
         schema = manager.get_schema()
 
         crest_columns = [
-            "crest_v3",
-            "crest_quick",
-            "crest_nci",
-            "crest_gfnff",
-            "crest_ewin",
-            "crest_rthr",
-            "crest_optlev",
-            "crest_threads",
-            "crest_xtb_preopt",
+            "v3",  # Renamed from crest_v3
+            "qm",  # Renamed from crest_quick
+            "nci",  # Renamed from crest_nci
+            "c_method",  # Renamed from crest_gfnff
+            "energy_window",  # Renamed from crest_ewin
+            "rmsd_threshold",  # Renamed from crest_rthr
+            "crest_optlev",  # Keep old name for now
+            "threads",  # Renamed from crest_threads
+            "xtb",  # Renamed from crest_xtb_preopt
         ]
 
         for col in crest_columns:
             assert col in schema, f"Missing CREST column: {col}"
 
     def test_schema_contains_mopac_settings(self, manager: BatchCSVManager) -> None:
-        """Verify MOPAC columns exist."""
+        """Verify MOPAC columns exist (Phase A names)."""
         schema = manager.get_schema()
 
         mopac_columns = [
-            "mopac_precise",
-            "mopac_scfcrt",
-            "mopac_itry",
-            "mopac_pulay",
-            "mopac_prtall",
-            "mopac_archive",
+            "precise_scf",  # Renamed from mopac_precise
+            "scf_threshold",  # Renamed from mopac_scfcrt
+            # Note: mopac_itry, mopac_pulay, mopac_prtall, mopac_archive not in Phase A
         ]
 
         for col in mopac_columns:
             assert col in schema, f"Missing MOPAC column: {col}"
 
     def test_crest_xtb_preopt_in_schema(self, manager: BatchCSVManager) -> None:
-        """Verify new column exists."""
+        """Verify xtb column exists (renamed from crest_xtb_preopt)."""
         schema = manager.get_schema()
-        assert "crest_xtb_preopt" in schema
+        assert "xtb" in schema
 
     def test_schema_length(self, manager: BatchCSVManager) -> None:
-        """Verify 45 columns total."""
+        """Verify schema has expected column count.
+
+        Current: 44 columns (Phase A core schema)
+        Target: 49 columns (after adding 5 reserved Phase B placeholder columns)
+        """
         schema = manager.get_schema()
-        assert len(schema) == 45, f"Expected 45 columns, got {len(schema)}"
+        assert len(schema) == 44, f"Expected 44 columns, got {len(schema)}"
 
     def test_schema_order(self, manager: BatchCSVManager) -> None:
         """Verify schema column order."""
@@ -72,7 +73,7 @@ class TestCSVSchema:
         assert schema[0] == "mol_id"
         assert schema[1] == "smiles"
         assert "status" in schema
-        assert "crest_xtb_preopt" in schema
+        assert "xtb" in schema  # Renamed from crest_xtb_preopt
         assert "retry_count" in schema
         assert "last_error_message" in schema
 
@@ -116,29 +117,25 @@ class TestCSVSchema:
         assert expected == manager.BATCH_INFO_COLUMNS
 
     def test_crest_config_columns(self, manager: BatchCSVManager) -> None:
-        """Verify CREST config columns class attribute."""
+        """Verify CREST config columns class attribute (Phase A names)."""
         expected = [
-            "crest_v3",
-            "crest_quick",
-            "crest_nci",
-            "crest_gfnff",
-            "crest_ewin",
-            "crest_rthr",
-            "crest_optlev",
-            "crest_threads",
-            "crest_xtb_preopt",
+            "v3",  # Renamed from crest_v3
+            "qm",  # Renamed from crest_quick
+            "nci",  # Renamed from crest_nci
+            "c_method",  # Renamed from crest_gfnff
+            "energy_window",  # Renamed from crest_ewin
+            "rmsd_threshold",  # Renamed from crest_rthr
+            "crest_optlev",  # Keep old name for now
+            "threads",  # Renamed from crest_threads
+            "xtb",  # Renamed from crest_xtb_preopt
         ]
         assert expected == manager.CREST_CONFIG_COLUMNS
 
     def test_mopac_config_columns(self, manager: BatchCSVManager) -> None:
-        """Verify MOPAC config columns class attribute."""
+        """Verify MOPAC config columns class attribute (Phase A names)."""
         expected = [
-            "mopac_precise",
-            "mopac_scfcrt",
-            "mopac_itry",
-            "mopac_pulay",
-            "mopac_prtall",
-            "mopac_archive",
+            "precise_scf",  # Renamed from mopac_precise
+            "scf_threshold",  # Renamed from mopac_scfcrt
         ]
         assert expected == manager.MOPAC_CONFIG_COLUMNS
 

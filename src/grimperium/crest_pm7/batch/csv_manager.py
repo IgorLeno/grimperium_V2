@@ -47,16 +47,19 @@ class BatchCSVManager:
         "crest_time",
         "crest_error",
         "num_conformers_selected",
-        "most_stable_hof",
+        "H298_pm7",  # Renamed from most_stable_hof
+        "abs_diff",  # NEW
+        "abs_diff_%",  # NEW
         "quality_grade",
         "success",
         "error_message",
         "total_execution_time",
-        "actual_crest_timeout_used",
-        "actual_mopac_timeout_used",
-        "delta_e_12",
-        "delta_e_13",
-        "delta_e_15",
+        "assigned_crest_timeout",  # Renamed from actual_crest_timeout_used
+        "assigned_mopac_timeout",  # Renamed from actual_mopac_timeout_used
+        "delta_1",  # Renamed from delta_e_12
+        "delta_2",  # Renamed from delta_e_13
+        "delta_3",  # Renamed from delta_e_15
+        "reruns",  # NEW
         "timestamp",
     ]
 
@@ -84,25 +87,22 @@ class BatchCSVManager:
 
     # CREST configuration columns
     CREST_CONFIG_COLUMNS = [
-        "crest_v3",
-        "crest_quick",
-        "crest_nci",
-        "crest_gfnff",
-        "crest_ewin",
-        "crest_rthr",
-        "crest_optlev",
-        "crest_threads",
-        "crest_xtb_preopt",
+        "v3",  # Renamed from crest_v3
+        "qm",  # Renamed from crest_quick
+        "nci",  # Renamed from crest_nci
+        "c_method",  # Renamed from crest_gfnff
+        "energy_window",  # Renamed from crest_ewin
+        "rmsd_threshold",  # Renamed from crest_rthr
+        "crest_optlev",  # Keep old name for now
+        "threads",  # Renamed from crest_threads
+        "xtb",  # Renamed from crest_xtb_preopt
     ]
 
     # MOPAC configuration columns
     MOPAC_CONFIG_COLUMNS = [
-        "mopac_precise",
-        "mopac_scfcrt",
-        "mopac_itry",
-        "mopac_pulay",
-        "mopac_prtall",
-        "mopac_archive",
+        "precise_scf",  # Renamed from mopac_precise
+        "scf_threshold",  # Renamed from mopac_scfcrt
+        # Note: mopac_itry, mopac_pulay, mopac_prtall, mopac_archive not in Phase A CSV
     ]
 
     # Retry tracking columns
@@ -733,6 +733,17 @@ class BatchCSVManager:
         Returns:
             Dict with CSV column updates
         """
+        # Calculate metrics if H298_cbs and H298_pm7 are available
+        h298_pm7 = round(result.most_stable_hof, 2) if result.most_stable_hof else None
+        h298_cbs = result.H298_cbs if hasattr(result, "H298_cbs") else None
+
+        abs_diff = None
+        abs_diff_pct = None
+        if h298_pm7 is not None and h298_cbs is not None:
+            abs_diff = round(abs(h298_cbs - h298_pm7), 4)
+            if h298_cbs != 0:
+                abs_diff_pct = round((abs_diff / abs(h298_cbs)) * 100, 2)
+
         return {
             # CREST Execution
             "crest_status": (
@@ -743,9 +754,9 @@ class BatchCSVManager:
             "crest_error": result.crest_error,
             # MOPAC Execution
             "num_conformers_selected": result.num_conformers_selected,
-            "most_stable_hof": (
-                round(result.most_stable_hof, 2) if result.most_stable_hof else None
-            ),
+            "H298_pm7": h298_pm7,  # Renamed from most_stable_hof
+            "abs_diff": abs_diff,  # NEW: |H298_cbs - H298_pm7|
+            "abs_diff_%": abs_diff_pct,  # NEW: Percentage difference
             "quality_grade": (
                 result.quality_grade.value if result.quality_grade is not None else None
             ),
@@ -756,15 +767,16 @@ class BatchCSVManager:
                 if result.total_execution_time
                 else None
             ),
-            "actual_crest_timeout_used": round(crest_timeout_used, 1),
-            "actual_mopac_timeout_used": round(mopac_timeout_used, 1),
-            # Delta-E
-            "delta_e_12": (round(result.delta_e_12, 4) if result.delta_e_12 else None),
-            "delta_e_13": (round(result.delta_e_13, 4) if result.delta_e_13 else None),
-            "delta_e_15": (round(result.delta_e_15, 4) if result.delta_e_15 else None),
+            "assigned_crest_timeout": round(crest_timeout_used, 1),  # Renamed
+            "assigned_mopac_timeout": round(mopac_timeout_used, 1),  # Renamed
+            # Delta-E (renamed for clarity)
+            "delta_1": (round(result.delta_e_12, 4) if result.delta_e_12 else None),
+            "delta_2": (round(result.delta_e_13, 4) if result.delta_e_13 else None),
+            "delta_3": (round(result.delta_e_15, 4) if result.delta_e_15 else None),
             # Batch Tracking
             "batch_id": batch_id,
             "batch_order": batch_order,
+            "reruns": result.reruns if hasattr(result, "reruns") else 0,  # NEW
             # Timestamp
             "timestamp": (
                 result.timestamp.strftime("%d/%m-%H:%M")
