@@ -122,3 +122,7 @@ anexos/
 
 # LibreOffice lock files
 .~lock.*
+
+# Temporary directories for CREST/MOPAC (Phase A fixes)
+src/grimperium/crest_pm7/tmp/*/
+!src/grimperium/crest_pm7/tmp/.gitignore
