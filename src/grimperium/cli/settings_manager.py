@@ -129,9 +129,15 @@ class SettingsManager:
         "crest_v3": (
             "Use iMTD-GC v3 algorithm (recommended for better conformer sampling)"
         ),
-        "crest_quick": "Fast mode - reduces search time but may miss structures",
         "crest_nci": "NCI mode for molecular complexes and weak interactions",
-        "crest_gfnff": "Use GFN-FF force field (default: GFN2-xTB)",
+        "crest_method": (
+            "Choose CREST quantum method: gfn2 (default, balanced), "
+            "gfnff (faster), gfn2//gfnff (two-step refinement)"
+        ),
+        "crest_quick_mode": (
+            "Choose speed/accuracy tradeoff: off (full), quick (fast), "
+            "squick (super-fast), mquick (fastest)"
+        ),
         "crest_ewin": (
             "Energy window in kcal/mol for conformer selection "
             "(higher = more conformers)"

@@ -229,9 +229,9 @@ class TestSettingsManager:
         """Verify help text exists for all expected settings."""
         expected_help_keys = [
             "crest_v3",
-            "crest_quick",
             "crest_nci",
-            "crest_gfnff",
+            "crest_method",
+            "crest_quick_mode",
             "crest_ewin",
             "crest_rthr",
             "crest_optlev",
