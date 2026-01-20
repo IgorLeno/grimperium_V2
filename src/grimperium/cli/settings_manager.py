@@ -224,12 +224,23 @@ class SettingsManager:
         Args:
             settings_dict: Dictionary with prefixed keys for settings.
         """
+        # Backward compatibility: convert old boolean toggles to new dropdown values
+        if "crest_gfnff" in settings_dict and "crest_method" not in settings_dict:
+            if self._parse_bool(settings_dict["crest_gfnff"]):
+                settings_dict["crest_method"] = "gfnff"
+            else:
+                settings_dict["crest_method"] = "gfn2"
+
+        if "crest_quick" in settings_dict and "crest_quick_mode" not in settings_dict:
+            if self._parse_bool(settings_dict["crest_quick"]):
+                settings_dict["crest_quick_mode"] = "quick"
+            else:
+                settings_dict["crest_quick_mode"] = "off"
+
         # CREST boolean fields
         for key, attr in [
             ("crest_v3", "v3"),
-            ("crest_quick", "quick"),
             ("crest_nci", "nci"),
-            ("crest_gfnff", "gfnff"),
         ]:
             if key in settings_dict:
                 try:
@@ -254,6 +265,16 @@ class SettingsManager:
             val = str(settings_dict["crest_optlev"]).strip().lower()
             if val in CRESTSettings.OPTLEV_CHOICES:
                 self.crest.optlev = val
+
+        if "crest_method" in settings_dict:
+            val = str(settings_dict["crest_method"]).strip().lower()
+            if val in CRESTSettings.CREST_METHOD_OPTIONS:
+                self.crest.crest_method = val
+
+        if "crest_quick_mode" in settings_dict:
+            val = str(settings_dict["crest_quick_mode"]).strip().lower()
+            if val in CRESTSettings.QUICK_MODE_OPTIONS:
+                self.crest.quick_mode = val
 
         if "crest_threads" in settings_dict:
             try:
