@@ -13,6 +13,7 @@
 """
 
 import logging
+import re
 import shutil
 from pathlib import Path
 
@@ -50,9 +51,36 @@ class TemporaryDirectoryManager:
     ROOT_TEMP = Path(__file__).parent / "tmp"
 
     @classmethod
-    def get_batch_temp_dir(cls, batch_id: str) -> Path:
+    def _validate_id(cls, id_str: str, id_type: str = "batch") -> str:
+        """Validate batch_id or mol_id against path traversal attacks.
+
+        Args:
+            id_str: The ID to validate (batch_id or mol_id)
+            id_type: Type of ID for error messages
+
+        Returns:
+            Validated ID string
+
+        Raises:
+            ValueError: If ID contains invalid characters or patterns
         """
-        Get temporary directory for a batch.
+        if not re.match(r"^[a-zA-Z0-9_-]+$", id_str):
+            raise ValueError(
+                f"Invalid {id_type}: '{id_str}'. "
+                f"Only alphanumerics, underscore, and hyphen allowed."
+            )
+
+        if ".." in id_str or "/" in id_str or "\\" in id_str:
+            raise ValueError(
+                f"Path traversal attempt in {id_type}: '{id_str}'. "
+                f"Path separators and '..' not allowed."
+            )
+
+        return id_str
+
+    @classmethod
+    def get_batch_temp_dir(cls, batch_id: str) -> Path:
+        """Get temporary directory for a batch (with path traversal protection).
 
         Args:
             batch_id: Batch identifier (e.g., "batch_0001")
@@ -60,21 +88,34 @@ class TemporaryDirectoryManager:
         Returns:
             Path to batch temp directory
 
+        Raises:
+            ValueError: If batch_id contains invalid characters or patterns
+
         Example:
             >>> batch_dir = get_batch_temp_dir("batch_0001")
             >>> batch_dir.mkdir(parents=True, exist_ok=True)
             >>> batch_dir.exists()
             True
         """
-        batch_dir = cls.ROOT_TEMP / batch_id
-        batch_dir.mkdir(parents=True, exist_ok=True)
-        logger.debug(f"Batch temp dir: {batch_dir}")
-        return batch_dir
+        batch_id = cls._validate_id(batch_id, "batch_id")
+
+        candidate = (Path(cls.ROOT_TEMP) / batch_id).resolve()
+        root_resolved = Path(cls.ROOT_TEMP).resolve()
+
+        try:
+            candidate.relative_to(root_resolved)
+        except ValueError as err:
+            raise ValueError(
+                f"Path escape attempt: {batch_id} would escape {root_resolved}"
+            ) from err
+
+        candidate.mkdir(parents=True, exist_ok=True)
+        logger.debug(f"Batch temp dir: {candidate}")
+        return candidate
 
     @classmethod
     def get_molecule_temp_dir(cls, batch_id: str, mol_id: str) -> Path:
-        """
-        Get temporary directory for a molecule within a batch.
+        """Get temporary directory for a molecule (with path traversal protection).
 
         Args:
             batch_id: Batch identifier (e.g., "batch_0001")
@@ -83,16 +124,30 @@ class TemporaryDirectoryManager:
         Returns:
             Path to molecule temp directory
 
+        Raises:
+            ValueError: If IDs contain invalid characters or patterns
+
         Example:
             >>> mol_dir = get_molecule_temp_dir("batch_0001", "mol_00001")
             >>> mol_dir
             PosixPath('.../src/crest_pm7/tmp/batch_0001/mol_00001')
         """
-        batch_dir = cls.get_batch_temp_dir(batch_id)
-        mol_dir = batch_dir / mol_id
-        mol_dir.mkdir(parents=True, exist_ok=True)
-        logger.debug(f"Molecule temp dir: {mol_dir}")
-        return mol_dir
+        batch_id = cls._validate_id(batch_id, "batch_id")
+        mol_id = cls._validate_id(mol_id, "mol_id")
+
+        candidate = (Path(cls.ROOT_TEMP) / batch_id / mol_id).resolve()
+        root_resolved = Path(cls.ROOT_TEMP).resolve()
+
+        try:
+            candidate.relative_to(root_resolved)
+        except ValueError as err:
+            raise ValueError(
+                f"Path escape attempt: {batch_id}/{mol_id} would escape {root_resolved}"
+            ) from err
+
+        candidate.mkdir(parents=True, exist_ok=True)
+        logger.debug(f"Molecule temp dir: {candidate}")
+        return candidate
 
     @classmethod
     def get_crest_temp_files(cls, batch_id: str, mol_id: str) -> dict[str, Path]:

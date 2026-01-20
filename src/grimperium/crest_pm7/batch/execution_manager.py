@@ -230,8 +230,12 @@ class BatchExecutionManager:
         """
         LOG.info(f"Processing {mol_id} ({batch_order}/{result.total_count})")
 
-        # Access batch logger
-        logger = self._batch_logger
+        # Safe logger access with fallback chain
+        logger = getattr(
+            self,
+            "_batch_logger",
+            getattr(self, "_logger", logging.getLogger(__name__)),
+        )
         logger.info(f"[{mol_id}] Processing ({batch_order}/{result.total_count})")
 
         # TODO: Add RDKit logging if RDKit processing happens here
@@ -308,17 +312,21 @@ class BatchExecutionManager:
                 result.success_count += 1
 
                 # Enhance CSV with delta calculations and batch settings
-                # TODO: Extract required data from pm7_result (adjust based on actual PM7Result structure)
-                h298_cbs = csv_update.get("h298_cbs", 0.0)  # Adjust field name
-                h298_pm7 = getattr(pm7_result, "h298_pm7", 0.0)  # Adjust attribute name
+                # Use PM7Result API correctly: most_stable_hof and conformers
+                h298_cbs = csv_update.get("h298_cbs")  # None if absent
+                h298_pm7 = pm7_result.most_stable_hof  # Property, may be None
 
-                # Get conformer energies from pm7_result
-                # TODO: Adjust based on actual PM7Result structure
+                # Get conformer energies from pm7_result.conformers
                 mopac_hof_values: list[float] = []
-                if hasattr(pm7_result, "mopac_result") and pm7_result.mopac_result:
-                    mopac_hof_values = getattr(
-                        pm7_result.mopac_result, "hof_values", []
-                    )
+                if pm7_result.conformers:
+                    mopac_hof_values = [
+                        c.energy_hof
+                        for c in pm7_result.conformers
+                        if c.is_successful and c.energy_hof is not None
+                    ]
+
+                # Safe access to batch_settings
+                batch_settings = getattr(self, "_batch_settings", {})
 
                 # Update CSV with enhanced fields
                 success = CSVManagerExtensions.update_molecule_with_mopac_results(
@@ -327,7 +335,7 @@ class BatchExecutionManager:
                     h298_cbs=h298_cbs,
                     h298_pm7=h298_pm7,
                     mopac_hof_values=mopac_hof_values,
-                    batch_settings=self._batch_settings,
+                    batch_settings=batch_settings,
                 )
 
                 if success:

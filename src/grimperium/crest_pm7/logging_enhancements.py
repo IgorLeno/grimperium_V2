@@ -73,6 +73,9 @@ def setup_batch_logging(batch_id: str) -> logging.Logger:
     # Clear existing handlers
     logger.handlers.clear()
 
+    # Disable propagation to prevent duplicate console output
+    logger.propagate = False
+
     # Add Rich handler for formatted console output
     handler = RichHandler(
         console=console,
@@ -276,8 +279,7 @@ def log_batch_summary(
 
 
 def suppress_pandas_warnings() -> None:
-    """
-    Suppress common pandas warnings (DtypeWarning, FutureWarning, etc.).
+    """Suppress pandas-specific warnings (narrowed to exact warning classes).
 
     Call once at application start.
 
@@ -285,11 +287,18 @@ def suppress_pandas_warnings() -> None:
         >>> suppress_pandas_warnings()
         # No more DtypeWarning messages!
     """
-
-    # Suppress pandas DtypeWarning
-    warnings.filterwarnings(
-        "ignore", category=Warning, message=".*Columns.*have mixed types.*"
-    )
+    # Suppress pandas DtypeWarning specifically (not all Warning)
+    try:
+        warnings.filterwarnings(
+            "ignore",
+            category=pd.errors.DtypeWarning,
+            message=".*Columns.*have mixed types.*",
+        )
+    except AttributeError:
+        # Fallback for older pandas versions without DtypeWarning
+        warnings.filterwarnings(
+            "ignore", category=Warning, message=".*Columns.*have mixed types.*"
+        )
 
     # Suppress FutureWarning about DataFrame indexing
     warnings.filterwarnings(
@@ -299,7 +308,11 @@ def suppress_pandas_warnings() -> None:
     )
 
     # Suppress SettingWithCopyWarning
-    warnings.filterwarnings("ignore", category=pd.errors.SettingWithCopyWarning)
+    try:
+        warnings.filterwarnings("ignore", category=pd.errors.SettingWithCopyWarning)
+    except AttributeError:
+        # Fallback for older pandas versions
+        pass
 
 
 # ╔════════════════════════════════════════════════════════════════════════════════╗

@@ -48,7 +48,7 @@ class DeltaCalculations:
     """
 
     @staticmethod
-    def calculate_abs_diff(h298_cbs: float, h298_pm7: float) -> float:
+    def calculate_abs_diff(h298_cbs: float | None, h298_pm7: float | None) -> float:
         """
         Calculate absolute difference between CBS and PM7 enthalpies.
 
@@ -63,13 +63,18 @@ class DeltaCalculations:
             >>> calculate_abs_diff(-17.5, -15.3)
             2.2
         """
-        if pd.isna(h298_cbs) or pd.isna(h298_pm7):
-            return np.nan
+        if (
+            h298_cbs is None
+            or h298_pm7 is None
+            or pd.isna(h298_cbs)
+            or pd.isna(h298_pm7)
+        ):
+            return float(np.nan)
 
-        return abs(h298_cbs - h298_pm7)
+        return float(abs(h298_cbs - h298_pm7))
 
     @staticmethod
-    def calculate_abs_diff_pct(h298_cbs: float, h298_pm7: float) -> float:
+    def calculate_abs_diff_pct(h298_cbs: float | None, h298_pm7: float | None) -> float:
         """
         Calculate percentage difference between CBS and PM7 enthalpies.
 
@@ -84,18 +89,23 @@ class DeltaCalculations:
             >>> calculate_abs_diff_pct(-17.5, -15.3)
             12.57  # 2.2 / 17.5 * 100
         """
-        if pd.isna(h298_cbs) or pd.isna(h298_pm7) or h298_cbs == 0:
-            return np.nan
+        if (
+            h298_cbs is None
+            or h298_pm7 is None
+            or pd.isna(h298_cbs)
+            or pd.isna(h298_pm7)
+            or h298_cbs == 0
+        ):
+            return float(np.nan)
 
         abs_diff = abs(h298_cbs - h298_pm7)
-        return (abs_diff / abs(h298_cbs)) * 100
+        return float((abs_diff / abs(h298_cbs)) * 100)
 
     @staticmethod
     def calculate_deltas_and_select(
         mopac_hof_values: list[float],
     ) -> tuple[float, float, float, int]:
-        """
-        Calculate delta energies and select best conformer.
+        """Calculate delta energies and select best conformer (with robust type handling).
 
         Given a list of MOPAC heats of formation (one per conformer),
         calculate the energy differences from the best (lowest) conformer.
@@ -104,6 +114,7 @@ class DeltaCalculations:
             mopac_hof_values: List of heat of formation values (kcal/mol)
                             One value per conformer
                             Example: [0.42, 0.87, 1.23]
+                            Handles None, strings, and other non-numeric values.
 
         Returns:
             Tuple of (delta_1, delta_2, delta_3, best_conformer_idx)
@@ -123,22 +134,28 @@ class DeltaCalculations:
             # - 2nd best (idx=1): 0.87 kcal/mol → delta = 0.87 - 0.42 = 0.45
             # - 3rd best (idx=2): 1.23 kcal/mol → delta = 1.23 - 0.42 = 0.81
         """
-
         # Handle invalid input
-        if not mopac_hof_values or pd.isna(mopac_hof_values).all():
+        if not mopac_hof_values:
             return np.nan, np.nan, np.nan, -1
 
-        # Convert to numpy array and remove NaN values
-        values = np.array(mopac_hof_values)
-        valid_mask = ~np.isnan(values)
-        valid_values = values[valid_mask]
+        # Coerce to float64, converting None/strings/invalid to NaN
+        numeric_values = pd.to_numeric(
+            pd.Series(mopac_hof_values), errors="coerce"
+        ).to_numpy(dtype=float)
+
+        # Check if all values are NaN
+        if pd.isna(numeric_values).all():
+            return np.nan, np.nan, np.nan, -1
+
+        valid_mask = ~np.isnan(numeric_values)
+        valid_values = numeric_values[valid_mask]
 
         if len(valid_values) == 0:
             return np.nan, np.nan, np.nan, -1
 
-        # Find the minimum (best/lowest) energy
-        min_energy = np.min(valid_values)
-        best_idx = int(np.argmin(values))  # Index in original array (cast to int)
+        # Use nanmin/nanargmin for NaN-safe operations
+        min_energy = np.nanmin(valid_values)
+        best_idx = int(np.nanargmin(numeric_values))  # Index in original array
 
         # Calculate deltas relative to best
         deltas = valid_values - min_energy
@@ -237,8 +254,8 @@ class CSVManagerExtensions:
     def update_molecule_with_mopac_results(
         csv_manager: Any,
         mol_id: str,
-        h298_cbs: float,
-        h298_pm7: float,
+        h298_cbs: float | None,
+        h298_pm7: float | None,
         mopac_hof_values: list[float],
         batch_settings: dict[str, Any],
     ) -> bool:
