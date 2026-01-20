@@ -824,9 +824,7 @@ class BatchCSVManager:
             ),
             "crest_conformers_generated": result.crest_conformers_generated,
             "crest_time": (
-                round(result.crest_time, 1)
-                if result.crest_time is not None
-                else None
+                round(result.crest_time, 1) if result.crest_time is not None else None
             ),
             "crest_error": result.crest_error,
             # MOPAC Execution
