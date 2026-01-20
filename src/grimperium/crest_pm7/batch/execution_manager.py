@@ -20,26 +20,10 @@ from grimperium.crest_pm7.batch.enums import BatchFailurePolicy, MoleculeStatus
 from grimperium.crest_pm7.batch.models import Batch, BatchResult
 from grimperium.crest_pm7.batch.processor_adapter import FixedTimeoutProcessor
 from grimperium.crest_pm7.config import PM7Config
-from grimperium.crest_pm7.paths import (
-    get_molecule_temp_dir,
-    get_crest_temp_files,
-    get_mopac_temp_files,
-)
+from grimperium.crest_pm7.csv_enhancements import BatchSettingsCapture
 from grimperium.crest_pm7.logging_enhancements import (
     setup_batch_logging,
-    log_rdkit_start,
-    log_rdkit_done,
-    log_crest_start,
-    log_crest_done,
-    log_mopac_start,
-    log_mopac_conformer_done,
-    log_mopac_done,
-    log_batch_summary,
     suppress_pandas_warnings,
-)
-from grimperium.crest_pm7.csv_enhancements import (
-    BatchSettingsCapture,
-    CSVManagerExtensions,
 )
 
 LOG = logging.getLogger("grimperium.crest_pm7.batch.execution_manager")
@@ -118,6 +102,20 @@ class BatchExecutionManager:
             f"policy={batch.failure_policy.value}"
         )
 
+        # Setup structured logging for this batch
+        batch_logger = setup_batch_logging(batch.batch_id)
+        batch_logger.info(
+            f"🚀 Starting batch {batch.batch_id}: {batch.size} molecules, "
+            f"policy={batch.failure_policy.value}"
+        )
+
+        # Suppress pandas DtypeWarning and FutureWarning
+        suppress_pandas_warnings()
+
+        # Capture batch settings for CSV population
+        batch_settings = BatchSettingsCapture.capture_batch_settings(self.pm7_config)
+        batch_logger.debug(f"Batch settings: {batch_settings}")
+
         # Update processor timeouts
         self.processor_adapter.update_timeouts(
             crest_timeout_minutes=batch.crest_timeout_minutes,
@@ -130,6 +128,10 @@ class BatchExecutionManager:
             total_count=batch.size,
             timestamp_start=datetime.now(timezone.utc),
         )
+
+        # Store logger and settings for use in _process_molecule
+        self._batch_logger = batch_logger
+        self._batch_settings = batch_settings
 
         # Track HOF values for statistics
         hof_values: list[tuple[str, float]] = []  # (mol_id, hof)
