@@ -371,7 +371,7 @@ class SettingsManager:
         table.add_row("v3 Algorithm", self._status_icon(self.crest.v3))
         table.add_row("NCI Mode", self._status_icon(self.crest.nci))
         table.add_row("CREST Method", self.crest.crest_method.upper())
-        table.add_row("Quick Mode", self.crest.quick_mode)
+        table.add_row("Quick Mode", self.crest.quick_mode.upper())
         table.add_row("Energy Window", f"{self.crest.ewin} kcal/mol")
         table.add_row("RMSD Threshold", f"{self.crest.rthr} Å")
         table.add_row("Optimization Level", self.crest.optlev)

@@ -751,7 +751,11 @@ class BatchCSVManager:
             Dict with CSV column updates
         """
         # Calculate metrics if H298_cbs and H298_pm7 are available
-        h298_pm7 = round(result.most_stable_hof, 2) if result.most_stable_hof else None
+        h298_pm7 = (
+            round(result.most_stable_hof, 2)
+            if getattr(result, "most_stable_hof", None) is not None
+            else None
+        )
         h298_cbs = result.H298_cbs if hasattr(result, "H298_cbs") else None
 
         abs_diff = None
@@ -767,7 +771,8 @@ class BatchCSVManager:
             times = [
                 c.mopac_execution_time
                 for c in result.conformers
-                if hasattr(c, "mopac_execution_time") and c.mopac_execution_time
+                if hasattr(c, "mopac_execution_time")
+                and c.mopac_execution_time is not None
             ]
             if times:
                 mopac_time = round(sum(times), 1)
@@ -807,7 +812,7 @@ class BatchCSVManager:
             "nrotbonds": result.nrotbonds if hasattr(result, "nrotbonds") else None,
             "tpsa": (
                 round(result.tpsa, 2)
-                if hasattr(result, "tpsa") and result.tpsa
+                if hasattr(result, "tpsa") and result.tpsa is not None
                 else None
             ),
             "aromatic_rings": (
@@ -818,7 +823,11 @@ class BatchCSVManager:
                 result.crest_status.value if result.crest_status is not None else None
             ),
             "crest_conformers_generated": result.crest_conformers_generated,
-            "crest_time": (round(result.crest_time, 1) if result.crest_time else None),
+            "crest_time": (
+                round(result.crest_time, 1)
+                if result.crest_time is not None
+                else None
+            ),
             "crest_error": result.crest_error,
             # MOPAC Execution
             "mopac_status": mopac_status,  # NEW: Computed from conformers
@@ -834,15 +843,21 @@ class BatchCSVManager:
             "error_message": result.error_message,
             "total_execution_time": (
                 round(result.total_execution_time, 1)
-                if result.total_execution_time
+                if result.total_execution_time is not None
                 else None
             ),
             "assigned_crest_timeout": round(crest_timeout_used, 1),  # Renamed
             "assigned_mopac_timeout": round(mopac_timeout_used, 1),  # Renamed
             # Delta-E (renamed for clarity)
-            "delta_1": (round(result.delta_e_12, 4) if result.delta_e_12 else None),
-            "delta_2": (round(result.delta_e_13, 4) if result.delta_e_13 else None),
-            "delta_3": (round(result.delta_e_15, 4) if result.delta_e_15 else None),
+            "delta_1": (
+                round(result.delta_e_12, 4) if result.delta_e_12 is not None else None
+            ),
+            "delta_2": (
+                round(result.delta_e_13, 4) if result.delta_e_13 is not None else None
+            ),
+            "delta_3": (
+                round(result.delta_e_15, 4) if result.delta_e_15 is not None else None
+            ),
             "conformer_selected": conformer_selected,  # NEW: Which conformer was selected
             # Batch Tracking
             "batch_id": batch_id,

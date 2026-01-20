@@ -14,6 +14,8 @@ def test_molecule_status_enum_exists():
 def test_molecule_status_values():
     """Test MoleculeStatus enum values"""
     assert MoleculeStatus.PENDING.value == "Pending"
+    assert MoleculeStatus.CURRENT_BATCH.value == "Current Batch"  # Verify actual value
+    assert MoleculeStatus.RUNNING.value == "Running"  # Verify actual value
     assert MoleculeStatus.OK.value == "OK"
     assert MoleculeStatus.RERUN.value == "Rerun"
     assert MoleculeStatus.SKIP.value == "Skip"
