@@ -97,7 +97,7 @@ Thumbs.db
 # Project specific
 data/raw/
 data/processed/
-data/molecules_pm7/conformer_details/
+data/molecules_pm7/conformer_details/*.json
 models/
 outputs/
 logs/
