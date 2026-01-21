@@ -60,13 +60,14 @@ class TestCSVSchema:
     def test_schema_length(self, manager: BatchCSVManager) -> None:
         """Verify schema has expected column count.
 
-        Current: 55 columns (Phase A complete schema)
+        Current: 56 columns (Phase A complete schema)
         - 44 original columns
         - 3 new Phase A columns (mopac_status, mopac_time, conformer_selected)
+        - 1 max_retries column
         - 8 reserved Phase B placeholder columns
         """
         schema = manager.get_schema()
-        assert len(schema) == 55, f"Expected 55 columns, got {len(schema)}"
+        assert len(schema) == 56, f"Expected 56 columns, got {len(schema)}"
 
     def test_schema_order(self, manager: BatchCSVManager) -> None:
         """Verify schema column order."""
@@ -143,5 +144,5 @@ class TestCSVSchema:
 
     def test_retry_tracking_columns(self, manager: BatchCSVManager) -> None:
         """Verify retry tracking columns class attribute."""
-        expected = ["retry_count", "last_error_message"]
+        expected = ["retry_count", "last_error_message", "max_retries"]
         assert expected == manager.RETRY_TRACKING_COLUMNS

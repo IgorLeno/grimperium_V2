@@ -112,6 +112,7 @@ class BatchCSVManager:
     RETRY_TRACKING_COLUMNS = [
         "retry_count",
         "last_error_message",
+        "max_retries",
     ]
 
     # Phase B reserved columns (for future ML features)
@@ -711,14 +712,13 @@ class BatchCSVManager:
             return
 
         self.save_csv()
-        LOG.debug(
-            f"Updated {updated_count} extra fields for {mol_id}"
-            + (
-                f" (skipped {len(skipped_cols)} unknown columns)"
-                if skipped_cols
-                else ""
+        if skipped_cols:
+            LOG.debug(
+                f"Updated {updated_count} extra fields for {mol_id} "
+                f"(skipped {len(skipped_cols)} unknown columns: {', '.join(skipped_cols)})"
             )
-        )
+        else:
+            LOG.debug(f"Updated {updated_count} extra fields for {mol_id}")
 
     def reset_batch(self, batch_id: str) -> int:
         """Reset all molecules in a batch for re-processing.
