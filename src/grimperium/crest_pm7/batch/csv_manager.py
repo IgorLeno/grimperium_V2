@@ -662,6 +662,60 @@ class BatchCSVManager:
         self.save_csv()
         LOG.warning(f"Marked {mol_id} as SKIP: {error_message}")
 
+    def _update_extra_fields(
+        self,
+        mol_id: str,
+        field_updates: dict[str, Any],
+    ) -> None:
+        """Update extra CSV fields for a molecule (internal helper).
+
+        This method is used by csv_enhancements to add calculated deltas
+        and batch settings after mark_success() has been called.
+
+        Designed to be called AFTER status transition (e.g., after mark_success).
+        Does NOT change molecule status, only updates data fields.
+
+        Args:
+            mol_id: Molecule identifier
+            field_updates: Dict of {column_name: value} to update
+
+        Raises:
+            KeyError: If mol_id not found in CSV
+
+        Example:
+            >>> csv_manager.mark_success(mol_id, result_update)
+            >>> csv_manager._update_extra_fields(mol_id, {
+            ...     'delta_1': 0.0,
+            ...     'delta_2': 0.45,
+            ...     'v3': False,
+            ...     'c_method': 'gfn2-xtb',
+            ... })
+        """
+        # FUTURE PARALLELIZATION: Wrap with self._lock
+        idx = self._get_row_index(mol_id)
+        df = self._ensure_loaded()
+
+        updated_count = 0
+        skipped_cols = []
+
+        for col, val in field_updates.items():
+            if col in df.columns:
+                df.at[idx, col] = val
+                updated_count += 1
+            else:
+                skipped_cols.append(col)
+                LOG.warning(f"Column '{col}' not in CSV schema, skipping")
+
+        self.save_csv()
+        LOG.debug(
+            f"Updated {updated_count} extra fields for {mol_id}"
+            + (
+                f" (skipped {len(skipped_cols)} unknown columns)"
+                if skipped_cols
+                else ""
+            )
+        )
+
     def reset_batch(self, batch_id: str) -> int:
         """Reset all molecules in a batch for re-processing.
 

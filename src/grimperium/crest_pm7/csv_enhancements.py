@@ -259,17 +259,13 @@ class CSVManagerExtensions:
         mopac_hof_values: list[float],
         batch_settings: dict[str, Any],
     ) -> bool:
-        """
-        Update CSV with MOPAC results and calculated deltas.
+        """Update CSV with MOPAC results and calculated deltas.
 
-        This function:
-        1. Calculates absolute and percentage differences
-        2. Calculates energy deltas (delta_1, delta_2, delta_3)
-        3. Selects best conformer
-        4. Updates CSV fields
+        This function now properly integrates batch settings into CSV
+        by using the new _update_extra_fields() method in BatchCSVManager.
 
         Args:
-            csv_manager: CSVManager instance
+            csv_manager: BatchCSVManager instance
             mol_id: Molecule identifier
             h298_cbs: CBS-level enthalpy (kcal/mol)
             h298_pm7: PM7 enthalpy (kcal/mol)
@@ -278,17 +274,6 @@ class CSVManagerExtensions:
 
         Returns:
             True if successful, False if error
-
-        Example:
-            >>> csv_manager = CSVManager(csv_path)
-            >>> success = update_molecule_with_mopac_results(
-            ...     csv_manager=csv_manager,
-            ...     mol_id="mol_00001",
-            ...     h298_cbs=-17.5,
-            ...     h298_pm7=-15.3,
-            ...     mopac_hof_values=[0.42, 0.87, 1.23],
-            ...     batch_settings=settings,
-            ... )
         """
 
         try:
@@ -322,21 +307,29 @@ class CSVManagerExtensions:
                 "scf_threshold": batch_settings.get("scf_threshold"),
             }
 
-            # Update CSV (method depends on CSVManager implementation)
-            if hasattr(csv_manager, "update_molecule"):
-                csv_manager.update_molecule(mol_id, updates)
-            elif hasattr(csv_manager, "loc"):  # Direct pandas DataFrame
+            # Update CSV via BatchCSVManager's new update method
+            if hasattr(csv_manager, "_update_extra_fields"):
+                csv_manager._update_extra_fields(mol_id, updates)
+            else:
+                # Fallback for backward compatibility: direct DataFrame access
+                df = csv_manager._ensure_loaded()
+                idx = csv_manager._get_row_index(mol_id)
                 for key, value in updates.items():
-                    if key in csv_manager.columns:
-                        csv_manager.loc[csv_manager["mol_id"] == mol_id, key] = value
+                    if key in df.columns:
+                        df.at[idx, key] = value
+                    else:
+                        logger.warning(f"Column '{key}' not in CSV schema, skipping")
+                csv_manager.save_csv()
 
             logger.info(
-                f"[{mol_id}] Updated CSV with calculated deltas (δ1={delta_1:.2f}, δ2={delta_2:.2f}, δ3={delta_3:.2f})"
+                f"[{mol_id}] ✓ CSV enhanced with deltas and settings "
+                f"(v3={batch_settings.get('v3')}, c_method={batch_settings.get('c_method')}, "
+                f"δ1={delta_1:.2f}, δ2={delta_2:.2f}, δ3={delta_3:.2f})"
             )
             return True
 
         except Exception as e:
-            logger.error(f"[{mol_id}] Error updating CSV: {str(e)}")
+            logger.error(f"[{mol_id}] Error updating CSV: {str(e)}", exc_info=True)
             return False
 
     @staticmethod

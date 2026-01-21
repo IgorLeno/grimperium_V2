@@ -2,28 +2,28 @@
   "mol_id": "mol_00001",
   "smiles": "C=Cc1ccc(C)o1",
   "batch_id": "batch_0001",
-  "timestamp": "2026-01-20T13:04:20.275320+00:00",
+  "timestamp": "2026-01-20T19:45:59.818975+00:00",
   "crest_status": "SUCCESS",
   "crest_conformers_generated": 4,
-  "crest_time": 412.29496669769287,
+  "crest_time": 424.27409744262695,
   "crest_error": null,
   "conformers": [
     {
       "conformer_index": 0,
-      "energy_hof": -3.68483,
+      "energy_hof": -3.68485,
       "energy_total": null,
       "mopac_status": "SUCCESS",
-      "mopac_time": 0.790860652923584,
+      "mopac_time": 1.0021166801452637,
       "mopac_error": null,
       "geometry_file": "/tmp/crest_pm7/mol_00001/mol_00001_conf000.out"
     }
   ],
   "num_conformers_selected": 1,
   "num_conformers_successful": 1,
-  "most_stable_hof": -3.68483,
+  "most_stable_hof": -3.68485,
   "quality_grade": "A",
   "issues": [],
   "success": true,
   "error_message": null,
-  "total_execution_time": 413.1997125148773
+  "total_execution_time": 425.4241840839386
 }

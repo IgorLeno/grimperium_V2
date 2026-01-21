@@ -2,10 +2,10 @@
   "mol_id": "mol_00002",
   "smiles": "Cc1ccoc1",
   "batch_id": "batch_0001",
-  "timestamp": "2026-01-20T13:11:16.948176+00:00",
+  "timestamp": "2026-01-20T19:53:08.976185+00:00",
   "crest_status": "SUCCESS",
   "crest_conformers_generated": 1,
-  "crest_time": 194.77103638648987,
+  "crest_time": 198.9065887928009,
   "crest_error": null,
   "conformers": [
     {
@@ -13,7 +13,7 @@
       "energy_hof": -14.6563,
       "energy_total": null,
       "mopac_status": "SUCCESS",
-      "mopac_time": 0.30778980255126953,
+      "mopac_time": 0.34344053268432617,
       "mopac_error": null,
       "geometry_file": "/tmp/crest_pm7/mol_00002/mol_00002_conf000.out"
     }
@@ -25,5 +25,5 @@
   "issues": [],
   "success": true,
   "error_message": null,
-  "total_execution_time": 195.11022567749023
+  "total_execution_time": 199.28348684310913
 }
