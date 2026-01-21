@@ -325,6 +325,26 @@ class BatchCSVManager:
             raise KeyError(f"mol_id not found: {mol_id}")
         return int(df[mask].index[0])
 
+    def get_reference_hof(self, mol_id: str) -> float | None:
+        """Get reference HOF (H298_cbs) value for a molecule from CSV.
+
+        Args:
+            mol_id: Molecule identifier
+
+        Returns:
+            Reference HOF value in kcal/mol, or None if not available/invalid
+        """
+        try:
+            df = self._ensure_loaded()
+            idx = self._get_row_index(mol_id)
+            val = df.at[idx, "reference_hof"]
+            if pd.isna(val):
+                return None
+            return float(val)
+        except (KeyError, ValueError, TypeError) as e:
+            LOG.debug(f"[{mol_id}] Could not get reference_hof: {e}")
+            return None
+
     def generate_batch_id(self) -> str:
         """Generate unique batch ID with sequential numbering.
 

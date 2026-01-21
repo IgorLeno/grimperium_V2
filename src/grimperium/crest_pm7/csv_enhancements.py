@@ -286,6 +286,9 @@ class CSVManagerExtensions:
                 DeltaCalculations.calculate_deltas_and_select(mopac_hof_values)
             )
 
+            # Convert 0-based index to 1-based for CSV (schema expects 1-3)
+            conformer_selected = best_conf_idx + 1 if best_conf_idx >= 0 else None
+
             # Prepare update dictionary
             updates = {
                 "abs_diff": abs_diff,
@@ -293,7 +296,7 @@ class CSVManagerExtensions:
                 "delta_1": delta_1,
                 "delta_2": delta_2,
                 "delta_3": delta_3,
-                "conformer_selected": best_conf_idx,
+                "conformer_selected": conformer_selected,
                 # Settings from batch
                 "v3": batch_settings.get("v3"),
                 "qm": batch_settings.get("qm"),
@@ -341,10 +344,13 @@ class CSVManagerExtensions:
                 if updated_any:
                     csv_manager.save_csv()
 
+            d1_str = f"{delta_1:.2f}" if not np.isnan(delta_1) else "NaN"
+            d2_str = f"{delta_2:.2f}" if not np.isnan(delta_2) else "NaN"
+            d3_str = f"{delta_3:.2f}" if not np.isnan(delta_3) else "NaN"
             logger.info(
                 f"[{mol_id}] ✓ CSV enhanced with deltas and settings "
                 f"(v3={batch_settings.get('v3')}, c_method={batch_settings.get('c_method')}, "
-                f"δ1={delta_1:.2f}, δ2={delta_2:.2f}, δ3={delta_3:.2f})"
+                f"δ1={d1_str}, δ2={d2_str}, δ3={d3_str})"
             )
             return True
 

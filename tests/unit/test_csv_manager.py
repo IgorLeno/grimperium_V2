@@ -11,7 +11,7 @@ import pandas as pd
 import pytest
 
 from grimperium.crest_pm7.batch.csv_manager import BatchCSVManager
-from grimperium.crest_pm7.batch.enums import BatchSortingStrategy, MoleculeStatus
+from grimperium.crest_pm7.batch.enums import BatchSortingStrategy
 
 
 @pytest.fixture
@@ -89,9 +89,7 @@ class TestMolIdOrdering:
 class TestSequentialBatchNaming:
     """Tests for FIX #2: Sequential batch numbering."""
 
-    def test_generate_batch_id_sequential(
-        self, manager_with_csv: BatchCSVManager
-    ):
+    def test_generate_batch_id_sequential(self, manager_with_csv: BatchCSVManager):
         """Verify batch IDs are sequential: batch_0001, batch_0002, ..."""
         # Clear existing batch IDs
         manager_with_csv.df["batch_id"] = None
@@ -117,9 +115,7 @@ class TestSequentialBatchNaming:
         batch_id_3 = manager_with_csv.generate_batch_id()
         assert batch_id_3 == "batch_0003"
 
-    def test_generate_batch_id_no_timestamp(
-        self, manager_with_csv: BatchCSVManager
-    ):
+    def test_generate_batch_id_no_timestamp(self, manager_with_csv: BatchCSVManager):
         """Verify batch ID format is batch_NNNN, not timestamp-based."""
         manager_with_csv.df["batch_id"] = None
         manager_with_csv.save_csv()
@@ -137,9 +133,7 @@ class TestSequentialBatchNaming:
 class TestTimestampFormat:
     """Tests for FIX #3: Simplified timestamp format."""
 
-    def test_timestamp_format_dd_mm_hh_mm(
-        self, manager_with_csv: BatchCSVManager
-    ):
+    def test_timestamp_format_dd_mm_hh_mm(self, manager_with_csv: BatchCSVManager):
         """Verify timestamp format is dd/mm-HH:MM, not ISO."""
 
         # Create mock PM7Result with known timestamp
@@ -175,3 +169,50 @@ class TestTimestampFormat:
         assert "T" not in csv_update["timestamp"]
         assert "+00:00" not in csv_update["timestamp"]
         assert "." not in csv_update["timestamp"]  # No fractional seconds
+
+
+class TestGetReferenceHof:
+    """Tests for get_reference_hof method used in delta calculations."""
+
+    def test_get_reference_hof_returns_value(self, tmp_path: Path) -> None:
+        """Test that get_reference_hof returns float when value exists."""
+        csv_content = """mol_id,smiles,nheavy,reference_hof,status
+id_001,C,1,-42.5,PENDING
+id_002,CC,2,,PENDING
+"""
+        csv_path = tmp_path / "test.csv"
+        csv_path.write_text(csv_content)
+        manager = BatchCSVManager(csv_path)
+        manager.load_csv()
+
+        result = manager.get_reference_hof("id_001")
+        assert result == -42.5
+
+    def test_get_reference_hof_returns_none_for_empty(self, tmp_path: Path) -> None:
+        """Test that get_reference_hof returns None when value is empty/NaN."""
+        csv_content = """mol_id,smiles,nheavy,reference_hof,status
+id_001,C,1,-42.5,PENDING
+id_002,CC,2,,PENDING
+"""
+        csv_path = tmp_path / "test.csv"
+        csv_path.write_text(csv_content)
+        manager = BatchCSVManager(csv_path)
+        manager.load_csv()
+
+        result = manager.get_reference_hof("id_002")
+        assert result is None
+
+    def test_get_reference_hof_returns_none_for_unknown_mol_id(
+        self, tmp_path: Path
+    ) -> None:
+        """Test that get_reference_hof returns None for non-existent mol_id."""
+        csv_content = """mol_id,smiles,nheavy,reference_hof,status
+id_001,C,1,-42.5,PENDING
+"""
+        csv_path = tmp_path / "test.csv"
+        csv_path.write_text(csv_content)
+        manager = BatchCSVManager(csv_path)
+        manager.load_csv()
+
+        result = manager.get_reference_hof("id_999")
+        assert result is None

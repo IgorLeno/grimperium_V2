@@ -312,18 +312,28 @@ class BatchExecutionManager:
                 result.success_count += 1
 
                 # Enhance CSV with delta calculations and batch settings
-                # Use PM7Result API correctly: most_stable_hof and conformers
-                h298_cbs = csv_update.get("h298_cbs")  # None if absent
+                # h298_cbs comes from CSV original data (reference_hof), NOT csv_update
+                h298_cbs = self.csv_manager.get_reference_hof(mol_id)
                 h298_pm7 = pm7_result.most_stable_hof  # Property, may be None
 
                 # Get conformer energies from pm7_result.conformers
                 mopac_hof_values: list[float] = []
                 if pm7_result.conformers:
+                    total_conformers = len(pm7_result.conformers)
+                    successful_conformers = [
+                        c for c in pm7_result.conformers if c.is_successful
+                    ]
                     mopac_hof_values = [
                         c.energy_hof
-                        for c in pm7_result.conformers
-                        if c.is_successful and c.energy_hof is not None
+                        for c in successful_conformers
+                        if c.energy_hof is not None
                     ]
+                    if not mopac_hof_values:
+                        LOG.warning(
+                            f"[{mol_id}] No HOF values extracted from conformers "
+                            f"(total={total_conformers}, successful={len(successful_conformers)}) "
+                            f"- deltas will be NaN"
+                        )
 
                 # Safe access to batch_settings
                 batch_settings = getattr(self, "_batch_settings", {})

@@ -99,7 +99,7 @@ def test_batch_settings_persist_to_csv(tmp_path):
     assert df_updated.loc[0, "delta_1"] == 0.0  # Best conformer delta
     assert df_updated.loc[0, "delta_2"] == pytest.approx(0.45, abs=0.01)
     assert df_updated.loc[0, "delta_3"] == pytest.approx(0.81, abs=0.01)
-    assert df_updated.loc[0, "conformer_selected"] == 0
+    assert df_updated.loc[0, "conformer_selected"] == 1  # 1-based index (not 0-based)
 
 
 def test_batch_settings_with_nan_deltas(tmp_path):
