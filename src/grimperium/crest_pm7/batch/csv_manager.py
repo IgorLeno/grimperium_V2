@@ -713,7 +713,7 @@ class BatchCSVManager:
         self.save_csv()
         LOG.debug(
             f"Updated {updated_count} extra fields for {mol_id}"
-             (
+            + (
                 f" (skipped {len(skipped_cols)} unknown columns)"
                 if skipped_cols
                 else ""
