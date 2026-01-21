@@ -706,10 +706,14 @@ class BatchCSVManager:
                 skipped_cols.append(col)
                 LOG.warning(f"Column '{col}' not in CSV schema, skipping")
 
+        if updated_count == 0:
+            LOG.debug(f"No fields updated for {mol_id}, skipping save")
+            return
+
         self.save_csv()
         LOG.debug(
             f"Updated {updated_count} extra fields for {mol_id}"
-            + (
+             (
                 f" (skipped {len(skipped_cols)} unknown columns)"
                 if skipped_cols
                 else ""

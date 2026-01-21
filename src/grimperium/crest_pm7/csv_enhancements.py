@@ -307,19 +307,39 @@ class CSVManagerExtensions:
                 "scf_threshold": batch_settings.get("scf_threshold"),
             }
 
-            # Update CSV via BatchCSVManager's new update method
+            # Update CSV via BatchCSVManager's update method
             if hasattr(csv_manager, "_update_extra_fields"):
                 csv_manager._update_extra_fields(mol_id, updates)
             else:
                 # Fallback for backward compatibility: direct DataFrame access
-                df = csv_manager._ensure_loaded()
-                idx = csv_manager._get_row_index(mol_id)
+                try:
+                    df = csv_manager._ensure_loaded()
+                    idx = csv_manager._get_row_index(mol_id)
+                except KeyError:
+                    logger.error(
+                        f"[{mol_id}] mol_id not found in CSV, cannot apply updates"
+                    )
+                    raise ValueError(
+                        f"mol_id '{mol_id}' not found in CSV DataFrame"
+                    ) from None
+                except Exception as e:
+                    logger.error(f"[{mol_id}] Failed to retrieve row index: {str(e)}")
+                    raise ValueError(
+                        f"Cannot update CSV for mol_id '{mol_id}': {str(e)}"
+                    ) from e
+
+                # Apply updates only after successful index retrieval
+                updated_any = False
                 for key, value in updates.items():
                     if key in df.columns:
                         df.at[idx, key] = value
+                        updated_any = True
                     else:
                         logger.warning(f"Column '{key}' not in CSV schema, skipping")
-                csv_manager.save_csv()
+
+                # Save only if at least one field was updated
+                if updated_any:
+                    csv_manager.save_csv()
 
             logger.info(
                 f"[{mol_id}] ✓ CSV enhanced with deltas and settings "

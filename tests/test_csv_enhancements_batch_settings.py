@@ -264,3 +264,188 @@ def test_multiple_molecules_batch_settings(tmp_path):
         assert df_updated.loc[i, "v3"] == False  # noqa: E712
         assert df_updated.loc[i, "c_method"] == "gfn2-xtb"
         assert df_updated.loc[i, "threads"] == 4
+
+
+def test_fallback_path_missing_mol_id_returns_false(tmp_path, monkeypatch, caplog):
+    """Test that fallback path returns False and logs error when mol_id not found."""
+    csv_path = tmp_path / "test.csv"
+    df = pd.DataFrame(
+        {
+            "mol_id": ["mol_001"],
+            "smiles": ["CCO"],
+            "nheavy": [2],
+            "status": ["RUNNING"],
+            "v3": [None],
+            "delta_1": [None],
+        }
+    )
+    df.to_csv(csv_path, index=False)
+
+    csv_manager = BatchCSVManager(csv_path)
+    csv_manager.load_csv()
+
+    # Remove _update_extra_fields to force fallback path
+    monkeypatch.delattr(BatchCSVManager, "_update_extra_fields")
+
+    batch_settings = {"v3": False}
+
+    # Try to update non-existent mol_id - should return False
+    success = CSVManagerExtensions.update_molecule_with_mopac_results(
+        csv_manager=csv_manager,
+        mol_id="mol_999",  # Does not exist!
+        h298_cbs=-17.5,
+        h298_pm7=-15.3,
+        mopac_hof_values=[0.42],
+        batch_settings=batch_settings,
+    )
+
+    # Should return False on error
+    assert success is False
+
+    # Should log clear error messages
+    assert "mol_999" in caplog.text
+    assert "not found in CSV" in caplog.text
+
+
+def test_fallback_path_handles_index_retrieval_errors(tmp_path, monkeypatch, caplog):
+    """Test that fallback path handles errors during index retrieval gracefully."""
+    csv_path = tmp_path / "test.csv"
+    df = pd.DataFrame(
+        {
+            "mol_id": ["mol_001"],
+            "smiles": ["CCO"],
+            "nheavy": [2],
+            "status": ["RUNNING"],
+            "v3": [None],
+        }
+    )
+    df.to_csv(csv_path, index=False)
+
+    csv_manager = BatchCSVManager(csv_path)
+    csv_manager.load_csv()
+
+    # Remove _update_extra_fields to force fallback path
+    monkeypatch.delattr(BatchCSVManager, "_update_extra_fields")
+
+    # Mock _get_row_index to raise a generic exception
+    def mock_get_row_index(mol_id):
+        raise RuntimeError("Simulated database error")
+
+    monkeypatch.setattr(csv_manager, "_get_row_index", mock_get_row_index)
+
+    batch_settings = {"v3": False}
+
+    # Try to update - should handle exception gracefully
+    success = CSVManagerExtensions.update_molecule_with_mopac_results(
+        csv_manager=csv_manager,
+        mol_id="mol_001",
+        h298_cbs=-17.5,
+        h298_pm7=-15.3,
+        mopac_hof_values=[0.42],
+        batch_settings=batch_settings,
+    )
+
+    # Should return False on error
+    assert success is False
+
+    # Verify error was logged with context
+    assert "mol_001" in caplog.text
+    assert "Failed to retrieve row index" in caplog.text
+
+
+def test_fallback_path_save_only_after_successful_update(tmp_path, monkeypatch):
+    """Test that fallback path saves CSV only after successful updates."""
+    csv_path = tmp_path / "test.csv"
+    df = pd.DataFrame(
+        {
+            "mol_id": ["mol_001"],
+            "smiles": ["CCO"],
+            "nheavy": [2],
+            "status": ["RUNNING"],
+            "delta_1": [None],
+        }
+    )
+    df.to_csv(csv_path, index=False)
+
+    csv_manager = BatchCSVManager(csv_path)
+    csv_manager.load_csv()
+
+    # Remove _update_extra_fields to force fallback path
+    monkeypatch.delattr(BatchCSVManager, "_update_extra_fields")
+
+    # Mock save_csv to track calls
+    save_called = []
+
+    def mock_save():
+        save_called.append(True)
+        csv_manager.df.to_csv(csv_path, index=False)
+
+    monkeypatch.setattr(csv_manager, "save_csv", mock_save)
+
+    batch_settings = {}
+
+    # Update with fields that don't exist in CSV (no actual updates)
+    success = CSVManagerExtensions.update_molecule_with_mopac_results(
+        csv_manager=csv_manager,
+        mol_id="mol_001",
+        h298_cbs=-17.5,
+        h298_pm7=-15.3,
+        mopac_hof_values=[0.42],
+        batch_settings=batch_settings,
+    )
+
+    assert success
+    # save_csv should be called because delta_1 exists and was updated
+    assert len(save_called) == 1
+
+
+def test_fallback_path_no_save_if_no_updates(tmp_path, monkeypatch, caplog):
+    """Test that fallback path doesn't save if no columns match."""
+    csv_path = tmp_path / "test.csv"
+    df = pd.DataFrame(
+        {
+            "mol_id": ["mol_001"],
+            "smiles": ["CCO"],
+            "nheavy": [2],
+            "status": ["RUNNING"],
+        }
+    )
+    df.to_csv(csv_path, index=False)
+
+    csv_manager = BatchCSVManager(csv_path)
+    csv_manager.load_csv()
+
+    # Remove _update_extra_fields to force fallback path
+    monkeypatch.delattr(BatchCSVManager, "_update_extra_fields")
+
+    # Mock save_csv to track calls
+    save_called = []
+
+    def mock_save():
+        save_called.append(True)
+        csv_manager.df.to_csv(csv_path, index=False)
+
+    monkeypatch.setattr(csv_manager, "save_csv", mock_save)
+
+    # Batch settings with fields that don't exist in CSV
+    batch_settings = {
+        "v3": False,
+        "c_method": "gfn2-xtb",
+        "nonexistent_field": 123,
+    }
+
+    # Update - all fields will be skipped
+    success = CSVManagerExtensions.update_molecule_with_mopac_results(
+        csv_manager=csv_manager,
+        mol_id="mol_001",
+        h298_cbs=None,
+        h298_pm7=None,
+        mopac_hof_values=[0.42],
+        batch_settings=batch_settings,
+    )
+
+    assert success
+    # save_csv should NOT be called since no columns matched
+    assert len(save_called) == 0
+    # Should have warnings for missing columns
+    assert "not in CSV schema" in caplog.text
