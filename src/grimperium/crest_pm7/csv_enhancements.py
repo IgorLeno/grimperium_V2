@@ -256,20 +256,21 @@ class CSVManagerExtensions:
         mol_id: str,
         h298_cbs: float | None,
         h298_pm7: float | None,
-        mopac_hof_values: list[float],
+        mopac_hof_values: list[float],  # noqa: ARG004 - kept for API compatibility
         batch_settings: dict[str, Any],
     ) -> bool:
-        """Update CSV with MOPAC results and calculated deltas.
+        """Update CSV with MOPAC absolute differences and batch settings.
 
-        This function now properly integrates batch settings into CSV
-        by using the new _update_extra_fields() method in BatchCSVManager.
+        This function integrates batch settings and abs_diff metrics into CSV.
+        Note: delta_1/2/3 are already calculated and saved by molecule_processor.py,
+        so they are NOT recalculated here to avoid overwriting correct values.
 
         Args:
             csv_manager: BatchCSVManager instance
             mol_id: Molecule identifier
             h298_cbs: CBS-level enthalpy (kcal/mol)
             h298_pm7: PM7 enthalpy (kcal/mol)
-            mopac_hof_values: List of HOF values (one per conformer)
+            mopac_hof_values: List of HOF values (one per conformer) [not used for delta calc]
             batch_settings: Settings dict from BatchSettingsCapture.capture_batch_settings()
 
         Returns:
@@ -281,22 +282,14 @@ class CSVManagerExtensions:
             abs_diff = DeltaCalculations.calculate_abs_diff(h298_cbs, h298_pm7)
             abs_diff_pct = DeltaCalculations.calculate_abs_diff_pct(h298_cbs, h298_pm7)
 
-            # Calculate deltas and select best conformer
-            delta_1, delta_2, delta_3, best_conf_idx = (
-                DeltaCalculations.calculate_deltas_and_select(mopac_hof_values)
-            )
+            # NOTE: Deltas (delta_1/2/3) are already calculated in molecule_processor.py
+            # and saved to CSV via csv_manager.pm7result_to_csv_update().
+            # DO NOT recalculate them here to avoid overwriting with NaN or incorrect values.
 
-            # Convert 0-based index to 1-based for CSV (schema expects 1-3)
-            conformer_selected = best_conf_idx + 1 if best_conf_idx >= 0 else None
-
-            # Prepare update dictionary
+            # Prepare update dictionary (WITHOUT delta_1/2/3/conformer_selected)
             updates = {
                 "abs_diff": abs_diff,
                 "abs_diff_%": abs_diff_pct,
-                "delta_1": delta_1,
-                "delta_2": delta_2,
-                "delta_3": delta_3,
-                "conformer_selected": conformer_selected,
                 # Settings from batch
                 "v3": batch_settings.get("v3"),
                 "qm": batch_settings.get("qm"),
@@ -344,13 +337,9 @@ class CSVManagerExtensions:
                 if updated_any:
                     csv_manager.save_csv()
 
-            d1_str = f"{delta_1:.2f}" if not np.isnan(delta_1) else "NaN"
-            d2_str = f"{delta_2:.2f}" if not np.isnan(delta_2) else "NaN"
-            d3_str = f"{delta_3:.2f}" if not np.isnan(delta_3) else "NaN"
             logger.info(
-                f"[{mol_id}] ✓ CSV enhanced with deltas and settings "
-                f"(v3={batch_settings.get('v3')}, c_method={batch_settings.get('c_method')}, "
-                f"δ1={d1_str}, δ2={d2_str}, δ3={d3_str})"
+                f"[{mol_id}] ✓ CSV enhanced with batch settings "
+                f"(v3={batch_settings.get('v3')}, c_method={batch_settings.get('c_method')})"
             )
             return True
 

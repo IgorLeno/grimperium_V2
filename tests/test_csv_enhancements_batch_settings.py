@@ -21,6 +21,7 @@ from grimperium.crest_pm7.csv_enhancements import (
 def test_batch_settings_persist_to_csv(tmp_path):
     """Test that batch settings are saved to CSV via _update_extra_fields."""
     # Setup CSV with minimal schema
+    # NOTE: delta_1/2/3 are pre-populated (from molecule_processor.py)
     csv_path = tmp_path / "test.csv"
     df = pd.DataFrame(
         {
@@ -38,10 +39,10 @@ def test_batch_settings_persist_to_csv(tmp_path):
             "xtb": [None],
             "precise_scf": [None],
             "scf_threshold": [None],
-            "delta_1": [None],
-            "delta_2": [None],
-            "delta_3": [None],
-            "conformer_selected": [None],
+            "delta_1": [0.0],  # Pre-populated (from pm7result_to_csv_update)
+            "delta_2": [0.45],  # Pre-populated
+            "delta_3": [0.81],  # Pre-populated
+            "conformer_selected": [1],  # Pre-populated
             "abs_diff": [None],
             "abs_diff_%": [None],
         }
@@ -72,7 +73,7 @@ def test_batch_settings_persist_to_csv(tmp_path):
         mol_id="mol_001",
         h298_cbs=-17.5,
         h298_pm7=-15.3,
-        mopac_hof_values=[0.42, 0.87, 1.23],
+        mopac_hof_values=[0.42, 0.87, 1.23],  # Not used for delta calculation
         batch_settings=batch_settings,
     )
 
@@ -95,15 +96,19 @@ def test_batch_settings_persist_to_csv(tmp_path):
     assert df_updated.loc[0, "precise_scf"] == True  # noqa: E712
     assert df_updated.loc[0, "scf_threshold"] == 1.0
 
-    # Check calculated fields also saved
-    assert df_updated.loc[0, "delta_1"] == 0.0  # Best conformer delta
+    # CRITICAL: Verify deltas were NOT overwritten (should preserve pre-populated values)
+    assert df_updated.loc[0, "delta_1"] == 0.0
     assert df_updated.loc[0, "delta_2"] == pytest.approx(0.45, abs=0.01)
     assert df_updated.loc[0, "delta_3"] == pytest.approx(0.81, abs=0.01)
-    assert df_updated.loc[0, "conformer_selected"] == 1  # 1-based index (not 0-based)
+    assert df_updated.loc[0, "conformer_selected"] == 1
 
 
 def test_batch_settings_with_nan_deltas(tmp_path):
-    """Test that settings persist even when deltas are NaN (edge case)."""
+    """Test that settings persist even when deltas are NaN (edge case).
+
+    Tests that pre-existing NaN deltas (from molecule_processor failure)
+    are NOT overwritten by csv_enhancements.
+    """
     csv_path = tmp_path / "test.csv"
     df = pd.DataFrame(
         {
@@ -114,8 +119,8 @@ def test_batch_settings_with_nan_deltas(tmp_path):
             "v3": [None],
             "c_method": [None],
             "energy_window": [None],
-            "delta_1": [None],
-            "delta_2": [None],
+            "delta_1": [None],  # NaN from molecule_processor failure
+            "delta_2": [None],  # NaN from molecule_processor failure
         }
     )
     df.to_csv(csv_path, index=False)
@@ -129,25 +134,25 @@ def test_batch_settings_with_nan_deltas(tmp_path):
         "energy_window": 5.0,
     }
 
-    # Empty HOF values (should produce NaN deltas)
+    # Call with empty HOF values (not used for delta calculation anyway)
     success = CSVManagerExtensions.update_molecule_with_mopac_results(
         csv_manager=csv_manager,
         mol_id="mol_001",
         h298_cbs=None,
         h298_pm7=None,
-        mopac_hof_values=[],  # Empty! Should give NaN deltas
+        mopac_hof_values=[],  # Not used for delta calculation
         batch_settings=batch_settings,
     )
 
     assert success
 
-    # Settings should still persist even with NaN deltas
+    # Settings should persist
     df_updated = pd.read_csv(csv_path)
     assert df_updated.loc[0, "v3"] == True  # noqa: E712
     assert df_updated.loc[0, "c_method"] == "gfn2-xtb"
     assert df_updated.loc[0, "energy_window"] == 5.0
 
-    # Deltas should be NaN
+    # Deltas should remain NaN (not overwritten)
     assert pd.isna(df_updated.loc[0, "delta_1"])
     assert pd.isna(df_updated.loc[0, "delta_2"])
 
@@ -162,7 +167,7 @@ def test_update_extra_fields_method(tmp_path):
             "nheavy": [2, 1],
             "status": ["OK", "RUNNING"],
             "v3": [None, None],
-            "delta_1": [None, None],
+            "abs_diff": [None, None],
         }
     )
     df.to_csv(csv_path, index=False)
@@ -175,16 +180,16 @@ def test_update_extra_fields_method(tmp_path):
         mol_id="mol_001",
         field_updates={
             "v3": False,
-            "delta_1": 0.0,
+            "abs_diff": 2.2,
         },
     )
 
     # Verify only mol_001 updated
     df_updated = pd.read_csv(csv_path)
     assert df_updated.loc[0, "v3"] == False  # noqa: E712
-    assert df_updated.loc[0, "delta_1"] == 0.0
+    assert df_updated.loc[0, "abs_diff"] == 2.2
     assert pd.isna(df_updated.loc[1, "v3"])  # mol_002 unchanged
-    assert pd.isna(df_updated.loc[1, "delta_1"])
+    assert pd.isna(df_updated.loc[1, "abs_diff"])
 
 
 def test_update_extra_fields_unknown_column_warning(tmp_path, caplog):
@@ -362,7 +367,7 @@ def test_fallback_path_save_only_after_successful_update(tmp_path, monkeypatch):
             "smiles": ["CCO"],
             "nheavy": [2],
             "status": ["RUNNING"],
-            "delta_1": [None],
+            "abs_diff": [None],  # Field that will be updated
         }
     )
     df.to_csv(csv_path, index=False)
@@ -384,7 +389,7 @@ def test_fallback_path_save_only_after_successful_update(tmp_path, monkeypatch):
 
     batch_settings = {}
 
-    # Update with fields that don't exist in CSV (no actual updates)
+    # Update - abs_diff field exists and will be updated
     success = CSVManagerExtensions.update_molecule_with_mopac_results(
         csv_manager=csv_manager,
         mol_id="mol_001",
@@ -395,7 +400,7 @@ def test_fallback_path_save_only_after_successful_update(tmp_path, monkeypatch):
     )
 
     assert success
-    # save_csv should be called because delta_1 exists and was updated
+    # save_csv should be called because abs_diff exists and was updated
     assert len(save_called) == 1
 
 
