@@ -142,6 +142,12 @@ class BatchExecutionManager:
 
         # Process each molecule
         for i, mol in enumerate(batch.molecules, start=1):
+            if progress_callback:
+                try:
+                    progress_callback(mol.mol_id, i - 1, batch.size)
+                except Exception as e:
+                    LOG.warning(f"Progress callback error (pre): {e}")
+
             try:
                 self._process_molecule(
                     mol_id=mol.mol_id,
@@ -166,7 +172,7 @@ class BatchExecutionManager:
                 try:
                     progress_callback(mol.mol_id, i, batch.size)
                 except Exception as e:
-                    LOG.warning(f"Progress callback error: {e}")
+                    LOG.warning(f"Progress callback error (post): {e}")
 
         # Finalize timing
         result.total_time = time.time() - start_time

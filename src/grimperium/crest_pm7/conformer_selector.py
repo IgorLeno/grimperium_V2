@@ -37,11 +37,6 @@ def get_num_conformers(
 ) -> tuple[int, str]:
     """Determine optimal number of conformers to process.
 
-    Flexibility is determined by config-driven thresholds via classify_flexibility:
-    - Rigid: nrotbonds <= config.nrotbonds_threshold_rigid_to_medium
-    - Medium: nrotbonds <= config.nrotbonds_threshold_medium_to_flexible
-    - Flexible: nrotbonds > config.nrotbonds_threshold_medium_to_flexible
-
     Args:
         nrotbonds: Number of rotatable bonds
         config: Pipeline configuration
@@ -50,24 +45,11 @@ def get_num_conformers(
     Returns:
         Tuple of (num_conformers, decision_reason)
     """
-    flexibility = classify_flexibility(nrotbonds, config)
-
-    # Get thresholds from config for informational messages
-    rigid_threshold = config.nrotbonds_threshold_rigid_to_medium
-    medium_threshold = config.nrotbonds_threshold_medium_to_flexible
-
-    if flexibility == "rigid":
-        target = 1
-        reason = f"rigid molecule (nrotbonds={nrotbonds}<={rigid_threshold})"
-    elif flexibility == "medium":
-        target = 3
-        reason = f"medium flexibility (nrotbonds={nrotbonds}, {rigid_threshold+1}-{medium_threshold})"
-    else:
-        target = 5
-        reason = f"flexible molecule (nrotbonds={nrotbonds}>{medium_threshold})"
-
-    # Respect max_conformers from config
-    target = min(target, config.max_conformers)
+    target = min(3, config.max_conformers)
+    reason = (
+        f"fixed target=3 (nrotbonds={nrotbonds}); "
+        f"max_conformers={config.max_conformers}"
+    )
 
     # Respect available conformers
     if max_available is not None and max_available < target:

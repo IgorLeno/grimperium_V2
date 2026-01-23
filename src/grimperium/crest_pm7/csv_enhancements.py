@@ -32,17 +32,18 @@ class DeltaCalculations:
     Calculate energy delta values for conformer selection and CSV population.
 
     The "delta" concept: After MOPAC optimization, we have multiple conformer
-    energies. The deltas represent the energy differences between conformers.
+    energies. The deltas represent the absolute difference between CBS reference
+    enthalpy (H298_cbs) and each conformer's HOF.
 
     Example:
         >>> hof_values = [0.42, 0.87, 1.23]  # Heats of formation (kcal/mol)
-        >>> d1, d2, d3, best_idx = calculate_deltas_and_select(hof_values)
-        >>> d1  # Lowest delta (best conformer)
-        0.0
-        >>> d2  # 2nd lowest
-        0.45
-        >>> d3  # 3rd lowest
-        0.81
+        >>> d1, d2, d3, best_idx = calculate_deltas_and_select(-0.10, hof_values)
+        >>> d1  # |H298_cbs - hof_1|
+        0.52
+        >>> d2  # |H298_cbs - hof_2|
+        0.97
+        >>> d3  # |H298_cbs - hof_3|
+        1.33
         >>> best_idx  # Index of best conformer
         0
     """
@@ -103,14 +104,18 @@ class DeltaCalculations:
 
     @staticmethod
     def calculate_deltas_and_select(
+        h298_cbs: float | None,
         mopac_hof_values: list[float],
     ) -> tuple[float, float, float, int]:
-        """Calculate delta energies and select best conformer (with robust type handling).
+        """Calculate delta values vs CBS and select best conformer.
 
         Given a list of MOPAC heats of formation (one per conformer),
-        calculate the energy differences from the best (lowest) conformer.
+        calculate absolute differences against H298_cbs for the lowest-energy
+        conformers (top 3). The selected conformer is the one with minimum
+        delta among those three.
 
         Args:
+            h298_cbs: CBS-level enthalpy at 298K (kcal/mol)
             mopac_hof_values: List of heat of formation values (kcal/mol)
                             One value per conformer
                             Example: [0.42, 0.87, 1.23]
@@ -118,23 +123,15 @@ class DeltaCalculations:
 
         Returns:
             Tuple of (delta_1, delta_2, delta_3, best_conformer_idx)
-            - delta_1: 0.0 (always, the best conformer's relative energy)
-            - delta_2: Energy difference to 2nd best
-            - delta_3: Energy difference to 3rd best
-            - best_conformer_idx: Index of the best (lowest energy) conformer
-
-        Example:
-            >>> values = [0.42, 0.87, 1.23]
-            >>> d1, d2, d3, idx = calculate_deltas_and_select(values)
-            >>> d1, d2, d3, idx
-            (0.0, 0.45, 0.81, 0)
-
-            # Explanation:
-            # - Best conformer (idx=0): 0.42 kcal/mol
-            # - 2nd best (idx=1): 0.87 kcal/mol → delta = 0.87 - 0.42 = 0.45
-            # - 3rd best (idx=2): 1.23 kcal/mol → delta = 1.23 - 0.42 = 0.81
+            - delta_1: |H298_cbs - hof_1| for lowest-energy conformer
+            - delta_2: |H298_cbs - hof_2| for second lowest-energy conformer
+            - delta_3: |H298_cbs - hof_3| for third lowest-energy conformer
+            - best_conformer_idx: Index (0-based) with minimum delta in top 3
+              or -1 if unavailable
         """
-        # Handle invalid input
+        if h298_cbs is None or pd.isna(h298_cbs):
+            return np.nan, np.nan, np.nan, -1
+
         if not mopac_hof_values:
             return np.nan, np.nan, np.nan, -1
 
@@ -143,30 +140,28 @@ class DeltaCalculations:
             pd.Series(mopac_hof_values), errors="coerce"
         ).to_numpy(dtype=float)
 
-        # Check if all values are NaN
-        if pd.isna(numeric_values).all():
-            return np.nan, np.nan, np.nan, -1
-
-        valid_mask = ~np.isnan(numeric_values)
-        valid_values = numeric_values[valid_mask]
-
+        # Keep only valid values
+        valid_values = numeric_values[~np.isnan(numeric_values)]
         if len(valid_values) == 0:
             return np.nan, np.nan, np.nan, -1
 
-        # Use nanmin/nanargmin for NaN-safe operations
-        min_energy = np.nanmin(valid_values)
-        best_idx = int(np.nanargmin(numeric_values))  # Index in original array
+        # Sort by energy (lowest first) and take top 3
+        sorted_hofs = np.sort(valid_values)[:3]
+        deltas = [abs(float(h298_cbs) - float(hof)) for hof in sorted_hofs]
 
-        # Calculate deltas relative to best
-        deltas = valid_values - min_energy
-        deltas_sorted = np.sort(deltas)
+        # Pad to length 3 with NaN if needed
+        while len(deltas) < 3:
+            deltas.append(np.nan)
 
-        # Extract delta_1, delta_2, delta_3
-        delta_1 = deltas_sorted[0] if len(deltas_sorted) > 0 else np.nan
-        delta_2 = deltas_sorted[1] if len(deltas_sorted) > 1 else np.nan
-        delta_3 = deltas_sorted[2] if len(deltas_sorted) > 2 else np.nan
+        # Select conformer with minimum delta among available values
+        valid_deltas = [d for d in deltas if not np.isnan(d)]
+        if not valid_deltas:
+            return np.nan, np.nan, np.nan, -1
 
-        return delta_1, delta_2, delta_3, best_idx
+        min_delta = min(valid_deltas)
+        best_idx = deltas.index(min_delta)
+
+        return deltas[0], deltas[1], deltas[2], best_idx
 
 
 # ╔════════════════════════════════════════════════════════════════════════════════╗
@@ -261,16 +256,15 @@ class CSVManagerExtensions:
     ) -> bool:
         """Update CSV with MOPAC absolute differences and batch settings.
 
-        This function integrates batch settings and abs_diff metrics into CSV.
-        Note: delta_1/2/3 are already calculated and saved by molecule_processor.py,
-        so they are NOT recalculated here to avoid overwriting correct values.
+        This function integrates batch settings, abs_diff metrics, and delta
+        calculations into CSV.
 
         Args:
             csv_manager: BatchCSVManager instance
             mol_id: Molecule identifier
             h298_cbs: CBS-level enthalpy (kcal/mol)
             h298_pm7: PM7 enthalpy (kcal/mol)
-            mopac_hof_values: List of HOF values (one per conformer) [not used for delta calc]
+            mopac_hof_values: List of HOF values (one per conformer)
             batch_settings: Settings dict from BatchSettingsCapture.capture_batch_settings()
 
         Returns:
@@ -282,14 +276,23 @@ class CSVManagerExtensions:
             abs_diff = DeltaCalculations.calculate_abs_diff(h298_cbs, h298_pm7)
             abs_diff_pct = DeltaCalculations.calculate_abs_diff_pct(h298_cbs, h298_pm7)
 
-            # NOTE: Deltas (delta_1/2/3) are already calculated in molecule_processor.py
-            # and saved to CSV via csv_manager.pm7result_to_csv_update().
-            # DO NOT recalculate them here to avoid overwriting with NaN or incorrect values.
+            # Calculate deltas vs CBS for top 3 conformers
+            delta_1, delta_2, delta_3, best_idx = (
+                DeltaCalculations.calculate_deltas_and_select(
+                    h298_cbs=h298_cbs,
+                    mopac_hof_values=mopac_hof_values,
+                )
+            )
+            conformer_selected = best_idx + 1 if best_idx >= 0 else None
 
-            # Prepare update dictionary (WITHOUT delta_1/2/3/conformer_selected)
+            # Prepare update dictionary
             updates = {
                 "abs_diff": abs_diff,
                 "abs_diff_%": abs_diff_pct,
+                "delta_1": delta_1,
+                "delta_2": delta_2,
+                "delta_3": delta_3,
+                "conformer_selected": conformer_selected,
                 # Settings from batch
                 "v3": batch_settings.get("v3"),
                 "qm": batch_settings.get("qm"),
@@ -375,8 +378,8 @@ if __name__ == "__main__":
     # Test delta calculations
     print("\n1. Testing DeltaCalculations...")
     values = [0.42, 0.87, 1.23]
-    d1, d2, d3, idx = DeltaCalculations.calculate_deltas_and_select(values)
-    print(f"   Values: {values}")
+    d1, d2, d3, idx = DeltaCalculations.calculate_deltas_and_select(-0.10, values)
+    print(f"   HOF values: {values}")
     print(f"   Delta 1: {d1:.2f}")
     print(f"   Delta 2: {d2:.2f}")
     print(f"   Delta 3: {d3:.2f}")

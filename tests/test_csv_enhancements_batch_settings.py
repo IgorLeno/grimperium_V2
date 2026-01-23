@@ -19,9 +19,8 @@ from grimperium.crest_pm7.csv_enhancements import (
 
 
 def test_batch_settings_persist_to_csv(tmp_path):
-    """Test that batch settings are saved to CSV via _update_extra_fields."""
+    """Test that batch settings and deltas are saved to CSV via _update_extra_fields."""
     # Setup CSV with minimal schema
-    # NOTE: delta_1/2/3 are pre-populated (from molecule_processor.py)
     csv_path = tmp_path / "test.csv"
     df = pd.DataFrame(
         {
@@ -39,10 +38,10 @@ def test_batch_settings_persist_to_csv(tmp_path):
             "xtb": [None],
             "precise_scf": [None],
             "scf_threshold": [None],
-            "delta_1": [0.0],  # Pre-populated (from pm7result_to_csv_update)
-            "delta_2": [0.45],  # Pre-populated
-            "delta_3": [0.81],  # Pre-populated
-            "conformer_selected": [1],  # Pre-populated
+            "delta_1": [None],
+            "delta_2": [None],
+            "delta_3": [None],
+            "conformer_selected": [None],
             "abs_diff": [None],
             "abs_diff_%": [None],
         }
@@ -73,7 +72,7 @@ def test_batch_settings_persist_to_csv(tmp_path):
         mol_id="mol_001",
         h298_cbs=-17.5,
         h298_pm7=-15.3,
-        mopac_hof_values=[0.42, 0.87, 1.23],  # Not used for delta calculation
+        mopac_hof_values=[0.42, 0.87, 1.23],
         batch_settings=batch_settings,
     )
 
@@ -96,19 +95,15 @@ def test_batch_settings_persist_to_csv(tmp_path):
     assert df_updated.loc[0, "precise_scf"] == True  # noqa: E712
     assert df_updated.loc[0, "scf_threshold"] == 1.0
 
-    # CRITICAL: Verify deltas were NOT overwritten (should preserve pre-populated values)
-    assert df_updated.loc[0, "delta_1"] == 0.0
-    assert df_updated.loc[0, "delta_2"] == pytest.approx(0.45, abs=0.01)
-    assert df_updated.loc[0, "delta_3"] == pytest.approx(0.81, abs=0.01)
+    # Verify deltas were calculated vs H298_cbs (top 3 conformers)
+    assert df_updated.loc[0, "delta_1"] == pytest.approx(17.92, abs=0.01)
+    assert df_updated.loc[0, "delta_2"] == pytest.approx(18.37, abs=0.01)
+    assert df_updated.loc[0, "delta_3"] == pytest.approx(18.73, abs=0.01)
     assert df_updated.loc[0, "conformer_selected"] == 1
 
 
 def test_batch_settings_with_nan_deltas(tmp_path):
-    """Test that settings persist even when deltas are NaN (edge case).
-
-    Tests that pre-existing NaN deltas (from molecule_processor failure)
-    are NOT overwritten by csv_enhancements.
-    """
+    """Test that settings persist even when deltas are NaN (edge case)."""
     csv_path = tmp_path / "test.csv"
     df = pd.DataFrame(
         {

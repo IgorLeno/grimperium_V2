@@ -196,6 +196,27 @@ class BatchCSVManager:
             },
         )
 
+        # Normalize column names (trim whitespace) to avoid schema mismatches
+        original_columns = list(self.df.columns)
+        normalized_columns = [
+            col.strip() if isinstance(col, str) else col for col in original_columns
+        ]
+        if normalized_columns != original_columns:
+            if len(set(normalized_columns)) != len(normalized_columns):
+                duplicates = [
+                    col
+                    for col in set(normalized_columns)
+                    if normalized_columns.count(col) > 1
+                ]
+                raise ValueError(
+                    "CSV has duplicate columns after normalization: "
+                    f"{', '.join(sorted(duplicates))}"
+                )
+            self.df.columns = normalized_columns
+            LOG.warning(
+                "Normalized CSV column names (trimmed whitespace) to match schema."
+            )
+
         # Ensure boolean columns use object dtype to avoid FutureWarning
         # when assigning True/False to columns that may contain NaN
         bool_columns = ["success"]
@@ -337,7 +358,15 @@ class BatchCSVManager:
         try:
             df = self._ensure_loaded()
             idx = self._get_row_index(mol_id)
-            val = df.at[idx, "reference_hof"]
+            if "reference_hof" in df.columns:
+                val = df.at[idx, "reference_hof"]
+            elif "H298_cbs" in df.columns:
+                val = df.at[idx, "H298_cbs"]
+            else:
+                LOG.debug(
+                    f"[{mol_id}] CSV missing reference_hof/H298_cbs columns"
+                )
+                return None
             if pd.isna(val):
                 return None
             return float(val)
@@ -868,22 +897,9 @@ class BatchCSVManager:
             elif result.conformers:
                 mopac_status = "FAILED"
 
-        # Calculate conformer_selected (which conformer had minimum delta)
+        # NOTE: delta_1/2/3 and conformer_selected are computed later using
+        # H298_cbs and conformer HOF values in CSV enhancements.
         conformer_selected = None
-        if (
-            result.delta_e_12 is not None
-            or result.delta_e_13 is not None
-            or result.delta_e_15 is not None
-        ):
-            deltas = []
-            if result.delta_e_12 is not None:
-                deltas.append((1, result.delta_e_12))
-            if result.delta_e_13 is not None:
-                deltas.append((2, result.delta_e_13))
-            if result.delta_e_15 is not None:
-                deltas.append((3, result.delta_e_15))
-            if deltas:
-                conformer_selected = min(deltas, key=lambda x: x[1])[0]
 
         return {
             # RDKit Descriptors (from PM7Result)
@@ -925,16 +941,10 @@ class BatchCSVManager:
             "assigned_crest_timeout": round(crest_timeout_used, 1),  # Renamed
             "assigned_mopac_timeout": round(mopac_timeout_used, 1),  # Renamed
             # Delta-E (renamed for clarity)
-            "delta_1": (
-                round(result.delta_e_12, 4) if result.delta_e_12 is not None else None
-            ),
-            "delta_2": (
-                round(result.delta_e_13, 4) if result.delta_e_13 is not None else None
-            ),
-            "delta_3": (
-                round(result.delta_e_15, 4) if result.delta_e_15 is not None else None
-            ),
-            "conformer_selected": conformer_selected,  # NEW: Which conformer was selected
+            "delta_1": None,
+            "delta_2": None,
+            "delta_3": None,
+            "conformer_selected": conformer_selected,
             # Batch Tracking
             "batch_id": batch_id,
             "batch_order": batch_order,
