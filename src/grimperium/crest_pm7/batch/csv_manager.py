@@ -363,9 +363,7 @@ class BatchCSVManager:
             elif "H298_cbs" in df.columns:
                 val = df.at[idx, "H298_cbs"]
             else:
-                LOG.debug(
-                    f"[{mol_id}] CSV missing reference_hof/H298_cbs columns"
-                )
+                LOG.debug(f"[{mol_id}] CSV missing reference_hof/H298_cbs columns")
                 return None
             if pd.isna(val):
                 return None
