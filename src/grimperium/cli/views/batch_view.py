@@ -5,11 +5,19 @@ Provides UI for:
 - Running batch jobs
 - Viewing batch status
 - Configuring batch parameters
+
+Progress Tracking:
+    Uses a 5-stage progress bar (30 chars) with CSV-driven state machine.
+    Daemon thread polls CSV every 500ms and communicates via Queue.
 """
 
+import logging
+import time
 from pathlib import Path
+from queue import Queue
 from typing import TYPE_CHECKING, Any, ClassVar
 
+from rich.live import Live
 from rich.panel import Panel
 from rich.progress import (
     BarColumn,
@@ -23,11 +31,19 @@ from rich.table import Table
 
 from grimperium.cli.constants import DATA_DIR
 from grimperium.cli.menu import MenuOption
+from grimperium.cli.progress_tracker import (
+    CSVMonitor,
+    ProgressEvent,
+    ProgressTracker,
+    consume_events,
+)
 from grimperium.cli.styles import COLORS, ICONS
 from grimperium.cli.views.base_view import BaseView
 
 if TYPE_CHECKING:
     from grimperium.cli.controller import CliController
+
+logger = logging.getLogger(__name__)
 
 
 class BatchView(BaseView):
@@ -268,7 +284,11 @@ class BatchView(BaseView):
             self.show_error(f"Invalid input: {e}")
 
     def _run_batch(self) -> None:
-        """Run a batch of molecules."""
+        """Run a batch of molecules with granular progress tracking.
+
+        Uses a 5-stage progress bar with CSV-driven state machine.
+        Falls back to legacy progress bar if new system fails.
+        """
         if not self.csv_path or not self.csv_path.exists():
             self.show_error("CSV path not configured or file not found")
             return
@@ -277,80 +297,276 @@ class BatchView(BaseView):
             self.detail_dir = self.DEFAULT_DETAIL_DIR
 
         try:
-            from grimperium.crest_pm7.batch import (
-                BatchCSVManager,
-                BatchExecutionManager,
-                BatchSortingStrategy,
-                ConformerDetailManager,
-                FixedTimeoutProcessor,
-            )
-            from grimperium.crest_pm7.config import PM7Config
-
-            # Initialize components
-            csv_manager = BatchCSVManager(self.csv_path)
-            csv_manager.load_csv()
-
-            detail_manager = ConformerDetailManager(self.detail_dir)
-            pm7_config = PM7Config()  # Default config
-
-            processor = FixedTimeoutProcessor(
-                config=pm7_config,
-                crest_timeout_minutes=self.crest_timeout,
-                mopac_timeout_minutes=self.mopac_timeout,
-            )
-
-            exec_manager = BatchExecutionManager(
-                csv_manager=csv_manager,
-                detail_manager=detail_manager,
-                pm7_config=pm7_config,
-                processor_adapter=processor,
-            )
-
-            # Create batch
-            batch_id = csv_manager.generate_batch_id()
-            batch = csv_manager.select_batch(
-                batch_id=batch_id,
-                batch_size=self.batch_size,
-                crest_timeout_minutes=self.crest_timeout,
-                mopac_timeout_minutes=self.mopac_timeout,
-                strategy=BatchSortingStrategy.RERUN_FIRST_THEN_EASY,
-            )
-
-            if batch.is_empty:
-                self.show_success("No molecules available for processing")
-                return
-
-            self.console.print()
+            self._run_batch_with_tracker()
+        except Exception as e:
             self.console.print(
-                f"[bold]Starting batch {batch_id}[/bold]: {batch.size} molecules"
+                "[bold yellow]Warning: Progress tracker failed, "
+                "using legacy mode[/bold yellow]"
             )
-            self.console.print()
+            logger.exception(f"Progress tracker error: {e}")
+            self._run_batch_legacy()
 
-            # Run with progress bar
-            with Progress(
-                SpinnerColumn(),
-                TextColumn("[progress.description]{task.description}"),
-                BarColumn(),
-                MofNCompleteColumn(),
-                TimeElapsedColumn(),
-                console=self.console,
-            ) as progress:
-                task = progress.add_task("Processing", total=batch.size)
+    def _run_batch_with_tracker(self) -> None:
+        """Run batch with granular 5-stage progress tracking.
 
-                def update_progress(mol_id: str, current: int, total: int) -> None:
-                    progress.update(
-                        task, completed=current, description=f"Processing {mol_id}"
-                    )
+        Uses Queue pattern for thread-safe communication between
+        CSVMonitor daemon thread and main thread Rich.Live updates.
+        """
+        from grimperium.crest_pm7.batch import (
+            BatchCSVManager,
+            BatchExecutionManager,
+            BatchSortingStrategy,
+            ConformerDetailManager,
+            FixedTimeoutProcessor,
+        )
+        from grimperium.crest_pm7.config import PM7Config
 
-                result = exec_manager.execute_batch(
-                    batch, progress_callback=update_progress
-                )
+        if self.csv_path is None:
+            raise ValueError("CSV path not configured")
 
-            # Display result
+        if self.detail_dir is None:
+            self.detail_dir = self.DEFAULT_DETAIL_DIR
+
+        # Initialize components
+        csv_manager = BatchCSVManager(self.csv_path)
+        csv_manager.load_csv()
+
+        detail_manager = ConformerDetailManager(self.detail_dir)
+        pm7_config = PM7Config()
+
+        processor = FixedTimeoutProcessor(
+            config=pm7_config,
+            crest_timeout_minutes=self.crest_timeout,
+            mopac_timeout_minutes=self.mopac_timeout,
+        )
+
+        exec_manager = BatchExecutionManager(
+            csv_manager=csv_manager,
+            detail_manager=detail_manager,
+            pm7_config=pm7_config,
+            processor_adapter=processor,
+        )
+
+        # Create batch
+        batch_id = csv_manager.generate_batch_id()
+        batch = csv_manager.select_batch(
+            batch_id=batch_id,
+            batch_size=self.batch_size,
+            crest_timeout_minutes=self.crest_timeout,
+            mopac_timeout_minutes=self.mopac_timeout,
+            strategy=BatchSortingStrategy.RERUN_FIRST_THEN_EASY,
+        )
+
+        if batch.is_empty:
+            self.show_success("No molecules available for processing")
+            return
+
+        self.console.print()
+        self.console.print(
+            f"[bold]Starting batch {batch_id}[/bold]: {batch.size} molecules"
+        )
+        self.console.print()
+
+        # Create event queue for thread-safe communication
+        event_queue: Queue[ProgressEvent] = Queue()
+
+        # Initialize progress tracker (main thread only)
+        tracker = ProgressTracker(
+            console=self.console,
+            batch_size=batch.size,
+        )
+
+        # Initialize CSV monitor (daemon thread)
+        csv_monitor = CSVMonitor(
+            csv_path=self.csv_path,
+            event_queue=event_queue,
+            poll_interval_ms=500,
+        )
+
+        # Register all molecules
+        for mol in batch.molecules:
+            tracker.register_molecule(mol.mol_id)
+            csv_monitor.register_molecule(mol.mol_id)
+
+        # Store current molecule being processed
+        current_mol_id: str | None = None
+        frame_idx = 0
+        result = None
+
+        def progress_callback(mol_id: str, current: int, total: int) -> None:
+            """Callback from execution manager to track current molecule."""
+            nonlocal current_mol_id
+            current_mol_id = mol_id
+
+        def completion_callback(mol_id: str, success: bool, _status: str) -> None:
+            """Callback when molecule processing completes."""
+            tracker.mark_completed(mol_id, success=success)
+
+        csv_monitor.start()
+
+        try:
+            with Live(console=self.console, refresh_per_second=10) as live:
+                # Start batch execution in a way that allows progress updates
+                # We need to run execute_batch and update display concurrently
+
+                # Use threading to run batch in background while updating display
+                import threading
+
+                batch_complete = threading.Event()
+                batch_error: Exception | None = None
+
+                def run_batch() -> None:
+                    nonlocal result, batch_error
+                    try:
+                        result = exec_manager.execute_batch(
+                            batch, progress_callback=progress_callback
+                        )
+                    except Exception as e:
+                        batch_error = e
+                    finally:
+                        batch_complete.set()
+
+                batch_thread = threading.Thread(target=run_batch, daemon=True)
+                batch_thread.start()
+
+                # Main loop: consume events and update display
+                while not batch_complete.is_set():
+                    # Consume all pending events (non-blocking)
+                    consume_events(event_queue, tracker)
+
+                    # Render display
+                    display = self._render_batch_display(tracker, frame_idx)
+                    live.update(display)
+
+                    frame_idx += 1
+                    time.sleep(0.1)  # 10 FPS
+
+                # Final update after batch completes
+                consume_events(event_queue, tracker)
+                display = self._render_batch_display(tracker, frame_idx)
+                live.update(display)
+
+                if batch_error is not None:
+                    raise batch_error
+
+        finally:
+            csv_monitor.stop(timeout=1.0)
+
+        # Display final result
+        if result is not None:
             self._display_batch_result(result)
 
-        except Exception as e:
-            self.show_error(f"Batch execution failed: {e}")
+    def _render_batch_display(self, tracker: ProgressTracker, frame_idx: int) -> Panel:
+        """Render complete batch display with header and progress bars.
+
+        Args:
+            tracker: ProgressTracker with current state
+            frame_idx: Animation frame index for spinner
+
+        Returns:
+            Rich Panel with formatted display
+        """
+        # Build header (7 lines)
+        header = tracker.render_batch_header()
+
+        # Build molecule progress lines
+        lines = [header, ""]  # Header + blank line
+
+        for mol_id in tracker._molecules:
+            line = tracker.render_molecule_line(mol_id, frame_idx)
+            lines.append(line)
+
+        content = "\n".join(lines)
+
+        return Panel(
+            content,
+            title=f"[bold {COLORS['batch']}]Batch Processing[/bold {COLORS['batch']}]",
+            border_style=COLORS["batch"],
+        )
+
+    def _run_batch_legacy(self) -> None:
+        """Run batch with legacy simple progress bar.
+
+        Fallback when new progress tracker fails.
+        """
+        from grimperium.crest_pm7.batch import (
+            BatchCSVManager,
+            BatchExecutionManager,
+            BatchSortingStrategy,
+            ConformerDetailManager,
+            FixedTimeoutProcessor,
+        )
+        from grimperium.crest_pm7.config import PM7Config
+
+        if self.csv_path is None:
+            self.show_error("CSV path not configured")
+            return
+
+        if self.detail_dir is None:
+            self.detail_dir = self.DEFAULT_DETAIL_DIR
+
+        # Initialize components
+        csv_manager = BatchCSVManager(self.csv_path)
+        csv_manager.load_csv()
+
+        detail_manager = ConformerDetailManager(self.detail_dir)
+        pm7_config = PM7Config()
+
+        processor = FixedTimeoutProcessor(
+            config=pm7_config,
+            crest_timeout_minutes=self.crest_timeout,
+            mopac_timeout_minutes=self.mopac_timeout,
+        )
+
+        exec_manager = BatchExecutionManager(
+            csv_manager=csv_manager,
+            detail_manager=detail_manager,
+            pm7_config=pm7_config,
+            processor_adapter=processor,
+        )
+
+        # Create batch
+        batch_id = csv_manager.generate_batch_id()
+        batch = csv_manager.select_batch(
+            batch_id=batch_id,
+            batch_size=self.batch_size,
+            crest_timeout_minutes=self.crest_timeout,
+            mopac_timeout_minutes=self.mopac_timeout,
+            strategy=BatchSortingStrategy.RERUN_FIRST_THEN_EASY,
+        )
+
+        if batch.is_empty:
+            self.show_success("No molecules available for processing")
+            return
+
+        self.console.print()
+        self.console.print(
+            f"[bold]Starting batch {batch_id}[/bold]: {batch.size} molecules"
+        )
+        self.console.print()
+
+        # Run with legacy progress bar
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            BarColumn(),
+            MofNCompleteColumn(),
+            TimeElapsedColumn(),
+            console=self.console,
+        ) as progress:
+            task = progress.add_task("Processing", total=batch.size)
+
+            def update_progress(mol_id: str, current: int, total: int) -> None:
+                progress.update(
+                    task, completed=current, description=f"Processing {mol_id}"
+                )
+
+            result = exec_manager.execute_batch(
+                batch, progress_callback=update_progress
+            )
+
+        # Display result
+        self._display_batch_result(result)
 
     def _display_batch_result(self, result: Any) -> None:
         """Display batch execution result."""
