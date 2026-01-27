@@ -12,6 +12,7 @@ Progress Tracking:
 """
 
 import logging
+import threading
 import time
 from pathlib import Path
 from queue import Queue
@@ -306,11 +307,14 @@ class BatchView(BaseView):
             logger.exception(f"Progress tracker error: {e}")
             self._run_batch_legacy()
 
-    def _run_batch_with_tracker(self) -> None:
-        """Run batch with granular 5-stage progress tracking.
+    def _prepare_batch(self) -> tuple[Any, Any]:
+        """Prepare batch components and create batch.
 
-        Uses Queue pattern for thread-safe communication between
-        CSVMonitor daemon thread and main thread Rich.Live updates.
+        Returns:
+            Tuple of (BatchExecutionManager, Batch)
+
+        Raises:
+            ValueError: If CSV path is not configured
         """
         from grimperium.crest_pm7.batch import (
             BatchCSVManager,
@@ -357,13 +361,24 @@ class BatchView(BaseView):
             strategy=BatchSortingStrategy.RERUN_FIRST_THEN_EASY,
         )
 
+        return exec_manager, batch
+
+    def _run_batch_with_tracker(self) -> None:
+        """Run batch with granular 5-stage progress tracking.
+
+        Uses Queue pattern for thread-safe communication between
+        CSVMonitor daemon thread and main thread Rich.Live updates.
+        """
+        # Prepare batch components
+        exec_manager, batch = self._prepare_batch()
+
         if batch.is_empty:
             self.show_success("No molecules available for processing")
             return
 
         self.console.print()
         self.console.print(
-            f"[bold]Starting batch {batch_id}[/bold]: {batch.size} molecules"
+            f"[bold]Starting batch {batch.batch_id}[/bold]: {batch.size} molecules"
         )
         self.console.print()
 
@@ -388,19 +403,8 @@ class BatchView(BaseView):
             tracker.register_molecule(mol.mol_id)
             csv_monitor.register_molecule(mol.mol_id)
 
-        # Store current molecule being processed
-        current_mol_id: str | None = None
         frame_idx = 0
         result = None
-
-        def progress_callback(mol_id: str, current: int, total: int) -> None:
-            """Callback from execution manager to track current molecule."""
-            nonlocal current_mol_id
-            current_mol_id = mol_id
-
-        def completion_callback(mol_id: str, success: bool, _status: str) -> None:
-            """Callback when molecule processing completes."""
-            tracker.mark_completed(mol_id, success=success)
 
         csv_monitor.start()
 
@@ -410,17 +414,13 @@ class BatchView(BaseView):
                 # We need to run execute_batch and update display concurrently
 
                 # Use threading to run batch in background while updating display
-                import threading
-
                 batch_complete = threading.Event()
                 batch_error: Exception | None = None
 
                 def run_batch() -> None:
                     nonlocal result, batch_error
                     try:
-                        result = exec_manager.execute_batch(
-                            batch, progress_callback=progress_callback
-                        )
+                        result = exec_manager.execute_batch(batch)
                     except Exception as e:
                         batch_error = e
                     finally:
@@ -452,6 +452,14 @@ class BatchView(BaseView):
         finally:
             csv_monitor.stop(timeout=1.0)
 
+        # Update tracker stats from batch result
+        if result is not None:
+            # Sync tracker stats with actual batch results
+            tracker.successful = result.success_count
+            tracker.failed = result.rerun_count  # Rerun implies failure
+            tracker.skipped = result.skip_count
+            tracker.total_processed = result.total_count
+
         # Display final result
         if result is not None:
             self._display_batch_result(result)
@@ -472,7 +480,7 @@ class BatchView(BaseView):
         # Build molecule progress lines
         lines = [header, ""]  # Header + blank line
 
-        for mol_id in tracker._molecules:
+        for mol_id in tracker.get_active_molecule_ids():
             line = tracker.render_molecule_line(mol_id, frame_idx)
             lines.append(line)
 
@@ -489,51 +497,8 @@ class BatchView(BaseView):
 
         Fallback when new progress tracker fails.
         """
-        from grimperium.crest_pm7.batch import (
-            BatchCSVManager,
-            BatchExecutionManager,
-            BatchSortingStrategy,
-            ConformerDetailManager,
-            FixedTimeoutProcessor,
-        )
-        from grimperium.crest_pm7.config import PM7Config
-
-        if self.csv_path is None:
-            self.show_error("CSV path not configured")
-            return
-
-        if self.detail_dir is None:
-            self.detail_dir = self.DEFAULT_DETAIL_DIR
-
-        # Initialize components
-        csv_manager = BatchCSVManager(self.csv_path)
-        csv_manager.load_csv()
-
-        detail_manager = ConformerDetailManager(self.detail_dir)
-        pm7_config = PM7Config()
-
-        processor = FixedTimeoutProcessor(
-            config=pm7_config,
-            crest_timeout_minutes=self.crest_timeout,
-            mopac_timeout_minutes=self.mopac_timeout,
-        )
-
-        exec_manager = BatchExecutionManager(
-            csv_manager=csv_manager,
-            detail_manager=detail_manager,
-            pm7_config=pm7_config,
-            processor_adapter=processor,
-        )
-
-        # Create batch
-        batch_id = csv_manager.generate_batch_id()
-        batch = csv_manager.select_batch(
-            batch_id=batch_id,
-            batch_size=self.batch_size,
-            crest_timeout_minutes=self.crest_timeout,
-            mopac_timeout_minutes=self.mopac_timeout,
-            strategy=BatchSortingStrategy.RERUN_FIRST_THEN_EASY,
-        )
+        # Prepare batch components
+        exec_manager, batch = self._prepare_batch()
 
         if batch.is_empty:
             self.show_success("No molecules available for processing")
@@ -541,7 +506,7 @@ class BatchView(BaseView):
 
         self.console.print()
         self.console.print(
-            f"[bold]Starting batch {batch_id}[/bold]: {batch.size} molecules"
+            f"[bold]Starting batch {batch.batch_id}[/bold]: {batch.size} molecules"
         )
         self.console.print()
 

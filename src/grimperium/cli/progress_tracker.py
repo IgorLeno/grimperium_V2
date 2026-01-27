@@ -317,6 +317,14 @@ class ProgressTracker:
         self.total_processed += 1
         self.skipped += 1
 
+    def get_active_molecule_ids(self) -> list[str]:
+        """Get list of currently active (not completed) molecule IDs.
+
+        Returns:
+            List of molecule IDs being tracked
+        """
+        return list(self._molecules.keys())
+
     def render_progress_bar(self, mol_id: str) -> str:
         """Render 30-character progress bar for a molecule.
 
@@ -386,7 +394,11 @@ class ProgressTracker:
             if self.total_processed > 0
             else 0.0
         )
-        total_progress = int(self.total_processed / self.batch_size * 100)
+        total_progress = (
+            int(self.total_processed / self.batch_size * 100)
+            if self.batch_size > 0
+            else 0
+        )
 
         return (
             "Batch Status:\n"
@@ -549,20 +561,27 @@ class CSVMonitor:
             return
 
         # Detect changes and enqueue events
-        for mol_id, progress in self._molecule_states.items():
-            if progress.completed:
-                continue
+        try:
+            for mol_id, progress in self._molecule_states.items():
+                if progress.completed:
+                    continue
 
-            mask = df["mol_id"] == mol_id
-            if not mask.any():
-                continue
+                mask = df["mol_id"] == mol_id
+                if not mask.any():
+                    continue
 
-            row = df[mask].iloc[0]
-            new_stage = progress.update_from_csv_row(row)
+                row = df[mask].iloc[0]
+                new_stage = progress.update_from_csv_row(row)
 
-            if new_stage is not None:
-                self.event_queue.put(ProgressEvent(mol_id=mol_id, new_stage=new_stage))
-                logger.debug(f"[{mol_id}] Stage changed to {new_stage.name}")
+                if new_stage is not None:
+                    self.event_queue.put(ProgressEvent(mol_id=mol_id, new_stage=new_stage))
+                    logger.debug(f"[{mol_id}] Stage changed to {new_stage.name}")
+        except KeyError as e:
+            logger.error(
+                f"Missing required column in CSV: {e}. "
+                f"Available columns: {list(df.columns)}"
+            )
+            return
 
 
 def consume_events(

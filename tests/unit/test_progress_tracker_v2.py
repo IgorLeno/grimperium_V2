@@ -625,21 +625,19 @@ class TestCSVMonitorDetection:
         monitor.register_molecule("mol_001")
         monitor.start()
 
-        time.sleep(0.15)  # Let it poll once
-
         # Update CSV to trigger transition
         csv_path.write_text(
             "mol_id,status,crest_status,mopac_status\n"
             "mol_001,processing,NOT_ATTEMPTED,none"
         )
 
-        time.sleep(0.2)  # Let it poll again
+        # Wait for event with timeout (deterministic synchronization)
+        try:
+            event = event_queue.get(timeout=1.0)
+        finally:
+            monitor.stop()
 
-        monitor.stop()
-
-        # Check queue has event
-        assert not event_queue.empty()
-        event = event_queue.get()
+        # Verify event
         assert event.mol_id == "mol_001"
         assert event.new_stage == ProcessingStage.RDKIT_PARAMS
 
@@ -860,7 +858,7 @@ class TestThreadSafety:
                     event = event_queue.get(timeout=1.0)
                     results.append(event)
                     consumed += 1
-                except Exception:
+                except Empty:
                     break
 
         producer_thread = threading.Thread(target=producer)
