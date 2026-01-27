@@ -574,7 +574,9 @@ class CSVMonitor:
                 new_stage = progress.update_from_csv_row(row)
 
                 if new_stage is not None:
-                    self.event_queue.put(ProgressEvent(mol_id=mol_id, new_stage=new_stage))
+                    self.event_queue.put(
+                        ProgressEvent(mol_id=mol_id, new_stage=new_stage)
+                    )
                     logger.debug(f"[{mol_id}] Stage changed to {new_stage.name}")
         except KeyError as e:
             logger.error(

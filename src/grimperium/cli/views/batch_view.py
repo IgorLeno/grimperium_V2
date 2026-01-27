@@ -391,9 +391,13 @@ class BatchView(BaseView):
             batch_size=batch.size,
         )
 
+        csv_path = self.csv_path
+        if csv_path is None:
+            raise ValueError("CSV path not configured")
+
         # Initialize CSV monitor (daemon thread)
         csv_monitor = CSVMonitor(
-            csv_path=self.csv_path,
+            csv_path=csv_path,
             event_queue=event_queue,
             poll_interval_ms=500,
         )
