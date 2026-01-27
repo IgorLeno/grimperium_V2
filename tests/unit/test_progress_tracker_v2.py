@@ -18,7 +18,7 @@ from __future__ import annotations
 import threading
 import time
 from pathlib import Path
-from queue import Queue
+from queue import Empty, Queue
 from typing import TYPE_CHECKING
 from unittest.mock import MagicMock
 
