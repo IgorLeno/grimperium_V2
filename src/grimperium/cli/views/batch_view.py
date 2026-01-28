@@ -399,6 +399,10 @@ class BatchView(BaseView):
 
         csv_monitor.start()
 
+        # Suppress noisy logs during Rich.Live rendering to avoid display corruption.
+        previous_disable = logging.root.manager.disable
+        logging.disable(logging.INFO)
+
         try:
             with Live(console=self.console, refresh_per_second=10) as live:
                 # Start batch execution in a way that allows progress updates
@@ -446,6 +450,7 @@ class BatchView(BaseView):
                     raise batch_error
 
         finally:
+            logging.disable(previous_disable)
             csv_monitor.stop(timeout=1.0)
 
         # Display final result
