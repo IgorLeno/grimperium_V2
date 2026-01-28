@@ -1,6 +1,8 @@
 # Grimperium Architecture
 
+**Document Version:** 2.2.0
 **Last Updated:** 2026-01-28
+**Next Review:** 2026-06-19 (or after 100K molecules processed)
 **Version:** v2.2
 **Status:** Production-Ready (Single-Process)
 

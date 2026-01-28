@@ -292,7 +292,7 @@ class BatchView(BaseView):
             self._run_batch_with_tracker()
         except Exception as e:
             self.show_error(f"Batch processing failed: {e}")
-            logger.exception(f"Batch processing error: {e}")
+            logger.exception("Batch processing error")
 
     def _prepare_batch(self) -> tuple[Any, Any]:
         """Prepare batch components and create batch.

@@ -650,7 +650,11 @@ class BatchCSVManager:
         return True
 
     def mark_crest_preopt(self, mol_id: str) -> None:
-        """Mark molecule as entering xTB pre-optimization stage."""
+        """Mark molecule as entering xTB pre-optimization stage.
+
+        Args:
+            mol_id: Molecule identifier
+        """
         updated = self._update_progress_column(
             mol_id,
             "crest_status",
@@ -661,7 +665,11 @@ class BatchCSVManager:
             self.save_csv()
 
     def mark_crest_search(self, mol_id: str) -> None:
-        """Mark molecule as entering CREST conformer search."""
+        """Mark molecule as entering CREST conformer search.
+
+        Args:
+            mol_id: Molecule identifier
+        """
         updated = self._update_progress_column(
             mol_id,
             "crest_status",
@@ -676,7 +684,11 @@ class BatchCSVManager:
             self.save_csv()
 
     def mark_mopac_running(self, mol_id: str) -> None:
-        """Mark molecule as entering MOPAC calculation stage."""
+        """Mark molecule as entering MOPAC calculation stage.
+
+        Args:
+            mol_id: Molecule identifier
+        """
         updated = self._update_progress_column(
             mol_id,
             "mopac_status",

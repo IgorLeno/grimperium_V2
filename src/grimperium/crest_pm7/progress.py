@@ -41,4 +41,4 @@ class BatchProgressStage(str, Enum):
     MOPAC_CALC = "MOPAC_CALC"
 
 
-BatchProgressCallback = Callable[[BatchProgressStage], None]
+BatchProgressCallback: TypeAlias = Callable[[BatchProgressStage], None]
