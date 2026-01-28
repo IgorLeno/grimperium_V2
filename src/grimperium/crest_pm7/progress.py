@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from enum import Enum
-from typing import Final
+from typing import Final, TypeAlias
 
 from grimperium.crest_pm7.batch.enums import MoleculeStatus
 
