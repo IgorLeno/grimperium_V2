@@ -636,7 +636,11 @@ class BatchCSVManager:
         current_raw = df.at[idx, column]
         current = "" if pd.isna(current_raw) else str(current_raw).strip()
 
-        if allowed_current is not None and current not in allowed_current and current != "":
+        if (
+            allowed_current is not None
+            and current not in allowed_current
+            and current != ""
+        ):
             return False
 
         if current == value:
