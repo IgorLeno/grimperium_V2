@@ -24,6 +24,7 @@ from .config import (
 from .conformer_generator import run_crest
 from .conformer_selector import calculate_delta_e, get_num_conformers
 from .mopac_optimizer import optimize_conformer
+from .progress import BatchProgressCallback, BatchProgressStage
 from .timeout_predictor import TimeoutPredictor
 
 LOG = logging.getLogger("grimperium.crest_pm7.molecule_processor")
@@ -384,11 +385,37 @@ class MoleculeProcessor:
             has_conformers=len(result.successful_conformers) > 0,
         )
 
+    @staticmethod
+    def _notify_progress(
+        progress_callback: BatchProgressCallback | None,
+        stage: BatchProgressStage,
+        mol_id: str,
+    ) -> None:
+        """Notify progress callback for a processing stage.
+
+        Args:
+            progress_callback: Optional callback to report progress
+            stage: Processing stage being entered
+            mol_id: Molecule identifier for logging context
+        """
+        if progress_callback is None:
+            return
+
+        try:
+            progress_callback(stage)
+        except Exception as exc:  # pragma: no cover - defensive logging
+            LOG.warning(
+                f"[{mol_id}] Progress callback failed for stage {stage.value}: {exc}"
+            )
+
     def process(
         self,
         mol_id: str,
         smiles: str,
         input_xyz: Path | None = None,
+        *,
+        progress_callback: BatchProgressCallback | None = None,
+        preopt_reported: bool = False,
     ) -> PM7Result:
         """Process a single molecule.
 
@@ -396,6 +423,8 @@ class MoleculeProcessor:
             mol_id: Molecule identifier
             smiles: SMILES string
             input_xyz: Optional input XYZ (if None, generate from SMILES)
+            progress_callback: Optional callback for progress stage updates
+            preopt_reported: Whether xTB pre-optimization stage was already reported
 
         Returns:
             PM7Result with all processing results
@@ -458,6 +487,14 @@ class MoleculeProcessor:
         result.decisions.append(f"timeout={timeout:.0f}s ({confidence.value})")
 
         # Run CREST
+        if not preopt_reported:
+            self._notify_progress(
+                progress_callback, BatchProgressStage.XTB_PREOPT, mol_id
+            )
+        self._notify_progress(
+            progress_callback, BatchProgressStage.CREST_SEARCH, mol_id
+        )
+
         crest_result = run_crest(
             mol_id=mol_id,
             input_xyz=input_xyz,
@@ -485,6 +522,10 @@ class MoleculeProcessor:
         )
 
         # Run MOPAC on each conformer with dynamic timeout redistribution
+        if conformers_to_process:
+            self._notify_progress(
+                progress_callback, BatchProgressStage.MOPAC_CALC, mol_id
+            )
         remaining_timeout = timeout
         remaining_conformers = len(conformers_to_process)
 

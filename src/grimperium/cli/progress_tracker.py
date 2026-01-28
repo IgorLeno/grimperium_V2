@@ -5,11 +5,11 @@ processing pipeline. It uses a CSV-driven state machine with daemon thread
 polling and Queue-based event emission for thread-safe Rich.Live updates.
 
 State Machine Events (CSV-driven):
-    1. status: pending -> processing     -> "RDKit parameters"      (1/5)
-    2. crest_status: NOT_ATTEMPTED -> xtb_opt -> "xTB pre-optimization" (2/5)
-    3. crest_status: xtb_opt -> conformer_search -> "CREST conformer search" (3/5)
-    4. mopac_status: none -> geometric_opt -> "MOPAC PM7 calculation" (4/5)
-    5. status: processing -> OK          -> "Final calculations"    (5/5)
+    1. status: Pending/Selected -> Running    -> "RDKit parameters"      (1/5)
+    2. crest_status: NOT_ATTEMPTED -> XTB_PREOPT -> "Pre-optimization"   (2/5)
+    3. crest_status: XTB_PREOPT -> CREST_SEARCH -> "CREST conformer search" (3/5)
+    4. mopac_status: NOT_ATTEMPTED -> RUNNING -> "MOPAC PM7 calculation" (4/5)
+    5. status: Running -> OK                 -> "Final calculations"    (5/5)
 
 Thread Safety:
     - CSVMonitor runs as daemon thread, only writes to Queue
@@ -34,11 +34,87 @@ from typing import TYPE_CHECKING, ClassVar
 import pandas as pd
 from rich.console import Console
 
+from grimperium.crest_pm7.progress import (
+    COMPLETION_STATUSES,
+    CREST_STATUS_FAILED,
+    CREST_STATUS_NOT_ATTEMPTED,
+    CREST_STATUS_PREOPT,
+    CREST_STATUS_SEARCH,
+    CREST_STATUS_SUCCESS,
+    MOPAC_STATUS_FAILED,
+    MOPAC_STATUS_NOT_ATTEMPTED,
+    MOPAC_STATUS_OK,
+    MOPAC_STATUS_RUNNING,
+    STATUS_OK,
+    STATUS_PENDING,
+    STATUS_RERUN,
+    STATUS_RUNNING,
+    STATUS_SELECTED,
+    STATUS_SKIP,
+)
+
 if TYPE_CHECKING:
     from queue import Queue as QueueType
 
 
 logger = logging.getLogger(__name__)
+
+_STATUS_NORMALIZATION = {
+    value.lower(): value
+    for value in (
+        STATUS_PENDING,
+        STATUS_SELECTED,
+        STATUS_RUNNING,
+        STATUS_OK,
+        STATUS_RERUN,
+        STATUS_SKIP,
+    )
+}
+_CREST_STATUS_NORMALIZATION = {
+    value.lower(): value
+    for value in (
+        CREST_STATUS_NOT_ATTEMPTED,
+        CREST_STATUS_PREOPT,
+        CREST_STATUS_SEARCH,
+        CREST_STATUS_SUCCESS,
+        CREST_STATUS_FAILED,
+    )
+}
+_MOPAC_STATUS_NORMALIZATION = {
+    value.lower(): value
+    for value in (
+        MOPAC_STATUS_NOT_ATTEMPTED,
+        MOPAC_STATUS_RUNNING,
+        MOPAC_STATUS_OK,
+        MOPAC_STATUS_FAILED,
+    )
+}
+
+
+def _normalize_csv_value(
+    value: object,
+    *,
+    default: str,
+    mapping: dict[str, str],
+) -> str:
+    """Normalize a CSV value to a canonical string.
+
+    Args:
+        value: Raw CSV value
+        default: Default value when missing
+        mapping: Mapping of normalized strings
+
+    Returns:
+        Normalized string value
+    """
+    if value is None or pd.isna(value):
+        return default
+
+    text = str(value).strip()
+    if not text:
+        return default
+
+    return mapping.get(text.lower(), text)
 
 
 class ProcessingStage(IntEnum):
@@ -49,11 +125,11 @@ class ProcessingStage(IntEnum):
     """
 
     NOT_STARTED = 0
-    RDKIT_PARAMS = 1  # status: pending -> processing
-    XTB_PREOPT = 2  # crest_status: NOT_ATTEMPTED -> xtb_opt
-    CREST_SEARCH = 3  # crest_status: xtb_opt -> conformer_search
-    MOPAC_CALC = 4  # mopac_status: none -> geometric_opt
-    FINAL_CALC = 5  # status: processing -> OK
+    RDKIT_PARAMS = 1  # status: Pending/Selected -> Running
+    XTB_PREOPT = 2  # crest_status: NOT_ATTEMPTED -> XTB_PREOPT
+    CREST_SEARCH = 3  # crest_status: XTB_PREOPT -> CREST_SEARCH
+    MOPAC_CALC = 4  # mopac_status: NOT_ATTEMPTED -> RUNNING
+    FINAL_CALC = 5  # status: Running -> OK
 
 
 @dataclass(frozen=True)
@@ -62,14 +138,14 @@ class StageTransition:
 
     Attributes:
         column: CSV column to monitor (status, crest_status, mopac_status)
-        from_value: Previous value that triggers transition
+        from_values: Previous values that trigger transition
         to_value: New value that triggers transition
         stage: ProcessingStage to transition to
         label: Human-readable label for display
     """
 
     column: str
-    from_value: str
+    from_values: tuple[str, ...]
     to_value: str
     stage: ProcessingStage
     label: str
@@ -79,36 +155,36 @@ class StageTransition:
 EVENTS: tuple[StageTransition, ...] = (
     StageTransition(
         column="status",
-        from_value="pending",
-        to_value="processing",
+        from_values=(STATUS_PENDING, STATUS_SELECTED),
+        to_value=STATUS_RUNNING,
         stage=ProcessingStage.RDKIT_PARAMS,
         label="RDKit parameters",
     ),
     StageTransition(
         column="crest_status",
-        from_value="NOT_ATTEMPTED",
-        to_value="xtb_opt",
+        from_values=(CREST_STATUS_NOT_ATTEMPTED,),
+        to_value=CREST_STATUS_PREOPT,
         stage=ProcessingStage.XTB_PREOPT,
-        label="xTB pre-optimization",
+        label="Pre-optimization",
     ),
     StageTransition(
         column="crest_status",
-        from_value="xtb_opt",
-        to_value="conformer_search",
+        from_values=(CREST_STATUS_PREOPT, CREST_STATUS_NOT_ATTEMPTED),
+        to_value=CREST_STATUS_SEARCH,
         stage=ProcessingStage.CREST_SEARCH,
         label="CREST conformer search",
     ),
     StageTransition(
         column="mopac_status",
-        from_value="none",
-        to_value="geometric_opt",
+        from_values=(MOPAC_STATUS_NOT_ATTEMPTED,),
+        to_value=MOPAC_STATUS_RUNNING,
         stage=ProcessingStage.MOPAC_CALC,
         label="MOPAC PM7 calculation",
     ),
     StageTransition(
         column="status",
-        from_value="processing",
-        to_value="OK",
+        from_values=(STATUS_RUNNING,),
+        to_value=STATUS_OK,
         stage=ProcessingStage.FINAL_CALC,
         label="Final calculations",
     ),
@@ -122,11 +198,13 @@ class ProgressEvent:
     Attributes:
         mol_id: Molecule identifier
         new_stage: New ProcessingStage after transition
+        status: Optional status update (OK/Rerun/Skip)
         timestamp: Unix timestamp when event was created
     """
 
     mol_id: str
-    new_stage: ProcessingStage
+    new_stage: ProcessingStage | None = None
+    status: str | None = None
     timestamp: float = field(default_factory=time.time)
 
 
@@ -149,9 +227,9 @@ class MoleculeProgress:
     current_stage: ProcessingStage = ProcessingStage.NOT_STARTED
     last_csv_state: dict[str, str] = field(
         default_factory=lambda: {
-            "status": "pending",
-            "crest_status": "NOT_ATTEMPTED",
-            "mopac_status": "none",
+            "status": STATUS_PENDING,
+            "crest_status": CREST_STATUS_NOT_ATTEMPTED,
+            "mopac_status": MOPAC_STATUS_NOT_ATTEMPTED,
         }
     )
     completed: bool = False
@@ -161,7 +239,7 @@ class MoleculeProgress:
         """Compare last_csv_state with current_row to detect stage transition.
 
         Iterates through EVENTS and checks if any transition matches:
-        - Previous value matches event.from_value
+        - Previous value matches event.from_values
         - Current value matches event.to_value
 
         Args:
@@ -174,8 +252,42 @@ class MoleculeProgress:
             prev_val = self.last_csv_state.get(event.column, "")
             curr_val = current_row.get(event.column, "")
 
-            if prev_val == event.from_value and curr_val == event.to_value:
+            if prev_val in event.from_values and curr_val == event.to_value:
                 return event.stage
+
+        return None
+
+    def _infer_stage(self, current_row: dict[str, str]) -> ProcessingStage | None:
+        """Infer stage from current CSV values when transitions are missed.
+
+        Args:
+            current_row: Dict with current status, crest_status, mopac_status
+
+        Returns:
+            Inferred ProcessingStage or None if no inference applies
+        """
+        status = current_row.get("status", "")
+        crest_status = current_row.get("crest_status", "")
+        mopac_status = current_row.get("mopac_status", "")
+
+        if status == STATUS_OK:
+            return ProcessingStage.FINAL_CALC
+        if mopac_status in {
+            MOPAC_STATUS_RUNNING,
+            MOPAC_STATUS_OK,
+            MOPAC_STATUS_FAILED,
+        }:
+            return ProcessingStage.MOPAC_CALC
+        if crest_status in {
+            CREST_STATUS_SEARCH,
+            CREST_STATUS_SUCCESS,
+            CREST_STATUS_FAILED,
+        }:
+            return ProcessingStage.CREST_SEARCH
+        if crest_status == CREST_STATUS_PREOPT:
+            return ProcessingStage.XTB_PREOPT
+        if status == STATUS_RUNNING:
+            return ProcessingStage.RDKIT_PARAMS
 
         return None
 
@@ -189,12 +301,29 @@ class MoleculeProgress:
             New ProcessingStage if transition detected, None otherwise
         """
         current_row = {
-            "status": str(row.get("status", "pending")),
-            "crest_status": str(row.get("crest_status", "NOT_ATTEMPTED")),
-            "mopac_status": str(row.get("mopac_status", "none")),
+            "status": _normalize_csv_value(
+                row.get("status"),
+                default=STATUS_PENDING,
+                mapping=_STATUS_NORMALIZATION,
+            ),
+            "crest_status": _normalize_csv_value(
+                row.get("crest_status"),
+                default=CREST_STATUS_NOT_ATTEMPTED,
+                mapping=_CREST_STATUS_NORMALIZATION,
+            ),
+            "mopac_status": _normalize_csv_value(
+                row.get("mopac_status"),
+                default=MOPAC_STATUS_NOT_ATTEMPTED,
+                mapping=_MOPAC_STATUS_NORMALIZATION,
+            ),
         }
 
         new_stage = self._detect_stage(current_row)
+
+        if new_stage is None:
+            inferred_stage = self._infer_stage(current_row)
+            if inferred_stage is not None and inferred_stage > self.current_stage:
+                new_stage = inferred_stage
 
         if new_stage is not None:
             self.current_stage = new_stage
@@ -203,8 +332,8 @@ class MoleculeProgress:
         self.last_csv_state = current_row
 
         # Check completion (terminal states)
-        status = str(row.get("status", ""))
-        if status in ("OK", "Skip", "Rerun"):
+        status = current_row["status"]
+        if status in COMPLETION_STATUSES:
             self.completed = True
 
         return new_stage
@@ -284,7 +413,16 @@ class ProgressTracker:
             return
 
         progress = self._molecules[event.mol_id]
-        progress.current_stage = event.new_stage
+        if event.new_stage is not None:
+            progress.current_stage = event.new_stage
+
+        if event.status is not None:
+            if event.status == STATUS_OK:
+                self.mark_completed(event.mol_id, success=True)
+            elif event.status == STATUS_RERUN:
+                self.mark_completed(event.mol_id, success=False)
+            elif event.status == STATUS_SKIP:
+                self.mark_skipped(event.mol_id)
 
     def mark_completed(self, mol_id: str, *, success: bool) -> None:
         """Mark molecule as completed and update statistics.
@@ -415,7 +553,7 @@ class ProgressTracker:
         """Render single molecule progress line.
 
         Format:
-            ⠹ mol_00002 ▓▓▓▓▓▓▓▓▓▓▓▓░░░░░░░░░░░░░░░░░░ 2/5 | xTB pre-optimization
+            ⠹ mol_00002 ▓▓▓▓▓▓▓▓▓▓▓▓░░░░░░░░░░░░░░░░░░ 2/5 | Pre-optimization
 
         Args:
             mol_id: Molecule identifier
@@ -571,13 +709,25 @@ class CSVMonitor:
                     continue
 
                 row = df[mask].iloc[0]
+                prev_status = progress.last_csv_state.get("status", "")
                 new_stage = progress.update_from_csv_row(row)
+                current_status = progress.last_csv_state.get("status", "")
 
-                if new_stage is not None:
+                status_changed = prev_status != current_status
+                completion_status = (
+                    current_status if current_status in COMPLETION_STATUSES else None
+                )
+
+                if new_stage is not None or (status_changed and completion_status):
                     self.event_queue.put(
-                        ProgressEvent(mol_id=mol_id, new_stage=new_stage)
+                        ProgressEvent(
+                            mol_id=mol_id,
+                            new_stage=new_stage,
+                            status=completion_status if status_changed else None,
+                        )
                     )
-                    logger.debug(f"[{mol_id}] Stage changed to {new_stage.name}")
+                    if new_stage is not None:
+                        logger.debug(f"[{mol_id}] Stage changed to {new_stage.name}")
         except KeyError as e:
             logger.error(
                 f"Missing required column in CSV: {e}. "
@@ -595,7 +745,7 @@ def consume_events(
     Non-blocking: Returns immediately if queue is empty.
 
     Args:
-        event_queue: Queue with ProgressEvents
+        event_queue: Queue with ProgressEvents (stage and/or completion status)
         tracker: ProgressTracker to apply events to
 
     Returns:

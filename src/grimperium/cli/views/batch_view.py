@@ -20,14 +20,6 @@ from typing import TYPE_CHECKING, Any, ClassVar
 
 from rich.live import Live
 from rich.panel import Panel
-from rich.progress import (
-    BarColumn,
-    MofNCompleteColumn,
-    Progress,
-    SpinnerColumn,
-    TextColumn,
-    TimeElapsedColumn,
-)
 from rich.table import Table
 
 from grimperium.cli.constants import DATA_DIR
@@ -288,7 +280,6 @@ class BatchView(BaseView):
         """Run a batch of molecules with granular progress tracking.
 
         Uses a 5-stage progress bar with CSV-driven state machine.
-        Falls back to legacy progress bar if new system fails.
         """
         if not self.csv_path or not self.csv_path.exists():
             self.show_error("CSV path not configured or file not found")
@@ -300,12 +291,8 @@ class BatchView(BaseView):
         try:
             self._run_batch_with_tracker()
         except Exception as e:
-            self.console.print(
-                "[bold yellow]Warning: Progress tracker failed, "
-                "using legacy mode[/bold yellow]"
-            )
-            logger.exception(f"Progress tracker error: {e}")
-            self._run_batch_legacy()
+            self.show_error(f"Batch processing failed: {e}")
+            logger.exception(f"Batch processing error: {e}")
 
     def _prepare_batch(self) -> tuple[Any, Any]:
         """Prepare batch components and create batch.
@@ -447,6 +434,11 @@ class BatchView(BaseView):
 
                 # Final update after batch completes
                 consume_events(event_queue, tracker)
+                if result is not None:
+                    tracker.successful = result.success_count
+                    tracker.failed = result.rerun_count  # Rerun implies failure
+                    tracker.skipped = result.skip_count
+                    tracker.total_processed = result.total_count
                 display = self._render_batch_display(tracker, frame_idx)
                 live.update(display)
 
@@ -455,14 +447,6 @@ class BatchView(BaseView):
 
         finally:
             csv_monitor.stop(timeout=1.0)
-
-        # Update tracker stats from batch result
-        if result is not None:
-            # Sync tracker stats with actual batch results
-            tracker.successful = result.success_count
-            tracker.failed = result.rerun_count  # Rerun implies failure
-            tracker.skipped = result.skip_count
-            tracker.total_processed = result.total_count
 
         # Display final result
         if result is not None:
@@ -495,47 +479,6 @@ class BatchView(BaseView):
             title=f"[bold {COLORS['batch']}]Batch Processing[/bold {COLORS['batch']}]",
             border_style=COLORS["batch"],
         )
-
-    def _run_batch_legacy(self) -> None:
-        """Run batch with legacy simple progress bar.
-
-        Fallback when new progress tracker fails.
-        """
-        # Prepare batch components
-        exec_manager, batch = self._prepare_batch()
-
-        if batch.is_empty:
-            self.show_success("No molecules available for processing")
-            return
-
-        self.console.print()
-        self.console.print(
-            f"[bold]Starting batch {batch.batch_id}[/bold]: {batch.size} molecules"
-        )
-        self.console.print()
-
-        # Run with legacy progress bar
-        with Progress(
-            SpinnerColumn(),
-            TextColumn("[progress.description]{task.description}"),
-            BarColumn(),
-            MofNCompleteColumn(),
-            TimeElapsedColumn(),
-            console=self.console,
-        ) as progress:
-            task = progress.add_task("Processing", total=batch.size)
-
-            def update_progress(mol_id: str, current: int, total: int) -> None:
-                progress.update(
-                    task, completed=current, description=f"Processing {mol_id}"
-                )
-
-            result = exec_manager.execute_batch(
-                batch, progress_callback=update_progress
-            )
-
-        # Display result
-        self._display_batch_result(result)
 
     def _display_batch_result(self, result: Any) -> None:
         """Display batch execution result."""

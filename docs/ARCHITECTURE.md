@@ -1,6 +1,6 @@
 # Grimperium Architecture
 
-**Last Updated:** 2026-01-19
+**Last Updated:** 2026-01-28
 **Version:** v2.2
 **Status:** Production-Ready (Single-Process)
 
@@ -51,6 +51,24 @@
 | **Persistence** | Atomic file writes (temp + replace) | Crash-safe, no corruption |
 | **Process Model** | Single-threaded, sequential | Simple, deterministic, safe |
 | **Logging** | Python logging | Structured, filterable |
+
+### CLI Batch Progress Tracking
+
+The CLI batch view renders a CSV-driven, 5-stage progress bar using a
+daemon CSV poller and a thread-safe Queue. The tracker reads only the CSV
+and never touches processing code directly.
+
+Stages (CSV transitions):
+1. `status`: `Pending`/`Selected` → `Running` (RDKit parameters)
+2. `crest_status`: `NOT_ATTEMPTED` → `XTB_PREOPT` (pre-optimization; xTB if enabled)
+3. `crest_status`: `XTB_PREOPT`/`NOT_ATTEMPTED` → `CREST_SEARCH` (CREST search)
+4. `mopac_status`: `NOT_ATTEMPTED` → `RUNNING` (MOPAC PM7 calculation)
+5. `status`: `Running` → `OK` (final calculations)
+
+Completion counters update when `status` reaches `OK`, `Rerun`, or `Skip`.
+Final result values still use `crest_status` = `SUCCESS`/`FAILED` and
+`mopac_status` = `OK`/`FAILED`.
+The UI renders a 30-character bar (6 chars per stage) with a live spinner.
 
 ### Key Design Decisions
 

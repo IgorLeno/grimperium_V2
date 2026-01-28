@@ -28,6 +28,7 @@ from grimperium.crest_pm7.logging_enhancements import (
     setup_batch_logging,
     suppress_pandas_warnings,
 )
+from grimperium.crest_pm7.progress import BatchProgressStage
 
 LOG = logging.getLogger("grimperium.crest_pm7.batch.execution_manager")
 
@@ -259,11 +260,26 @@ class BatchExecutionManager:
         # Mark as running
         self.csv_manager.mark_running(mol_id)
 
+        def progress_callback(stage: BatchProgressStage) -> None:
+            """Update CSV progress stage for current molecule."""
+            try:
+                if stage == BatchProgressStage.XTB_PREOPT:
+                    self.csv_manager.mark_crest_preopt(mol_id)
+                elif stage == BatchProgressStage.CREST_SEARCH:
+                    self.csv_manager.mark_crest_search(mol_id)
+                elif stage == BatchProgressStage.MOPAC_CALC:
+                    self.csv_manager.mark_mopac_running(mol_id)
+            except Exception as exc:
+                logger.warning(
+                    f"[{mol_id}] Failed to update progress stage {stage.value}: {exc}"
+                )
+
         try:
             # Process molecule
             pm7_result = self.processor_adapter.process_with_fixed_timeout(
                 mol_id=mol_id,
                 smiles=smiles,
+                progress_callback=progress_callback,
             )
 
             # Create CSV update dict

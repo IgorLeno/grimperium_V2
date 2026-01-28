@@ -16,6 +16,10 @@ from grimperium import DequeAny, DictStrAny
 from grimperium.crest_pm7.config import PM7Config, TimeoutConfidence
 from grimperium.crest_pm7.molecule_processor import MoleculeProcessor, PM7Result
 from grimperium.crest_pm7.preoptimization import xTBPreOptimizer
+from grimperium.crest_pm7.progress import (
+    BatchProgressCallback,
+    BatchProgressStage,
+)
 
 LOG = logging.getLogger("grimperium.crest_pm7.batch.processor_adapter")
 
@@ -212,6 +216,7 @@ class FixedTimeoutProcessor:
         mol_id: str,
         smiles: str,
         input_xyz: Path | None = None,
+        progress_callback: BatchProgressCallback | None = None,
     ) -> PM7Result:
         """Process molecule with fixed timeouts.
 
@@ -223,16 +228,22 @@ class FixedTimeoutProcessor:
             mol_id: Molecule identifier
             smiles: SMILES string
             input_xyz: Optional input XYZ file
+            progress_callback: Optional callback for progress stage updates
 
         Returns:
             PM7Result from processing
         """
         LOG.debug(f"Processing {mol_id} with fixed timeouts")
 
+        preopt_reported = False
         # xTB pre-optimization before MoleculeProcessor
         if input_xyz is not None and self.preoptimizer.enabled:
             work_dir = self.config.temp_dir / mol_id
             work_dir.mkdir(parents=True, exist_ok=True)
+
+            if progress_callback is not None:
+                progress_callback(BatchProgressStage.XTB_PREOPT)
+                preopt_reported = True
 
             preopt_result = self.preoptimizer.preoptimize_structure(
                 mol_id, input_xyz, work_dir
@@ -243,7 +254,13 @@ class FixedTimeoutProcessor:
             else:
                 LOG.warning(f"xTB pre-opt failed for {mol_id}, using original")
 
-        return self.processor.process(mol_id, smiles, input_xyz)
+        return self.processor.process(
+            mol_id,
+            smiles,
+            input_xyz,
+            progress_callback=progress_callback,
+            preopt_reported=preopt_reported,
+        )
 
     def update_timeouts(
         self,

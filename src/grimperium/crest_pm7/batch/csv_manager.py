@@ -22,6 +22,13 @@ from grimperium.crest_pm7.batch.enums import (
     MoleculeStatus,
 )
 from grimperium.crest_pm7.batch.models import Batch, BatchMolecule
+from grimperium.crest_pm7.progress import (
+    CREST_STATUS_NOT_ATTEMPTED,
+    CREST_STATUS_PREOPT,
+    CREST_STATUS_SEARCH,
+    MOPAC_STATUS_NOT_ATTEMPTED,
+    MOPAC_STATUS_RUNNING,
+)
 
 LOG = logging.getLogger("grimperium.crest_pm7.batch.csv_manager")
 
@@ -577,6 +584,9 @@ class BatchCSVManager:
 
         Transition: SELECTED -> RUNNING
 
+        Also resets crest_status and mopac_status to NOT_ATTEMPTED
+        to ensure progress tracking starts cleanly for the run.
+
         Args:
             mol_id: Molecule identifier
         """
@@ -591,8 +601,86 @@ class BatchCSVManager:
             )
 
         df.at[idx, "status"] = MoleculeStatus.RUNNING.value
+        if "crest_status" in df.columns:
+            df.at[idx, "crest_status"] = CREST_STATUS_NOT_ATTEMPTED
+        if "mopac_status" in df.columns:
+            df.at[idx, "mopac_status"] = MOPAC_STATUS_NOT_ATTEMPTED
         self.save_csv()
         LOG.debug(f"Marked {mol_id} as RUNNING")
+
+    def _update_progress_column(
+        self,
+        mol_id: str,
+        column: str,
+        value: str,
+        *,
+        allowed_current: set[str] | None = None,
+    ) -> bool:
+        """Update a progress column if the current value allows it.
+
+        Args:
+            mol_id: Molecule identifier
+            column: CSV column name
+            value: Value to write
+            allowed_current: Optional set of allowed current values
+
+        Returns:
+            True if the column was updated, False otherwise
+        """
+        df = self._ensure_loaded()
+        idx = self._get_row_index(mol_id)
+
+        if column not in df.columns:
+            return False
+
+        current_raw = df.at[idx, column]
+        current = "" if pd.isna(current_raw) else str(current_raw).strip()
+
+        if allowed_current is not None and current not in allowed_current and current != "":
+            return False
+
+        if current == value:
+            return False
+
+        df.at[idx, column] = value
+        return True
+
+    def mark_crest_preopt(self, mol_id: str) -> None:
+        """Mark molecule as entering xTB pre-optimization stage."""
+        updated = self._update_progress_column(
+            mol_id,
+            "crest_status",
+            CREST_STATUS_PREOPT,
+            allowed_current={CREST_STATUS_NOT_ATTEMPTED, CREST_STATUS_PREOPT},
+        )
+        if updated:
+            self.save_csv()
+
+    def mark_crest_search(self, mol_id: str) -> None:
+        """Mark molecule as entering CREST conformer search."""
+        updated = self._update_progress_column(
+            mol_id,
+            "crest_status",
+            CREST_STATUS_SEARCH,
+            allowed_current={
+                CREST_STATUS_NOT_ATTEMPTED,
+                CREST_STATUS_PREOPT,
+                CREST_STATUS_SEARCH,
+            },
+        )
+        if updated:
+            self.save_csv()
+
+    def mark_mopac_running(self, mol_id: str) -> None:
+        """Mark molecule as entering MOPAC calculation stage."""
+        updated = self._update_progress_column(
+            mol_id,
+            "mopac_status",
+            MOPAC_STATUS_RUNNING,
+            allowed_current={MOPAC_STATUS_NOT_ATTEMPTED, MOPAC_STATUS_RUNNING},
+        )
+        if updated:
+            self.save_csv()
 
     def mark_success(
         self,

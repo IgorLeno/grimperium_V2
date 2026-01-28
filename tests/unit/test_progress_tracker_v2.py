@@ -67,21 +67,21 @@ def sample_csv_all_states(tmp_path: Path) -> Path:
     """CSV with molecules in ALL 5 processing states.
 
     States covered:
-        - mol_001: pending (stage 0)
-        - mol_002: processing, NOT_ATTEMPTED (stage 1 - RDKit)
-        - mol_003: processing, xtb_opt (stage 2 - xTB)
-        - mol_004: processing, conformer_search (stage 3 - CREST)
-        - mol_005: processing, geometric_opt (stage 4 - MOPAC)
-        - mol_006: OK, SUCCESS, success (stage 5 - Complete)
+        - mol_001: Pending (stage 0)
+        - mol_002: Running, NOT_ATTEMPTED (stage 1 - RDKit)
+        - mol_003: Running, XTB_PREOPT (stage 2 - Preopt)
+        - mol_004: Running, CREST_SEARCH (stage 3 - CREST)
+        - mol_005: Running, CREST_SEARCH, RUNNING (stage 4 - MOPAC)
+        - mol_006: OK, SUCCESS, OK (stage 5 - Complete)
     """
     csv_content = (
         "mol_id,smiles,status,crest_status,mopac_status\n"
-        "mol_001,C,pending,NOT_ATTEMPTED,none\n"
-        "mol_002,CC,processing,NOT_ATTEMPTED,none\n"
-        "mol_003,CCC,processing,xtb_opt,none\n"
-        "mol_004,CCCC,processing,conformer_search,none\n"
-        "mol_005,CCCCC,processing,conformer_search,geometric_opt\n"
-        "mol_006,CCCCCC,OK,SUCCESS,success\n"
+        "mol_001,C,Pending,NOT_ATTEMPTED,NOT_ATTEMPTED\n"
+        "mol_002,CC,Running,NOT_ATTEMPTED,NOT_ATTEMPTED\n"
+        "mol_003,CCC,Running,XTB_PREOPT,NOT_ATTEMPTED\n"
+        "mol_004,CCCC,Running,CREST_SEARCH,NOT_ATTEMPTED\n"
+        "mol_005,CCCCC,Running,CREST_SEARCH,RUNNING\n"
+        "mol_006,CCCCCC,OK,SUCCESS,OK\n"
     )
     csv_path = tmp_path / "test_batch.csv"
     csv_path.write_text(csv_content)
@@ -151,46 +151,46 @@ class TestStageTransition:
             event.column = "other"  # type: ignore[misc]
 
     def test_first_event_is_status_pending_to_processing(self) -> None:
-        """First event: status pending -> processing (RDKit)."""
+        """First event: status Pending/Selected -> Running (RDKit)."""
         event = EVENTS[0]
         assert event.column == "status"
-        assert event.from_value == "pending"
-        assert event.to_value == "processing"
+        assert event.from_values == ("Pending", "Selected")
+        assert event.to_value == "Running"
         assert event.stage == ProcessingStage.RDKIT_PARAMS
         assert event.label == "RDKit parameters"
 
     def test_second_event_is_crest_status_to_xtb_opt(self) -> None:
-        """Second event: crest_status NOT_ATTEMPTED -> xtb_opt (xTB)."""
+        """Second event: crest_status NOT_ATTEMPTED -> XTB_PREOPT (preopt)."""
         event = EVENTS[1]
         assert event.column == "crest_status"
-        assert event.from_value == "NOT_ATTEMPTED"
-        assert event.to_value == "xtb_opt"
+        assert event.from_values == ("NOT_ATTEMPTED",)
+        assert event.to_value == "XTB_PREOPT"
         assert event.stage == ProcessingStage.XTB_PREOPT
-        assert event.label == "xTB pre-optimization"
+        assert event.label == "Pre-optimization"
 
     def test_third_event_is_crest_status_to_conformer_search(self) -> None:
-        """Third event: crest_status xtb_opt -> conformer_search (CREST)."""
+        """Third event: crest_status XTB_PREOPT -> CREST_SEARCH (CREST)."""
         event = EVENTS[2]
         assert event.column == "crest_status"
-        assert event.from_value == "xtb_opt"
-        assert event.to_value == "conformer_search"
+        assert event.from_values == ("XTB_PREOPT", "NOT_ATTEMPTED")
+        assert event.to_value == "CREST_SEARCH"
         assert event.stage == ProcessingStage.CREST_SEARCH
         assert event.label == "CREST conformer search"
 
     def test_fourth_event_is_mopac_status_to_geometric_opt(self) -> None:
-        """Fourth event: mopac_status none -> geometric_opt (MOPAC)."""
+        """Fourth event: mopac_status NOT_ATTEMPTED -> RUNNING (MOPAC)."""
         event = EVENTS[3]
         assert event.column == "mopac_status"
-        assert event.from_value == "none"
-        assert event.to_value == "geometric_opt"
+        assert event.from_values == ("NOT_ATTEMPTED",)
+        assert event.to_value == "RUNNING"
         assert event.stage == ProcessingStage.MOPAC_CALC
         assert event.label == "MOPAC PM7 calculation"
 
     def test_last_event_is_status_processing_to_ok(self) -> None:
-        """Fifth event: status processing -> OK (Final)."""
+        """Fifth event: status Running -> OK (Final)."""
         event = EVENTS[4]
         assert event.column == "status"
-        assert event.from_value == "processing"
+        assert event.from_values == ("Running",)
         assert event.to_value == "OK"
         assert event.stage == ProcessingStage.FINAL_CALC
         assert event.label == "Final calculations"
@@ -204,72 +204,72 @@ class TestMoleculeProgress:
         progress = MoleculeProgress(mol_id="test")
         assert progress.current_stage == ProcessingStage.NOT_STARTED
         assert progress.last_csv_state == {
-            "status": "pending",
+            "status": "Pending",
             "crest_status": "NOT_ATTEMPTED",
-            "mopac_status": "none",
+            "mopac_status": "NOT_ATTEMPTED",
         }
         assert progress.completed is False
         assert progress.error is None
 
     def test_detect_stage_pending_to_processing(self) -> None:
-        """Detect transition from pending to processing (stage 1)."""
+        """Detect transition from Pending to Running (stage 1)."""
         progress = MoleculeProgress(mol_id="test")
         new_stage = progress._detect_stage(
             {
-                "status": "processing",
+                "status": "Running",
                 "crest_status": "NOT_ATTEMPTED",
-                "mopac_status": "none",
+                "mopac_status": "NOT_ATTEMPTED",
             }
         )
         assert new_stage == ProcessingStage.RDKIT_PARAMS
 
     def test_detect_stage_xtb_opt(self) -> None:
-        """Detect transition to xtb_opt (stage 2)."""
+        """Detect transition to XTB_PREOPT (stage 2)."""
         progress = MoleculeProgress(mol_id="test")
         progress.last_csv_state = {
-            "status": "processing",
+            "status": "Running",
             "crest_status": "NOT_ATTEMPTED",
-            "mopac_status": "none",
+            "mopac_status": "NOT_ATTEMPTED",
         }
         new_stage = progress._detect_stage(
             {
-                "status": "processing",
-                "crest_status": "xtb_opt",
-                "mopac_status": "none",
+                "status": "Running",
+                "crest_status": "XTB_PREOPT",
+                "mopac_status": "NOT_ATTEMPTED",
             }
         )
         assert new_stage == ProcessingStage.XTB_PREOPT
 
     def test_detect_stage_conformer_search(self) -> None:
-        """Detect transition to conformer_search (stage 3)."""
+        """Detect transition to CREST_SEARCH (stage 3)."""
         progress = MoleculeProgress(mol_id="test")
         progress.last_csv_state = {
-            "status": "processing",
-            "crest_status": "xtb_opt",
-            "mopac_status": "none",
+            "status": "Running",
+            "crest_status": "XTB_PREOPT",
+            "mopac_status": "NOT_ATTEMPTED",
         }
         new_stage = progress._detect_stage(
             {
-                "status": "processing",
-                "crest_status": "conformer_search",
-                "mopac_status": "none",
+                "status": "Running",
+                "crest_status": "CREST_SEARCH",
+                "mopac_status": "NOT_ATTEMPTED",
             }
         )
         assert new_stage == ProcessingStage.CREST_SEARCH
 
     def test_detect_stage_geometric_opt(self) -> None:
-        """Detect transition to geometric_opt (stage 4)."""
+        """Detect transition to RUNNING (stage 4)."""
         progress = MoleculeProgress(mol_id="test")
         progress.last_csv_state = {
-            "status": "processing",
-            "crest_status": "conformer_search",
-            "mopac_status": "none",
+            "status": "Running",
+            "crest_status": "CREST_SEARCH",
+            "mopac_status": "NOT_ATTEMPTED",
         }
         new_stage = progress._detect_stage(
             {
-                "status": "processing",
-                "crest_status": "conformer_search",
-                "mopac_status": "geometric_opt",
+                "status": "Running",
+                "crest_status": "CREST_SEARCH",
+                "mopac_status": "RUNNING",
             }
         )
         assert new_stage == ProcessingStage.MOPAC_CALC
@@ -278,15 +278,15 @@ class TestMoleculeProgress:
         """Detect transition to OK (stage 5)."""
         progress = MoleculeProgress(mol_id="test")
         progress.last_csv_state = {
-            "status": "processing",
+            "status": "Running",
             "crest_status": "SUCCESS",
-            "mopac_status": "success",
+            "mopac_status": "OK",
         }
         new_stage = progress._detect_stage(
             {
                 "status": "OK",
                 "crest_status": "SUCCESS",
-                "mopac_status": "success",
+                "mopac_status": "OK",
             }
         )
         assert new_stage == ProcessingStage.FINAL_CALC
@@ -296,9 +296,9 @@ class TestMoleculeProgress:
         progress = MoleculeProgress(mol_id="test")
         new_stage = progress._detect_stage(
             {
-                "status": "pending",
+                "status": "Pending",
                 "crest_status": "NOT_ATTEMPTED",
-                "mopac_status": "none",
+                "mopac_status": "NOT_ATTEMPTED",
             }
         )
         assert new_stage is None
@@ -308,24 +308,24 @@ class TestMoleculeProgress:
         progress = MoleculeProgress(mol_id="test")
         row = pd.Series(
             {
-                "status": "processing",
-                "crest_status": "xtb_opt",
-                "mopac_status": "none",
+                "status": "Running",
+                "crest_status": "XTB_PREOPT",
+                "mopac_status": "NOT_ATTEMPTED",
             }
         )
         progress.update_from_csv_row(row)
-        assert progress.last_csv_state["status"] == "processing"
-        assert progress.last_csv_state["crest_status"] == "xtb_opt"
-        assert progress.last_csv_state["mopac_status"] == "none"
+        assert progress.last_csv_state["status"] == "Running"
+        assert progress.last_csv_state["crest_status"] == "XTB_PREOPT"
+        assert progress.last_csv_state["mopac_status"] == "NOT_ATTEMPTED"
 
     def test_update_from_csv_row_returns_new_stage(self) -> None:
         """update_from_csv_row() returns new stage when transition detected."""
         progress = MoleculeProgress(mol_id="test")
         row = pd.Series(
             {
-                "status": "processing",
+                "status": "Running",
                 "crest_status": "NOT_ATTEMPTED",
-                "mopac_status": "none",
+                "mopac_status": "NOT_ATTEMPTED",
             }
         )
         new_stage = progress.update_from_csv_row(row)
@@ -336,9 +336,9 @@ class TestMoleculeProgress:
         progress = MoleculeProgress(mol_id="test")
         row = pd.Series(
             {
-                "status": "processing",
+                "status": "Running",
                 "crest_status": "NOT_ATTEMPTED",
-                "mopac_status": "none",
+                "mopac_status": "NOT_ATTEMPTED",
             }
         )
         progress.update_from_csv_row(row)
@@ -348,7 +348,7 @@ class TestMoleculeProgress:
         """Molecule is marked completed when status is OK."""
         progress = MoleculeProgress(mol_id="test")
         row = pd.Series(
-            {"status": "OK", "crest_status": "SUCCESS", "mopac_status": "success"}
+            {"status": "OK", "crest_status": "SUCCESS", "mopac_status": "OK"}
         )
         progress.update_from_csv_row(row)
         assert progress.completed is True
@@ -357,7 +357,7 @@ class TestMoleculeProgress:
         """Molecule is marked completed when status is Skip."""
         progress = MoleculeProgress(mol_id="test")
         row = pd.Series(
-            {"status": "Skip", "crest_status": "ERROR", "mopac_status": "none"}
+            {"status": "Skip", "crest_status": "FAILED", "mopac_status": "NOT_ATTEMPTED"}
         )
         progress.update_from_csv_row(row)
         assert progress.completed is True
@@ -366,7 +366,7 @@ class TestMoleculeProgress:
         """Molecule is marked completed when status is Rerun."""
         progress = MoleculeProgress(mol_id="test")
         row = pd.Series(
-            {"status": "Rerun", "crest_status": "timeout", "mopac_status": "none"}
+            {"status": "Rerun", "crest_status": "FAILED", "mopac_status": "NOT_ATTEMPTED"}
         )
         progress.update_from_csv_row(row)
         assert progress.completed is True
@@ -559,6 +559,38 @@ class TestProgressTrackerStats:
         assert progress_tracker.failed == 2
 
 
+class TestProgressTrackerCompletionEvents:
+    """Test applying completion events updates tracker stats."""
+
+    def test_apply_event_ok_marks_completed(
+        self, progress_tracker: ProgressTracker
+    ) -> None:
+        """Completion event with OK updates stats and removes molecule."""
+        progress_tracker.register_molecule("mol_001")
+        progress_tracker.apply_event(
+            ProgressEvent(
+                "mol_001",
+                new_stage=ProcessingStage.FINAL_CALC,
+                status="OK",
+            )
+        )
+
+        assert progress_tracker.total_processed == 1
+        assert progress_tracker.successful == 1
+        assert "mol_001" not in progress_tracker._molecules
+
+    def test_apply_event_skip_marks_skipped(
+        self, progress_tracker: ProgressTracker
+    ) -> None:
+        """Completion event with Skip updates skipped count."""
+        progress_tracker.register_molecule("mol_002")
+        progress_tracker.apply_event(ProgressEvent("mol_002", status="Skip"))
+
+        assert progress_tracker.total_processed == 1
+        assert progress_tracker.skipped == 1
+        assert "mol_002" not in progress_tracker._molecules
+
+
 class TestCSVMonitor:
     """Test CSV polling daemon thread."""
 
@@ -614,7 +646,7 @@ class TestCSVMonitorDetection:
         csv_path = tmp_path / "test.csv"
         csv_path.write_text(
             "mol_id,status,crest_status,mopac_status\n"
-            "mol_001,pending,NOT_ATTEMPTED,none"
+            "mol_001,Pending,NOT_ATTEMPTED,NOT_ATTEMPTED"
         )
 
         monitor = CSVMonitor(
@@ -628,7 +660,7 @@ class TestCSVMonitorDetection:
         # Update CSV to trigger transition
         csv_path.write_text(
             "mol_id,status,crest_status,mopac_status\n"
-            "mol_001,processing,NOT_ATTEMPTED,none"
+            "mol_001,Running,NOT_ATTEMPTED,NOT_ATTEMPTED"
         )
 
         # Wait for event with timeout (deterministic synchronization)
@@ -641,6 +673,40 @@ class TestCSVMonitorDetection:
         assert event.mol_id == "mol_001"
         assert event.new_stage == ProcessingStage.RDKIT_PARAMS
 
+    def test_detects_completion_status(
+        self,
+        tmp_path: Path,
+        event_queue: QueueType[ProgressEvent],
+    ) -> None:
+        """CSVMonitor emits completion event when status becomes OK."""
+        csv_path = tmp_path / "test.csv"
+        csv_path.write_text(
+            "mol_id,status,crest_status,mopac_status\n"
+            "mol_001,Pending,NOT_ATTEMPTED,NOT_ATTEMPTED"
+        )
+
+        monitor = CSVMonitor(
+            csv_path=csv_path,
+            event_queue=event_queue,
+            poll_interval_ms=50,
+        )
+        monitor.register_molecule("mol_001")
+        monitor.start()
+
+        csv_path.write_text(
+            "mol_id,status,crest_status,mopac_status\n"
+            "mol_001,OK,SUCCESS,OK"
+        )
+
+        try:
+            event = event_queue.get(timeout=1.0)
+        finally:
+            monitor.stop()
+
+        assert event.mol_id == "mol_001"
+        assert event.status == "OK"
+        assert event.new_stage == ProcessingStage.FINAL_CALC
+
     def test_no_event_when_no_change(
         self,
         tmp_path: Path,
@@ -650,7 +716,7 @@ class TestCSVMonitorDetection:
         csv_path = tmp_path / "test.csv"
         csv_path.write_text(
             "mol_id,status,crest_status,mopac_status\n"
-            "mol_001,pending,NOT_ATTEMPTED,none"
+            "mol_001,Pending,NOT_ATTEMPTED,NOT_ATTEMPTED"
         )
 
         monitor = CSVMonitor(
@@ -773,7 +839,7 @@ class TestAllFiveEventsSequence:
 
         stages_and_labels = [
             (ProcessingStage.RDKIT_PARAMS, "RDKit parameters"),
-            (ProcessingStage.XTB_PREOPT, "xTB pre-optimization"),
+            (ProcessingStage.XTB_PREOPT, "Pre-optimization"),
             (ProcessingStage.CREST_SEARCH, "CREST conformer search"),
             (ProcessingStage.MOPAC_CALC, "MOPAC PM7 calculation"),
             (ProcessingStage.FINAL_CALC, "Final calculations"),
@@ -882,7 +948,7 @@ class TestThreadSafety:
         csv_path = tmp_path / "test.csv"
         csv_path.write_text(
             "mol_id,status,crest_status,mopac_status\n"
-            "mol_001,pending,NOT_ATTEMPTED,none"
+            "mol_001,Pending,NOT_ATTEMPTED,NOT_ATTEMPTED"
         )
 
         tracker = ProgressTracker(console=mock_console, batch_size=1)
@@ -902,7 +968,7 @@ class TestThreadSafety:
         # Update CSV
         csv_path.write_text(
             "mol_id,status,crest_status,mopac_status\n"
-            "mol_001,processing,NOT_ATTEMPTED,none"
+            "mol_001,Running,NOT_ATTEMPTED,NOT_ATTEMPTED"
         )
 
         time.sleep(0.15)
