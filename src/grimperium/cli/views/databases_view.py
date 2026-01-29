@@ -8,7 +8,6 @@ import json
 import logging
 import os
 import threading
-import time
 from datetime import date, datetime
 from queue import Queue
 from typing import TYPE_CHECKING, Any
@@ -659,43 +658,51 @@ class DatabasesView(BaseView):
             previous_disable = logging.root.manager.disable
             logging.disable(logging.INFO)
 
+            # Define batch_complete and batch_thread outside Live context for cleanup access
+            batch_complete = threading.Event()
+            batch_error: Exception | None = None
+            batch_thread: threading.Thread | None = None
+
+            def run_batch() -> None:
+                nonlocal result, batch_error
+                try:
+                    result = exec_manager.execute_batch(batch)
+                except Exception as e:
+                    batch_error = e
+                finally:
+                    batch_complete.set()
+
             try:
                 with Live(console=self.console, refresh_per_second=10) as live:
-                    batch_complete = threading.Event()
-                    batch_error: Exception | None = None
-
-                    def run_batch() -> None:
-                        nonlocal result, batch_error
-                        try:
-                            result = exec_manager.execute_batch(batch)
-                        except Exception as e:
-                            batch_error = e
-                        finally:
-                            batch_complete.set()
-
                     batch_thread = threading.Thread(target=run_batch, daemon=True)
                     batch_thread.start()
 
-                    while not batch_complete.is_set():
-                        consume_events(event_queue, tracker)
-                        display = self._render_pm7_batch_display(tracker, frame_idx)
-                        live.update(display)
-                        frame_idx += 1
-                        time.sleep(0.1)
+                    try:
+                        while not batch_complete.is_set():
+                            consume_events(event_queue, tracker)
+                            display = self._render_pm7_batch_display(tracker, frame_idx)
+                            live.update(display)
+                            frame_idx += 1
 
-                    consume_events(event_queue, tracker)
-                    if result is not None:
-                        tracker.successful = result.success_count
-                        tracker.failed = result.rerun_count  # Rerun implies failure
-                        tracker.skipped = result.skip_count
-                        tracker.total_processed = result.total_count
-                    display = self._render_pm7_batch_display(tracker, frame_idx)
-                    live.update(display)
+                        if result is not None:
+                            tracker.successful = result.success_count
+                            tracker.failed = result.failed_count
+                            tracker.skipped = result.skip_count
+                            tracker.total_processed = result.total_count
+                            display = self._render_pm7_batch_display(tracker, frame_idx)
+                            live.update(display)
 
-                    if batch_error is not None:
-                        raise batch_error
+                        if batch_error is not None:
+                            raise batch_error
+                    except (KeyboardInterrupt, Exception):
+                        batch_complete.set()
+                        raise
             finally:
                 logging.disable(previous_disable)
+                # Ensure batch_thread completes and flushes CSV writes before cleanup
+                if batch_thread is not None:
+                    batch_complete.set()  # Ensure event is set even if exception occurred
+                    batch_thread.join()
                 csv_monitor.stop(timeout=1.0)
 
             self.console.print()
