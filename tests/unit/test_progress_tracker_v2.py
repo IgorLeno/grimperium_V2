@@ -1,5 +1,4 @@
-"""
-Tests for ProgressTracker with CSV-driven state machine and Queue pattern.
+"""Tests for ProgressTracker with CSV-driven state machine and Queue pattern.
 
 Coverage requirements: >= 85%
 
@@ -197,6 +196,7 @@ class TestStageTransition:
         assert event.label == "Final calculations"
 
 
+@pytest.mark.unit
 class TestStageWeights:
     """Test stage timing weights configuration."""
 
@@ -614,6 +614,7 @@ class TestProgressTrackerStats:
         assert progress_tracker.failed == 2
 
 
+@pytest.mark.unit
 class TestProgressTrackerTiming:
     """Test elapsed and remaining time calculations."""
 
