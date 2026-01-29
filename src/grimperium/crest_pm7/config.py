@@ -206,6 +206,52 @@ class PM7Config:
                 )
             self.phase = Phase(self.phase)
 
+        # Normalize and validate CREST settings
+        if isinstance(self.crest_method, str):
+            self.crest_method = self.crest_method.strip().lower()
+        if isinstance(self.crest_quick_mode, str):
+            self.crest_quick_mode = self.crest_quick_mode.strip().lower()
+
+        valid_crest_methods = {"gfn2", "gfnff", "gfn2//gfnff"}
+        if self.crest_method not in valid_crest_methods:
+            raise ValueError(
+                f"Invalid crest_method '{self.crest_method}'. "
+                f"Must be one of: {', '.join(sorted(valid_crest_methods))}"
+            )
+
+        valid_quick_modes = {"off", "quick", "squick", "mquick"}
+        if self.crest_quick_mode not in valid_quick_modes:
+            raise ValueError(
+                f"Invalid crest_quick_mode '{self.crest_quick_mode}'. "
+                f"Must be one of: {', '.join(sorted(valid_quick_modes))}"
+            )
+
+        # Keep crest_optlev_label derived from crest_opt_level (canonical numeric field)
+        if isinstance(self.crest_opt_level, str):
+            try:
+                self.crest_opt_level = int(self.crest_opt_level)
+            except ValueError as e:  # pragma: no cover - defensive
+                raise ValueError(
+                    f"crest_opt_level must be an integer 0..2, got '{self.crest_opt_level}'"
+                ) from e
+
+        optlev_label_map = {0: "loose", 1: "normal", 2: "tight"}
+        if self.crest_opt_level not in optlev_label_map:
+            raise ValueError(
+                f"Invalid crest_opt_level '{self.crest_opt_level}'. "
+                f"Must be one of: {', '.join(str(k) for k in sorted(optlev_label_map))}"
+            )
+
+        expected_label = optlev_label_map[self.crest_opt_level]
+        normalized_label = str(self.crest_optlev_label).strip().lower()
+        if normalized_label and normalized_label != expected_label:
+            raise ValueError(
+                "Inconsistent CREST optlev settings: "
+                f"crest_opt_level={self.crest_opt_level} implies "
+                f"crest_optlev_label='{expected_label}', got '{normalized_label}'"
+            )
+        self.crest_optlev_label = expected_label
+
         # Validate threshold fields
         if not (0 <= self.hof_extraction_threshold <= 1):
             raise ValueError(

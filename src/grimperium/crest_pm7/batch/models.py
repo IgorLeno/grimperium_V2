@@ -10,7 +10,7 @@ This module defines data models for:
 from datetime import datetime, timezone
 from pathlib import Path
 
-from pydantic import BaseModel, Field, computed_field, field_serializer
+from pydantic import BaseModel, Field, computed_field, field_serializer, model_validator
 
 from grimperium.crest_pm7.batch.enums import (
     BatchFailurePolicy,
@@ -215,18 +215,18 @@ class BatchRowCSV(BaseModel):
     nci: bool | None = Field(default=None, description="CREST NCI mode")
     c_method: str | None = Field(default=None, description="CREST method")
     energy_window: float | None = Field(
-        default=None, description="CREST energy window (kcal/mol)"
+        default=None, gt=0, description="CREST energy window (kcal/mol)"
     )
     rmsd_threshold: float | None = Field(
-        default=None, description="CREST RMSD threshold (A)"
+        default=None, gt=0, description="CREST RMSD threshold (A)"
     )
     opt_lvl: int | None = Field(
-        default=None, description="CREST optimization level (0-2)"
+        default=None, ge=0, le=2, description="CREST optimization level (0-2)"
     )
     crest_optlev: str | None = Field(
         default=None, description="CREST optimization label"
     )
-    threads: int | None = Field(default=None, description="CREST threads")
+    threads: int | None = Field(default=None, gt=0, description="CREST threads")
     xtb: bool | None = Field(default=None, description="xTB pre-optimization")
 
     # === MOPAC Configuration (per batch) ===
@@ -293,6 +293,20 @@ class BatchRowCSV(BaseModel):
     def serialize_timestamp(self, v: datetime | None) -> str | None:
         """Serialize datetime to ISO format."""
         return v.isoformat() if v is not None else None
+
+    @model_validator(mode="after")
+    def _sync_total_time_fields(self) -> "BatchRowCSV":
+        """Keep `total_execution_time` (s) and `total_time` (min) consistent.
+
+        Canonical field is `total_execution_time` in seconds.
+        If only `total_time` is provided, derive seconds from minutes.
+        If seconds are provided, always derive minutes from seconds.
+        """
+        if self.total_execution_time is not None:
+            self.total_time = self.total_execution_time / 60.0
+        elif self.total_time is not None:
+            self.total_execution_time = self.total_time * 60.0
+        return self
 
     model_config = {
         "use_enum_values": True,

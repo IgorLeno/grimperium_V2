@@ -25,6 +25,7 @@ LOG = logging.getLogger("grimperium.crest_pm7.batch.processor_adapter")
 
 # Default maximum observations to keep for statistics
 DEFAULT_MAX_OBSERVATIONS = 100
+DEFAULT_XTB_TIMEOUT_SECONDS = 300
 
 
 @dataclass
@@ -177,7 +178,8 @@ class FixedTimeoutProcessor:
             crest_timeout_minutes: Fixed CREST timeout in minutes
             mopac_timeout_minutes: Fixed MOPAC timeout in minutes
             enable_xtb_preopt: Enable xTB pre-optimization (default: False)
-            xtb_timeout_seconds: Optional xTB pre-optimization timeout override
+            xtb_timeout_seconds: Timeout do xTB pre-optimization em segundos.
+                Se None, usa o padrão de 300 segundos.
 
         Side Effects:
             Modifies config.crest_timeout = crest_timeout_minutes * 60
@@ -208,7 +210,9 @@ class FixedTimeoutProcessor:
         self.preoptimizer = xTBPreOptimizer(
             enabled=enable_xtb_preopt,
             timeout_seconds=(
-                xtb_timeout_seconds if xtb_timeout_seconds is not None else 300
+                xtb_timeout_seconds
+                if xtb_timeout_seconds is not None
+                else DEFAULT_XTB_TIMEOUT_SECONDS
             ),
         )
 

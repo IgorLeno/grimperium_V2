@@ -21,6 +21,13 @@ def _safe_descriptor(
 
     Returns:
         Descriptor value or None if unavailable
+
+    Example:
+        >>> from rdkit import Chem
+        >>> from rdkit.Chem import Descriptors
+        >>> mol = Chem.MolFromSmiles("CCO")
+        >>> _safe_descriptor(Descriptors.MolWt, mol)
+        46.07
     """
     if func is None:
         return None
@@ -39,6 +46,11 @@ def extract_all_rdkit_descriptors(smiles: str) -> dict[str, float]:
 
     Returns:
         Dictionary of descriptor values (empty if SMILES invalid)
+
+    Example:
+        >>> descriptors = extract_all_rdkit_descriptors("CCO")
+        >>> "mol_wt" in descriptors
+        True
     """
     try:
         from rdkit import Chem

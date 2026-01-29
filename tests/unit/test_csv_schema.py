@@ -62,10 +62,13 @@ class TestCSVSchema:
         """Verify schema has expected column count.
 
         Current: 58 columns (Phase A complete schema)
-        - 45 original columns
-        - 4 new Phase A columns (mopac_status, mopac_time, conformer_selected, total_time)
-        - 1 opt_lvl column
-        - 1 max_retries column
+        - 1 identity column
+        - 7 molecular property columns
+        - 4 batch info columns
+        - 10 CREST config columns
+        - 2 MOPAC config columns
+        - 23 results columns
+        - 3 retry tracking columns
         - 8 reserved Phase B placeholder columns
         """
         schema = manager.get_schema()

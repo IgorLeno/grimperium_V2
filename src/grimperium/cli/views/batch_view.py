@@ -30,6 +30,7 @@ from grimperium.cli.progress_tracker import (
     ProgressTracker,
     consume_events,
 )
+from grimperium.cli.settings_manager import SettingsManager
 from grimperium.cli.styles import COLORS, ICONS
 from grimperium.cli.views.base_view import BaseView
 
@@ -324,7 +325,9 @@ class BatchView(BaseView):
 
         detail_manager = ConformerDetailManager(self.detail_dir)
         pm7_config = PM7Config()
-        settings_manager = getattr(self.controller, "settings_manager", None)
+        settings_manager: SettingsManager | None = getattr(
+            self.controller, "settings_manager", None
+        )
         if settings_manager is not None:
             settings_manager.apply_to_pm7_config(pm7_config)
 

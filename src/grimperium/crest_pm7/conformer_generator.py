@@ -4,6 +4,7 @@ Wraps CREST executable and handles XYZ to SDF conversion.
 """
 
 import logging
+import os
 import shutil
 import subprocess
 import time
@@ -335,9 +336,13 @@ def run_crest(
             "gfnff": "--gfnff",
             "gfn2//gfnff": "--gfn2//gfnff",
         }
-        method_flag = method_flags.get(config.crest_method)
-        if method_flag:
-            cmd.append(method_flag)
+        if config.crest_method not in method_flags:
+            valid_methods = ", ".join(sorted(method_flags))
+            raise ValueError(
+                f"Invalid config.crest_method '{config.crest_method}'. "
+                f"Valid values: {valid_methods}"
+            )
+        cmd.append(method_flags[config.crest_method])
 
         if config.crest_v3:
             cmd.append("--v3")
@@ -349,20 +354,82 @@ def run_crest(
             "squick": "--squick",
             "mquick": "--mquick",
         }
-        quick_flag = quick_flags.get(config.crest_quick_mode)
-        if quick_flag:
-            cmd.append(quick_flag)
+        if config.crest_quick_mode in quick_flags:
+            cmd.append(quick_flags[config.crest_quick_mode])
+        elif config.crest_quick_mode not in {"off", ""}:
+            valid_quick = ", ".join(sorted({"off"} | set(quick_flags)))
+            LOG.warning(
+                "Invalid config.crest_quick_mode '%s' (valid: %s). "
+                "Proceeding without quick flag.",
+                config.crest_quick_mode,
+                valid_quick,
+            )
+
+        # Validate/sanitize numeric parameters before building CREST command
+        try:
+            threads = int(config.crest_threads)
+        except (TypeError, ValueError) as e:
+            raise ValueError(
+                f"Invalid config.crest_threads '{config.crest_threads}'. Must be int > 0."
+            ) from e
+        if threads <= 0:
+            raise ValueError(
+                f"Invalid config.crest_threads '{config.crest_threads}'. Must be int > 0."
+            )
+        max_threads = os.cpu_count() or 1
+        safe_threads = min(threads, max_threads)
+        if safe_threads != threads:
+            LOG.warning(
+                "Clamping config.crest_threads from %s to %s (cpu_count=%s).",
+                threads,
+                safe_threads,
+                max_threads,
+            )
+
+        try:
+            energy_window = float(config.energy_window)
+        except (TypeError, ValueError) as e:
+            raise ValueError(
+                f"Invalid config.energy_window '{config.energy_window}'. Must be float > 0."
+            ) from e
+        if not (0.0 < energy_window <= 1000.0):
+            raise ValueError(
+                f"Invalid config.energy_window '{energy_window}'. Must be in (0, 1000]."
+            )
+
+        try:
+            rmsd_threshold = float(config.crest_rmsd_threshold)
+        except (TypeError, ValueError) as e:
+            raise ValueError(
+                f"Invalid config.crest_rmsd_threshold '{config.crest_rmsd_threshold}'. "
+                "Must be float > 0."
+            ) from e
+        if not (0.0 < rmsd_threshold <= 10.0):
+            raise ValueError(
+                f"Invalid config.crest_rmsd_threshold '{rmsd_threshold}'. Must be in (0, 10]."
+            )
+
+        try:
+            opt_level = int(config.crest_opt_level)
+        except (TypeError, ValueError) as e:
+            raise ValueError(
+                f"Invalid config.crest_opt_level '{config.crest_opt_level}'. Must be int in [0, 2]."
+            ) from e
+        if opt_level not in {0, 1, 2}:
+            raise ValueError(
+                f"Invalid config.crest_opt_level '{opt_level}'. Must be int in [0, 2]."
+            )
 
         cmd.extend(
             [
                 "--ewin",
-                str(config.energy_window),
+                str(energy_window),
                 "--rthr",
-                str(config.crest_rmsd_threshold),
+                str(rmsd_threshold),
                 "--opt",
-                str(config.crest_opt_level),
+                str(opt_level),
                 "--T",
-                str(config.crest_threads),
+                str(safe_threads),
             ]
         )
 

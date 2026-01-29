@@ -4,6 +4,8 @@ Databases view for GRIMPERIUM CLI.
 Displays and manages molecular databases.
 """
 
+from __future__ import annotations
+
 import json
 import logging
 import os
@@ -31,6 +33,7 @@ from grimperium.cli.views.base_view import BaseView
 
 if TYPE_CHECKING:
     from grimperium.cli.controller import CliController
+    from grimperium.cli.settings_manager import SettingsManager
 
 
 class DatabasesView(BaseView):
@@ -41,7 +44,7 @@ class DatabasesView(BaseView):
     icon = ICONS["databases"]
     color = COLORS["databases"]
 
-    def __init__(self, controller: "CliController") -> None:
+    def __init__(self, controller: CliController) -> None:
         """Initialize the databases view."""
         super().__init__(controller)
         self.selected_db: Database | None = None
@@ -593,7 +596,9 @@ class DatabasesView(BaseView):
             self.console.print("[bold cyan]Initializing batch processor...[/bold cyan]")
 
             pm7_config = PM7Config()
-            settings_manager = getattr(self.controller, "settings_manager", None)
+            settings_manager: SettingsManager | None = getattr(
+                self.controller, "settings_manager", None
+            )
             if settings_manager is not None:
                 settings_manager.apply_to_pm7_config(pm7_config)
             csv_manager = BatchCSVManager(csv_path)

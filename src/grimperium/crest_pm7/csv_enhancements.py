@@ -215,9 +215,10 @@ class BatchSettingsCapture:
         crest_quick_mode = getattr(
             pm7_config, "crest_quick_mode", crest_config.get("quick_mode", "off")
         )
-        crest_method = getattr(
-            pm7_config, "crest_method", crest_config.get("c_method", "gfn2-xtb")
-        )
+        raw_crest_method = getattr(pm7_config, "crest_method", None)
+        if raw_crest_method is None:
+            raw_crest_method = crest_config.get("c_method", "gfn2-xtb")
+        crest_method = str(raw_crest_method).strip().lower()
         method_label = {
             "gfn2": "gfn2-xtb",
             "gfnff": "gfnff",
@@ -229,7 +230,7 @@ class BatchSettingsCapture:
         settings["nci"] = getattr(
             pm7_config, "crest_nci", crest_config.get("nci", False)
         )
-        settings["c_method"] = crest_config.get("c_method", method_label)
+        settings["c_method"] = method_label
         settings["energy_window"] = getattr(
             pm7_config, "energy_window", crest_config.get("energy_window", 10.0)
         )
