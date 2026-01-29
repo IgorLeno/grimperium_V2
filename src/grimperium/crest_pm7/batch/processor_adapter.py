@@ -178,8 +178,8 @@ class FixedTimeoutProcessor:
             crest_timeout_minutes: Fixed CREST timeout in minutes
             mopac_timeout_minutes: Fixed MOPAC timeout in minutes
             enable_xtb_preopt: Enable xTB pre-optimization (default: False)
-            xtb_timeout_seconds: Timeout do xTB pre-optimization em segundos.
-                Se None, usa o padrão de 300 segundos.
+            xtb_timeout_seconds: Timeout for xTB pre-optimization in seconds.
+                If None, uses the default of 300 seconds.
 
         Side Effects:
             Modifies config.crest_timeout = crest_timeout_minutes * 60

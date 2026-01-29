@@ -357,12 +357,10 @@ def run_crest(
         if config.crest_quick_mode in quick_flags:
             cmd.append(quick_flags[config.crest_quick_mode])
         elif config.crest_quick_mode not in {"off", ""}:
-            valid_quick = ", ".join(sorted({"off"} | set(quick_flags)))
-            LOG.warning(
-                "Invalid config.crest_quick_mode '%s' (valid: %s). "
-                "Proceeding without quick flag.",
-                config.crest_quick_mode,
-                valid_quick,
+            valid_quick = ", ".join(["off", *sorted(quick_flags)])
+            raise ValueError(
+                f"Invalid config.crest_quick_mode '{config.crest_quick_mode}' while "
+                f"building CREST cmd {cmd}. Valid values: {valid_quick}"
             )
 
         # Validate/sanitize numeric parameters before building CREST command

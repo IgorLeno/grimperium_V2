@@ -26,8 +26,9 @@ def _safe_descriptor(
         >>> from rdkit import Chem
         >>> from rdkit.Chem import Descriptors
         >>> mol = Chem.MolFromSmiles("CCO")
-        >>> _safe_descriptor(Descriptors.MolWt, mol)
-        46.07
+        >>> result = _safe_descriptor(Descriptors.MolWt, mol)
+        >>> 46.0 < result < 47.0  # Ethanol MW ~46.07
+        True
     """
     if func is None:
         return None
