@@ -328,13 +328,43 @@ def run_crest(
 
     try:
         # Run CREST
-        cmd = [
-            config.crest_executable,
-            str(input_copy),
-            "--quick",
-            "--ewin",
-            str(config.energy_window),
-        ]
+        cmd = [config.crest_executable, str(input_copy)]
+
+        method_flags = {
+            "gfn2": "--gfn2",
+            "gfnff": "--gfnff",
+            "gfn2//gfnff": "--gfn2//gfnff",
+        }
+        method_flag = method_flags.get(config.crest_method)
+        if method_flag:
+            cmd.append(method_flag)
+
+        if config.crest_v3:
+            cmd.append("--v3")
+        if config.crest_nci:
+            cmd.append("--nci")
+
+        quick_flags = {
+            "quick": "--quick",
+            "squick": "--squick",
+            "mquick": "--mquick",
+        }
+        quick_flag = quick_flags.get(config.crest_quick_mode)
+        if quick_flag:
+            cmd.append(quick_flag)
+
+        cmd.extend(
+            [
+                "--ewin",
+                str(config.energy_window),
+                "--rthr",
+                str(config.crest_rmsd_threshold),
+                "--opt",
+                str(config.crest_opt_level),
+                "--T",
+                str(config.crest_threads),
+            ]
+        )
 
         LOG.info(f"Running CREST for {mol_id}: {' '.join(cmd)}")
 

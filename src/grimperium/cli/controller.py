@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING
 from rich.console import Console
 
 from grimperium.cli.mock_data import DEFAULT_MODEL
+from grimperium.cli.settings_manager import SettingsManager
 from grimperium.cli.styles import CLI_THEME
 
 if TYPE_CHECKING:
@@ -35,6 +36,7 @@ class CliController:
         self.current_model: str = DEFAULT_MODEL
         self.status: str = "Ready"
         self.console = Console(theme=CLI_THEME)
+        self.settings_manager = SettingsManager(console=self.console)
         self._views: dict[str, BaseView] = {}
         self._running: bool = False
 

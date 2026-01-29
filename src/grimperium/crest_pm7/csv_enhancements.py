@@ -196,7 +196,8 @@ class BatchSettingsCapture:
 
         Returns:
             Dictionary with settings:
-            - CREST settings: v3, qm, nci, c_method, energy_window, rmsd_threshold, threads, xtb
+            - CREST settings: v3, qm, nci, c_method, energy_window, rmsd_threshold,
+              opt_lvl, threads, xtb
             - MOPAC settings: precise_scf, scf_threshold
 
         Example:
@@ -211,19 +212,54 @@ class BatchSettingsCapture:
 
         # CREST settings
         crest_config = getattr(pm7_config, "crest_config", {})
-        settings["v3"] = crest_config.get("v3", False)
-        settings["qm"] = crest_config.get("qm", False)
-        settings["nci"] = crest_config.get("nci", False)
-        settings["c_method"] = crest_config.get("c_method", "gfn2-xtb")
-        settings["energy_window"] = crest_config.get("energy_window", 10.0)
-        settings["rmsd_threshold"] = crest_config.get("rmsd_threshold", 0.125)
-        settings["threads"] = crest_config.get("threads", 4)
-        settings["xtb"] = crest_config.get("xtb", True)
+        crest_quick_mode = getattr(
+            pm7_config, "crest_quick_mode", crest_config.get("quick_mode", "off")
+        )
+        crest_method = getattr(
+            pm7_config, "crest_method", crest_config.get("c_method", "gfn2-xtb")
+        )
+        method_label = {
+            "gfn2": "gfn2-xtb",
+            "gfnff": "gfnff",
+            "gfn2//gfnff": "gfn2//gfnff",
+        }.get(crest_method, crest_method)
+
+        settings["v3"] = getattr(pm7_config, "crest_v3", crest_config.get("v3", False))
+        settings["qm"] = crest_config.get("qm", crest_quick_mode != "off")
+        settings["nci"] = getattr(
+            pm7_config, "crest_nci", crest_config.get("nci", False)
+        )
+        settings["c_method"] = crest_config.get("c_method", method_label)
+        settings["energy_window"] = getattr(
+            pm7_config, "energy_window", crest_config.get("energy_window", 10.0)
+        )
+        settings["rmsd_threshold"] = getattr(
+            pm7_config,
+            "crest_rmsd_threshold",
+            crest_config.get("rmsd_threshold", 0.125),
+        )
+        settings["opt_lvl"] = getattr(
+            pm7_config, "crest_opt_level", crest_config.get("opt_lvl")
+        )
+        settings["crest_optlev"] = crest_config.get(
+            "crest_optlev", getattr(pm7_config, "crest_optlev_label", None)
+        )
+        settings["threads"] = getattr(
+            pm7_config, "crest_threads", crest_config.get("threads", 4)
+        )
+        settings["xtb"] = crest_config.get(
+            "xtb",
+            getattr(pm7_config, "xtb_preopt", True),
+        )
 
         # MOPAC settings
         mopac_config = getattr(pm7_config, "mopac_config", {})
-        settings["precise_scf"] = mopac_config.get("precise_scf", True)
-        settings["scf_threshold"] = mopac_config.get("scf_threshold", 1.0)
+        settings["precise_scf"] = getattr(
+            pm7_config, "mopac_precise_scf", mopac_config.get("precise_scf", True)
+        )
+        settings["scf_threshold"] = getattr(
+            pm7_config, "mopac_scf_threshold", mopac_config.get("scf_threshold", 1.0)
+        )
 
         logger.debug(f"Captured batch settings: {settings}")
         return settings
@@ -300,6 +336,8 @@ class CSVManagerExtensions:
                 "c_method": batch_settings.get("c_method"),
                 "energy_window": batch_settings.get("energy_window"),
                 "rmsd_threshold": batch_settings.get("rmsd_threshold"),
+                "opt_lvl": batch_settings.get("opt_lvl"),
+                "crest_optlev": batch_settings.get("crest_optlev"),
                 "threads": batch_settings.get("threads"),
                 "xtb": batch_settings.get("xtb"),
                 "precise_scf": batch_settings.get("precise_scf"),

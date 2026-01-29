@@ -94,9 +94,20 @@ class PM7Config:
         output_dir: Directory for output files
         max_conformers: Maximum conformers to generate/process
         energy_window: Energy window for conformer selection (kcal/mol)
+        crest_rmsd_threshold: RMSD threshold for CREST deduplication
+        crest_opt_level: CREST optimization level (0-2)
+        crest_optlev_label: CREST optimization level label
+        crest_threads: Number of CREST threads
+        crest_method: CREST method (gfn2, gfnff, gfn2//gfnff)
+        crest_quick_mode: CREST quick mode (off/quick/squick/mquick)
+        crest_v3: Use CREST v3 algorithm
+        crest_nci: Enable CREST NCI mode
         crest_timeout: Timeout for CREST execution (seconds)
         mopac_timeout_base: Base timeout for MOPAC execution (seconds)
         mopac_timeout_margin: Margin multiplier for MOPAC timeout
+        mopac_precise_scf: Enable MOPAC PRECISE SCF
+        mopac_scf_threshold: MOPAC SCF convergence threshold
+        xtb_preopt: Enable xTB pre-optimization
         nrotbonds_threshold_rigid_to_medium: Threshold for rigid -> medium
         nrotbonds_threshold_medium_to_flexible: Threshold for medium -> flexible
         timeout_predictor_recalibrate_interval: Molecules between recalibration
@@ -131,11 +142,24 @@ class PM7Config:
     # CREST settings
     max_conformers: int = 10
     energy_window: float = 6.0  # kcal/mol
+    crest_rmsd_threshold: float = 0.125  # Angstrom
+    crest_opt_level: int = 1  # 0=loose, 1=normal, 2=tight
+    crest_optlev_label: str = "normal"
+    crest_threads: int = 4
+    crest_method: str = "gfn2"
+    crest_quick_mode: str = "off"
+    crest_v3: bool = True
+    crest_nci: bool = False
     crest_timeout: float = 300.0  # seconds
 
     # MOPAC settings
     mopac_timeout_base: float = 120.0  # seconds
     mopac_timeout_margin: float = 1.3
+    mopac_precise_scf: bool = False
+    mopac_scf_threshold: float = 1.0e-4
+
+    # xTB pre-optimization
+    xtb_preopt: bool = False
 
     # Conformer selection thresholds (calibrated in Phase C)
     nrotbonds_threshold_rigid_to_medium: int = 1
@@ -236,6 +260,22 @@ class PM7Config:
             raise ValueError(
                 f"consecutive_failures_warning ({self.consecutive_failures_warning}) must be less than "
                 f"consecutive_failures_critical ({self.consecutive_failures_critical})"
+            )
+
+        # Validate CREST/MOPAC settings
+        if self.crest_opt_level not in (0, 1, 2):
+            raise ValueError(
+                f"crest_opt_level must be 0, 1, or 2, got {self.crest_opt_level}"
+            )
+        if self.crest_rmsd_threshold <= 0:
+            raise ValueError(
+                f"crest_rmsd_threshold must be > 0, got {self.crest_rmsd_threshold}"
+            )
+        if self.crest_threads <= 0:
+            raise ValueError(f"crest_threads must be > 0, got {self.crest_threads}")
+        if self.mopac_scf_threshold <= 0:
+            raise ValueError(
+                f"mopac_scf_threshold must be > 0, got {self.mopac_scf_threshold}"
             )
 
     def ensure_directories(self) -> None:

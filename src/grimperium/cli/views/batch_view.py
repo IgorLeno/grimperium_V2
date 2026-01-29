@@ -324,11 +324,20 @@ class BatchView(BaseView):
 
         detail_manager = ConformerDetailManager(self.detail_dir)
         pm7_config = PM7Config()
+        settings_manager = getattr(self.controller, "settings_manager", None)
+        if settings_manager is not None:
+            settings_manager.apply_to_pm7_config(pm7_config)
 
         processor = FixedTimeoutProcessor(
             config=pm7_config,
             crest_timeout_minutes=self.crest_timeout,
             mopac_timeout_minutes=self.mopac_timeout,
+            enable_xtb_preopt=pm7_config.xtb_preopt,
+            xtb_timeout_seconds=(
+                settings_manager.xtb.timeout_seconds
+                if settings_manager is not None
+                else None
+            ),
         )
 
         exec_manager = BatchExecutionManager(

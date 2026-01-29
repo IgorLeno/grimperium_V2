@@ -1,4 +1,4 @@
-"""Tests for Phase A CSV schema (49 columns)."""
+"""Tests for Phase A CSV schema (43 columns)."""
 
 import pandas as pd
 import pytest
@@ -17,15 +17,16 @@ EXPECTED_COLUMNS = [
     "H298_pm7",
     "abs_diff",
     "abs_diff_%",
-    # Batch metadata (11-13)
+    # Batch metadata (11-14)
     "batch_id",
     "timestamp",
+    "total_time",
     "reruns",
-    # RDKit descriptors (14-16)
+    # RDKit descriptors (15-17)
     "nrotbonds",
     "tpsa",
     "aromatic_rings",
-    # CREST results and settings (17-28)
+    # CREST results and settings (18-30)
     "crest_status",
     "xtb",
     "v3",
@@ -34,40 +35,32 @@ EXPECTED_COLUMNS = [
     "c_method",
     "energy_window",
     "rmsd_threshold",
+    "opt_lvl",
     "threads",
     "crest_conformers_generated",
     "crest_time",
     "num_conformers_selected",
-    # MOPAC results and settings (29-32)
+    # MOPAC results and settings (31-34)
     "mopac_status",
     "precise_scf",
     "scf_threshold",
     "mopac_time",
-    # Delta calculations (33-36)
+    # Delta calculations (35-38)
     "delta_1",
     "delta_2",
     "delta_3",
     "conformer_selected",
-    # Error handling and batch control (37-41)
+    # Error handling and batch control (39-43)
     "error_message",
     "batch_order",
     "batch_failure_policy",
     "assigned_crest_timeout",
     "assigned_mopac_timeout",
-    # Reserved for Phase B (42-49)
-    "reserved_42",
-    "reserved_43",
-    "reserved_44",
-    "reserved_45",
-    "reserved_46",
-    "reserved_47",
-    "reserved_48",
-    "reserved_49",
 ]
 
 
-def test_csv_has_49_columns() -> None:
-    """Test that CSV output has exactly 49 columns (after regeneration)."""
+def test_csv_has_43_columns() -> None:
+    """Test that CSV output has exactly 43 columns (after regeneration)."""
     csv_path = Path("data/thermo_pm7.csv")
 
     if csv_path.exists():
@@ -75,7 +68,7 @@ def test_csv_has_49_columns() -> None:
         # Skip test if CSV hasn't been regenerated yet (will have 41 columns)
         if len(df.columns) == 41:
             pytest.skip("CSV not yet regenerated with new schema (still 41 columns)")
-        assert len(df.columns) == 49, f"Expected 49 columns, got {len(df.columns)}"
+        assert len(df.columns) == 43, f"Expected 43 columns, got {len(df.columns)}"
     else:
         pytest.skip("CSV file does not exist yet")
 
@@ -127,5 +120,6 @@ def test_csv_has_new_columns() -> None:
         # Settings
         assert "c_method" in df.columns
         assert "qm" in df.columns
+        assert "opt_lvl" in df.columns
     else:
         pytest.skip("CSV file does not exist yet")

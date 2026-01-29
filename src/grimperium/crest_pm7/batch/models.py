@@ -161,7 +161,7 @@ class Batch(BaseModel):
 class BatchRowCSV(BaseModel):
     """Schema for a row in the batch tracking CSV file.
 
-    This model defines all 36 columns in the CSV.
+    This model defines the Phase A CSV columns.
     Used for validation and documentation.
     """
 
@@ -209,6 +209,30 @@ class BatchRowCSV(BaseModel):
         default=None, description="Assigned MOPAC timeout (minutes)"
     )
 
+    # === CREST Configuration (per batch) ===
+    v3: bool | None = Field(default=None, description="CREST v3 algorithm")
+    qm: bool | None = Field(default=None, description="CREST quick mode enabled")
+    nci: bool | None = Field(default=None, description="CREST NCI mode")
+    c_method: str | None = Field(default=None, description="CREST method")
+    energy_window: float | None = Field(
+        default=None, description="CREST energy window (kcal/mol)"
+    )
+    rmsd_threshold: float | None = Field(
+        default=None, description="CREST RMSD threshold (A)"
+    )
+    opt_lvl: int | None = Field(
+        default=None, description="CREST optimization level (0-2)"
+    )
+    crest_optlev: str | None = Field(
+        default=None, description="CREST optimization label"
+    )
+    threads: int | None = Field(default=None, description="CREST threads")
+    xtb: bool | None = Field(default=None, description="xTB pre-optimization")
+
+    # === MOPAC Configuration (per batch) ===
+    precise_scf: bool | None = Field(default=None, description="MOPAC precise SCF")
+    scf_threshold: float | None = Field(default=None, description="MOPAC SCF threshold")
+
     # === CREST Execution Results ===
     crest_status: str | None = Field(default=None, description="CREST status")
     crest_conformers_generated: int | None = Field(
@@ -245,6 +269,7 @@ class BatchRowCSV(BaseModel):
     total_execution_time: float | None = Field(
         default=None, description="Total time (s)"
     )
+    total_time: float | None = Field(default=None, description="Total time (min)")
 
     # === Actual Timeouts Used ===
     actual_crest_timeout_used: float | None = Field(

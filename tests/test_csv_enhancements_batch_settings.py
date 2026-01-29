@@ -34,6 +34,8 @@ def test_batch_settings_persist_to_csv(tmp_path):
             "c_method": [None],
             "energy_window": [None],
             "rmsd_threshold": [None],
+            "opt_lvl": [None],
+            "crest_optlev": [None],
             "threads": [None],
             "xtb": [None],
             "precise_scf": [None],
@@ -60,6 +62,8 @@ def test_batch_settings_persist_to_csv(tmp_path):
         "c_method": "gfn2-xtb",
         "energy_window": 10.0,
         "rmsd_threshold": 0.125,
+        "opt_lvl": 1,
+        "crest_optlev": "normal",
         "threads": 4,
         "xtb": True,
         "precise_scf": True,
@@ -88,6 +92,8 @@ def test_batch_settings_persist_to_csv(tmp_path):
     assert df_updated.loc[0, "c_method"] == "gfn2-xtb"
     assert df_updated.loc[0, "energy_window"] == 10.0
     assert df_updated.loc[0, "rmsd_threshold"] == 0.125
+    assert df_updated.loc[0, "opt_lvl"] == 1
+    assert df_updated.loc[0, "crest_optlev"] == "normal"
     assert df_updated.loc[0, "threads"] == 4
     assert df_updated.loc[0, "xtb"] == True  # noqa: E712
 

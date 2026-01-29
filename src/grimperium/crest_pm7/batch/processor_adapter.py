@@ -156,6 +156,7 @@ class FixedTimeoutProcessor:
         crest_timeout_minutes: float = 30.0,
         mopac_timeout_minutes: float = 60.0,
         enable_xtb_preopt: bool = False,
+        xtb_timeout_seconds: int | None = None,
     ) -> None:
         """Initialize FixedTimeoutProcessor with batch-specific timeout.
 
@@ -176,6 +177,7 @@ class FixedTimeoutProcessor:
             crest_timeout_minutes: Fixed CREST timeout in minutes
             mopac_timeout_minutes: Fixed MOPAC timeout in minutes
             enable_xtb_preopt: Enable xTB pre-optimization (default: False)
+            xtb_timeout_seconds: Optional xTB pre-optimization timeout override
 
         Side Effects:
             Modifies config.crest_timeout = crest_timeout_minutes * 60
@@ -203,7 +205,12 @@ class FixedTimeoutProcessor:
         )
 
         # Create xTB pre-optimizer
-        self.preoptimizer = xTBPreOptimizer(enabled=enable_xtb_preopt)
+        self.preoptimizer = xTBPreOptimizer(
+            enabled=enable_xtb_preopt,
+            timeout_seconds=(
+                xtb_timeout_seconds if xtb_timeout_seconds is not None else 300
+            ),
+        )
 
         LOG.info(
             f"FixedTimeoutProcessor initialized: "

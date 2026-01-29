@@ -593,6 +593,9 @@ class DatabasesView(BaseView):
             self.console.print("[bold cyan]Initializing batch processor...[/bold cyan]")
 
             pm7_config = PM7Config()
+            settings_manager = getattr(self.controller, "settings_manager", None)
+            if settings_manager is not None:
+                settings_manager.apply_to_pm7_config(pm7_config)
             csv_manager = BatchCSVManager(csv_path)
             csv_manager.load_csv()
 
@@ -603,6 +606,12 @@ class DatabasesView(BaseView):
                 config=pm7_config,
                 crest_timeout_minutes=float(crest_timeout_minutes),
                 mopac_timeout_minutes=float(mopac_timeout_minutes),
+                enable_xtb_preopt=pm7_config.xtb_preopt,
+                xtb_timeout_seconds=(
+                    settings_manager.xtb.timeout_seconds
+                    if settings_manager is not None
+                    else None
+                ),
             )
 
             exec_manager = BatchExecutionManager(

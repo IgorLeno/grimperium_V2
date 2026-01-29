@@ -53,6 +53,7 @@ class MOPACResult:
 def _create_mopac_input(
     xyz_file: Path,
     output_mop: Path,
+    config: PM7Config | None = None,
     charge: int = 0,
     multiplicity: int = 1,
 ) -> bool:
@@ -61,6 +62,7 @@ def _create_mopac_input(
     Args:
         xyz_file: Input XYZ file
         output_mop: Output .mop file
+        config: Pipeline configuration (optional)
         charge: Molecular charge
         multiplicity: Spin multiplicity (1=singlet, 2=doublet, etc.)
 
@@ -78,7 +80,14 @@ def _create_mopac_input(
         comment = lines[1].strip() if len(lines) > 1 else ""
 
         # Build MOPAC keywords
-        keywords = ["PM7", "PRECISE"]
+        keywords = ["PM7"]
+        precise_scf = config.mopac_precise_scf if config is not None else True
+        if precise_scf:
+            keywords.append("PRECISE")
+            if config is not None:
+                keywords.append(f"SCFCRT={format(config.mopac_scf_threshold, '.1e')}")
+        else:
+            keywords.append("1SCF")
         if charge != 0:
             keywords.append(f"CHARGE={charge}")
 
@@ -188,7 +197,7 @@ def run_mopac(
     mop_file = work_dir / f"{mol_id}_conf{conf_index:03d}.mop"
     out_file = work_dir / f"{mol_id}_conf{conf_index:03d}.out"
 
-    if not _create_mopac_input(xyz_file, mop_file):
+    if not _create_mopac_input(xyz_file, mop_file, config=config):
         result.status = MOPACStatus.NOT_ATTEMPTED
         result.error_message = "Failed to create MOPAC input file"
         return result

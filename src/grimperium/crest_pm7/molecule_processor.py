@@ -121,6 +121,7 @@ class PM7Result:
         tpsa: Topological polar surface area
         aromatic_rings: Number of aromatic rings
         has_heteroatoms: Whether molecule has heteroatoms
+        rdkit_descriptors: Extra RDKit descriptors for delta-learning
         crest_status: Overall CREST status
         crest_conformers_generated: Number of conformers from CREST
         crest_time: CREST execution time
@@ -152,6 +153,7 @@ class PM7Result:
     tpsa: float | None = None
     aromatic_rings: int | None = None
     has_heteroatoms: bool | None = None
+    rdkit_descriptors: dict[str, float] = field(default_factory=dict)
 
     # CREST
     crest_status: CRESTStatus = CRESTStatus.NOT_ATTEMPTED
@@ -211,6 +213,7 @@ class PM7Result:
             "tpsa": self.tpsa,
             "aromatic_rings": self.aromatic_rings,
             "has_heteroatoms": self.has_heteroatoms,
+            "rdkit_descriptors": self.rdkit_descriptors,
             "crest_status": self.crest_status.value,
             "crest_conformers_generated": self.crest_conformers_generated,
             "crest_time": self.crest_time,
@@ -453,6 +456,12 @@ class MoleculeProcessor:
         result.tpsa = descriptors["tpsa"]
         result.aromatic_rings = descriptors["aromatic_rings"]
         result.has_heteroatoms = descriptors["has_heteroatoms"]
+        try:
+            from grimperium.core.descriptors import extract_all_rdkit_descriptors
+
+            result.rdkit_descriptors = extract_all_rdkit_descriptors(smiles)
+        except Exception as exc:
+            LOG.debug("RDKit descriptor extraction failed: %s", exc)
 
         if result.nheavy is None:
             result.error_message = "Failed to parse SMILES"

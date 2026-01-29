@@ -6,7 +6,7 @@ Manages CREST, MOPAC, and xTB configuration with interactive menus.
 
 import os
 from dataclasses import dataclass, field
-from typing import Any, ClassVar
+from typing import TYPE_CHECKING, Any, ClassVar
 
 import questionary
 from prompt_toolkit.styles import Style
@@ -15,6 +15,9 @@ from rich.panel import Panel
 from rich.table import Table
 
 from grimperium.cli.styles import COLORS
+
+if TYPE_CHECKING:
+    from grimperium.crest_pm7.config import PM7Config
 
 
 @dataclass
@@ -328,6 +331,44 @@ class SettingsManager:
                 )
             except (ValueError, TypeError):
                 pass
+
+    @staticmethod
+    def _optlev_to_level(optlev: str) -> int:
+        """Convert CREST optlev label to numeric level.
+
+        Args:
+            optlev: Optimization level label (loose/normal/tight/vtight/extreme)
+
+        Returns:
+            Numeric level (0, 1, or 2)
+        """
+        mapping = {
+            "loose": 0,
+            "normal": 1,
+            "tight": 2,
+            "vtight": 2,
+            "extreme": 2,
+        }
+        return mapping.get(optlev, 1)
+
+    def apply_to_pm7_config(self, config: "PM7Config") -> None:
+        """Apply current settings to a PM7Config instance.
+
+        Args:
+            config: PM7Config instance to update
+        """
+        config.energy_window = self.crest.ewin
+        config.crest_rmsd_threshold = self.crest.rthr
+        config.crest_opt_level = self._optlev_to_level(self.crest.optlev)
+        config.crest_optlev_label = self.crest.optlev
+        config.crest_threads = self.crest.threads
+        config.crest_method = self.crest.crest_method
+        config.crest_quick_mode = self.crest.quick_mode
+        config.crest_v3 = self.crest.v3
+        config.crest_nci = self.crest.nci
+        config.xtb_preopt = self.xtb.preopt
+        config.mopac_precise_scf = self.mopac.precise
+        config.mopac_scf_threshold = self.mopac.scfcrt
 
     def reset_crest(self) -> None:
         """Reset CREST settings to defaults."""

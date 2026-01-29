@@ -69,8 +69,9 @@ class BatchCSVManager:
         "delta_2",  # Renamed from delta_e_13
         "delta_3",  # Renamed from delta_e_15
         "conformer_selected",  # NEW: Which conformer was selected (1-3)
-        "reruns",  # NEW
         "timestamp",
+        "total_time",  # NEW: total time in minutes
+        "reruns",  # NEW
     ]
 
     # Identity column
@@ -103,6 +104,7 @@ class BatchCSVManager:
         "c_method",  # Renamed from crest_gfnff
         "energy_window",  # Renamed from crest_ewin
         "rmsd_threshold",  # Renamed from crest_rthr
+        "opt_lvl",  # NEW: numeric optimization level
         "crest_optlev",  # Keep old name for now
         "threads",  # Renamed from crest_threads
         "xtb",  # Renamed from crest_xtb_preopt
@@ -149,14 +151,14 @@ class BatchCSVManager:
         """Get the full CSV schema with all column names.
 
         Returns:
-            List of 49 column names in order (Phase A schema):
+            List of column names in order (Phase A schema):
             - Identity (1): mol_id
             - Molecular properties (7): smiles, nheavy, nrotbonds, tpsa, etc.
             - Batch info (4): status, batch_id, batch_order, batch_failure_policy
-            - CREST configuration (9): v3, qm, nci, c_method, energy_window, etc.
+            - CREST configuration (10): v3, qm, nci, c_method, energy_window, etc.
             - MOPAC configuration (2): precise_scf, scf_threshold
-            - Results (18): crest_status, H298_pm7, deltas, mopac_time, etc.
-            - Retry tracking (2): retry_count, last_error_message
+            - Results (23): crest_status, H298_pm7, deltas, mopac_time, etc.
+            - Retry tracking (3): retry_count, last_error_message, max_retries
             - Phase B reserved (8): reserved_42 through reserved_49
         """
         return (
@@ -1037,6 +1039,11 @@ class BatchCSVManager:
             "error_message": result.error_message,
             "total_execution_time": (
                 round(result.total_execution_time, 1)
+                if result.total_execution_time is not None
+                else None
+            ),
+            "total_time": (
+                round(result.total_execution_time / 60.0, 2)
                 if result.total_execution_time is not None
                 else None
             ),

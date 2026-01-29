@@ -31,6 +31,7 @@ class TestCSVSchema:
             "c_method",  # Renamed from crest_gfnff
             "energy_window",  # Renamed from crest_ewin
             "rmsd_threshold",  # Renamed from crest_rthr
+            "opt_lvl",  # New numeric optimization level
             "crest_optlev",  # Keep old name for now
             "threads",  # Renamed from crest_threads
             "xtb",  # Renamed from crest_xtb_preopt
@@ -60,14 +61,15 @@ class TestCSVSchema:
     def test_schema_length(self, manager: BatchCSVManager) -> None:
         """Verify schema has expected column count.
 
-        Current: 56 columns (Phase A complete schema)
-        - 44 original columns
-        - 3 new Phase A columns (mopac_status, mopac_time, conformer_selected)
+        Current: 58 columns (Phase A complete schema)
+        - 45 original columns
+        - 4 new Phase A columns (mopac_status, mopac_time, conformer_selected, total_time)
+        - 1 opt_lvl column
         - 1 max_retries column
         - 8 reserved Phase B placeholder columns
         """
         schema = manager.get_schema()
-        assert len(schema) == 56, f"Expected 56 columns, got {len(schema)}"
+        assert len(schema) == 58, f"Expected 58 columns, got {len(schema)}"
 
     def test_schema_order(self, manager: BatchCSVManager) -> None:
         """Verify schema column order."""
@@ -128,6 +130,7 @@ class TestCSVSchema:
             "c_method",  # Renamed from crest_gfnff
             "energy_window",  # Renamed from crest_ewin
             "rmsd_threshold",  # Renamed from crest_rthr
+            "opt_lvl",  # New numeric optimization level
             "crest_optlev",  # Keep old name for now
             "threads",  # Renamed from crest_threads
             "xtb",  # Renamed from crest_xtb_preopt

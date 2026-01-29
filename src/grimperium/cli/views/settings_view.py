@@ -48,7 +48,11 @@ class SettingsView(BaseView):
             SettingsManager instance for this view.
         """
         if self._settings_manager is None:
-            self._settings_manager = SettingsManager(console=self.console)
+            controller_manager = getattr(self.controller, "settings_manager", None)
+            if controller_manager is not None:
+                self._settings_manager = controller_manager
+            else:
+                self._settings_manager = SettingsManager(console=self.console)
         return self._settings_manager
 
     def render(self) -> None:
