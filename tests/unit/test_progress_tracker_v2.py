@@ -6,7 +6,7 @@ Test categories:
     - ProcessingStage enum values and ordering
     - StageTransition and EVENTS tuple (5 elements, immutable)
     - MoleculeProgress state tracking with _detect_stage()
-    - ProgressTracker register, update, render (30 chars exactly)
+    - ProgressTracker register, update, render (60 chars exactly)
     - CSVMonitor daemon thread with Queue pattern
     - Thread safety and concurrent operations
     - Batch header statistics
@@ -14,6 +14,7 @@ Test categories:
 
 from __future__ import annotations
 
+import re
 import threading
 import time
 from pathlib import Path
@@ -34,10 +35,12 @@ from grimperium.cli.progress_tracker import (
     ProgressTracker,
     STAGE_WEIGHTS,
 )
+from grimperium.cli.views.batch_view import BatchView
 
 if TYPE_CHECKING:
     from queue import Queue as QueueType
 
+MOCK_MOL_ID = "mol_001"
 
 # ============== FIXTURES ==============
 
@@ -414,63 +417,63 @@ class TestProgressTracker:
         assert "mol_001" in progress_tracker._molecules
         assert isinstance(progress_tracker._molecules["mol_001"], MoleculeProgress)
 
-    def test_progress_bar_width_exactly_30_chars(
+    def test_progress_bar_width_exactly_60_chars(
         self, progress_tracker: ProgressTracker
     ) -> None:
-        """Progress bar must be exactly 30 characters."""
+        """Progress bar must be exactly 60 characters."""
         progress_tracker.register_molecule("mol_001")
         bar = progress_tracker.render_progress_bar("mol_001")
-        assert len(bar) == 30
+        assert len(bar) == 60
 
-    def test_progress_bar_fills_6_chars_per_stage(
+    def test_progress_bar_fills_12_chars_per_stage(
         self, progress_tracker: ProgressTracker
     ) -> None:
-        """Each stage fills exactly 6 characters in the progress bar."""
+        """Each stage fills exactly 12 characters in the progress bar."""
         progress_tracker.register_molecule("mol_001")
 
         # Stage 0: all empty
         bar = progress_tracker.render_progress_bar("mol_001")
         assert bar.count(ProgressTracker.FILLED_CHAR) == 0
-        assert bar.count(ProgressTracker.EMPTY_CHAR) == 30
+        assert bar.count(ProgressTracker.EMPTY_CHAR) == 60
 
         # Apply stage 1 event
         progress_tracker.apply_event(
             ProgressEvent("mol_001", ProcessingStage.RDKIT_PARAMS)
         )
         bar = progress_tracker.render_progress_bar("mol_001")
-        assert bar.count(ProgressTracker.FILLED_CHAR) == 6
-        assert bar.count(ProgressTracker.EMPTY_CHAR) == 24
+        assert bar.count(ProgressTracker.FILLED_CHAR) == 12
+        assert bar.count(ProgressTracker.EMPTY_CHAR) == 48
 
         # Apply stage 2 event
         progress_tracker.apply_event(
             ProgressEvent("mol_001", ProcessingStage.XTB_PREOPT)
         )
         bar = progress_tracker.render_progress_bar("mol_001")
-        assert bar.count(ProgressTracker.FILLED_CHAR) == 12
-        assert bar.count(ProgressTracker.EMPTY_CHAR) == 18
+        assert bar.count(ProgressTracker.FILLED_CHAR) == 24
+        assert bar.count(ProgressTracker.EMPTY_CHAR) == 36
 
         # Apply stage 3 event
         progress_tracker.apply_event(
             ProgressEvent("mol_001", ProcessingStage.CREST_SEARCH)
         )
         bar = progress_tracker.render_progress_bar("mol_001")
-        assert bar.count(ProgressTracker.FILLED_CHAR) == 18
-        assert bar.count(ProgressTracker.EMPTY_CHAR) == 12
+        assert bar.count(ProgressTracker.FILLED_CHAR) == 36
+        assert bar.count(ProgressTracker.EMPTY_CHAR) == 24
 
         # Apply stage 4 event
         progress_tracker.apply_event(
             ProgressEvent("mol_001", ProcessingStage.MOPAC_CALC)
         )
         bar = progress_tracker.render_progress_bar("mol_001")
-        assert bar.count(ProgressTracker.FILLED_CHAR) == 24
-        assert bar.count(ProgressTracker.EMPTY_CHAR) == 6
+        assert bar.count(ProgressTracker.FILLED_CHAR) == 48
+        assert bar.count(ProgressTracker.EMPTY_CHAR) == 12
 
         # Apply stage 5 event
         progress_tracker.apply_event(
             ProgressEvent("mol_001", ProcessingStage.FINAL_CALC)
         )
         bar = progress_tracker.render_progress_bar("mol_001")
-        assert bar.count(ProgressTracker.FILLED_CHAR) == 30
+        assert bar.count(ProgressTracker.FILLED_CHAR) == 60
         assert bar.count(ProgressTracker.EMPTY_CHAR) == 0
 
     def test_apply_event_updates_stage(self, progress_tracker: ProgressTracker) -> None:
@@ -521,20 +524,20 @@ class TestProgressTracker:
     ) -> None:
         """render_progress_bar() for unknown molecule returns empty bar."""
         bar = progress_tracker.render_progress_bar("unknown")
-        assert len(bar) == 30
-        assert bar == ProgressTracker.EMPTY_CHAR * 30
+        assert len(bar) == 60
+        assert bar == ProgressTracker.EMPTY_CHAR * 60
 
     def test_render_weighted_bar_crest_stage(
         self, progress_tracker: ProgressTracker
     ) -> None:
-        """Weighted bar shows CREST stage as 24 filled chars."""
+        """Weighted bar shows CREST stage as 48 filled chars."""
         progress_tracker.register_molecule("mol_001")
         progress_tracker.apply_event(
             ProgressEvent("mol_001", ProcessingStage.CREST_SEARCH)
         )
         bar = progress_tracker.render_progress_bar_weighted("mol_001")
-        assert len(bar) == 30
-        assert bar.count(ProgressTracker.FILLED_CHAR) == 24
+        assert len(bar) == 60
+        assert bar.count(ProgressTracker.FILLED_CHAR) == 48
 
     def test_render_weighted_bar_final_stage_full(
         self, progress_tracker: ProgressTracker
@@ -545,16 +548,34 @@ class TestProgressTracker:
             ProgressEvent("mol_001", ProcessingStage.FINAL_CALC)
         )
         bar = progress_tracker.render_progress_bar_weighted("mol_001")
-        assert len(bar) == 30
-        assert bar.count(ProgressTracker.FILLED_CHAR) == 30
+        assert len(bar) == 60
+        assert bar.count(ProgressTracker.FILLED_CHAR) == 60
 
     def test_render_weighted_bar_unknown_molecule(
         self, progress_tracker: ProgressTracker
     ) -> None:
         """Weighted bar for unknown molecule returns empty bar."""
         bar = progress_tracker.render_progress_bar_weighted("unknown")
-        assert len(bar) == 30
-        assert bar == ProgressTracker.EMPTY_CHAR * 30
+        assert len(bar) == 60
+        assert bar == ProgressTracker.EMPTY_CHAR * 60
+
+    def test_render_progress_bar_weighted_60_chars(
+        self, progress_tracker: ProgressTracker
+    ) -> None:
+        """Weighted bar is exactly 60 characters."""
+        progress_tracker.register_molecule(MOCK_MOL_ID)
+        progress_tracker.apply_event(
+            ProgressEvent(MOCK_MOL_ID, ProcessingStage.CREST_SEARCH)
+        )
+        bar = progress_tracker.render_progress_bar_weighted(MOCK_MOL_ID)
+        assert len(bar) == 60
+        filled_count = bar.count(ProgressTracker.FILLED_CHAR)
+        assert 45 <= filled_count <= 51
+
+    def test_render_progress_bar_width_constant(self) -> None:
+        """Progress bar width constants are set to 60/12."""
+        assert ProgressTracker.PROGRESS_BAR_WIDTH == 60
+        assert ProgressTracker.STAGE_WIDTH == 12
 
 
 class TestProgressTrackerStats:
@@ -614,9 +635,181 @@ class TestProgressTrackerStats:
         assert progress_tracker.failed == 2
 
 
+class TestProgressTrackerHeader:
+    """Test batch header rendering layout."""
+
+    def test_render_batch_header_has_bullets(
+        self,
+        mock_console: MagicMock,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Header contains bullet points with indentation."""
+        tracker = ProgressTracker(console=mock_console, batch_size=3)
+        tracker.total_processed = 1
+        tracker.successful = 1
+        tracker.failed = 0
+        tracker.skipped = 0
+        tracker.batch_start_time = 100.0
+        monkeypatch.setattr(
+            "grimperium.cli.progress_tracker.time.time",
+            lambda: 160.0,
+        )
+
+        header = tracker.render_batch_header()
+
+        lines = header.splitlines()
+        assert lines[0] == "Batch Status:"
+        for line in lines[1:]:
+            assert line.startswith("  - ")
+
+    def test_render_batch_header_has_running_time(
+        self,
+        mock_console: MagicMock,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Header contains running time and excludes estimates."""
+        tracker = ProgressTracker(console=mock_console, batch_size=3)
+        tracker.total_processed = 1
+        tracker.successful = 1
+        tracker.failed = 0
+        tracker.skipped = 0
+        tracker.batch_start_time = 100.0
+        monkeypatch.setattr(
+            "grimperium.cli.progress_tracker.time.time",
+            lambda: 160.0,
+        )
+
+        header = tracker.render_batch_header()
+
+        assert "Est. total time" not in header
+        assert "  - Running time:" in header
+        assert header.splitlines()[-1].startswith("  - Running time:")
+
+    def test_render_batch_header_contains_all_fields(
+        self,
+        mock_console: MagicMock,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Header contains all required fields."""
+        tracker = ProgressTracker(console=mock_console, batch_size=3)
+        tracker.total_processed = 1
+        tracker.successful = 1
+        tracker.failed = 0
+        tracker.skipped = 0
+        tracker.batch_start_time = 100.0
+        monkeypatch.setattr(
+            "grimperium.cli.progress_tracker.time.time",
+            lambda: 160.0,
+        )
+
+        header = tracker.render_batch_header()
+
+        required_fields = [
+            "Batch Status:",
+            "  - Batch size:",
+            "  - Total processed:",
+            "  - Successful:",
+            "  - Failed:",
+            "  - Skipped:",
+            "  - Success rate:",
+            "  - Total progress:",
+            "  - Running time:",
+        ]
+
+        for field in required_fields:
+            assert field in header, f"Missing field: {field}"
+
+
+class TestProgressTrackerMoleculeLine:
+    """Test molecule progress line rendering."""
+
+    def test_render_molecule_line_is_single_line(
+        self, progress_tracker: ProgressTracker
+    ) -> None:
+        """Molecule line is exactly one line."""
+        progress_tracker.register_molecule(MOCK_MOL_ID)
+        progress_tracker.apply_event(
+            ProgressEvent(MOCK_MOL_ID, ProcessingStage.CREST_SEARCH)
+        )
+
+        line = progress_tracker.render_molecule_line(MOCK_MOL_ID, frame_idx=0)
+
+        assert len(line.splitlines()) == 1
+        assert MOCK_MOL_ID in line
+        assert "3/5" in line
+        assert "▓" in line or "░" in line
+
+    def test_render_molecule_line_no_elapsed_time(
+        self, progress_tracker: ProgressTracker
+    ) -> None:
+        """Molecule line does not include elapsed/estimated time."""
+        progress_tracker.register_molecule(MOCK_MOL_ID)
+        progress_tracker.apply_event(
+            ProgressEvent(MOCK_MOL_ID, ProcessingStage.CREST_SEARCH)
+        )
+
+        line = progress_tracker.render_molecule_line(MOCK_MOL_ID, frame_idx=0)
+
+        assert re.search(r"\d{2}:\d{2}", line) is None
+        assert "~" not in line
+
+    def test_render_molecule_line_format(
+        self, progress_tracker: ProgressTracker
+    ) -> None:
+        """Molecule line follows spinner + ID + bar + stage + label format."""
+        progress_tracker.register_molecule(MOCK_MOL_ID)
+        progress_tracker.apply_event(
+            ProgressEvent(MOCK_MOL_ID, ProcessingStage.CREST_SEARCH)
+        )
+
+        line = progress_tracker.render_molecule_line(MOCK_MOL_ID, frame_idx=0)
+
+        spinner, mol_id, bar, rest = line.split(" ", 3)
+        assert spinner in ProgressTracker.SPINNER_FRAMES
+        assert mol_id == MOCK_MOL_ID
+        assert len(bar) == ProgressTracker.PROGRESS_BAR_WIDTH
+        assert rest.count(" | ") == 1
+        stage_part, label = rest.split(" | ")
+        assert stage_part == "3/5"
+        assert label == progress_tracker.get_stage_label(MOCK_MOL_ID)
+
+
+class TestRecentCompletions:
+    """Test recent completion history formatting."""
+
+    def test_recent_completions_format(self, progress_tracker: ProgressTracker) -> None:
+        """Recent completions store mol_id and success flag."""
+        progress_tracker.mark_completed(MOCK_MOL_ID, success=True)
+
+        completed = progress_tracker.get_completed_molecules()
+
+        assert len(completed) == 1
+        mol_id, success = completed[0]
+        assert mol_id == MOCK_MOL_ID
+        assert success is True
+
+    def test_recent_completions_color_tags_in_display(
+        self, mock_console: MagicMock
+    ) -> None:
+        """Recent completions show color tags in batch display."""
+        tracker = ProgressTracker(console=mock_console, batch_size=3)
+        tracker.mark_completed(MOCK_MOL_ID, success=True)
+
+        class _Controller:
+            def __init__(self, console: Console) -> None:
+                self.console = console
+
+        view = BatchView(_Controller(mock_console))
+        panel = view._render_batch_display(tracker, frame_idx=0)
+
+        content = str(panel.renderable)
+        assert "Recent Completions:" in content
+        assert f"✓ {MOCK_MOL_ID} (green)" in content
+
+
 @pytest.mark.unit
 class TestProgressTrackerTiming:
-    """Test elapsed and remaining time calculations."""
+    """Test elapsed time calculations."""
 
     def test_get_elapsed_time_unknown_molecule_returns_zero(
         self, progress_tracker: ProgressTracker
@@ -636,45 +829,6 @@ class TestProgressTrackerTiming:
         )
 
         assert progress_tracker.get_elapsed_time("mol_001") == 60.0
-
-    def test_estimate_remaining_time_uses_stage_weights(
-        self, progress_tracker: ProgressTracker, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        """Remaining time estimate scales with completed stage weights."""
-        progress_tracker.register_molecule("mol_001")
-        progress_tracker.apply_event(
-            ProgressEvent("mol_001", ProcessingStage.CREST_SEARCH)
-        )
-        progress_tracker._molecules["mol_001"].start_time = 100.0
-        monkeypatch.setattr(
-            "grimperium.cli.progress_tracker.time.time",
-            lambda: 160.0,
-        )
-
-        completed_pct = (
-            STAGE_WEIGHTS[ProcessingStage.NOT_STARTED]
-            + STAGE_WEIGHTS[ProcessingStage.RDKIT_PARAMS]
-            + STAGE_WEIGHTS[ProcessingStage.XTB_PREOPT]
-        )
-        estimated_total = 60.0 / completed_pct
-        expected_remaining = estimated_total - 60.0
-
-        assert progress_tracker.estimate_remaining_time("mol_001") == pytest.approx(
-            expected_remaining
-        )
-
-    def test_estimate_remaining_time_without_progress_returns_zero(
-        self, progress_tracker: ProgressTracker, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        """Remaining time is zero when no progress is available."""
-        progress_tracker.register_molecule("mol_001")
-        progress_tracker._molecules["mol_001"].start_time = 100.0
-        monkeypatch.setattr(
-            "grimperium.cli.progress_tracker.time.time",
-            lambda: 160.0,
-        )
-
-        assert progress_tracker.estimate_remaining_time("mol_001") == 0.0
 
 
 class TestProgressTrackerCompletionEvents:
@@ -944,9 +1098,9 @@ class TestAllFiveEventsSequence:
             progress_tracker.apply_event(ProgressEvent("mol_001", stage))
 
             bar = progress_tracker.render_progress_bar("mol_001")
-            expected_filled = (i + 1) * 6
+            expected_filled = (i + 1) * 12
             assert bar.count(ProgressTracker.FILLED_CHAR) == expected_filled
-            assert bar.count(ProgressTracker.EMPTY_CHAR) == 30 - expected_filled
+            assert bar.count(ProgressTracker.EMPTY_CHAR) == 60 - expected_filled
 
     def test_events_with_correct_labels(
         self, progress_tracker: ProgressTracker
@@ -987,7 +1141,7 @@ class TestMoleculeTransitionResetsProgress:
         bar = progress_tracker.render_progress_bar("mol_002")
 
         assert bar.count(ProgressTracker.FILLED_CHAR) == 0
-        assert bar.count(ProgressTracker.EMPTY_CHAR) == 30
+        assert bar.count(ProgressTracker.EMPTY_CHAR) == 60
 
     def test_completed_molecule_not_in_tracking(
         self, progress_tracker: ProgressTracker
@@ -1018,8 +1172,8 @@ class TestMoleculeTransitionResetsProgress:
         bar_001 = progress_tracker.render_progress_bar("mol_001")
         bar_002 = progress_tracker.render_progress_bar("mol_002")
 
-        assert bar_001.count(ProgressTracker.FILLED_CHAR) == 18  # 3 stages
-        assert bar_002.count(ProgressTracker.FILLED_CHAR) == 6  # 1 stage
+        assert bar_001.count(ProgressTracker.FILLED_CHAR) == 36  # 3 stages
+        assert bar_002.count(ProgressTracker.FILLED_CHAR) == 12  # 1 stage
 
 
 class TestThreadSafety:

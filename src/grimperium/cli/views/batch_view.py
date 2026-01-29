@@ -7,7 +7,7 @@ Provides UI for:
 - Configuring batch parameters
 
 Progress Tracking:
-    Uses a 5-stage progress bar (30 chars) with CSV-driven state machine.
+    Uses a 5-stage progress bar (60 chars) with CSV-driven state machine.
     Daemon thread polls CSV every 500ms and communicates via Queue.
 """
 
@@ -404,7 +404,10 @@ class BatchView(BaseView):
         logging.disable(logging.INFO)
 
         try:
-            with Live(console=self.console, refresh_per_second=5) as live:
+            with Live(console=self.console, refresh_per_second=3) as live:
+                # Reduced from 5 to 3 to prevent header duplication glitch
+                # when moving between displays (notebook + external monitor).
+                # This is a known issue with Rich when terminal size changes rapidly.
                 # Start batch execution in a way that allows progress updates
                 # We need to run execute_batch and update display concurrently
 
@@ -425,16 +428,37 @@ class BatchView(BaseView):
                 batch_thread.start()
 
                 # Main loop: consume events and update display
+                last_size_check = 0.0
+                last_terminal_size: tuple[int, int] | None = None
+                resize_cooldown_until = 0.0
+                size_check_interval = 0.5
+                resize_debounce_seconds = 0.6
+                frame_delay = 1 / 3
                 while not batch_complete.is_set():
                     # Consume all pending events (non-blocking)
                     consume_events(event_queue, tracker)
+
+                    now = time.monotonic()
+                    if now - last_size_check >= size_check_interval:
+                        size = self.console.size
+                        size_tuple = (size.width, size.height)
+                        if last_terminal_size is None:
+                            last_terminal_size = size_tuple
+                        elif size_tuple != last_terminal_size:
+                            last_terminal_size = size_tuple
+                            resize_cooldown_until = now + resize_debounce_seconds
+                        last_size_check = now
+
+                    if now < resize_cooldown_until:
+                        time.sleep(frame_delay)
+                        continue
 
                     # Render display
                     display = self._render_batch_display(tracker, frame_idx)
                     live.update(display)
 
                     frame_idx += 1
-                    time.sleep(0.2)  # 5 FPS
+                    time.sleep(frame_delay)  # 3 FPS
 
                 # Final update after batch completes
                 consume_events(event_queue, tracker)
@@ -458,7 +482,7 @@ class BatchView(BaseView):
             self._display_batch_result(result)
 
     def _render_batch_display(self, tracker: ProgressTracker, frame_idx: int) -> Panel:
-        """Render batch display with single active progress and history.
+        """Render batch display: header + current molecule + completion history.
 
         Args:
             tracker: ProgressTracker with current state
@@ -467,9 +491,7 @@ class BatchView(BaseView):
         Returns:
             Rich Panel with formatted display
         """
-        # Build header (7 lines)
         header = tracker.render_batch_header()
-
         lines = [header, ""]
 
         current_mol = tracker.get_current_molecule_id()
@@ -479,12 +501,11 @@ class BatchView(BaseView):
 
         completed = tracker.get_completed_molecules()
         if completed:
-            lines.append("[bold]Recent Completions:[/bold]")
+            lines.append("Recent Completions:")
             for mol_id, success in completed[-5:]:
-                icon = ICONS["success"] if success else ICONS["error"]
-                color = COLORS["success"] if success else COLORS["error"]
-                label = "Completed successfully" if success else "Failed"
-                lines.append(f"  [{color}]{icon} {mol_id} {label}[/{color}]")
+                status = "✓" if success else "✗"
+                color = "green" if success else "red"
+                lines.append(f"  {status} {mol_id} ({color})")
 
         content = "\n".join(lines)
 
