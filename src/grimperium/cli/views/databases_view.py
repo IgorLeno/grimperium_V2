@@ -5,25 +5,28 @@ Displays and manages molecular databases.
 """
 
 import json
+import logging
 import os
+import threading
+import time
 from datetime import date, datetime
+from queue import Queue
 from typing import TYPE_CHECKING, Any
 
 import pandas as pd
+from rich.live import Live
 from rich.panel import Panel
-from rich.progress import (
-    BarColumn,
-    MofNCompleteColumn,
-    Progress,
-    SpinnerColumn,
-    TextColumn,
-    TimeElapsedColumn,
-)
 from rich.table import Table
 
 from grimperium.cli.constants import DATA_DIR, PHASE_A_RESULTS_FILE
 from grimperium.cli.menu import MenuOption, show_back_menu
 from grimperium.cli.mock_data import DATABASES, Database
+from grimperium.cli.progress_tracker import (
+    CSVMonitor,
+    ProgressEvent,
+    ProgressTracker,
+    consume_events,
+)
 from grimperium.cli.styles import COLORS, ICONS
 from grimperium.cli.views.base_view import BaseView
 
@@ -633,26 +636,67 @@ class DatabasesView(BaseView):
             )
             self.console.print()
 
-            with Progress(
-                SpinnerColumn(),
-                TextColumn("[progress.description]{task.description}"),
-                BarColumn(),
-                MofNCompleteColumn(),
-                TimeElapsedColumn(),
+            event_queue: Queue[ProgressEvent] = Queue()
+            tracker = ProgressTracker(
                 console=self.console,
-            ) as progress:
-                task = progress.add_task("Processing", total=batch.size)
+                batch_size=batch.size,
+            )
+            csv_monitor = CSVMonitor(
+                csv_path=csv_path,
+                event_queue=event_queue,
+                poll_interval_ms=500,
+            )
 
-                def update_progress(mol_id: str, current: int, total: int) -> None:
-                    progress.update(
-                        task,
-                        completed=current,
-                        description=f"Processing {mol_id}",
-                    )
+            for mol in batch.molecules:
+                tracker.register_molecule(mol.mol_id)
+                csv_monitor.register_molecule(mol.mol_id)
 
-                result = exec_manager.execute_batch(
-                    batch, progress_callback=update_progress
-                )
+            frame_idx = 0
+            result = None
+            csv_monitor.start()
+
+            # Suppress noisy logs during Rich.Live rendering to avoid display corruption.
+            previous_disable = logging.root.manager.disable
+            logging.disable(logging.INFO)
+
+            try:
+                with Live(console=self.console, refresh_per_second=10) as live:
+                    batch_complete = threading.Event()
+                    batch_error: Exception | None = None
+
+                    def run_batch() -> None:
+                        nonlocal result, batch_error
+                        try:
+                            result = exec_manager.execute_batch(batch)
+                        except Exception as e:
+                            batch_error = e
+                        finally:
+                            batch_complete.set()
+
+                    batch_thread = threading.Thread(target=run_batch, daemon=True)
+                    batch_thread.start()
+
+                    while not batch_complete.is_set():
+                        consume_events(event_queue, tracker)
+                        display = self._render_pm7_batch_display(tracker, frame_idx)
+                        live.update(display)
+                        frame_idx += 1
+                        time.sleep(0.1)
+
+                    consume_events(event_queue, tracker)
+                    if result is not None:
+                        tracker.successful = result.success_count
+                        tracker.failed = result.rerun_count  # Rerun implies failure
+                        tracker.skipped = result.skip_count
+                        tracker.total_processed = result.total_count
+                    display = self._render_pm7_batch_display(tracker, frame_idx)
+                    live.update(display)
+
+                    if batch_error is not None:
+                        raise batch_error
+            finally:
+                logging.disable(previous_disable)
+                csv_monitor.stop(timeout=1.0)
 
             self.console.print()
             self.console.print("[bold green]✓ Batch completed![/bold green]")
@@ -681,6 +725,33 @@ class DatabasesView(BaseView):
 
         self.console.print()
         self.console.input("[dim]Press Enter to continue...[/dim]")
+
+    def _render_pm7_batch_display(
+        self, tracker: ProgressTracker, frame_idx: int
+    ) -> Panel:
+        """Render PM7 batch display with header and progress bars.
+
+        Args:
+            tracker: ProgressTracker with current state
+            frame_idx: Animation frame index for spinner
+
+        Returns:
+            Rich Panel with formatted display
+        """
+        header = tracker.render_batch_header()
+        lines = [header, ""]
+
+        for mol_id in tracker.get_active_molecule_ids():
+            line = tracker.render_molecule_line(mol_id, frame_idx)
+            lines.append(line)
+
+        content = "\n".join(lines)
+
+        return Panel(
+            content,
+            title=f"[bold {COLORS['batch']}]Batch Processing[/bold {COLORS['batch']}]",
+            border_style=COLORS["batch"],
+        )
 
     def run(self) -> str | None:
         """Run the databases view interaction loop."""
