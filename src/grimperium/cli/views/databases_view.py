@@ -702,14 +702,17 @@ class DatabasesView(BaseView):
             self.console.print("[bold green]✓ Batch completed![/bold green]")
             self.console.print()
             self.console.print("[bold]Results Summary:[/bold]")
-            self.console.print(f"  • Total processed: {result.total_count}")
-            self.console.print(f"  • Successful: {result.success_count}")
-            self.console.print(f"  • Failed: {result.failed_count}")
-            self.console.print(f"  • Skipped: {result.skip_count}")
+            if result is not None:
+                self.console.print(f"  • Total processed: {result.total_count}")
+                self.console.print(f"  • Successful: {result.success_count}")
+                self.console.print(f"  • Failed: {result.failed_count}")
+                self.console.print(f"  • Skipped: {result.skip_count}")
 
-            if result.total_count > 0:
-                rate = result.success_count / result.total_count * 100
-                self.console.print(f"  • Success rate: {rate:.1f}%")
+                if result.total_count > 0:
+                    rate = result.success_count / result.total_count * 100
+                    self.console.print(f"  • Success rate: {rate:.1f}%")
+            else:
+                self.console.print("  • No results available")
 
             self.console.print()
             self.console.print(
