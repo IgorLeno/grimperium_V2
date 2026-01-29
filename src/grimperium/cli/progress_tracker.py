@@ -388,6 +388,7 @@ class ProgressTracker:
         self.console = console
         self.batch_size = batch_size
         self._molecules: dict[str, MoleculeProgress] = {}
+        self._completed_molecules: list[tuple[str, bool]] = []
 
         # Batch statistics
         self.total_processed: int = 0
@@ -434,9 +435,9 @@ class ProgressTracker:
             success: Whether processing succeeded
         """
         if mol_id in self._molecules:
-            self._molecules[mol_id].completed = True
             del self._molecules[mol_id]  # Auto-cleanup
 
+        self._completed_molecules.append((mol_id, success))
         self.total_processed += 1
         if success:
             self.successful += 1
@@ -452,8 +453,25 @@ class ProgressTracker:
         if mol_id in self._molecules:
             del self._molecules[mol_id]
 
+        self._completed_molecules.append((mol_id, False))
         self.total_processed += 1
         self.skipped += 1
+
+    def get_current_molecule_id(self) -> str | None:
+        """Get the molecule currently being processed (first active).
+
+        Returns:
+            First active molecule ID or None if all completed
+        """
+        return next(iter(self._molecules), None)
+
+    def get_completed_molecules(self) -> list[tuple[str, bool]]:
+        """Get list of completed molecules and their status.
+
+        Returns:
+            List of (mol_id, success) tuples
+        """
+        return list(self._completed_molecules)
 
     def get_active_molecule_ids(self) -> list[str]:
         """Get list of currently active (not completed) molecule IDs.

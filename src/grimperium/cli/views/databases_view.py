@@ -732,7 +732,7 @@ class DatabasesView(BaseView):
     def _render_pm7_batch_display(
         self, tracker: ProgressTracker, frame_idx: int
     ) -> Panel:
-        """Render PM7 batch display with header and progress bars.
+        """Render PM7 batch display with single active progress and history.
 
         Args:
             tracker: ProgressTracker with current state
@@ -744,9 +744,19 @@ class DatabasesView(BaseView):
         header = tracker.render_batch_header()
         lines = [header, ""]
 
-        for mol_id in tracker.get_active_molecule_ids():
-            line = tracker.render_molecule_line(mol_id, frame_idx)
-            lines.append(line)
+        current_mol = tracker.get_current_molecule_id()
+        if current_mol:
+            lines.append(tracker.render_molecule_line(current_mol, frame_idx))
+            lines.append("")
+
+        completed = tracker.get_completed_molecules()
+        if completed:
+            lines.append("[bold]Recent Completions:[/bold]")
+            for mol_id, success in completed[-5:]:
+                icon = ICONS["success"] if success else ICONS["error"]
+                color = COLORS["success"] if success else COLORS["error"]
+                label = "Completed successfully" if success else "Failed"
+                lines.append(f"  [{color}]{icon} {mol_id} {label}[/{color}]")
 
         content = "\n".join(lines)
 

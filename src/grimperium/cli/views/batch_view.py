@@ -404,7 +404,7 @@ class BatchView(BaseView):
         logging.disable(logging.INFO)
 
         try:
-            with Live(console=self.console, refresh_per_second=10) as live:
+            with Live(console=self.console, refresh_per_second=5) as live:
                 # Start batch execution in a way that allows progress updates
                 # We need to run execute_batch and update display concurrently
 
@@ -434,7 +434,7 @@ class BatchView(BaseView):
                     live.update(display)
 
                     frame_idx += 1
-                    time.sleep(0.1)  # 10 FPS
+                    time.sleep(0.2)  # 5 FPS
 
                 # Final update after batch completes
                 consume_events(event_queue, tracker)
@@ -458,7 +458,7 @@ class BatchView(BaseView):
             self._display_batch_result(result)
 
     def _render_batch_display(self, tracker: ProgressTracker, frame_idx: int) -> Panel:
-        """Render complete batch display with header and progress bars.
+        """Render batch display with single active progress and history.
 
         Args:
             tracker: ProgressTracker with current state
@@ -470,12 +470,21 @@ class BatchView(BaseView):
         # Build header (7 lines)
         header = tracker.render_batch_header()
 
-        # Build molecule progress lines
-        lines = [header, ""]  # Header + blank line
+        lines = [header, ""]
 
-        for mol_id in tracker.get_active_molecule_ids():
-            line = tracker.render_molecule_line(mol_id, frame_idx)
-            lines.append(line)
+        current_mol = tracker.get_current_molecule_id()
+        if current_mol:
+            lines.append(tracker.render_molecule_line(current_mol, frame_idx))
+            lines.append("")
+
+        completed = tracker.get_completed_molecules()
+        if completed:
+            lines.append("[bold]Recent Completions:[/bold]")
+            for mol_id, success in completed[-5:]:
+                icon = ICONS["success"] if success else ICONS["error"]
+                color = COLORS["success"] if success else COLORS["error"]
+                label = "Completed successfully" if success else "Failed"
+                lines.append(f"  [{color}]{icon} {mol_id} {label}[/{color}]")
 
         content = "\n".join(lines)
 
