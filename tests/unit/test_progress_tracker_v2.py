@@ -570,7 +570,7 @@ class TestProgressTracker:
         bar = progress_tracker.render_progress_bar_weighted(MOCK_MOL_ID)
         assert len(bar) == 60
         filled_count = bar.count(ProgressTracker.FILLED_CHAR)
-        assert 45 <= filled_count <= 51
+        assert filled_count == 48
 
     def test_render_progress_bar_width_constant(self) -> None:
         """Progress bar width constants are set to 60/12."""

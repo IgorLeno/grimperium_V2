@@ -531,8 +531,8 @@ class ProgressTracker:
         - RDKit params:     5% ->  3 chars
         - Pre-optimization: 10% ->  6 chars
         - CREST search:     80% -> 48 chars (main contributor)
-        - MOPAC calc:        3% ->  1.8 chars
-        - Final calc:        2% ->  1.2 chars
+        - MOPAC calc:        3% ->  ~2 chars
+        - Final calc:        2% ->  ~1 char
 
         Visual example for CREST stage:
             ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓░░░░░░░░░░░░░░
