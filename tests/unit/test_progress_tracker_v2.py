@@ -33,6 +33,7 @@ from grimperium.cli.progress_tracker import (
     ProcessingStage,
     ProgressEvent,
     ProgressTracker,
+    STAGE_WEIGHTS,
 )
 
 if TYPE_CHECKING:
@@ -196,6 +197,20 @@ class TestStageTransition:
         assert event.label == "Final calculations"
 
 
+class TestStageWeights:
+    """Test stage timing weights configuration."""
+
+    def test_stage_weights_cover_all_stages(self) -> None:
+        """Stage weights include every ProcessingStage."""
+        for stage in ProcessingStage:
+            assert stage in STAGE_WEIGHTS
+
+    def test_stage_weights_sum_to_one(self) -> None:
+        """Stage weights should sum to 1.0."""
+        total = sum(STAGE_WEIGHTS.values())
+        assert total == pytest.approx(1.0)
+
+
 class TestMoleculeProgress:
     """Test MoleculeProgress state tracking with _detect_stage()."""
 
@@ -357,7 +372,11 @@ class TestMoleculeProgress:
         """Molecule is marked completed when status is Skip."""
         progress = MoleculeProgress(mol_id="test")
         row = pd.Series(
-            {"status": "Skip", "crest_status": "FAILED", "mopac_status": "NOT_ATTEMPTED"}
+            {
+                "status": "Skip",
+                "crest_status": "FAILED",
+                "mopac_status": "NOT_ATTEMPTED",
+            }
         )
         progress.update_from_csv_row(row)
         assert progress.completed is True
@@ -366,7 +385,11 @@ class TestMoleculeProgress:
         """Molecule is marked completed when status is Rerun."""
         progress = MoleculeProgress(mol_id="test")
         row = pd.Series(
-            {"status": "Rerun", "crest_status": "FAILED", "mopac_status": "NOT_ATTEMPTED"}
+            {
+                "status": "Rerun",
+                "crest_status": "FAILED",
+                "mopac_status": "NOT_ATTEMPTED",
+            }
         )
         progress.update_from_csv_row(row)
         assert progress.completed is True
@@ -501,6 +524,38 @@ class TestProgressTracker:
         assert len(bar) == 30
         assert bar == ProgressTracker.EMPTY_CHAR * 30
 
+    def test_render_weighted_bar_crest_stage(
+        self, progress_tracker: ProgressTracker
+    ) -> None:
+        """Weighted bar shows CREST stage as 24 filled chars."""
+        progress_tracker.register_molecule("mol_001")
+        progress_tracker.apply_event(
+            ProgressEvent("mol_001", ProcessingStage.CREST_SEARCH)
+        )
+        bar = progress_tracker.render_progress_bar_weighted("mol_001")
+        assert len(bar) == 30
+        assert bar.count(ProgressTracker.FILLED_CHAR) == 24
+
+    def test_render_weighted_bar_final_stage_full(
+        self, progress_tracker: ProgressTracker
+    ) -> None:
+        """Weighted bar is fully filled at final stage."""
+        progress_tracker.register_molecule("mol_001")
+        progress_tracker.apply_event(
+            ProgressEvent("mol_001", ProcessingStage.FINAL_CALC)
+        )
+        bar = progress_tracker.render_progress_bar_weighted("mol_001")
+        assert len(bar) == 30
+        assert bar.count(ProgressTracker.FILLED_CHAR) == 30
+
+    def test_render_weighted_bar_unknown_molecule(
+        self, progress_tracker: ProgressTracker
+    ) -> None:
+        """Weighted bar for unknown molecule returns empty bar."""
+        bar = progress_tracker.render_progress_bar_weighted("unknown")
+        assert len(bar) == 30
+        assert bar == ProgressTracker.EMPTY_CHAR * 30
+
 
 class TestProgressTrackerStats:
     """Test batch header statistics tracking."""
@@ -557,6 +612,68 @@ class TestProgressTrackerStats:
         assert progress_tracker.total_processed == 5
         assert progress_tracker.successful == 3
         assert progress_tracker.failed == 2
+
+
+class TestProgressTrackerTiming:
+    """Test elapsed and remaining time calculations."""
+
+    def test_get_elapsed_time_unknown_molecule_returns_zero(
+        self, progress_tracker: ProgressTracker
+    ) -> None:
+        """Elapsed time is zero for unknown molecule."""
+        assert progress_tracker.get_elapsed_time("unknown") == 0.0
+
+    def test_get_elapsed_time_reports_seconds(
+        self, progress_tracker: ProgressTracker, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Elapsed time uses molecule start_time."""
+        progress_tracker.register_molecule("mol_001")
+        progress_tracker._molecules["mol_001"].start_time = 100.0
+        monkeypatch.setattr(
+            "grimperium.cli.progress_tracker.time.time",
+            lambda: 160.0,
+        )
+
+        assert progress_tracker.get_elapsed_time("mol_001") == 60.0
+
+    def test_estimate_remaining_time_uses_stage_weights(
+        self, progress_tracker: ProgressTracker, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Remaining time estimate scales with completed stage weights."""
+        progress_tracker.register_molecule("mol_001")
+        progress_tracker.apply_event(
+            ProgressEvent("mol_001", ProcessingStage.CREST_SEARCH)
+        )
+        progress_tracker._molecules["mol_001"].start_time = 100.0
+        monkeypatch.setattr(
+            "grimperium.cli.progress_tracker.time.time",
+            lambda: 160.0,
+        )
+
+        completed_pct = (
+            STAGE_WEIGHTS[ProcessingStage.NOT_STARTED]
+            + STAGE_WEIGHTS[ProcessingStage.RDKIT_PARAMS]
+            + STAGE_WEIGHTS[ProcessingStage.XTB_PREOPT]
+        )
+        estimated_total = 60.0 / completed_pct
+        expected_remaining = estimated_total - 60.0
+
+        assert progress_tracker.estimate_remaining_time("mol_001") == pytest.approx(
+            expected_remaining
+        )
+
+    def test_estimate_remaining_time_without_progress_returns_zero(
+        self, progress_tracker: ProgressTracker, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Remaining time is zero when no progress is available."""
+        progress_tracker.register_molecule("mol_001")
+        progress_tracker._molecules["mol_001"].start_time = 100.0
+        monkeypatch.setattr(
+            "grimperium.cli.progress_tracker.time.time",
+            lambda: 160.0,
+        )
+
+        assert progress_tracker.estimate_remaining_time("mol_001") == 0.0
 
 
 class TestProgressTrackerCompletionEvents:
@@ -694,8 +811,7 @@ class TestCSVMonitorDetection:
         monitor.start()
 
         csv_path.write_text(
-            "mol_id,status,crest_status,mopac_status\n"
-            "mol_001,OK,SUCCESS,OK"
+            "mol_id,status,crest_status,mopac_status\n" "mol_001,OK,SUCCESS,OK"
         )
 
         try:

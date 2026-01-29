@@ -16,8 +16,8 @@ Thread Safety:
     - ProgressTracker operates in main thread only
     - Queue[ProgressEvent] provides thread-safe communication
 
-Visual Output (30-char progress bar):
-    ⠹ mol_00002 ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓░░░░░░░░░░░░ 3/5 | CREST conformer search
+Visual Output (30-char weighted progress bar):
+    ⠹ mol_00002 ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓░░░░░░ 3/5 | 00:45 (~12 min) | CREST conformer search
 """
 
 from __future__ import annotations
@@ -132,6 +132,18 @@ class ProcessingStage(IntEnum):
     FINAL_CALC = 5  # status: Running -> OK
 
 
+# Stage timing weights (%)
+# CREST conformer search occupies ~80% of total processing time
+STAGE_WEIGHTS: dict[ProcessingStage, float] = {
+    ProcessingStage.NOT_STARTED: 0.0,
+    ProcessingStage.RDKIT_PARAMS: 0.05,  # 5%
+    ProcessingStage.XTB_PREOPT: 0.10,  # 10%
+    ProcessingStage.CREST_SEARCH: 0.80,  # 80% (main contributor)
+    ProcessingStage.MOPAC_CALC: 0.03,  # 3%
+    ProcessingStage.FINAL_CALC: 0.02,  # 2%
+}
+
+
 @dataclass(frozen=True)
 class StageTransition:
     """Defines a CSV column transition that triggers a stage change.
@@ -221,6 +233,8 @@ class MoleculeProgress:
         last_csv_state: Cache of previous CSV column values
         completed: Whether molecule has finished processing
         error: Error message if processing failed
+        start_time: Unix timestamp when molecule started tracking
+        completion_time: Unix timestamp when molecule completed (if any)
     """
 
     mol_id: str
@@ -234,6 +248,8 @@ class MoleculeProgress:
     )
     completed: bool = False
     error: str | None = None
+    start_time: float = field(default_factory=time.time)
+    completion_time: float | None = None
 
     def _detect_stage(self, current_row: dict[str, str]) -> ProcessingStage | None:
         """Compare last_csv_state with current_row to detect stage transition.
@@ -335,6 +351,8 @@ class MoleculeProgress:
         status = current_row["status"]
         if status in COMPLETION_STATUSES:
             self.completed = True
+            if self.completion_time is None:
+                self.completion_time = time.time()
 
         return new_stage
 
@@ -435,6 +453,7 @@ class ProgressTracker:
             success: Whether processing succeeded
         """
         if mol_id in self._molecules:
+            self._molecules[mol_id].completion_time = time.time()
             del self._molecules[mol_id]  # Auto-cleanup
 
         self._completed_molecules.append((mol_id, success))
@@ -451,6 +470,7 @@ class ProgressTracker:
             mol_id: Molecule identifier
         """
         if mol_id in self._molecules:
+            self._molecules[mol_id].completion_time = time.time()
             del self._molecules[mol_id]
 
         self._completed_molecules.append((mol_id, False))
@@ -502,6 +522,99 @@ class ProgressTracker:
 
         return self.FILLED_CHAR * filled + self.EMPTY_CHAR * empty
 
+    def render_progress_bar_weighted(self, mol_id: str) -> str:
+        """Render weighted progress bar reflecting actual time distribution.
+
+        CREST conformer search occupies ~80% of processing time, so it gets
+        24 out of 30 characters. Stages are weighted proportionally:
+        - RDKit params:     5% ->  1.5 chars
+        - Pre-optimization: 10% ->  3 chars
+        - CREST search:     80% -> 24 chars (main contributor)
+        - MOPAC calc:        3% ->  0.9 chars
+        - Final calc:        2% ->  0.6 chars
+
+        Visual example for CREST stage:
+            ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓░░░░░░
+            (24 filled for CREST, 6 empty for remaining)
+
+        Args:
+            mol_id: Molecule identifier
+
+        Returns:
+            30-character string with weighted distribution
+        """
+        progress = self._molecules.get(mol_id)
+        if progress is None:
+            return self.EMPTY_CHAR * self.PROGRESS_BAR_WIDTH
+
+        current_stage = progress.current_stage
+        if current_stage == ProcessingStage.NOT_STARTED:
+            return self.EMPTY_CHAR * self.PROGRESS_BAR_WIDTH
+        if current_stage == ProcessingStage.FINAL_CALC:
+            return self.FILLED_CHAR * self.PROGRESS_BAR_WIDTH
+
+        completed_weight = 0.0
+        for stage in range(1, current_stage.value):
+            stage_enum = ProcessingStage(stage)
+            completed_weight += STAGE_WEIGHTS.get(stage_enum, 0.0)
+
+        current_weight = STAGE_WEIGHTS.get(current_stage, 0.0)
+        filled_weight = max(completed_weight, current_weight)
+        filled = min(
+            self.PROGRESS_BAR_WIDTH,
+            int(filled_weight * self.PROGRESS_BAR_WIDTH),
+        )
+        empty = self.PROGRESS_BAR_WIDTH - filled
+
+        return self.FILLED_CHAR * filled + self.EMPTY_CHAR * empty
+
+    def get_elapsed_time(self, mol_id: str) -> float:
+        """Get elapsed time in seconds for a molecule.
+
+        Args:
+            mol_id: Molecule identifier
+
+        Returns:
+            Seconds elapsed since molecule started processing
+        """
+        progress = self._molecules.get(mol_id)
+        if progress is None:
+            return 0.0
+        return time.time() - progress.start_time
+
+    def estimate_remaining_time(self, mol_id: str) -> float:
+        """Estimate remaining time based on current stage and elapsed time.
+
+        Uses stage weights to infer total processing time:
+        - If 50% complete and 15 mins elapsed -> est. total 30 mins
+        - Remaining = total - elapsed
+
+        Args:
+            mol_id: Molecule identifier
+
+        Returns:
+            Estimated seconds remaining (or 0 if cannot estimate)
+        """
+        progress = self._molecules.get(mol_id)
+        if progress is None:
+            return 0.0
+
+        elapsed = self.get_elapsed_time(mol_id)
+        current_stage = progress.current_stage.value
+
+        completed_pct = sum(
+            STAGE_WEIGHTS.get(ProcessingStage(stage), 0.0)
+            for stage in range(current_stage)
+        )
+
+        if completed_pct <= 0.0:
+            return 0.0
+
+        estimated_total = elapsed / completed_pct
+        remaining = estimated_total - elapsed
+
+        return max(0.0, remaining)
+
     def get_stage_label(self, mol_id: str) -> str:
         """Get current stage label for molecule.
 
@@ -530,7 +643,7 @@ class ProgressTracker:
         return self.SPINNER_FRAMES[frame_idx % len(self.SPINNER_FRAMES)]
 
     def render_batch_header(self) -> str:
-        """Render 7-line batch status header with bullets.
+        """Render batch status header with timing estimates.
 
         Format:
             Batch Status:
@@ -541,6 +654,7 @@ class ProgressTracker:
               - Skipped: 0
               - Success rate: 100.0%
               - Total progress: 33%
+              - Est. total time: ~270 min
 
         Returns:
             Formatted header string
@@ -556,6 +670,9 @@ class ProgressTracker:
             else 0
         )
 
+        estimated_per_molecule = 45  # minutes
+        estimated_total_min = self.batch_size * estimated_per_molecule
+
         return (
             "Batch Status:\n"
             f"  - Batch size: {self.batch_size}\n"
@@ -564,32 +681,51 @@ class ProgressTracker:
             f"  - Failed: {self.failed}\n"
             f"  - Skipped: {self.skipped}\n"
             f"  - Success rate: {success_rate:.1f}%\n"
-            f"  - Total progress: {total_progress}%"
+            f"  - Total progress: {total_progress}%\n"
+            f"  - Est. total time: ~{estimated_total_min} min"
         )
 
     def render_molecule_line(self, mol_id: str, frame_idx: int) -> str:
-        """Render single molecule progress line.
+        """Render single molecule progress line with timing.
 
         Format:
-            ⠹ mol_00002 ▓▓▓▓▓▓▓▓▓▓▓▓░░░░░░░░░░░░░░░░░░ 2/5 | Pre-optimization
+            ⠹ mol_00002 ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓░░░░░░ 3/5 | 00:45 (~12 min) | CREST conformer search
+
+        Shows:
+        - Spinner: Animated character indicating activity
+        - Molecule ID
+        - Weighted progress bar: 30 chars with stage weights
+        - Stage number: 3/5
+        - Elapsed time: MM:SS
+        - Estimated remaining: ~N min
+        - Stage label: Current processing stage
 
         Args:
             mol_id: Molecule identifier
-            frame_idx: Animation frame index
+            frame_idx: Animation frame index for spinner
 
         Returns:
-            Formatted progress line
+            Formatted progress line with timing information
         """
         progress = self._molecules.get(mol_id)
         if progress is None:
             return f"  ? {mol_id} (unknown)"
 
         spinner = self.get_spinner_frame(frame_idx)
-        bar = self.render_progress_bar(mol_id)
+        bar = self.render_progress_bar_weighted(mol_id)
         stage_num = progress.current_stage.value
         label = self.get_stage_label(mol_id)
 
-        return f"  {spinner} {mol_id} {bar} {stage_num}/5 | {label}"
+        elapsed = self.get_elapsed_time(mol_id)
+        remaining = self.estimate_remaining_time(mol_id)
+
+        elapsed_str = f"{int(elapsed // 60):02d}:{int(elapsed % 60):02d}"
+        remaining_min = int(remaining // 60)
+
+        return (
+            f"  {spinner} {mol_id} {bar} {stage_num}/5 | "
+            f"{elapsed_str} (~{remaining_min} min) | {label}"
+        )
 
 
 class CSVMonitor:
