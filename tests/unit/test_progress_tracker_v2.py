@@ -635,6 +635,7 @@ class TestProgressTrackerStats:
         assert progress_tracker.failed == 2
 
 
+@pytest.mark.unit
 class TestProgressTrackerHeader:
     """Test batch header rendering layout."""
 
@@ -720,6 +721,7 @@ class TestProgressTrackerHeader:
             assert field in header, f"Missing field: {field}"
 
 
+@pytest.mark.unit
 class TestProgressTrackerMoleculeLine:
     """Test molecule progress line rendering."""
 
@@ -774,6 +776,7 @@ class TestProgressTrackerMoleculeLine:
         assert label == progress_tracker.get_stage_label(MOCK_MOL_ID)
 
 
+@pytest.mark.unit
 class TestRecentCompletions:
     """Test recent completion history formatting."""
 
@@ -804,7 +807,7 @@ class TestRecentCompletions:
 
         content = str(panel.renderable)
         assert "Recent Completions:" in content
-        assert f"✓ {MOCK_MOL_ID} (green)" in content
+        assert f"[green]✓[/green] {MOCK_MOL_ID}" in content
 
 
 @pytest.mark.unit

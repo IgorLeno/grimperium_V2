@@ -675,7 +675,8 @@ class ProgressTracker:
         """
         progress = self._molecules.get(mol_id)
         if progress is None:
-            return f"⠹ {mol_id} (unknown)"
+            spinner = self.get_spinner_frame(frame_idx)
+            return f"{spinner} {mol_id} (unknown)"
 
         spinner = self.get_spinner_frame(frame_idx)
         bar = self.render_progress_bar_weighted(mol_id)

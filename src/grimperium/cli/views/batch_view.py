@@ -505,7 +505,8 @@ class BatchView(BaseView):
             for mol_id, success in completed[-5:]:
                 status = "✓" if success else "✗"
                 color = "green" if success else "red"
-                lines.append(f"  {status} {mol_id} ({color})")
+                colored_status = f"[{color}]{status}[/{color}]"
+                lines.append(f"  {colored_status} {mol_id}")
 
         content = "\n".join(lines)
 
