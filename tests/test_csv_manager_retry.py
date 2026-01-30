@@ -16,6 +16,9 @@ from grimperium.crest_pm7.batch.enums import MoleculeStatus
 def csv_path(tmp_path: Path) -> Path:
     """Provide a temporary CSV path.
 
+    Args:
+        tmp_path: Temporary directory fixture provided by pytest.
+
     Returns:
         Path: Path to the temporary CSV file named "retry_test.csv".
     """

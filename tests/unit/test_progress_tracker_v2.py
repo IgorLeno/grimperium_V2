@@ -399,6 +399,7 @@ class TestMoleculeProgress:
         assert progress.completed is True
 
 
+@pytest.mark.unit
 class TestProgressTracker:
     """Test ProgressTracker class methods."""
 

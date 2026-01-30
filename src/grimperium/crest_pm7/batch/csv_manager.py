@@ -807,7 +807,7 @@ class BatchCSVManager:
             df.at[idx, "error_message"] = final_error_message
 
         # Keep reruns aligned with retry_count for legacy schema compatibility
-        if "reruns" in df.columns:
+        if "retry_count" in df.columns and "reruns" in df.columns:
             df.at[idx, "reruns"] = retry_count
 
         self.save_csv()
@@ -816,6 +816,7 @@ class BatchCSVManager:
         self,
         mol_id: str,
         error_message: str,
+        force: bool = False,
     ) -> None:
         """Mark molecule as permanently skipped.
 
@@ -824,16 +825,30 @@ class BatchCSVManager:
         Args:
             mol_id: Molecule identifier
             error_message: Error that caused the skip
+            force: Skip retry_count vs max_retries validation when True
         """
         # FUTURE PARALLELIZATION: Wrap with self._lock
         idx = self._get_row_index(mol_id)
         df = self._ensure_loaded()
 
         retry_count = self._safe_int(df.at[idx, "retry_count"], default=0)
-        max_retries = self._safe_int(df.at[idx, "max_retries"], default=3)
-        if max_retries < 0:
-            raise ValueError(f"max_retries must be >= 0, got {max_retries}")
-        if retry_count != max_retries:
+        if "max_retries" in df.columns:
+            max_retries_val = df.at[idx, "max_retries"]
+        else:
+            max_retries_val = None
+        if pd.isna(max_retries_val):
+            max_retries = None
+        else:
+            max_retries = int(max_retries_val)
+            if max_retries < 0:
+                raise ValueError(f"max_retries must be >= 0, got {max_retries}")
+        if max_retries is None:
+            if not force:
+                raise ValueError(
+                    f"mark_skip({mol_id}): max_retries is missing or NaN "
+                    f"(retry_count={retry_count})"
+                )
+        elif not force and retry_count != max_retries:
             raise ValueError(
                 f"mark_skip({mol_id}): retry_count={retry_count} "
                 f"does not match max_retries={max_retries}"
