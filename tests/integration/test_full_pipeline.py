@@ -11,6 +11,7 @@ This test validates the complete flow:
 """
 
 import numpy as np
+import pandas as pd
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.metrics import mean_absolute_error, r2_score
 
@@ -18,10 +19,8 @@ from grimperium.data import ChemperiumLoader, DataFusion
 from tests.fixtures.real_data import load_real_subset
 
 
-def _create_synthetic_pm7(df: "pd.DataFrame", random_state: int = 42) -> "pd.DataFrame":
+def _create_synthetic_pm7(df: pd.DataFrame, random_state: int = 42) -> pd.DataFrame:
     """Create synthetic PM7 values with realistic noise for testing."""
-    import pandas as pd
-
     rng = np.random.default_rng(random_state)
     pm7_df = df[["smiles"]].copy()
     # PM7 typically differs from CBS by a systematic offset + noise

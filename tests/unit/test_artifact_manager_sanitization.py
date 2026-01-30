@@ -5,8 +5,10 @@ Tests verify that dangerous characters, path traversal attempts, and edge cases
 are properly sanitized before being used in filesystem operations.
 """
 
-import pytest
 from pathlib import Path
+
+import pytest
+
 from src.grimperium.crest_pm7.batch.artifact_manager import ArtifactManager
 
 

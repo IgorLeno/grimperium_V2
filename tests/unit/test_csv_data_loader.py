@@ -4,8 +4,6 @@ Tests for CSVDataLoader and BatchDataManager.
 Includes tests for Ajuste #3 (duplicate check integration).
 """
 
-from pathlib import Path
-
 import pytest
 
 from grimperium.core.csv_data_loader import (

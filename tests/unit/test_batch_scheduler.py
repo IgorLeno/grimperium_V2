@@ -4,8 +4,6 @@ Tests for BatchScheduler.
 Includes tests for Ajuste #2 (explicit max_reruns parameter).
 """
 
-import pytest
-
 from grimperium.core.batch_scheduler import BatchScheduler
 from grimperium.core.molecule import (
     Molecule,

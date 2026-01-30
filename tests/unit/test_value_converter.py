@@ -7,8 +7,6 @@ Includes tests for Ajuste #1 (to_string allow_empty fix).
 from datetime import datetime
 from enum import Enum
 
-import pytest
-
 from grimperium.core.value_converter import MoleculeValueConverter
 
 

@@ -484,7 +484,17 @@ class ProgressTracker:
         Returns:
             First active molecule ID or None if all completed
         """
-        return next(iter(self._molecules), None)
+        for mol_id, progress in self._molecules.items():
+            if progress.completed:
+                continue
+
+            status = progress.last_csv_state.get("status", STATUS_PENDING)
+            if status != STATUS_RUNNING:
+                continue
+
+            return mol_id
+
+        return None
 
     def get_completed_molecules(self) -> list[tuple[str, bool]]:
         """Get list of completed molecules and their status.

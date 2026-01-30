@@ -1,7 +1,5 @@
 """Tests for Phase A settings system changes."""
 
-import pytest
-
 from src.grimperium.cli.settings_manager import CRESTSettings, SettingsManager
 
 

@@ -2,8 +2,6 @@
 Tests for Molecule dataclass hierarchy.
 """
 
-from datetime import datetime
-
 import pytest
 
 from grimperium.core.molecule import (
@@ -11,7 +9,6 @@ from grimperium.core.molecule import (
     MoleculeIdentity,
     MoleculeMeta,
     MoleculeProperties,
-    MoleculeResults,
     MoleculeStatus,
 )
 

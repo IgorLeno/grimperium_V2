@@ -731,6 +731,11 @@ class BatchCSVManager:
             if col in df.columns:
                 df.at[idx, col] = val
 
+        # Keep reruns aligned with retry_count for legacy schema compatibility
+        if "retry_count" in df.columns and "reruns" in df.columns:
+            retry_count = self._safe_int(df.at[idx, "retry_count"], default=0)
+            df.at[idx, "reruns"] = retry_count
+
         self.save_csv()
         LOG.debug(f"Marked {mol_id} as OK")
 
@@ -771,7 +776,14 @@ class BatchCSVManager:
                 raise ValueError(f"max_retries must be >= 0, got {max_retries}")
 
         df.at[idx, "retry_count"] = retry_count
-        df.at[idx, "last_error_message"] = error_message
+
+        error_base = (error_message or "").strip()
+        if not error_base:
+            error_base = "Unknown error"
+        final_error_message = f"{error_base} (attempt {retry_count})"
+
+        if "last_error_message" in df.columns:
+            df.at[idx, "last_error_message"] = final_error_message
 
         # Determine next status
         if retry_count >= max_retries:
@@ -789,6 +801,14 @@ class BatchCSVManager:
             for col, val in result_update.items():
                 if col in df.columns:
                     df.at[idx, col] = val
+
+        # Always store final error message for audit/UI usage
+        if "error_message" in df.columns:
+            df.at[idx, "error_message"] = final_error_message
+
+        # Keep reruns aligned with retry_count for legacy schema compatibility
+        if "reruns" in df.columns:
+            df.at[idx, "reruns"] = retry_count
 
         self.save_csv()
 
@@ -809,12 +829,31 @@ class BatchCSVManager:
         idx = self._get_row_index(mol_id)
         df = self._ensure_loaded()
 
+        retry_count = self._safe_int(df.at[idx, "retry_count"], default=0)
+        max_retries = 3
+        if retry_count != max_retries:
+            raise ValueError(
+                f"mark_skip({mol_id}): retry_count={retry_count} "
+                f"does not match max_retries={max_retries}"
+            )
+
+        error_base = (error_message or "").strip()
+        if not error_base:
+            error_base = "Unknown error"
+        final_error_message = f"{error_base} (attempt {retry_count})"
+
         df.at[idx, "status"] = MoleculeStatus.SKIP.value
-        df.at[idx, "last_error_message"] = error_message
-        df.at[idx, "error_message"] = error_message
+        if "last_error_message" in df.columns:
+            df.at[idx, "last_error_message"] = final_error_message
+        if "error_message" in df.columns:
+            df.at[idx, "error_message"] = final_error_message
+
+        # Keep reruns aligned with retry_count for legacy schema compatibility
+        if "retry_count" in df.columns and "reruns" in df.columns:
+            df.at[idx, "reruns"] = retry_count
 
         self.save_csv()
-        LOG.warning(f"Marked {mol_id} as SKIP: {error_message}")
+        LOG.warning(f"Marked {mol_id} as SKIP: {final_error_message}")
 
     def _update_extra_fields(
         self,
@@ -1000,6 +1039,8 @@ class BatchCSVManager:
                 mopac_status = "OK"
             elif result.conformers:
                 mopac_status = "FAILED"
+        if mopac_status is None:
+            mopac_status = MOPAC_STATUS_NOT_ATTEMPTED
 
         # NOTE: delta_1/2/3 and conformer_selected are computed later using
         # H298_cbs and conformer HOF values in CSV enhancements.
@@ -1057,7 +1098,6 @@ class BatchCSVManager:
             # Batch Tracking
             "batch_id": batch_id,
             "batch_order": batch_order,
-            "reruns": result.reruns if hasattr(result, "reruns") else 0,  # NEW
             # Timestamp
             "timestamp": (
                 result.timestamp.strftime("%d/%m-%H:%M")

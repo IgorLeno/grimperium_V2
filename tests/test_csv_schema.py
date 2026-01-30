@@ -1,8 +1,9 @@
 """Tests for Phase A CSV schema (43 columns)."""
 
+from pathlib import Path
+
 import pandas as pd
 import pytest
-from pathlib import Path
 
 EXPECTED_COLUMNS = [
     # Core molecule data (1-6)

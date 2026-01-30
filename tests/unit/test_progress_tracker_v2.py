@@ -28,14 +28,15 @@ from rich.console import Console
 
 from grimperium.cli.progress_tracker import (
     EVENTS,
+    STAGE_WEIGHTS,
     CSVMonitor,
     MoleculeProgress,
     ProcessingStage,
     ProgressEvent,
     ProgressTracker,
-    STAGE_WEIGHTS,
 )
 from grimperium.cli.views.batch_view import BatchView
+from grimperium.crest_pm7.progress import STATUS_OK, STATUS_RERUN, STATUS_RUNNING
 
 if TYPE_CHECKING:
     from queue import Queue as QueueType
@@ -416,6 +417,20 @@ class TestProgressTracker:
         progress_tracker.register_molecule("mol_001")
         assert "mol_001" in progress_tracker._molecules
         assert isinstance(progress_tracker._molecules["mol_001"], MoleculeProgress)
+
+    def test_get_current_molecule_id_only_running(
+        self, progress_tracker: ProgressTracker
+    ) -> None:
+        """get_current_molecule_id returns only RUNNING molecules."""
+        progress_tracker.register_molecule("mol_001")
+        progress_tracker.register_molecule("mol_002")
+        progress_tracker.register_molecule("mol_003")
+
+        progress_tracker._molecules["mol_001"].last_csv_state["status"] = STATUS_OK
+        progress_tracker._molecules["mol_002"].last_csv_state["status"] = STATUS_RERUN
+        progress_tracker._molecules["mol_003"].last_csv_state["status"] = STATUS_RUNNING
+
+        assert progress_tracker.get_current_molecule_id() == "mol_003"
 
     def test_progress_bar_width_exactly_60_chars(
         self, progress_tracker: ProgressTracker

@@ -10,11 +10,6 @@ Tests:
 """
 
 import numpy as np
-
-from tests.fixtures.real_data import load_real_subset
-
-
-import numpy as np
 import pandas as pd
 
 from tests.fixtures.real_data import load_real_subset

@@ -45,9 +45,11 @@ def test_load_real_phase_a_results_from_csv_fallback(tmp_path: Path) -> None:
     csv_content = "smiles,H298_pm7,charge,multiplicity\nCCO,-100.5,0,1\nCC,-50.2,0,1\nC,-25.1,0,1\n"
     csv_file.write_text(csv_content, encoding="utf-8")
 
-    with patch("grimperium.cli.views.databases_view.PHASE_A_RESULTS_FILE", json_file):
-        with patch("grimperium.cli.views.databases_view.DATA_DIR", tmp_path):
-            result = DatabasesView.load_real_phase_a_results()
+    with (
+        patch("grimperium.cli.views.databases_view.PHASE_A_RESULTS_FILE", json_file),
+        patch("grimperium.cli.views.databases_view.DATA_DIR", tmp_path),
+    ):
+        result = DatabasesView.load_real_phase_a_results()
 
     assert result is not None
     assert result.molecules == 3  # 3 data rows (excluding header)
@@ -65,9 +67,11 @@ def test_load_real_phase_a_results_empty_csv_fallback(tmp_path: Path) -> None:
     csv_file = tmp_path / "thermo_pm7.csv"
     csv_file.write_text("smiles,H298_pm7,charge,multiplicity\n", encoding="utf-8")
 
-    with patch("grimperium.cli.views.databases_view.PHASE_A_RESULTS_FILE", json_file):
-        with patch("grimperium.cli.views.databases_view.DATA_DIR", tmp_path):
-            result = DatabasesView.load_real_phase_a_results()
+    with (
+        patch("grimperium.cli.views.databases_view.PHASE_A_RESULTS_FILE", json_file),
+        patch("grimperium.cli.views.databases_view.DATA_DIR", tmp_path),
+    ):
+        result = DatabasesView.load_real_phase_a_results()
 
     assert result is not None
     assert result.molecules == 0
@@ -83,9 +87,11 @@ def test_load_real_phase_a_results_no_files(tmp_path: Path) -> None:
     json_file = tmp_path / "phase_a_results.json"
     # Neither file exists
 
-    with patch("grimperium.cli.views.databases_view.PHASE_A_RESULTS_FILE", json_file):
-        with patch("grimperium.cli.views.databases_view.DATA_DIR", tmp_path):
-            result = DatabasesView.load_real_phase_a_results()
+    with (
+        patch("grimperium.cli.views.databases_view.PHASE_A_RESULTS_FILE", json_file),
+        patch("grimperium.cli.views.databases_view.DATA_DIR", tmp_path),
+    ):
+        result = DatabasesView.load_real_phase_a_results()
 
     assert result is None
 
@@ -103,9 +109,11 @@ def test_load_real_phase_a_results_invalid_json(tmp_path: Path) -> None:
     csv_content = "smiles,H298_pm7\nCCO,-100.5\n"
     csv_file.write_text(csv_content, encoding="utf-8")
 
-    with patch("grimperium.cli.views.databases_view.PHASE_A_RESULTS_FILE", json_file):
-        with patch("grimperium.cli.views.databases_view.DATA_DIR", tmp_path):
-            result = DatabasesView.load_real_phase_a_results()
+    with (
+        patch("grimperium.cli.views.databases_view.PHASE_A_RESULTS_FILE", json_file),
+        patch("grimperium.cli.views.databases_view.DATA_DIR", tmp_path),
+    ):
+        result = DatabasesView.load_real_phase_a_results()
 
     assert result is not None
     assert result.molecules == 1  # Fallback to CSV count
@@ -125,9 +133,11 @@ def test_load_real_phase_a_results_json_with_zero_molecules(tmp_path: Path) -> N
     csv_content = "smiles,H298_pm7\nCCO,-100.5\nCC,-50.2\n"
     csv_file.write_text(csv_content, encoding="utf-8")
 
-    with patch("grimperium.cli.views.databases_view.PHASE_A_RESULTS_FILE", json_file):
-        with patch("grimperium.cli.views.databases_view.DATA_DIR", tmp_path):
-            result = DatabasesView.load_real_phase_a_results()
+    with (
+        patch("grimperium.cli.views.databases_view.PHASE_A_RESULTS_FILE", json_file),
+        patch("grimperium.cli.views.databases_view.DATA_DIR", tmp_path),
+    ):
+        result = DatabasesView.load_real_phase_a_results()
 
     assert result is not None
     assert result.molecules == 2  # Use CSV count, not JSON's 0
