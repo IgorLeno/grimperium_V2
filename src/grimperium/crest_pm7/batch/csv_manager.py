@@ -830,7 +830,9 @@ class BatchCSVManager:
         df = self._ensure_loaded()
 
         retry_count = self._safe_int(df.at[idx, "retry_count"], default=0)
-        max_retries = 3
+        max_retries = self._safe_int(df.at[idx, "max_retries"], default=3)
+        if max_retries < 0:
+            raise ValueError(f"max_retries must be >= 0, got {max_retries}")
         if retry_count != max_retries:
             raise ValueError(
                 f"mark_skip({mol_id}): retry_count={retry_count} "

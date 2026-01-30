@@ -14,7 +14,11 @@ from grimperium.crest_pm7.batch.enums import MoleculeStatus
 
 @pytest.fixture
 def csv_path(tmp_path: Path) -> Path:
-    """Provide a temporary CSV path."""
+    """Provide a temporary CSV path.
+
+    Returns:
+        Path: Path to the temporary CSV file named "retry_test.csv".
+    """
     return tmp_path / "retry_test.csv"
 
 
@@ -81,6 +85,8 @@ class TestRetryHandling:
                     "reruns": 1,
                     "last_error_message": "CREST timeout after 3600s (attempt 1)",
                     "error_message": "CREST timeout after 3600s (attempt 1)",
+                    "crest_status": "NOT_ATTEMPTED",
+                    "mopac_status": "NOT_ATTEMPTED",
                 }
             ],
         )
@@ -113,6 +119,8 @@ class TestRetryHandling:
                     "reruns": 2,
                     "last_error_message": "CREST timeout after 3600s (attempt 2)",
                     "error_message": "CREST timeout after 3600s (attempt 2)",
+                    "crest_status": "NOT_ATTEMPTED",
+                    "mopac_status": "NOT_ATTEMPTED",
                 }
             ],
         )
@@ -145,6 +153,8 @@ class TestRetryHandling:
                     "reruns": 2,
                     "last_error_message": "prev error",
                     "error_message": "prev error",
+                    "crest_status": "NOT_ATTEMPTED",
+                    "mopac_status": "NOT_ATTEMPTED",
                 }
             ],
         )
