@@ -284,7 +284,8 @@ These files are context for agents (mention them for better understanding):
 ```
 src/grimperium/cli/
 ├─ __init__.py
-├─ main.py                      (Entry point)
+├─ __main__.py                   (Module entry point)
+├─ app.py                        (CLI application)
 ├─ controller.py                (Main orchestrator)
 ├─ menu.py                      (Menu logic)
 ├─ styles.py                    (Rich styling)
@@ -292,7 +293,7 @@ src/grimperium/cli/
 └─ views/
    ├─ base_view.py             (Abstract view)
    ├─ calc_view.py             (Molecular calculation)
-   ├─ database_view.py         ← BUGS: CBS, count, flow, update
+   ├─ databases_view.py        ← BUGS: CBS, count, flow, update
    ├─ models_view.py           (ML model management)
    ├─ results_view.py          (Analytics display)
    ├─ settings_view.py         ← BUGS: headers, back button
@@ -303,21 +304,14 @@ Data Management
 src/grimperium/crest_pm7/
 ├─ batch/
 │  ├─ csv_manager.py           ← BUG: wrong count
-│  └─ batch_processor.py        ← BUG: wrong flow
+│  └─ processor_adapter.py     ← BUG: wrong flow
 
 Test Structure (85%+ coverage required)
 tests/
-├─ cli/
-│  ├─ test_main.py
-│  ├─ test_controller.py
-│  ├─ test_views/
-│  │  ├─ test_base_view.py
-│  │  ├─ test_calc_view.py
-│  │  ├─ test_database_view.py  ← Needs updates for bugs
-│  │  ├─ test_models_view.py
-│  │  ├─ test_results_view.py
-│  │  ├─ test_settings_view.py  ← Needs updates for bugs
-│  │  └─ test_about_view.py
+├─ unit/
+│  ├─ test_calc_view.py
+│  ├─ test_databases_view.py    ← Needs updates for bugs
+│  ├─ test_settings_view.py     ← Needs updates for bugs
 │  └─ test_settings_manager.py
 ```
 

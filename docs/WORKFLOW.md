@@ -222,7 +222,6 @@ Blocks commit se qualquer check falha (use `--no-verify` só em emergências).
 | `CLAUDE.md` v2.0 | Behavioral guide for Claude Code | 2026-01-17 |
 | `.claude/settings.json` | Claude Code config (minimal, hooks ready) | 2026-01-17 |
 | `.git/hooks/pre-commit` | Quality gate automático | 2026-01-17 |
-| `VALIDATION_CHECKLIST.md` | Setup validation (antes de BATCH 12) | 2026-01-17 |
 | `CHANGELOG.md` | Unreleased: Phase C setup | 2026-01-17 |
 | `README.md` | Phase C overview | 2026-01-17 |
 | `architecture.md` | v2.0 com CLI redesign | 2026-01-17 |

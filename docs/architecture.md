@@ -18,9 +18,9 @@ This document describes the architecture of Grimperium, a delta-learning framewo
          ▼                   ▼                   ▼
 ┌─────────────────┐ ┌─────────────────┐ ┌─────────────────┐
 │      Data       │ │     Models      │ │      Core       │
-│  (loader.py)    │ │  (ensemble.py)  │ │ (delta_learn)   │
+│  (loader.py)    │ │  (ensemble.py)  │ │ (delta_learning.py)   │
 │  (fusion.py)    │ │  (kernel_ridge) │ │  (metrics.py)   │
-│  (semiemp.py)   │ │  (xgboost)      │ │                 │
+│  (semiempirical.py)   │ │  (xgboost)      │ │                 │
 └─────────────────┘ └─────────────────┘ └─────────────────┘
          │                   │                   │
          └───────────────────┼───────────────────┘
@@ -236,11 +236,12 @@ Main orchestrator for the delta-learning workflow:
 4. Evaluate performance
 
 ```python
+from grimperium.core import DeltaLearner
+
 learner = DeltaLearner()
-learner.load_data(chemperium_path, pm7_path)
-learner.compute_features()
-learner.train()
-metrics = learner.evaluate()
+learner.fit(X, y_cbs, y_pm7)
+y_pred = learner.predict(X, y_pm7)
+metrics = learner.evaluate(X, y_cbs, y_pm7)
 ```
 
 #### Metrics (`metrics.py`)

@@ -39,37 +39,37 @@
 
 ### Single Test Example
 ```python
-# tests/test_database_view.py
+# tests/unit/test_databases_view.py
 
-import pytest
-from src.cli.views.database_view import DatabaseView
-from src.data.loader import load_molecules
+import json
+from pathlib import Path
+from unittest.mock import MagicMock, patch
 
-@pytest.fixture
-def sample_data():
-    """Mock CSV data for testing"""
-    return {
-        'mol_001': {'smiles': 'CCO', 'pm7_energy': -156.234},
-        'mol_002': {'smiles': 'CC(C)O', 'pm7_energy': -198.456},
+from grimperium.cli.views.databases_view import DatabasesView
+
+
+def test_load_real_phase_a_results_from_json(tmp_path: Path) -> None:
+    """
+    Bug #2: Test loading molecule count from phase_a_results.json.
+
+    When JSON exists with n_molecules, that value should be used.
+    """
+    json_file = tmp_path / "phase_a_results.json"
+    json_data = {
+        "n_molecules": 29568,
+        "results": [
+            {"smiles": "CCO", "H298_pm7": -100.5, "timestamp": "2026-01-15T10:30:00"}
+        ],
     }
+    json_file.write_text(json.dumps(json_data), encoding="utf-8")
 
-def test_display_database_shows_count(sample_data):
-    """Test that database view displays molecule count correctly"""
-    view = DatabaseView(sample_data)
-    output = view.render()
-    assert "2 molecules" in output
-    assert "CCO" in output
+    with patch("grimperium.cli.views.databases_view.PHASE_A_RESULTS_FILE", json_file):
+        result = DatabasesView.load_real_phase_a_results()
 
-def test_display_database_empty():
-    """Test edge case: empty database"""
-    view = DatabaseView({})
-    output = view.render()
-    assert "No molecules" in output or "0 molecules" in output
-
-def test_database_invalid_input():
-    """Test error handling for invalid input"""
-    with pytest.raises(TypeError):
-        DatabaseView("not a dict")
+    assert result is not None
+    assert result.molecules == 29568
+    assert result.name == "CREST PM7"
+    assert result.status == "ready"  # Because molecules > 0
 ```
 
 ---
@@ -90,7 +90,7 @@ pytest tests/ --cov=src/ --cov-report=html
 
 ### Specific Module
 ```bash
-pytest tests/test_database_view.py -v
+pytest tests/unit/test_databases_view.py -v
 → Tests for database_view only
 ```
 

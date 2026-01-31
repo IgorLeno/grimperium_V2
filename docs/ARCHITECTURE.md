@@ -25,7 +25,7 @@
 │                   GRIMPERIUM v2.2                   │
 ├─────────────────────────────────────────────────────┤
 │                                                     │
-│  CLI Layer (main.py)                                │
+│  CLI Layer (app.py)                                 │
 │  ↓                                                  │
 │  BatchOrchestrator (coordinator)                    │
 │  ├─ BatchDataManager (load CSV)                     │
@@ -152,32 +152,11 @@ Result: mol_001 lost
 
 **Solution Strategy (for future, NOT NOW):**
 
-**Option A: SQLite (Recommended for ≤1M molecules)**
-```python
-# Future (v3.0+):
-from grimperium.backends import SQLitePersister
-
-persister = SQLitePersister("grimperium.db")
-# Benefits: ACID, indexes, query support, concurrent reads
-```
-
-**Option B: PostgreSQL (For distributed)**
-```python
-# Future (v4.0+):
-from grimperium.backends import PostgreSQLPersister
-
-persister = PostgreSQLPersister("postgresql://...")
-# Benefits: Full transactional, multi-server, scale unlimited
-```
-
-**Option C: Event Sourcing (For audit trail)**
-```python
-# Future (v3.5+):
-from grimperium.backends import EventSourcingPersister
-
-persister = EventSourcingPersister("grimperium.events")
-# Benefits: Full history, temporal queries, no overwrites
-```
+Persistence backends are not implemented in the codebase yet.
+Conceptual options for future versions include:
+- SQLite (recommended for ≤1M molecules)
+- PostgreSQL (distributed deployments)
+- Event sourcing (full audit trail)
 
 **For Now (v2.2):**
 - ✅ Use CSV with single-process

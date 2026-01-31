@@ -195,30 +195,17 @@ import numpy as np
 from grimperium.core import DeltaLearner
 from grimperium.core.metrics import rmse, mae
 
-# Load data
+# Initialize and train
 learner = DeltaLearner()
-learner.load_data("chemperium.csv", "pm7.csv")
+learner.fit(X, y_cbs, y_pm7)
 
-# Compute features
-learner.compute_features()
-
-# Train
-learner.train()
-
-# Evaluate
-metrics = learner.evaluate()
+# Predict and evaluate
+y_pred = learner.predict(X, y_pm7)
+metrics = learner.evaluate(X, y_cbs, y_pm7)
 
 # Compare with baseline
-h298_pm7 = test_data["H298_pm7"]
-h298_cbs = test_data["H298_cbs"]
-
-# Baseline error (PM7 raw)
-baseline_rmse = rmse(h298_cbs, h298_pm7)
-
-# Delta-corrected error
-delta_pred = learner.predict(X_test, return_delta=True)
-corrected = h298_pm7 + delta_pred
-corrected_rmse = rmse(h298_cbs, corrected)
+baseline_rmse = rmse(y_cbs, y_pm7)
+corrected_rmse = rmse(y_cbs, y_pred)
 
 print(f"PM7 raw RMSE: {baseline_rmse:.2f} kcal/mol")
 print(f"PM7+δ RMSE: {corrected_rmse:.2f} kcal/mol")

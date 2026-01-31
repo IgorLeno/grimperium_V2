@@ -52,16 +52,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Dataset Migration System** (2026-01-10)
   - Added `ChemperiumLoader.load_thermo_cbs_clean()` as primary method for Phase A onwards
-  - Created comprehensive dataset migration documentation (`docs/DATASET_MIGRATION.md`)
   - Implemented proper deprecation warnings for `load_thermo_cbs_opt()`
   - Added extensive docstrings explaining dataset versions and filtering rationale
-  
-- Module-specific documentation (READMEs)
-  - `READMEs/README_core.md` - Core module documentation
-  - `READMEs/README_data.md` - Data module documentation
-  - `READMEs/README_models.md` - Models module documentation
-  - `READMEs/README_utils.md` - Utils module documentation
-  - `READMEs/README.md` - Consolidated documentation index
+  - Dataset reference: `docs/DATASETS.md`
 
 ### Changed
 - **Python Version Update** (2026-01-14)

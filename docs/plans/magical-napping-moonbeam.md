@@ -85,7 +85,7 @@ All fixes must pass 6 quality aspects before commit:
 - Empty molecule list handling
 - FileNotFoundError on missing dataset
 
-**Quality Gate 1:** Run `pytest tests/cli/ -v --cov=src/grimperium/cli/ --cov-fail-under=85`
+**Quality Gate 1:** Run `pytest tests/unit/ -v --cov=src/grimperium/cli/ --cov-fail-under=85`
 
 ---
 
@@ -228,10 +228,10 @@ Start CLI and verify:
 5. `src/grimperium/cli/settings_manager.py` (Bugs #7, #9, #10, #11)
 
 ### Test Files
-1. `tests/cli/test_databases_view.py` (Bugs #1, #2, #4)
-2. `tests/cli/test_calc_view.py` (Bug #3)
-3. `tests/cli/test_settings_view.py` (Bugs #5, #6, #8)
-4. `tests/cli/test_settings_manager.py` (Bugs #7, #9, #10, #11)
+1. `tests/unit/test_databases_view.py` (Bugs #1, #2, #4)
+2. `tests/unit/test_calc_view.py` (Bug #3)
+3. `tests/unit/test_settings_view.py` (Bugs #5, #6, #8)
+4. `tests/unit/test_settings_manager.py` (Bugs #7, #9, #10, #11)
 
 ---
 

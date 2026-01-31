@@ -88,8 +88,8 @@ PHASE_B_DESCRIPTORS = [
 
 RDKit descriptors are calculated in **two places**:
 
-#### A. Batch Processor (CSV Writer)
-**File:** `src/grimperium/crest_pm7/batch_processor.py`
+#### A. Batch CSV Manager (CSV Writer)
+**File:** `src/grimperium/crest_pm7/batch/csv_manager.py`
 
 ```python
 # CSV row generation
@@ -263,8 +263,6 @@ def enrich_molecule_with_rdkit(molecule: Molecule) -> Molecule:
 
 ### Unit Tests
 
-**File:** `tests/test_rdkit_integration.py`
-
 ```python
 import pytest
 from rdkit import Chem
@@ -313,7 +311,7 @@ def test_descriptor_calculation_with_none():
 
 ```bash
 # Run batch
-python -m grimperium.cli.main
+python -m grimperium.cli
 
 # Verify CSV
 import pandas as pd
@@ -509,4 +507,4 @@ Use for Adaptive Timeout Prediction
 
 ---
 
-**Questions?** See `grimperium_spec.md` or `grimperium_implementation_guide.md` for detailed specifications.
+**Questions?** See `docs/ARCHITECTURE.md` for system design details.

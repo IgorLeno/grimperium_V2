@@ -78,13 +78,11 @@ pytest tests/ -v
 ### 3. Uso Básico
 
 ```python
-from grimperium import DeltaLearning
-from grimperium.models import XGBoostDelta
+from grimperium import GrimperiumAPI
 
 # Carregar dados
-model = XGBoostDelta()
-model.train(X_train, y_train)
-predictions = model.predict(X_test)
+api = GrimperiumAPI()
+api.load_data("data/thermo_cbs_chon.csv", "data/thermo_pm7.csv")
 ```
 
 ---
@@ -124,9 +122,6 @@ print(f"Loaded {len(df)} CHON molecules")
 | `docs/CLAUDE.md` | Guia comportamento Claude Code |
 | `docs/architecture.md` | Visão da arquitetura |
 | `docs/DATASETS.md` | **NEW** - Dataset reference guide |
-| `docs/PHASE-A-START-HERE.md` | Comece aqui para Phase A |
-| `docs/PHASE-A-RESULTS.md` | modelo para resultados |
-| `docs/feature_engineering.md` | Guia de features |
 | `docs/delta_learning_guide.md` | Guia de Delta Learning |
 
 ---
