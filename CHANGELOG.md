@@ -54,7 +54,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Added `ChemperiumLoader.load_thermo_cbs_clean()` as primary method for Phase A onwards
   - Implemented proper deprecation warnings for `load_thermo_cbs_opt()`
   - Added extensive docstrings explaining dataset versions and filtering rationale
-  - Dataset reference: `docs/DATASETS.md`
+
 
 ### Changed
 - **Python Version Update** (2026-01-14)
