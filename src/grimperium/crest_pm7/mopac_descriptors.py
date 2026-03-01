@@ -47,7 +47,12 @@ def parse_fortran_float(s: str) -> float:
 
 
 def _empty_descriptors() -> dict[str, Any]:
-    """Return dict with all descriptor keys set to NaN/None defaults."""
+    """Return dict with all descriptor keys set to NaN/None defaults.
+
+    Returns:
+        Dictionary with all keys from _DESCRIPTOR_KEYS initialized to np.nan,
+        except 'mopac_point_group' which is set to None.
+    """
     result: dict[str, Any] = {}
     for key in _DESCRIPTOR_KEYS:
         if key == "mopac_point_group":

@@ -340,7 +340,9 @@ class BatchExecutionManager:
                 h298_pm7 = pm7_result.most_stable_hof  # Property, may be None
 
                 # Get PM7-selected conformer and its CREST rank
-                selected_conformer: ConformerData | None = pm7_result.get_selected_conformer()
+                selected_conformer: ConformerData | None = (
+                    pm7_result.get_selected_conformer()
+                )
                 k_selected_pm7: int | None = pm7_result.k_selected_pm7
 
                 # Safe access to batch_settings
