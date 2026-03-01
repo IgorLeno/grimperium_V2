@@ -128,9 +128,7 @@ class Results(TypedDict):
 
 def _get_git_commit() -> str:
     try:
-        out = subprocess.check_output(
-            ["git", "rev-parse", "HEAD"], text=True
-        ).strip()
+        out = subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()
         return out
     except Exception:
         return "unknown"
@@ -138,9 +136,7 @@ def _get_git_commit() -> str:
 
 def _get_cpu_model() -> str:
     try:
-        txt = Path("/proc/cpuinfo").read_text(
-            encoding="utf-8", errors="ignore"
-        )
+        txt = Path("/proc/cpuinfo").read_text(encoding="utf-8", errors="ignore")
         m = re.search(r"^model name\s*:\s*(.+)$", txt, re.M)
         return m.group(1).strip() if m else "unknown"
     except Exception:
@@ -243,9 +239,7 @@ def _load_xy(
 
     df_sample = df.sample(n=n_samples, random_state=sample_seed)
 
-    X_basic = (
-        df_sample[["nheavy", "charge", "multiplicity"]].values.astype(float)
-    )
+    X_basic = df_sample[["nheavy", "charge", "multiplicity"]].values.astype(float)
     y_cbs = df_sample["H298_cbs"].values.astype(float)
     X = _create_enriched_features(X_basic)
     y_pm7 = _create_realistic_mock_pm7(
@@ -269,9 +263,7 @@ def _fit_predict(
         y_cbs_test,
         y_pm7_train,
         y_pm7_test,
-    ) = train_test_split(
-        X, y_cbs, y_pm7, test_size=test_size, random_state=split_seed
-    )
+    ) = train_test_split(X, y_cbs, y_pm7, test_size=test_size, random_state=split_seed)
 
     model_delta = DeltaLearner()
     model_delta.fit(X_train, y_cbs_train, y_pm7_train)
@@ -357,15 +349,11 @@ def main() -> int:
         "--data-path",
         type=Path,
         default=Path("thermo_cbs_opt.csv"),
-        help=(
-            "Caminho para o CSV do Chemperium (padrão: ./thermo_cbs_opt.csv)."
-        ),
+        help=("Caminho para o CSV do Chemperium (padrão: ./thermo_cbs_opt.csv)."),
     )
     parser.add_argument("--n-samples", type=int, default=1000)
     parser.add_argument("--test-size", type=float, default=0.2)
-    parser.add_argument(
-        "--seed", type=int, default=42, help="Seed do protocolo."
-    )
+    parser.add_argument("--seed", type=int, default=42, help="Seed do protocolo.")
     parser.add_argument("--bootstrap-n", type=int, default=2000)
     parser.add_argument("--bootstrap-seed", type=int, default=42)
     args = parser.parse_args()

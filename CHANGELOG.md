@@ -32,7 +32,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     ```python
     # OLD (deprecated)
     df = loader.load_thermo_cbs_clean()
-    
+
     # NEW (use this)
     df = loader.load_thermo_cbs_chon()
     ```

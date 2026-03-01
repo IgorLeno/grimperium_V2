@@ -1,4 +1,4 @@
-"""Tests for Phase A CSV schema (52 columns)."""
+"""Tests for Phase A CSV schema (55 columns, derived from len(EXPECTED_COLUMNS))."""
 
 from pathlib import Path
 
@@ -72,20 +72,19 @@ EXPECTED_COLUMNS = [
 ]
 
 
-def test_csv_has_expected_columns() -> None:
-    """Test that CSV output has expected column count (after regeneration)."""
-    csv_path = Path("data/thermo_pm7.csv")
+_CSV_PATH = Path("data/thermo_pm7.csv")
 
-    if csv_path.exists():
-        df = pd.read_csv(csv_path)
-        # Skip test if CSV hasn't been regenerated yet
-        if len(df.columns) < 50:
-            pytest.skip("CSV not yet regenerated with new schema")
-        assert len(df.columns) == len(EXPECTED_COLUMNS), (
-            f"Expected {len(EXPECTED_COLUMNS)} columns, got {len(df.columns)}"
-        )
-    else:
-        pytest.skip("CSV file does not exist yet")
+
+@pytest.mark.skipif(
+    not _CSV_PATH.exists(),
+    reason="CSV data file not yet generated; run the pipeline first",
+)
+def test_csv_has_expected_columns() -> None:
+    """Test that CSV output has the expected column count."""
+    df = pd.read_csv(_CSV_PATH)
+    assert len(df.columns) == len(
+        EXPECTED_COLUMNS
+    ), f"Expected {len(EXPECTED_COLUMNS)} columns, got {len(df.columns)}"
 
 
 def test_csv_column_order() -> None:

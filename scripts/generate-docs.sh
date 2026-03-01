@@ -55,5 +55,3 @@ if ! poetry run sphinx-build -b html docs/source docs/build/html; then
 fi
 
 exit 0
-
-

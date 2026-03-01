@@ -6,37 +6,37 @@
 import os
 import sys
 
-sys.path.insert(0, os.path.abspath('../../src'))
+sys.path.insert(0, os.path.abspath("../../src"))
 
 # -- Project information -----------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
 
-project = 'Grimperium'
-copyright = '2026, Igor Leno'
-author = 'Igor Leno'
-release = '0.2.3'
+project = "Grimperium"
+copyright = "2026, Igor Leno"
+author = "Igor Leno"
+release = "0.2.3"
 
 # -- General configuration ---------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration
 
 extensions = [
-    'sphinx.ext.autodoc',
-    'sphinx.ext.viewcode',
-    'sphinx.ext.napoleon',
-    'sphinx_autodoc_typehints',
+    "sphinx.ext.autodoc",
+    "sphinx.ext.viewcode",
+    "sphinx.ext.napoleon",
+    "sphinx_autodoc_typehints",
 ]
 
-templates_path = ['_templates']
+templates_path = ["_templates"]
 exclude_patterns = []
 
-language = 'pt_BR'
+language = "pt_BR"
 
 # -- Options for HTML output -------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#options-for-html-output
 
-html_theme = 'sphinx_rtd_theme'
+html_theme = "sphinx_rtd_theme"
 # Sphinx static assets directory.
 # Source of truth: `html_static_path`.
 # Do not keep documentation/README inside `_static`.
 # If the directory must exist in git even when empty, use `.gitkeep`.
-html_static_path = ['_static']
+html_static_path = ["_static"]

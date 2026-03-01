@@ -47,8 +47,6 @@ def _empty_descriptors() -> dict[str, Any]:
     for key in _DESCRIPTOR_KEYS:
         if key == "mopac_point_group":
             result[key] = None
-        elif key == "mopac_num_scf_cycles":
-            result[key] = np.nan
         else:
             result[key] = np.nan
     return result

@@ -119,10 +119,10 @@ The UI renders a 30-character bar (6 chars per stage) with a live spinner.
 ```
 Single-process execution
   → Only one writer at a time
-  
+
 Linear processing order
   → Deterministic, no race conditions
-  
+
 Atomic writes (temp + replace)
   → Even if crash mid-write, previous state intact
 ```
@@ -259,7 +259,7 @@ class PersistenceQueue:
     """Thread-safe write queue"""
     def enqueue(self, mol):
         self.queue.put(mol)  # Thread-safe
-    
+
     def worker(self):
         while True:
             mol = self.queue.get()
@@ -426,7 +426,7 @@ crest_time,mopac_status,mopac_time,delta_1,delta_2,delta_3,most_stable_hof,error
 1. **Add File Locking (MANDATORY)**
    ```python
    from filelock import FileLock
-   
+
    with FileLock(self.csv_path + ".lock"):
        self.persister.save_molecule(mol)
    ```
@@ -438,7 +438,7 @@ crest_time,mopac_status,mopac_time,delta_1,delta_2,delta_3,most_stable_hof,error
        def __init__(self):
            self.lock = threading.Lock()
            self.retries = {}
-       
+
        def increment_rerun(self, mol_id):
            with self.lock:
                self.retries[mol_id] = self.retries.get(mol_id, 0) + 1
@@ -448,7 +448,7 @@ crest_time,mopac_status,mopac_time,delta_1,delta_2,delta_3,most_stable_hof,error
    ```python
    # Use Queue for summary updates
    self.summary_queue = queue.Queue()
-   
+
    # Worker thread
    def summary_worker():
        while True:
@@ -566,7 +566,7 @@ Process writes to:
   ├─ Line 2: mol_002
   ├─ Line 3: mol_003
   └─ Sync to disk
-  
+
 os.replace(temp, actual)  ← Atomic at OS level
 
 If crash during replace:

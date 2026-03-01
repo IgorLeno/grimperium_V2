@@ -5,11 +5,11 @@
 
 ## 🎯 PROJECT CONTEXT
 
-**Project Name:** Grimperium Delta-Learning Framework  
-**Current Phase:** C - CLI Interactive Application  
-**Current BATCH:** 12 (Critical Fixes)  
-**Deadline:** BATCH 12 smoke test completion (3 molecules)  
-**Stack:** Python 3.10+, Rich, Questionary, Pytest, Ruff, Black, MyPy  
+**Project Name:** Grimperium Delta-Learning Framework
+**Current Phase:** C - CLI Interactive Application
+**Current BATCH:** 12 (Critical Fixes)
+**Deadline:** BATCH 12 smoke test completion (3 molecules)
+**Stack:** Python 3.10+, Rich, Questionary, Pytest, Ruff, Black, MyPy
 
 ### Quick Stats
 
@@ -344,21 +344,21 @@ Every change in Grimperium must meet:
 ```
 1. TYPE HINTS (100%)
    → mypy --strict src/ (zero errors)
-   
+
 2. LINTING (Ruff clean)
    → ruff check src/ (zero errors)
-   
+
 3. FORMATTING (Black)
    → black --check src/ (zero changes)
-   
+
 4. TESTS (85%+ coverage)
    → pytest tests/ --cov=src/ --cov-report=term
    → Minimum 85% line coverage
-   
+
 5. CODE REVIEW (6 aspects)
    → /superpowers:code-review [file]
    → Readability, Performance, Security, Maintainability, etc.
-   
+
 6. MOLECULAR CORRECTNESS
    → Calculations validated against research
    → CSV counts accurate
@@ -473,4 +473,4 @@ Encontrei: [X bug], [Y issue], [Z question]"
 ---
 
 **Version:** 1.0 (Phase C - BATCH 12)
-**Last Updated:** 2026-01-17  
+**Last Updated:** 2026-01-17

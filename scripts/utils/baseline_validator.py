@@ -110,7 +110,9 @@ def main() -> int:
             issues.append("hof_not_extracted")
         elif hof_min is not None and hof_max is not None:
             if not (hof_min <= hof_actual <= hof_max):
-                issues.append(f"hof_out_of_range: {hof_actual:.2f} not in [{hof_min:.2f}, {hof_max:.2f}]")
+                issues.append(
+                    f"hof_out_of_range: {hof_actual:.2f} not in [{hof_min:.2f}, {hof_max:.2f}]"
+                )
 
         # Type-safe validation using QualityGrade enum
         if grade not in acceptable_grades:

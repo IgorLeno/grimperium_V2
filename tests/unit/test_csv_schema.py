@@ -104,7 +104,7 @@ class TestCSVSchema:
 
     def test_identity_columns(self, manager: BatchCSVManager) -> None:
         """Verify identity columns class attribute."""
-        assert manager.IDENTITY_COLUMNS == ["mol_id"]
+        assert ["mol_id"] == manager.IDENTITY_COLUMNS
 
     def test_molecular_properties_columns(self, manager: BatchCSVManager) -> None:
         """Verify molecular properties columns class attribute."""

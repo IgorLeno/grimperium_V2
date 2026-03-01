@@ -65,15 +65,15 @@ def predict(self, X: np.ndarray, y_pm7: np.ndarray) -> np.ndarray:
 ```python
 class ClassName:
     """Class docstring."""
-    
+
     def __init__(self, ...):
         """Initialize with parameters."""
         self.attr: Type = value
         self._private: bool = False
-        
+
     def __repr__(self) -> str:
         return f"ClassName(...)"
-    
+
     def public_method(self) -> ReturnType:
         """Method docstring."""
         pass

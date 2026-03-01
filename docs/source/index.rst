@@ -13,4 +13,3 @@ Grimperium is a delta learning framework for molecular property prediction.
    :caption: Contents:
 
    modules
-

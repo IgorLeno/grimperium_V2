@@ -139,9 +139,7 @@ class TestBatchOrchestratorRun:
 class TestBatchOrchestratorVisibility:
     """Tests for v2.2 visibility features."""
 
-    def test_creates_validation_log_permissive(
-        self, tmp_path
-    ):
+    def test_creates_validation_log_permissive(self, tmp_path):
         """v2.2: Creates validation log file in permissive mode."""
         # Create CSV with invalid rows
         csv_content = (

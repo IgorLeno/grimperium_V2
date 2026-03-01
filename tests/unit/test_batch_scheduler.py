@@ -78,9 +78,7 @@ class TestSchedulePriority:
         )
 
         # Pass in opposite order
-        scheduled = BatchScheduler.schedule(
-            [mol_pending, mol_failed], max_reruns=3
-        )
+        scheduled = BatchScheduler.schedule([mol_pending, mol_failed], max_reruns=3)
 
         # Failed should come first
         assert scheduled[0] is mol_failed
@@ -92,9 +90,7 @@ class TestSchedulePriority:
         mol_p2 = create_molecule("pending_2", status=MoleculeStatus.PENDING)
         mol_p3 = create_molecule("pending_3", status=MoleculeStatus.PENDING)
 
-        scheduled = BatchScheduler.schedule(
-            [mol_p1, mol_p2, mol_p3], max_reruns=3
-        )
+        scheduled = BatchScheduler.schedule([mol_p1, mol_p2, mol_p3], max_reruns=3)
 
         # Same order as input
         assert scheduled == [mol_p1, mol_p2, mol_p3]

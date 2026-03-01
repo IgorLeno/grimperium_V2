@@ -36,7 +36,8 @@ class ConformerData:
 
     Attributes:
         index: Conformer index
-        crest_rank: 1-based rank from CREST output (sorted by energy ascending)
+        crest_rank: 1-based rank from CREST output (sorted by energy ascending), or
+            None if not yet assigned. The value 0 is never valid.
         mol_id: Parent molecule ID
         crest_status: CREST generation status
         crest_geometry_file: Path to XYZ file
@@ -54,7 +55,13 @@ class ConformerData:
 
     index: int
     mol_id: str
-    crest_rank: int = 0
+    crest_rank: int | None = None
+
+    def __post_init__(self) -> None:
+        if self.crest_rank == 0:
+            raise ValueError(
+                "crest_rank=0 is invalid; ranks are 1-based or None when unassigned"
+            )
 
     # CREST
     crest_status: CRESTStatus = CRESTStatus.NOT_ATTEMPTED
@@ -88,7 +95,7 @@ class ConformerData:
         return {
             "index": self.index,
             "mol_id": self.mol_id,
-            "crest_rank": self.crest_rank,
+            "crest_rank": self.crest_rank,  # None when not yet assigned; serializes as null
             "crest_status": self.crest_status.value,
             "crest_geometry_file": (
                 str(self.crest_geometry_file) if self.crest_geometry_file else None
@@ -214,7 +221,11 @@ class PM7Result:
         successful = self.successful_conformers
         if not successful:
             return None
-        return min(successful, key=lambda c: c.energy_hof)  # type: ignore[arg-type]
+        # is_successful guarantees energy_hof is not None
+        return min(
+            successful,
+            key=lambda c: c.energy_hof if c.energy_hof is not None else float("inf"),
+        )
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to JSON-safe dictionary."""

@@ -24,9 +24,7 @@ LINT_LOG = LOGS_DIR / "lint-log" / "lint.log"
 TYPE_LOG = LOGS_DIR / "type-log" / "type.log"
 TEST_LOGS = list(LOGS_DIR.glob("test-log-*/test-*.log"))
 REPORT_FILE = WORKSPACE / "CI_ERROR_SUMMARY.md"
-GITHUB_STEP_SUMMARY = Path(
-    os.environ.get("GITHUB_STEP_SUMMARY", "/tmp/summary.md")
-)
+GITHUB_STEP_SUMMARY = Path(os.environ.get("GITHUB_STEP_SUMMARY", "/tmp/summary.md"))
 
 # Collect metadata
 COMMIT = os.environ.get("GITHUB_SHA", "unknown")[:12]
@@ -152,18 +150,10 @@ def parse_lint_log(text):
         return [], "not_run"
 
     # Extract ruff errors
-    ruff_errors = re.findall(
-        r'^.+?:\d+:\d+: [A-Z]\d+.+$',
-        text,
-        re.MULTILINE
-    )
+    ruff_errors = re.findall(r"^.+?:\d+:\d+: [A-Z]\d+.+$", text, re.MULTILINE)
 
     # Extract black formatting issues
-    black_errors = re.findall(
-        r'^would reformat .+$',
-        text,
-        re.MULTILINE
-    )
+    black_errors = re.findall(r"^would reformat .+$", text, re.MULTILINE)
 
     all_errors = ruff_errors + black_errors
 
@@ -184,11 +174,7 @@ def parse_type_log(text):
         return [], "not_run"
 
     # Extract mypy errors
-    errors = re.findall(
-        r'^.+?:\d+: error:.+$',
-        text,
-        re.MULTILINE
-    )
+    errors = re.findall(r"^.+?:\d+: error:.+$", text, re.MULTILINE)
 
     # Check for success message
     if "Success: no issues found" in text:
@@ -209,25 +195,14 @@ def parse_test_log(text, python_version=""):
         return [], "Log file not found", [], "not_run"
 
     # Extract summary line
-    summary_match = re.search(
-        r'=+ (.+ passed.+|.+ failed.+|.+ error.+) =+',
-        text
-    )
+    summary_match = re.search(r"=+ (.+ passed.+|.+ failed.+|.+ error.+) =+", text)
     summary = summary_match.group(1) if summary_match else "No summary found"
 
     # Extract failure details
-    failures = re.findall(
-        r'^FAILED .+$',
-        text,
-        re.MULTILINE
-    )
+    failures = re.findall(r"^FAILED .+$", text, re.MULTILINE)
 
     # Extract error details
-    errors = re.findall(
-        r'^ERROR .+$',
-        text,
-        re.MULTILINE
-    )
+    errors = re.findall(r"^ERROR .+$", text, re.MULTILINE)
 
     # Determine status
     if "passed" in text and not failures and not errors:
@@ -258,30 +233,32 @@ print("🔍 Parsing test logs...")
 if TEST_LOGS:
     for test_log_path in TEST_LOGS:
         # Extract Python version from path (e.g., test-3.11.log)
-        version_match = re.search(r'test-(\d+\.\d+)\.log', test_log_path.name)
+        version_match = re.search(r"test-(\d+\.\d+)\.log", test_log_path.name)
         py_version = version_match.group(1) if version_match else "unknown"
 
         test_log = read_log(test_log_path)
-        failures, summary, errors, status = parse_test_log(
-            test_log, py_version
-        )
+        failures, summary, errors, status = parse_test_log(test_log, py_version)
 
-        test_results.append({
-            "version": py_version,
-            "failures": failures,
-            "errors": errors,
-            "summary": summary,
-            "status": status
-        })
+        test_results.append(
+            {
+                "version": py_version,
+                "failures": failures,
+                "errors": errors,
+                "summary": summary,
+                "status": status,
+            }
+        )
 else:
     print("⚠️  No test logs found")
-    test_results.append({
-        "version": "unknown",
-        "failures": [],
-        "errors": [],
-        "summary": "No test logs found",
-        "status": "not_run"
-    })
+    test_results.append(
+        {
+            "version": "unknown",
+            "failures": [],
+            "errors": [],
+            "summary": "No test logs found",
+            "status": "not_run",
+        }
+    )
 
 # Determine overall status (agregado a partir dos componentes)
 #
@@ -309,9 +286,7 @@ type_status = normalize_status(type_status)
 for t in test_results:
     t["status"] = normalize_status(t.get("status", "not_run"))
 
-component_statuses = (
-    [lint_status, type_status] + [t["status"] for t in test_results]
-)
+component_statuses = [lint_status, type_status] + [t["status"] for t in test_results]
 
 any_failed = any(s == "failed" for s in component_statuses)
 all_not_run = all(s == "not_run" for s in component_statuses)
@@ -390,11 +365,15 @@ else:
             report += f"{excerpt}\n"
             report += "```\n</details>\n\n"
 
-report += """---
+report += (
+    """---
 
 ## 2️⃣ Type Check (Mypy)
 
-**Status:** """ + type_badge + "\n\n"
+**Status:** """
+    + type_badge
+    + "\n\n"
+)
 
 if type_status == "failed" and type_errors:
     report += f"**Errors Found:** {len(type_errors)}\n\n"
@@ -446,9 +425,7 @@ for i, test_result in enumerate(test_results):
         for failure in test_result["failures"][:MAX_TEST_FAILURES_DISPLAYED]:
             report += f"{failure}\n"
         if len(test_result["failures"]) > MAX_TEST_FAILURES_DISPLAYED:
-            more_failures = (
-                len(test_result["failures"]) - MAX_TEST_FAILURES_DISPLAYED
-            )
+            more_failures = len(test_result["failures"]) - MAX_TEST_FAILURES_DISPLAYED
             report += f"\n... and {more_failures} more failures\n"
         report += "```\n</details>\n\n"
 
@@ -459,9 +436,7 @@ for i, test_result in enumerate(test_results):
         for error in errors_to_show:
             report += f"{error}\n"
         if len(test_result["errors"]) > MAX_TEST_ERRORS_DISPLAYED:
-            more_errors = (
-                len(test_result["errors"]) - MAX_TEST_ERRORS_DISPLAYED
-            )
+            more_errors = len(test_result["errors"]) - MAX_TEST_ERRORS_DISPLAYED
             report += f"\n... and {more_errors} more errors\n"
         report += "```\n</details>\n\n"
 
@@ -509,8 +484,7 @@ for test_result in test_results:
     else:
         details = "All passed"
     report += (
-        f"| Tests (Python {test_result['version']}) | {test_badge} | "
-        f"{details} |\n"
+        f"| Tests (Python {test_result['version']}) | {test_badge} | " f"{details} |\n"
     )
 
 report += f"| **Overall** | **{overall_status}** | - |\n"
@@ -569,13 +543,12 @@ try:
         f.write(report)
         f.write("\n\n---\n\n")
         f.write(
-            "📥 **Full report available in artifacts: "
-            "`CI-Error-Summary-Report`**\n"
+            "📥 **Full report available in artifacts: " "`CI-Error-Summary-Report`**\n"
         )
     print("✅ Job Summary updated")
 except Exception as e:
     print(f"⚠️  Could not update Job Summary: {e}")
 
-print("\n" + "="*60)
+print("\n" + "=" * 60)
 print("REPORT GENERATION COMPLETE")
-print("="*60)
+print("=" * 60)

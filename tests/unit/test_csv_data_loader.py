@@ -100,9 +100,7 @@ class TestCSVDataLoaderBasic:
 class TestCSVDataLoaderAjuste3:
     """Tests for Ajuste #3 - duplicate check integration."""
 
-    def test_strict_mode_checks_duplicates_first(
-        self, tmp_path, csv_with_duplicates
-    ):
+    def test_strict_mode_checks_duplicates_first(self, tmp_path, csv_with_duplicates):
         """AJUSTE #3: Strict mode checks duplicates first."""
         csv_file = tmp_path / "duplicates.csv"
         csv_file.write_text(csv_with_duplicates)
@@ -127,9 +125,7 @@ class TestCSVDataLoaderAjuste3:
         # Permissive mode still fails on duplicates
         assert "Duplicate mol_id" in str(exc.value)
 
-    def test_duplicate_error_message_helpful(
-        self, tmp_path, csv_with_duplicates
-    ):
+    def test_duplicate_error_message_helpful(self, tmp_path, csv_with_duplicates):
         """AJUSTE #3: Error message includes recovery steps."""
         csv_file = tmp_path / "duplicates.csv"
         csv_file.write_text(csv_with_duplicates)
@@ -145,9 +141,7 @@ class TestCSVDataLoaderAjuste3:
 class TestCSVDataLoaderPermissive:
     """Tests for permissive validation mode."""
 
-    def test_permissive_skips_invalid_rows(
-        self, tmp_path, csv_with_invalid_rows
-    ):
+    def test_permissive_skips_invalid_rows(self, tmp_path, csv_with_invalid_rows):
         """Permissive mode skips invalid rows."""
         csv_file = tmp_path / "invalid.csv"
         csv_file.write_text(csv_with_invalid_rows)
@@ -158,9 +152,7 @@ class TestCSVDataLoaderPermissive:
         # Only valid rows are returned
         assert len(df) == 3  # mol_001, mol_003, mol_005
 
-    def test_permissive_reports_skipped_rows(
-        self, tmp_path, csv_with_invalid_rows
-    ):
+    def test_permissive_reports_skipped_rows(self, tmp_path, csv_with_invalid_rows):
         """Permissive mode reports skipped rows."""
         csv_file = tmp_path / "invalid.csv"
         csv_file.write_text(csv_with_invalid_rows)
@@ -171,9 +163,7 @@ class TestCSVDataLoaderPermissive:
         report = loader.get_validation_report()
         assert report.total_errors == 2  # Two invalid rows
 
-    def test_strict_fails_on_first_invalid_row(
-        self, tmp_path, csv_with_invalid_rows
-    ):
+    def test_strict_fails_on_first_invalid_row(self, tmp_path, csv_with_invalid_rows):
         """Strict mode fails on first invalid row."""
         csv_file = tmp_path / "invalid.csv"
         csv_file.write_text(csv_with_invalid_rows)

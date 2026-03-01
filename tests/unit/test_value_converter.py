@@ -171,25 +171,19 @@ class TestToEnum:
 
     def test_valid_enum(self):
         """Valid enum value is converted."""
-        value, error = MoleculeValueConverter.to_enum(
-            "pending", self.TestStatus
-        )
+        value, error = MoleculeValueConverter.to_enum("pending", self.TestStatus)
         assert value == self.TestStatus.PENDING
         assert error is None
 
     def test_case_insensitive(self):
         """Enum matching is case-insensitive."""
-        value, error = MoleculeValueConverter.to_enum(
-            "PENDING", self.TestStatus
-        )
+        value, error = MoleculeValueConverter.to_enum("PENDING", self.TestStatus)
         assert value == self.TestStatus.PENDING
         assert error is None
 
     def test_invalid_value(self):
         """Invalid enum value returns error."""
-        value, error = MoleculeValueConverter.to_enum(
-            "invalid", self.TestStatus
-        )
+        value, error = MoleculeValueConverter.to_enum("invalid", self.TestStatus)
         assert value is None
         assert error == "invalid"
 

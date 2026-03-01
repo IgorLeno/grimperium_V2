@@ -57,7 +57,9 @@ def test_validate_smiles_invalid_molecules(calc_view: CalcView) -> None:
 
     for smiles in invalid_smiles:
         result = calc_view.validate_smiles(smiles)
-        assert isinstance(result, str), f"Invalid SMILES '{smiles}' should return error message"
+        assert isinstance(
+            result, str
+        ), f"Invalid SMILES '{smiles}' should return error message"
         assert len(result) > 0, "Error message should not be empty"
 
 
@@ -110,9 +112,9 @@ def test_validate_molecules_method_exists(calc_view: CalcView) -> None:
     This method should validate a list of molecule dictionaries.
     """
     # Check if method exists
-    assert hasattr(calc_view, "validate_molecules"), (
-        "CalcView should have validate_molecules method for batch operations"
-    )
+    assert hasattr(
+        calc_view, "validate_molecules"
+    ), "CalcView should have validate_molecules method for batch operations"
 
 
 def test_validate_molecules_filters_invalid_smiles(calc_view: CalcView) -> None:
@@ -134,9 +136,9 @@ def test_validate_molecules_filters_invalid_smiles(calc_view: CalcView) -> None:
     assert valid[0]["smiles"] == "CCO"
     assert valid[1]["smiles"] == "CC"
 
-    assert "rejected" in summary.lower() or "2" in summary, (
-        "Summary should mention rejected molecules"
-    )
+    assert (
+        "rejected" in summary.lower() or "2" in summary
+    ), "Summary should mention rejected molecules"
 
 
 def test_validate_molecules_removes_duplicates(calc_view: CalcView) -> None:

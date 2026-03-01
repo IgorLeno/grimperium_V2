@@ -110,9 +110,7 @@ class DeltaCalculations:
         return float((abs_diff / abs(h298_cbs)) * 100)
 
     @staticmethod
-    def calculate_target_delta(
-        h298_cbs: float | None, h298_pm7: float | None
-    ) -> float:
+    def calculate_target_delta(h298_cbs: float | None, h298_pm7: float | None) -> float:
         """Calculate signed target delta for delta-learning.
 
         Args:
@@ -289,10 +287,12 @@ class CSVManagerExtensions:
 
             # Extract electronic descriptors from selected conformer's .aux file
             descriptors: dict[str, Any] = {}
-            if (
-                selected_conformer is not None
-                and selected_conformer.mopac_output_file is not None
-            ):
+            if selected_conformer is None:
+                logger.warning(
+                    f"[{mol_id}] No conformer was selected; "
+                    "descriptor extraction skipped, mopac columns will be None/NaN"
+                )
+            elif selected_conformer.mopac_output_file is not None:
                 descriptors = extract_mopac_descriptors(
                     selected_conformer.mopac_output_file
                 )

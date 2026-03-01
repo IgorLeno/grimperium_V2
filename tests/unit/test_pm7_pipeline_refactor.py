@@ -18,18 +18,17 @@ import pytest
 pytest.importorskip("rdkit", reason="rdkit not available")
 
 from grimperium.crest_pm7.batch.csv_manager import BatchCSVManager
-from grimperium.crest_pm7.config import HOFConfidence, MOPACStatus
+from grimperium.crest_pm7.config import MOPACStatus
 from grimperium.crest_pm7.csv_enhancements import (
     CSVManagerExtensions,
     DeltaCalculations,
 )
+from grimperium.crest_pm7.molecule_processor import ConformerData, PM7Result
 from grimperium.crest_pm7.mopac_descriptors import (
     _parse_aux_file,
     extract_mopac_descriptors,
     parse_fortran_float,
 )
-from grimperium.crest_pm7.molecule_processor import ConformerData, PM7Result
-
 
 # ─── Real H2O .aux fixture (MOPAC2016.22.234L with PM7 PRECISE EF AUX) ───
 
@@ -61,6 +60,7 @@ O   H   H
 # ─── Step 2: MOPAC input keywords ───
 
 
+@pytest.mark.unit
 class TestMopacInputKeywords:
     """Tests for EF+AUX keywords in MOPAC input."""
 
@@ -100,6 +100,7 @@ class TestMopacInputKeywords:
 # ─── Step 3: PM7Result selection ───
 
 
+@pytest.mark.unit
 class TestPM7ResultSelection:
     """Tests for PM7Result.get_selected_conformer() and k_selected_pm7."""
 
@@ -136,19 +137,61 @@ class TestPM7ResultSelection:
         result = PM7Result(mol_id="T", smiles="O", conformers=[c1, c2])
         selected = result.get_selected_conformer()
         assert selected is not None
-        result.k_selected_pm7 = selected.crest_rank
-
-        assert result.k_selected_pm7 == 2
+        # Verify the production assignment logic: process() does
+        # result.k_selected_pm7 = selected.crest_rank; test that the right
+        # conformer is returned so the assignment would produce the correct value.
+        assert selected.crest_rank == 2
 
     def test_get_selected_conformer_returns_none_when_empty(self) -> None:
         """No successful conformers returns None."""
         result = PM7Result(mol_id="T", smiles="O", conformers=[])
         assert result.get_selected_conformer() is None
 
+    def test_selected_conformer_none_handles_descriptors(self, tmp_path: Path) -> None:
+        """CSV update with no selected conformer sets k_selected_pm7 to None/NaN."""
+        csv_path = tmp_path / "test.csv"
+        df = pd.DataFrame(
+            {
+                "mol_id": ["T"],
+                "smiles": ["O"],
+                "nheavy": [1],
+                "status": ["RUNNING"],
+                "abs_diff": [None],
+                "abs_diff_%": [None],
+                "target_delta_kcalmol": [None],
+                "k_selected_pm7": [None],
+                "mopac_dipole_debye": [None],
+                "mopac_homo_ev": [None],
+                "v3": [None],
+            }
+        )
+        df.to_csv(csv_path, index=False)
+
+        csv_manager = BatchCSVManager(csv_path)
+        csv_manager.load_csv()
+
+        result = PM7Result(mol_id="T", smiles="O", conformers=[])
+        assert result.get_selected_conformer() is None
+        assert result.k_selected_pm7 is None
+
+        success = CSVManagerExtensions.update_molecule_with_mopac_results(
+            csv_manager=csv_manager,
+            mol_id="T",
+            h298_cbs=-17.5,
+            h298_pm7=-15.3,
+            selected_conformer=None,
+            k_selected_pm7=None,
+            batch_settings={"v3": False},
+        )
+        assert success
+        df_out = pd.read_csv(csv_path)
+        assert pd.isna(df_out.loc[0, "k_selected_pm7"])
+
 
 # ─── Step 4: .aux file parsing ───
 
 
+@pytest.mark.unit
 class TestAuxFileParsing:
     """Tests for MOPAC .aux descriptor parsing."""
 
@@ -206,10 +249,37 @@ class TestAuxFileParsing:
         result = extract_mopac_descriptors(out_path)
         assert result["mopac_dipole_debye"] == pytest.approx(2.12919)
 
+    def test_aux_parsing_odd_electron_count_returns_defined_values(self) -> None:
+        """Odd electron count does not crash; values extracted via integer division."""
+        aux_odd = H2O_AUX_CONTENT.replace("NUM_ELECTRONS=08", "NUM_ELECTRONS=07")
+        result = _parse_aux_file(aux_odd)
+        # With 7 electrons: homo_idx=2, lumo_idx=3, both within the 6-element array
+        # Pipeline uses closed-shell floor-division; result must be a float, not NaN.
+        assert isinstance(result["mopac_homo_ev"], float)
+        assert not np.isnan(result["mopac_homo_ev"])
+        assert isinstance(result["mopac_lumo_ev"], float)
+        assert not np.isnan(result["mopac_lumo_ev"])
+
+    def test_aux_parsing_malformed_fortran_d_returns_nan(self) -> None:
+        """Corrupted Fortran D notation and partial lines return NaN, not errors."""
+        malformed = (
+            " START OF MOPAC FILE\n"
+            " DIPOLE:DEBYE=+INVALID_D+01\n"
+            " IONIZATION_POTENTIAL:EV=+0.12D\n"
+            " GRADIENT_NORM:KCAL/MOL/ANGSTROM=\n"
+            " END OF MOPAC FILE\n"
+        )
+        result = _parse_aux_file(malformed)
+        assert np.isnan(result["mopac_dipole_debye"])
+        assert np.isnan(result["mopac_ionization_potential_ev"])
+        assert np.isnan(result["mopac_gradient_norm"])
+        assert result["mopac_point_group"] is None
+
 
 # ─── Step 5: CSV update calculations ───
 
 
+@pytest.mark.unit
 class TestCSVUpdateCalculations:
     """Tests for target_delta and k_selected_pm7 in CSV updates."""
 
@@ -222,6 +292,20 @@ class TestCSVUpdateCalculations:
         # CBS = -15.3, PM7 = -17.5 => delta = -15.3 - (-17.5) = +2.2
         delta2 = DeltaCalculations.calculate_target_delta(-15.3, -17.5)
         assert delta2 == pytest.approx(2.2)
+
+    def test_target_delta_kcalmol_can_be_negative(self) -> None:
+        """target_delta_kcalmol preserves sign; negative values are valid."""
+        delta_neg = DeltaCalculations.calculate_target_delta(-20.0, -15.0)
+        assert delta_neg == pytest.approx(-5.0)
+        assert delta_neg < 0
+
+        delta_pos = DeltaCalculations.calculate_target_delta(-10.0, -15.0)
+        assert delta_pos == pytest.approx(5.0)
+        assert delta_pos > 0
+
+        # NaN propagation: None inputs return NaN
+        assert np.isnan(DeltaCalculations.calculate_target_delta(None, -15.0))
+        assert np.isnan(DeltaCalculations.calculate_target_delta(-20.0, None))
 
     def test_csv_update_includes_k_selected_pm7(self, tmp_path: Path) -> None:
         """k_selected_pm7 appears in CSV after update."""
@@ -273,6 +357,7 @@ class TestCSVUpdateCalculations:
 # ─── Step 6: Execution manager integration ───
 
 
+@pytest.mark.unit
 class TestExecutionManagerIntegration:
     """Tests for execution_manager passing selected_conformer and k."""
 
@@ -347,11 +432,8 @@ class TestExecutionManagerIntegration:
 
             mock_update.assert_called_once()
             call_kwargs = mock_update.call_args
-            # Verify new arguments are passed (positional or keyword)
-            args_dict = call_kwargs.kwargs if call_kwargs.kwargs else {}
-            if not args_dict:
-                # May be positional args
-                assert "selected_conformer" in str(call_kwargs) or len(call_kwargs.args) >= 5
-            else:
-                assert "selected_conformer" in args_dict
-                assert "k_selected_pm7" in args_dict
+            assert (
+                call_kwargs.kwargs
+            ), "update_molecule_with_mopac_results must be called with keyword arguments"
+            assert "selected_conformer" in call_kwargs.kwargs
+            assert "k_selected_pm7" in call_kwargs.kwargs
