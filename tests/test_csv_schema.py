@@ -1,4 +1,4 @@
-"""Tests for Phase A CSV schema (43 columns)."""
+"""Tests for Phase A CSV schema (52 columns)."""
 
 from pathlib import Path
 
@@ -13,21 +13,18 @@ EXPECTED_COLUMNS = [
     "multiplicity",
     "charge",
     "nheavy",
-    # Thermodynamic data (7-10)
+    # Thermodynamic data (7-11)
     "H298_cbs",
     "H298_pm7",
+    "target_delta_kcalmol",
     "abs_diff",
     "abs_diff_%",
-    # Batch metadata (11-14)
+    # Batch metadata (12-15)
     "batch_id",
     "timestamp",
     "total_time",
     "reruns",
-    # RDKit descriptors (15-17)
-    "nrotbonds",
-    "tpsa",
-    "aromatic_rings",
-    # CREST results and settings (18-30)
+    # CREST settings (16-24)
     "crest_status",
     "xtb",
     "v3",
@@ -37,39 +34,56 @@ EXPECTED_COLUMNS = [
     "energy_window",
     "rmsd_threshold",
     "opt_lvl",
-    "threads",
+    # RDKit descriptors (25-39)
+    "rdkit_nrotbonds",
+    "rdkit_tpsa",
+    "rdkit_num_rings",
+    "rdkit_fsp3",
+    "rdkit_mol_weight",
+    "rdkit_hbond_donors",
+    "rdkit_hbond_acceptors",
+    "rdkit_nC",
+    "rdkit_nH",
+    "rdkit_nO",
+    "rdkit_nN",
+    "rdkit_bonds_single",
+    "rdkit_bonds_double",
+    "rdkit_bonds_triple",
+    "rdkit_bonds_aromatic",
+    # CREST results (40-42)
     "crest_conformers_generated",
-    "crest_time",
     "num_conformers_selected",
-    # MOPAC results and settings (31-34)
+    "crest_time_s",
+    # MOPAC status (43)
     "mopac_status",
-    "precise_scf",
-    "scf_threshold",
-    "mopac_time",
-    # Delta calculations (35-38)
-    "delta_1",
-    "delta_2",
-    "delta_3",
-    "conformer_selected",
-    # Error handling and batch control (39-43)
-    "error_message",
-    "batch_order",
-    "batch_failure_policy",
-    "assigned_crest_timeout",
-    "assigned_mopac_timeout",
+    # PM7 selection & electronic descriptors (44-55)
+    "k_selected_pm7",
+    "mopac_dipole_debye",
+    "mopac_ionization_potential_ev",
+    "mopac_homo_ev",
+    "mopac_lumo_ev",
+    "mopac_gap_ev",
+    "mopac_cosmo_area_a2",
+    "mopac_cosmo_volume_a3",
+    "mopac_gradient_norm",
+    "mopac_num_scf_cycles",
+    "mopac_point_group",
+    "mopac_time_s",
 ]
 
 
-def test_csv_has_43_columns() -> None:
-    """Test that CSV output has exactly 43 columns (after regeneration)."""
+def test_csv_has_expected_columns() -> None:
+    """Test that CSV output has expected column count (after regeneration)."""
     csv_path = Path("data/thermo_pm7.csv")
 
     if csv_path.exists():
         df = pd.read_csv(csv_path)
-        # Skip test if CSV hasn't been regenerated yet (will have 41 columns)
-        if len(df.columns) == 41:
-            pytest.skip("CSV not yet regenerated with new schema (still 41 columns)")
-        assert len(df.columns) == 43, f"Expected 43 columns, got {len(df.columns)}"
+        # Skip test if CSV hasn't been regenerated yet
+        if len(df.columns) < 50:
+            pytest.skip("CSV not yet regenerated with new schema")
+        assert len(df.columns) == len(EXPECTED_COLUMNS), (
+            f"Expected {len(EXPECTED_COLUMNS)} columns, got {len(df.columns)}"
+        )
     else:
         pytest.skip("CSV file does not exist yet")
 
@@ -80,9 +94,9 @@ def test_csv_column_order() -> None:
 
     if csv_path.exists():
         df = pd.read_csv(csv_path)
-        # Skip test if CSV hasn't been regenerated yet (will have 41 columns)
-        if len(df.columns) == 41:
-            pytest.skip("CSV not yet regenerated with new schema (still 41 columns)")
+        # Skip test if CSV hasn't been regenerated yet
+        if len(df.columns) < 50:
+            pytest.skip("CSV not yet regenerated with new schema")
         assert list(df.columns) == EXPECTED_COLUMNS
     else:
         pytest.skip("CSV file does not exist yet")
@@ -97,6 +111,10 @@ def test_csv_no_old_columns() -> None:
         assert "crest_timeout" not in df.columns
         assert "mopac_timeout" not in df.columns
         assert "most_stable_hof" not in df.columns
+        assert "delta_1" not in df.columns
+        assert "delta_2" not in df.columns
+        assert "delta_3" not in df.columns
+        assert "conformer_selected" not in df.columns
     else:
         pytest.skip("CSV file does not exist yet")
 
@@ -107,17 +125,18 @@ def test_csv_has_new_columns() -> None:
 
     if csv_path.exists():
         df = pd.read_csv(csv_path)
-        # Skip test if CSV hasn't been regenerated yet (will have 41 columns)
-        if len(df.columns) == 41:
-            pytest.skip("CSV not yet regenerated with new schema (still 41 columns)")
+        # Skip test if CSV hasn't been regenerated yet
+        if len(df.columns) < 50:
+            pytest.skip("CSV not yet regenerated with new schema")
         # Metrics
         assert "abs_diff" in df.columns
         assert "abs_diff_%" in df.columns
-        # Deltas
-        assert "delta_1" in df.columns
-        assert "delta_2" in df.columns
-        assert "delta_3" in df.columns
-        assert "conformer_selected" in df.columns
+        # PM7 selection & descriptors
+        assert "target_delta_kcalmol" in df.columns
+        assert "k_selected_pm7" in df.columns
+        assert "mopac_dipole_debye" in df.columns
+        assert "mopac_homo_ev" in df.columns
+        assert "mopac_gap_ev" in df.columns
         # Settings
         assert "c_method" in df.columns
         assert "qm" in df.columns

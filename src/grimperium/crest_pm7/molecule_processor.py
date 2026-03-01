@@ -36,6 +36,7 @@ class ConformerData:
 
     Attributes:
         index: Conformer index
+        crest_rank: 1-based rank from CREST output (sorted by energy ascending)
         mol_id: Parent molecule ID
         crest_status: CREST generation status
         crest_geometry_file: Path to XYZ file
@@ -53,6 +54,7 @@ class ConformerData:
 
     index: int
     mol_id: str
+    crest_rank: int = 0
 
     # CREST
     crest_status: CRESTStatus = CRESTStatus.NOT_ATTEMPTED
@@ -86,6 +88,7 @@ class ConformerData:
         return {
             "index": self.index,
             "mol_id": self.mol_id,
+            "crest_rank": self.crest_rank,
             "crest_status": self.crest_status.value,
             "crest_geometry_file": (
                 str(self.crest_geometry_file) if self.crest_geometry_file else None
@@ -164,6 +167,7 @@ class PM7Result:
     # MOPAC
     conformers: list[ConformerData] = field(default_factory=list)
     num_conformers_selected: int | None = None
+    k_selected_pm7: int | None = None
     total_execution_time: float | None = None
 
     # Energy differences
@@ -201,6 +205,17 @@ class PM7Result:
         """Get list of successfully processed conformers."""
         return [c for c in self.conformers if c.is_successful]
 
+    def get_selected_conformer(self) -> ConformerData | None:
+        """Get PM7-selected conformer (lowest HOF among successful).
+
+        Returns:
+            ConformerData with minimum energy_hof, or None if no successful conformers
+        """
+        successful = self.successful_conformers
+        if not successful:
+            return None
+        return min(successful, key=lambda c: c.energy_hof)  # type: ignore[arg-type]
+
     def to_dict(self) -> dict[str, Any]:
         """Convert to JSON-safe dictionary."""
         return {
@@ -220,6 +235,7 @@ class PM7Result:
             "crest_error": self.crest_error,
             "conformers": [c.to_dict() for c in self.conformers],
             "num_conformers_selected": self.num_conformers_selected,
+            "k_selected_pm7": self.k_selected_pm7,
             "total_execution_time": self.total_execution_time,
             "delta_e_12": self.delta_e_12,
             "delta_e_13": self.delta_e_13,
@@ -542,7 +558,7 @@ class MoleculeProcessor:
             # Calculate timeout for this conformer based on remaining time
             per_conformer_timeout = remaining_timeout / max(1, remaining_conformers)
 
-            conf_data = ConformerData(index=idx, mol_id=mol_id)
+            conf_data = ConformerData(index=idx, mol_id=mol_id, crest_rank=idx + 1)
             conf_data.crest_status = CRESTStatus.SUCCESS
             conf_data.crest_geometry_file = xyz_file
 
@@ -590,6 +606,11 @@ class MoleculeProcessor:
             result.delta_e_12 = deltas["delta_e_12"]
             result.delta_e_13 = deltas["delta_e_13"]
             result.delta_e_15 = deltas["delta_e_15"]
+
+        # Select best conformer by PM7 HOF
+        selected = result.get_selected_conformer()
+        if selected is not None:
+            result.k_selected_pm7 = selected.crest_rank
 
         # Determine success
         result.success = len(result.successful_conformers) > 0

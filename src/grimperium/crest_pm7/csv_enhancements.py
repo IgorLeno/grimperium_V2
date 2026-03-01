@@ -12,12 +12,19 @@
 ╚════════════════════════════════════════════════════════════════════════════════╝
 """
 
+from __future__ import annotations
+
 import logging
 import warnings
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 import pandas as pd
+
+from .mopac_descriptors import extract_mopac_descriptors
+
+if TYPE_CHECKING:
+    from .molecule_processor import ConformerData
 
 logger = logging.getLogger(__name__)
 
@@ -103,65 +110,27 @@ class DeltaCalculations:
         return float((abs_diff / abs(h298_cbs)) * 100)
 
     @staticmethod
-    def calculate_deltas_and_select(
-        h298_cbs: float | None,
-        mopac_hof_values: list[float],
-    ) -> tuple[float, float, float, int]:
-        """Calculate delta values vs CBS and select best conformer.
-
-        Given a list of MOPAC heats of formation (one per conformer),
-        calculate absolute differences against H298_cbs for the lowest-energy
-        conformers (top 3). The selected conformer is the one with minimum
-        delta among those three.
+    def calculate_target_delta(
+        h298_cbs: float | None, h298_pm7: float | None
+    ) -> float:
+        """Calculate signed target delta for delta-learning.
 
         Args:
             h298_cbs: CBS-level enthalpy at 298K (kcal/mol)
-            mopac_hof_values: List of heat of formation values (kcal/mol)
-                            One value per conformer
-                            Example: [0.42, 0.87, 1.23]
-                            Handles None, strings, and other non-numeric values.
+            h298_pm7: PM7 enthalpy at 298K (kcal/mol)
 
         Returns:
-            Tuple of (delta_1, delta_2, delta_3, best_conformer_idx)
-            - delta_1: |H298_cbs - hof_1| for lowest-energy conformer
-            - delta_2: |H298_cbs - hof_2| for second lowest-energy conformer
-            - delta_3: |H298_cbs - hof_3| for third lowest-energy conformer
-            - best_conformer_idx: Index (0-based) with minimum delta in top 3
-              or -1 if unavailable
+            Signed difference H298_cbs - H298_pm7, or NaN if either is None
         """
-        if h298_cbs is None or pd.isna(h298_cbs):
-            return np.nan, np.nan, np.nan, -1
+        if (
+            h298_cbs is None
+            or h298_pm7 is None
+            or pd.isna(h298_cbs)
+            or pd.isna(h298_pm7)
+        ):
+            return float(np.nan)
 
-        if not mopac_hof_values:
-            return np.nan, np.nan, np.nan, -1
-
-        # Coerce to float64, converting None/strings/invalid to NaN
-        numeric_values = pd.to_numeric(
-            pd.Series(mopac_hof_values), errors="coerce"
-        ).to_numpy(dtype=float)
-
-        # Keep only valid values
-        valid_values = numeric_values[~np.isnan(numeric_values)]
-        if len(valid_values) == 0:
-            return np.nan, np.nan, np.nan, -1
-
-        # Sort by energy (lowest first) and take top 3
-        sorted_hofs = np.sort(valid_values)[:3]
-        deltas = [abs(float(h298_cbs) - float(hof)) for hof in sorted_hofs]
-
-        # Pad to length 3 with NaN if needed
-        while len(deltas) < 3:
-            deltas.append(np.nan)
-
-        # Select conformer with minimum delta among available values
-        valid_deltas = [d for d in deltas if not np.isnan(d)]
-        if not valid_deltas:
-            return np.nan, np.nan, np.nan, -1
-
-        min_delta = min(valid_deltas)
-        best_idx = deltas.index(min_delta)
-
-        return deltas[0], deltas[1], deltas[2], best_idx
+        return float(h298_cbs - h298_pm7)
 
 
 # ╔════════════════════════════════════════════════════════════════════════════════╗
@@ -288,20 +257,22 @@ class CSVManagerExtensions:
         mol_id: str,
         h298_cbs: float | None,
         h298_pm7: float | None,
-        mopac_hof_values: list[float],  # noqa: ARG004 - kept for API compatibility
+        selected_conformer: ConformerData | None,
+        k_selected_pm7: int | None,
         batch_settings: dict[str, Any],
     ) -> bool:
-        """Update CSV with MOPAC absolute differences and batch settings.
+        """Update CSV with MOPAC descriptors, target delta, and batch settings.
 
-        This function integrates batch settings, abs_diff metrics, and delta
-        calculations into CSV.
+        This function integrates batch settings, abs_diff metrics, target delta,
+        and electronic descriptors from the selected conformer's .aux file.
 
         Args:
             csv_manager: BatchCSVManager instance
             mol_id: Molecule identifier
             h298_cbs: CBS-level enthalpy (kcal/mol)
             h298_pm7: PM7 enthalpy (kcal/mol)
-            mopac_hof_values: List of HOF values (one per conformer)
+            selected_conformer: PM7-selected conformer (lowest HOF)
+            k_selected_pm7: CREST rank of selected conformer
             batch_settings: Settings dict from BatchSettingsCapture.capture_batch_settings()
 
         Returns:
@@ -313,23 +284,39 @@ class CSVManagerExtensions:
             abs_diff = DeltaCalculations.calculate_abs_diff(h298_cbs, h298_pm7)
             abs_diff_pct = DeltaCalculations.calculate_abs_diff_pct(h298_cbs, h298_pm7)
 
-            # Calculate deltas vs CBS for top 3 conformers
-            delta_1, delta_2, delta_3, best_idx = (
-                DeltaCalculations.calculate_deltas_and_select(
-                    h298_cbs=h298_cbs,
-                    mopac_hof_values=mopac_hof_values,
+            # Calculate signed target delta for delta-learning
+            target_delta = DeltaCalculations.calculate_target_delta(h298_cbs, h298_pm7)
+
+            # Extract electronic descriptors from selected conformer's .aux file
+            descriptors: dict[str, Any] = {}
+            if (
+                selected_conformer is not None
+                and selected_conformer.mopac_output_file is not None
+            ):
+                descriptors = extract_mopac_descriptors(
+                    selected_conformer.mopac_output_file
                 )
-            )
-            conformer_selected = best_idx + 1 if best_idx >= 0 else None
 
             # Prepare update dictionary
-            updates = {
+            updates: dict[str, Any] = {
                 "abs_diff": abs_diff,
                 "abs_diff_%": abs_diff_pct,
-                "delta_1": delta_1,
-                "delta_2": delta_2,
-                "delta_3": delta_3,
-                "conformer_selected": conformer_selected,
+                "target_delta_kcalmol": target_delta,
+                "k_selected_pm7": k_selected_pm7,
+                # Electronic descriptors from .aux
+                "mopac_dipole_debye": descriptors.get("mopac_dipole_debye"),
+                "mopac_ionization_potential_ev": descriptors.get(
+                    "mopac_ionization_potential_ev"
+                ),
+                "mopac_homo_ev": descriptors.get("mopac_homo_ev"),
+                "mopac_lumo_ev": descriptors.get("mopac_lumo_ev"),
+                "mopac_gap_ev": descriptors.get("mopac_gap_ev"),
+                "mopac_cosmo_area_a2": descriptors.get("mopac_cosmo_area_a2"),
+                "mopac_cosmo_volume_a3": descriptors.get("mopac_cosmo_volume_a3"),
+                "mopac_gradient_norm": descriptors.get("mopac_gradient_norm"),
+                "mopac_num_scf_cycles": descriptors.get("mopac_num_scf_cycles"),
+                "mopac_point_group": descriptors.get("mopac_point_group"),
+                "mopac_time_s": descriptors.get("mopac_time_s"),
                 # Settings from batch
                 "v3": batch_settings.get("v3"),
                 "qm": batch_settings.get("qm"),
@@ -380,8 +367,9 @@ class CSVManagerExtensions:
                     csv_manager.save_csv()
 
             logger.info(
-                f"[{mol_id}] ✓ CSV enhanced with batch settings "
-                f"(v3={batch_settings.get('v3')}, c_method={batch_settings.get('c_method')})"
+                f"[{mol_id}] CSV enhanced with descriptors and settings "
+                f"(k={k_selected_pm7}, v3={batch_settings.get('v3')}, "
+                f"c_method={batch_settings.get('c_method')})"
             )
             return True
 
@@ -414,23 +402,18 @@ if __name__ == "__main__":
     # Test the module
     print("Testing csv_enhancements.py module...")
 
-    # Test delta calculations
+    # Test target delta
     print("\n1. Testing DeltaCalculations...")
-    values = [0.42, 0.87, 1.23]
-    d1, d2, d3, idx = DeltaCalculations.calculate_deltas_and_select(-0.10, values)
-    print(f"   HOF values: {values}")
-    print(f"   Delta 1: {d1:.2f}")
-    print(f"   Delta 2: {d2:.2f}")
-    print(f"   Delta 3: {d3:.2f}")
-    print(f"   Best conformer index: {idx}")
+    target = DeltaCalculations.calculate_target_delta(-17.5, -15.3)
+    print(f"   Target delta (CBS=-17.5, PM7=-15.3): {target:.2f}")
 
     # Test abs diff
     print("\n2. Testing absolute differences...")
-    abs_diff = DeltaCalculations.calculate_abs_diff(-17.5, -15.3)
-    abs_diff_pct = DeltaCalculations.calculate_abs_diff_pct(-17.5, -15.3)
+    abs_diff_val = DeltaCalculations.calculate_abs_diff(-17.5, -15.3)
+    abs_diff_pct_val = DeltaCalculations.calculate_abs_diff_pct(-17.5, -15.3)
     print("   CBS: -17.5, PM7: -15.3")
-    print(f"   Absolute difference: {abs_diff:.2f}")
-    print(f"   Percentage difference: {abs_diff_pct:.2f}%")
+    print(f"   Absolute difference: {abs_diff_val:.2f}")
+    print(f"   Percentage difference: {abs_diff_pct_val:.2f}%")
 
     # Test batch settings
     print("\n3. Testing batch settings capture...")
@@ -448,6 +431,6 @@ if __name__ == "__main__":
     # Test warning suppression
     print("\n4. Testing warning suppression...")
     CSVManagerExtensions.suppress_pandas_warnings()
-    print("   ✓ Warnings suppressed")
+    print("   Warnings suppressed")
 
-    print("\n✓ All tests passed!")
+    print("\nAll tests passed!")

@@ -83,13 +83,13 @@ excluded_tools: []
 # (contrary to the memories, which are loaded on demand).
 initial_prompt: |
   You are the Code Agent for Grimperium (Delta Learning ML Ensemble Framework).
-  
+
   PROJECT CONTEXT:
   Name: Grimperium - CREST PM7 Optimization Framework
   Phase: Phase A (Threshold Monitoring + Timeout Prediction - ACTIVE)
   Language: Python 3.10+
   Status: Phase A active (core components implemented; Phase B not yet available)
-  
+
   ARCHITECTURE:
   - src/grimperium/crest_pm7/ = Core Phase A (conformer_generator, threshold_monitor, timeout_predictor, validation, pipeline)
   - src/grimperium/models/ = Delta-learning ML models - Planned for future phases (not yet present)
@@ -97,7 +97,7 @@ initial_prompt: |
   - tests/unit/ + tests/integration/ = Test suite (85%+ coverage required)
   - docs/ = CLAUDE.md (your guide), PHASE-A-* (execution guides)
   - data/molecules_pm7/ = Test molecules (thermo_cbs_clean.csv) + logs
-  
+
   CODE STANDARDS (NON-NEGOTIABLE):
   ✅ Type hints: 100% of functions/methods (Python 3.10+ syntax)
   ✅ Docstrings: Google-style on ALL public functions/classes
@@ -105,7 +105,7 @@ initial_prompt: |
   ✅ Coverage: Minimum 85% (pytest --cov)
   ✅ Linting: Pre-commit compliance (ruff, black, mypy - NO WARNINGS)
   ✅ Pre-commit hooks: Must pass before commit
-  
+
   WHAT TO ALWAYS DO:
   ✅ Run: pytest tests/ -v --cov=src/grimperium
   ✅ Run: ruff check src/ tests/
@@ -114,7 +114,7 @@ initial_prompt: |
   ✅ Run: pre-commit run --all-files
   ✅ Commit messages: type(scope): description (e.g., feat(crest_pm7): add threshold monitor)
   ✅ No code goes to production without tests passing 100%
-  
+
   WHAT TO NEVER DO:
   ❌ TODOs, XXX, or FIXME comments in code
   ❌ Ignore type hints or docstrings
@@ -123,25 +123,59 @@ initial_prompt: |
   ❌ Add dependencies without prior approval
   ❌ Delete code without backup/branch
   ❌ Use persistent disk or cloud storage for model artifacts without verification
-  
+
   PHASE A SCOPE:
   ✅ IMPLEMENT: threshold_monitor.py, timeout_predictor.py, validation, pipeline
   ✅ TEST: Unit + integration tests for Phase A components
   ✅ DO NOT: Data loading (Phase B), Model training (Phase B), MOPAC integration (Phase B)
-  
+
   PHASE B STATUS:
   Phase B modules (e.g., src/grimperium/models/base_model.py, kernel_ridge.py, xgboost_model.py, delta_ensemble.py) are not present in the repo and are planned for future phases.
-  
+
   KEY WORKFLOWS:
   - Git: Branch naming = feature/*, fix/*, refactor/*
   - Testing: All new code must have tests passing before merge
   - Linting: Pre-commit hooks catch issues before commit
   - Review: Code changes require validation against Phase A success criteria
-  
+
   TECHNICAL ADVISOR: Igor Leno (PT-BR + Technical English)
   You receive structured prompts from Igor. Follow them precisely.
-  
-  Questions? Refer to docs/CLAUDE.md (your behavioral guide).
 
+  Questions? Refer to docs/CLAUDE.md (your behavioral guide).
+# the name by which the project can be referenced within Serena
 project_name: "grimperium"
+
+# list of tools to include that would otherwise be disabled (particularly optional tools that are disabled by default)
 included_optional_tools: []
+
+# fixed set of tools to use as the base tool set (if non-empty), replacing Serena's default set of tools.
+# This cannot be combined with non-empty excluded_tools or included_optional_tools.
+fixed_tools: []
+
+# list of mode names to that are always to be included in the set of active modes
+# The full set of modes to be activated is base_modes + default_modes.
+# If the setting is undefined, the base_modes from the global configuration (serena_config.yml) apply.
+# Otherwise, this setting overrides the global configuration.
+# Set this to [] to disable base modes for this project.
+# Set this to a list of mode names to always include the respective modes for this project.
+base_modes:
+
+# list of mode names that are to be activated by default.
+# The full set of modes to be activated is base_modes + default_modes.
+# If the setting is undefined, the default_modes from the global configuration (serena_config.yml) apply.
+# Otherwise, this overrides the setting from the global configuration (serena_config.yml).
+# This setting can, in turn, be overridden by CLI parameters (--mode).
+default_modes:
+
+# time budget (seconds) per tool call for the retrieval of additional symbol information
+# such as docstrings or parameter information.
+# This overrides the corresponding setting in the global configuration; see the documentation there.
+# If null or missing, use the setting from the global configuration.
+symbol_info_budget:
+
+# The language backend to use for this project.
+# If not set, the global setting from serena_config.yml is used.
+# Valid values: LSP, JetBrains
+# Note: the backend is fixed at startup. If a project with a different backend
+# is activated post-init, an error will be returned.
+language_backend:

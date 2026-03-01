@@ -80,14 +80,12 @@ def _create_mopac_input(
         comment = lines[1].strip() if len(lines) > 1 else ""
 
         # Build MOPAC keywords
-        keywords = ["PM7"]
+        keywords = ["PM7", "EF", "AUX"]
         precise_scf = config.mopac_precise_scf if config is not None else True
         if precise_scf:
             keywords.append("PRECISE")
             if config is not None:
                 keywords.append(f"SCFCRT={format(config.mopac_scf_threshold, '.1e')}")
-        else:
-            keywords.append("1SCF")
         if charge != 0:
             keywords.append(f"CHARGE={charge}")
 

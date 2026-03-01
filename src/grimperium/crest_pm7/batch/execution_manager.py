@@ -338,42 +338,30 @@ class BatchExecutionManager:
                 h298_cbs = self.csv_manager.get_reference_hof(mol_id)
                 h298_pm7 = pm7_result.most_stable_hof  # Property, may be None
 
-                # Get conformer energies from pm7_result.conformers
-                mopac_hof_values: list[float] = []
-                if pm7_result.conformers:
-                    total_conformers = len(pm7_result.conformers)
-                    successful_conformers = [
-                        c for c in pm7_result.conformers if c.is_successful
-                    ]
-                    mopac_hof_values = [
-                        c.energy_hof
-                        for c in successful_conformers
-                        if c.energy_hof is not None
-                    ]
-                    if not mopac_hof_values:
-                        LOG.warning(
-                            f"[{mol_id}] No HOF values extracted from conformers "
-                            f"(total={total_conformers}, successful={len(successful_conformers)}) "
-                            f"- deltas will be NaN"
-                        )
+                # Get PM7-selected conformer and its CREST rank
+                selected_conformer = pm7_result.get_selected_conformer()
+                k_selected_pm7 = pm7_result.k_selected_pm7
 
                 # Safe access to batch_settings
                 batch_settings = getattr(self, "_batch_settings", {})
 
-                # Update CSV with enhanced fields
+                # Update CSV with descriptors and settings
                 success = CSVManagerExtensions.update_molecule_with_mopac_results(
                     csv_manager=self.csv_manager,
                     mol_id=mol_id,
                     h298_cbs=h298_cbs,
                     h298_pm7=h298_pm7,
-                    mopac_hof_values=mopac_hof_values,
+                    selected_conformer=selected_conformer,
+                    k_selected_pm7=k_selected_pm7,
                     batch_settings=batch_settings,
                 )
 
                 if success:
-                    logger.info(f"[{mol_id}] ✓ CSV enhanced with deltas and settings")
+                    logger.info(
+                        f"[{mol_id}] CSV enhanced with descriptors and settings"
+                    )
                 else:
-                    logger.warning(f"[{mol_id}] ⚠ CSV enhancement failed")
+                    logger.warning(f"[{mol_id}] CSV enhancement failed")
 
                 # Track HOF for statistics
                 if pm7_result.most_stable_hof is not None:

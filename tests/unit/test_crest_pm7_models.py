@@ -80,6 +80,7 @@ class TestConformerData:
 
         assert result["index"] == 0
         assert result["mol_id"] == "TEST_001"
+        assert result["crest_rank"] == 0  # default
         assert result["energy_hof"] == -50.5
         assert "mopac_status" in result
 

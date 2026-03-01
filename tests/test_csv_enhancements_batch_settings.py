@@ -40,10 +40,8 @@ def test_batch_settings_persist_to_csv(tmp_path):
             "xtb": [None],
             "precise_scf": [None],
             "scf_threshold": [None],
-            "delta_1": [None],
-            "delta_2": [None],
-            "delta_3": [None],
-            "conformer_selected": [None],
+            "target_delta_kcalmol": [None],
+            "k_selected_pm7": [None],
             "abs_diff": [None],
             "abs_diff_%": [None],
         }
@@ -76,7 +74,8 @@ def test_batch_settings_persist_to_csv(tmp_path):
         mol_id="mol_001",
         h298_cbs=-17.5,
         h298_pm7=-15.3,
-        mopac_hof_values=[0.42, 0.87, 1.23],
+        selected_conformer=None,
+        k_selected_pm7=2,
         batch_settings=batch_settings,
     )
 
@@ -101,11 +100,9 @@ def test_batch_settings_persist_to_csv(tmp_path):
     assert df_updated.loc[0, "precise_scf"] == True  # noqa: E712
     assert df_updated.loc[0, "scf_threshold"] == 1.0
 
-    # Verify deltas were calculated vs H298_cbs (top 3 conformers)
-    assert df_updated.loc[0, "delta_1"] == pytest.approx(17.92, abs=0.01)
-    assert df_updated.loc[0, "delta_2"] == pytest.approx(18.37, abs=0.01)
-    assert df_updated.loc[0, "delta_3"] == pytest.approx(18.73, abs=0.01)
-    assert df_updated.loc[0, "conformer_selected"] == 1
+    # Verify target delta is signed: -17.5 - (-15.3) = -2.2
+    assert df_updated.loc[0, "target_delta_kcalmol"] == pytest.approx(-2.2)
+    assert df_updated.loc[0, "k_selected_pm7"] == 2
 
 
 def test_batch_settings_with_nan_deltas(tmp_path):
@@ -120,8 +117,8 @@ def test_batch_settings_with_nan_deltas(tmp_path):
             "v3": [None],
             "c_method": [None],
             "energy_window": [None],
-            "delta_1": [None],  # NaN from molecule_processor failure
-            "delta_2": [None],  # NaN from molecule_processor failure
+            "target_delta_kcalmol": [None],  # NaN when h298 values missing
+            "k_selected_pm7": [None],
         }
     )
     df.to_csv(csv_path, index=False)
@@ -141,7 +138,8 @@ def test_batch_settings_with_nan_deltas(tmp_path):
         mol_id="mol_001",
         h298_cbs=None,
         h298_pm7=None,
-        mopac_hof_values=[],  # Not used for delta calculation
+        selected_conformer=None,
+        k_selected_pm7=None,
         batch_settings=batch_settings,
     )
 
@@ -153,9 +151,8 @@ def test_batch_settings_with_nan_deltas(tmp_path):
     assert df_updated.loc[0, "c_method"] == "gfn2-xtb"
     assert df_updated.loc[0, "energy_window"] == 5.0
 
-    # Deltas should remain NaN (not overwritten)
-    assert pd.isna(df_updated.loc[0, "delta_1"])
-    assert pd.isna(df_updated.loc[0, "delta_2"])
+    # target_delta should be NaN (both h298 values are None)
+    assert pd.isna(df_updated.loc[0, "target_delta_kcalmol"])
 
 
 def test_update_extra_fields_method(tmp_path):
@@ -260,7 +257,8 @@ def test_multiple_molecules_batch_settings(tmp_path):
             mol_id=mol_id,
             h298_cbs=-17.5,
             h298_pm7=-15.3,
-            mopac_hof_values=[0.42],
+            selected_conformer=None,
+            k_selected_pm7=None,
             batch_settings=batch_settings,
         )
 
@@ -282,7 +280,7 @@ def test_fallback_path_missing_mol_id_returns_false(tmp_path, monkeypatch, caplo
             "nheavy": [2],
             "status": ["RUNNING"],
             "v3": [None],
-            "delta_1": [None],
+            "target_delta_kcalmol": [None],
         }
     )
     df.to_csv(csv_path, index=False)
@@ -301,7 +299,8 @@ def test_fallback_path_missing_mol_id_returns_false(tmp_path, monkeypatch, caplo
         mol_id="mol_999",  # Does not exist!
         h298_cbs=-17.5,
         h298_pm7=-15.3,
-        mopac_hof_values=[0.42],
+        selected_conformer=None,
+        k_selected_pm7=None,
         batch_settings=batch_settings,
     )
 
@@ -347,7 +346,8 @@ def test_fallback_path_handles_index_retrieval_errors(tmp_path, monkeypatch, cap
         mol_id="mol_001",
         h298_cbs=-17.5,
         h298_pm7=-15.3,
-        mopac_hof_values=[0.42],
+        selected_conformer=None,
+        k_selected_pm7=None,
         batch_settings=batch_settings,
     )
 
@@ -396,7 +396,8 @@ def test_fallback_path_save_only_after_successful_update(tmp_path, monkeypatch):
         mol_id="mol_001",
         h298_cbs=-17.5,
         h298_pm7=-15.3,
-        mopac_hof_values=[0.42],
+        selected_conformer=None,
+        k_selected_pm7=None,
         batch_settings=batch_settings,
     )
 
@@ -446,7 +447,8 @@ def test_fallback_path_no_save_if_no_updates(tmp_path, monkeypatch, caplog):
         mol_id="mol_001",
         h298_cbs=None,
         h298_pm7=None,
-        mopac_hof_values=[0.42],
+        selected_conformer=None,
+        k_selected_pm7=None,
         batch_settings=batch_settings,
     )
 

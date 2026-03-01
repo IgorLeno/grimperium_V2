@@ -65,10 +65,19 @@ class BatchCSVManager:
         "total_execution_time",
         "assigned_crest_timeout",  # Renamed from actual_crest_timeout_used
         "assigned_mopac_timeout",  # Renamed from actual_mopac_timeout_used
-        "delta_1",  # Renamed from delta_e_12
-        "delta_2",  # Renamed from delta_e_13
-        "delta_3",  # Renamed from delta_e_15
-        "conformer_selected",  # NEW: Which conformer was selected (1-3)
+        "target_delta_kcalmol",  # Signed: H298_cbs - H298_pm7
+        "k_selected_pm7",  # CREST rank of PM7-selected conformer (1..5)
+        "mopac_dipole_debye",
+        "mopac_ionization_potential_ev",
+        "mopac_homo_ev",
+        "mopac_lumo_ev",
+        "mopac_gap_ev",
+        "mopac_cosmo_area_a2",
+        "mopac_cosmo_volume_a3",
+        "mopac_gradient_norm",
+        "mopac_num_scf_cycles",
+        "mopac_point_group",
+        "mopac_time_s",
         "timestamp",
         "total_time",  # NEW: total time in minutes
         "reruns",  # NEW
@@ -1059,10 +1068,6 @@ class BatchCSVManager:
         if mopac_status is None:
             mopac_status = MOPAC_STATUS_NOT_ATTEMPTED
 
-        # NOTE: delta_1/2/3 and conformer_selected are computed later using
-        # H298_cbs and conformer HOF values in CSV enhancements.
-        conformer_selected = None
-
         return {
             # RDKit Descriptors (from PM7Result)
             "nrotbonds": result.nrotbonds if hasattr(result, "nrotbonds") else None,
@@ -1107,11 +1112,20 @@ class BatchCSVManager:
             ),
             "assigned_crest_timeout": round(crest_timeout_used, 1),  # Renamed
             "assigned_mopac_timeout": round(mopac_timeout_used, 1),  # Renamed
-            # Delta-E (renamed for clarity)
-            "delta_1": None,
-            "delta_2": None,
-            "delta_3": None,
-            "conformer_selected": conformer_selected,
+            # PM7 selection & descriptors (populated by csv_enhancements)
+            "target_delta_kcalmol": None,
+            "k_selected_pm7": None,
+            "mopac_dipole_debye": None,
+            "mopac_ionization_potential_ev": None,
+            "mopac_homo_ev": None,
+            "mopac_lumo_ev": None,
+            "mopac_gap_ev": None,
+            "mopac_cosmo_area_a2": None,
+            "mopac_cosmo_volume_a3": None,
+            "mopac_gradient_norm": None,
+            "mopac_num_scf_cycles": None,
+            "mopac_point_group": None,
+            "mopac_time_s": None,
             # Batch Tracking
             "batch_id": batch_id,
             "batch_order": batch_order,
