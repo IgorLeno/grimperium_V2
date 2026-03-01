@@ -6,6 +6,9 @@ Includes tests for Ajuste #1 (to_string allow_empty fix).
 
 from datetime import datetime
 from enum import Enum
+from typing import Any
+
+import pytest
 
 from grimperium.core.value_converter import MoleculeValueConverter
 
@@ -169,20 +172,35 @@ class TestToEnum:
         PENDING = "pending"
         COMPLETE = "complete"
 
-    def test_valid_enum(self):
-        """Valid enum value is converted."""
+    @pytest.mark.unit
+    def test_valid_enum(self: Any) -> None:
+        """Valid enum value is converted to the matching enum member.
+
+        Returns:
+            None
+        """
         value, error = MoleculeValueConverter.to_enum("pending", self.TestStatus)
         assert value == self.TestStatus.PENDING
         assert error is None
 
-    def test_case_insensitive(self):
-        """Enum matching is case-insensitive."""
+    @pytest.mark.unit
+    def test_case_insensitive(self: Any) -> None:
+        """Enum matching is case-insensitive, e.g. "PENDING" resolves to TestStatus.PENDING.
+
+        Returns:
+            None
+        """
         value, error = MoleculeValueConverter.to_enum("PENDING", self.TestStatus)
         assert value == self.TestStatus.PENDING
         assert error is None
 
-    def test_invalid_value(self):
-        """Invalid enum value returns error."""
+    @pytest.mark.unit
+    def test_invalid_value(self: Any) -> None:
+        """Invalid enum value returns a tuple of (None, error_string).
+
+        Returns:
+            None
+        """
         value, error = MoleculeValueConverter.to_enum("invalid", self.TestStatus)
         assert value is None
         assert error == "invalid"

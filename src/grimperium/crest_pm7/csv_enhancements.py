@@ -296,6 +296,12 @@ class CSVManagerExtensions:
                 descriptors = extract_mopac_descriptors(
                     selected_conformer.mopac_output_file
                 )
+            else:
+                logger.warning(
+                    f"[{mol_id}] Selected conformer (rank={selected_conformer.crest_rank})"
+                    " has no mopac_output_file; descriptor extraction skipped,"
+                    " mopac columns will be None/NaN"
+                )
 
             # Prepare update dictionary
             updates: dict[str, Any] = {

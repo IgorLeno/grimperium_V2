@@ -21,13 +21,13 @@ def test_crest_settings_has_new_fields() -> None:
 def test_crest_method_options() -> None:
     """Test that CREST_METHOD_OPTIONS are defined."""
     assert hasattr(CRESTSettings, "CREST_METHOD_OPTIONS")
-    assert ["gfn2", "gfnff", "gfn2//gfnff"] == CRESTSettings.CREST_METHOD_OPTIONS
+    assert CRESTSettings.CREST_METHOD_OPTIONS == ["gfn2", "gfnff", "gfn2//gfnff"]
 
 
 def test_quick_mode_options() -> None:
     """Test that QUICK_MODE_OPTIONS are defined."""
     assert hasattr(CRESTSettings, "QUICK_MODE_OPTIONS")
-    assert ["off", "quick", "squick", "mquick"] == CRESTSettings.QUICK_MODE_OPTIONS
+    assert CRESTSettings.QUICK_MODE_OPTIONS == ["off", "quick", "squick", "mquick"]
 
 
 def test_settings_to_dict_new_format() -> None:

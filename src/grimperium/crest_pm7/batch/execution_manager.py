@@ -28,6 +28,7 @@ from grimperium.crest_pm7.logging_enhancements import (
     setup_batch_logging,
     suppress_pandas_warnings,
 )
+from grimperium.crest_pm7.molecule_processor import ConformerData
 from grimperium.crest_pm7.progress import BatchProgressStage
 
 LOG = logging.getLogger("grimperium.crest_pm7.batch.execution_manager")
@@ -339,8 +340,8 @@ class BatchExecutionManager:
                 h298_pm7 = pm7_result.most_stable_hof  # Property, may be None
 
                 # Get PM7-selected conformer and its CREST rank
-                selected_conformer = pm7_result.get_selected_conformer()
-                k_selected_pm7 = pm7_result.k_selected_pm7
+                selected_conformer: ConformerData | None = pm7_result.get_selected_conformer()
+                k_selected_pm7: int | None = pm7_result.k_selected_pm7
 
                 # Safe access to batch_settings
                 batch_settings = getattr(self, "_batch_settings", {})

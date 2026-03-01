@@ -33,10 +33,15 @@ def parse_fortran_float(s: str) -> float:
     """Convert Fortran D notation to Python float.
 
     Args:
-        s: String like '+0.577997D+02' or '-0.123456D-03'
+        s: String like '+0.577997D+02' or '-0.123456D-03' where D/d
+            is the Fortran exponent separator (equivalent to E notation).
 
     Returns:
-        Python float value
+        Python float value after replacing the D/d exponent marker with E.
+
+    Example:
+        >>> parse_fortran_float('+0.577997D+02')
+        57.7997
     """
     return float(s.replace("D", "E").replace("d", "e"))
 

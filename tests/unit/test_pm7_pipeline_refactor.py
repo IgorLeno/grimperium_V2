@@ -432,8 +432,6 @@ class TestExecutionManagerIntegration:
 
             mock_update.assert_called_once()
             call_kwargs = mock_update.call_args
-            assert (
-                call_kwargs.kwargs
-            ), "update_molecule_with_mopac_results must be called with keyword arguments"
+            assert isinstance(call_kwargs.kwargs, dict)
             assert "selected_conformer" in call_kwargs.kwargs
             assert "k_selected_pm7" in call_kwargs.kwargs

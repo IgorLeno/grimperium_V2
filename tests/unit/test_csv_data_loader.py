@@ -4,6 +4,9 @@ Tests for CSVDataLoader and BatchDataManager.
 Includes tests for Ajuste #3 (duplicate check integration).
 """
 
+from pathlib import Path
+from typing import Any
+
 import pytest
 
 from grimperium.core.csv_data_loader import (
@@ -100,8 +103,19 @@ class TestCSVDataLoaderBasic:
 class TestCSVDataLoaderAjuste3:
     """Tests for Ajuste #3 - duplicate check integration."""
 
-    def test_strict_mode_checks_duplicates_first(self, tmp_path, csv_with_duplicates):
-        """AJUSTE #3: Strict mode checks duplicates first."""
+    @pytest.mark.unit
+    def test_strict_mode_checks_duplicates_first(
+        self: Any, tmp_path: Path, csv_with_duplicates: str
+    ) -> None:
+        """AJUSTE #3: Strict mode checks duplicates first.
+
+        Args:
+            tmp_path: Temporary directory provided by pytest.
+            csv_with_duplicates: CSV content string with duplicate mol_ids.
+
+        Returns:
+            None
+        """
         csv_file = tmp_path / "duplicates.csv"
         csv_file.write_text(csv_with_duplicates)
 
@@ -125,8 +139,19 @@ class TestCSVDataLoaderAjuste3:
         # Permissive mode still fails on duplicates
         assert "Duplicate mol_id" in str(exc.value)
 
-    def test_duplicate_error_message_helpful(self, tmp_path, csv_with_duplicates):
-        """AJUSTE #3: Error message includes recovery steps."""
+    @pytest.mark.unit
+    def test_duplicate_error_message_helpful(
+        self: Any, tmp_path: Path, csv_with_duplicates: Any
+    ) -> None:
+        """AJUSTE #3: Error message includes recovery steps.
+
+        Args:
+            tmp_path: Temporary directory provided by pytest.
+            csv_with_duplicates: CSV content with duplicate mol_ids.
+
+        Returns:
+            None
+        """
         csv_file = tmp_path / "duplicates.csv"
         csv_file.write_text(csv_with_duplicates)
 
@@ -141,8 +166,19 @@ class TestCSVDataLoaderAjuste3:
 class TestCSVDataLoaderPermissive:
     """Tests for permissive validation mode."""
 
-    def test_permissive_skips_invalid_rows(self, tmp_path, csv_with_invalid_rows):
-        """Permissive mode skips invalid rows."""
+    @pytest.mark.unit
+    def test_permissive_skips_invalid_rows(
+        self: Any, tmp_path: Path, csv_with_invalid_rows: str
+    ) -> None:
+        """Permissive mode skips invalid rows and returns only valid data.
+
+        Args:
+            tmp_path: Temporary directory provided by pytest.
+            csv_with_invalid_rows: CSV content string containing invalid rows.
+
+        Returns:
+            None
+        """
         csv_file = tmp_path / "invalid.csv"
         csv_file.write_text(csv_with_invalid_rows)
 
@@ -152,8 +188,19 @@ class TestCSVDataLoaderPermissive:
         # Only valid rows are returned
         assert len(df) == 3  # mol_001, mol_003, mol_005
 
-    def test_permissive_reports_skipped_rows(self, tmp_path, csv_with_invalid_rows):
-        """Permissive mode reports skipped rows."""
+    @pytest.mark.unit
+    def test_permissive_reports_skipped_rows(
+        self: Any, tmp_path: Path, csv_with_invalid_rows: str
+    ) -> None:
+        """Permissive mode reports the number of skipped invalid rows.
+
+        Args:
+            tmp_path: Temporary directory provided by pytest.
+            csv_with_invalid_rows: CSV content string containing invalid rows.
+
+        Returns:
+            None
+        """
         csv_file = tmp_path / "invalid.csv"
         csv_file.write_text(csv_with_invalid_rows)
 
@@ -163,8 +210,19 @@ class TestCSVDataLoaderPermissive:
         report = loader.get_validation_report()
         assert report.total_errors == 2  # Two invalid rows
 
-    def test_strict_fails_on_first_invalid_row(self, tmp_path, csv_with_invalid_rows):
-        """Strict mode fails on first invalid row."""
+    @pytest.mark.unit
+    def test_strict_fails_on_first_invalid_row(
+        self: Any, tmp_path: Path, csv_with_invalid_rows: str
+    ) -> None:
+        """Strict mode raises an error on the first invalid row encountered.
+
+        Args:
+            tmp_path: Temporary directory provided by pytest.
+            csv_with_invalid_rows: CSV content string containing invalid rows.
+
+        Returns:
+            None
+        """
         csv_file = tmp_path / "invalid.csv"
         csv_file.write_text(csv_with_invalid_rows)
 

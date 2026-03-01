@@ -365,15 +365,13 @@ else:
             report += f"{excerpt}\n"
             report += "```\n</details>\n\n"
 
-report += (
-    """---
+report += f"""---
 
 ## 2️⃣ Type Check (Mypy)
 
-**Status:** """
-    + type_badge
-    + "\n\n"
-)
+**Status:** {type_badge}
+
+"""
 
 if type_status == "failed" and type_errors:
     report += f"**Errors Found:** {len(type_errors)}\n\n"
@@ -483,9 +481,7 @@ for test_result in test_results:
         details = f"{len(test_result['failures'])} failures"
     else:
         details = "All passed"
-    report += (
-        f"| Tests (Python {test_result['version']}) | {test_badge} | " f"{details} |\n"
-    )
+    report += f"| Tests (Python {test_result['version']}) | {test_badge} | {details} |\n"
 
 report += f"| **Overall** | **{overall_status}** | - |\n"
 
