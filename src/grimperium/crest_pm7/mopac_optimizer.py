@@ -80,7 +80,7 @@ def _create_mopac_input(
         comment = lines[1].strip() if len(lines) > 1 else ""
 
         # Build MOPAC keywords
-        keywords = ["PM7", "EF", "AUX"]
+        keywords = ["PM7", "EF"]
         precise_scf = config.mopac_precise_scf if config is not None else True
         if precise_scf:
             keywords.append("PRECISE")

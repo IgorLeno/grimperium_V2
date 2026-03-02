@@ -217,7 +217,7 @@ class CSVManagerExtensions:
         """Update CSV with MOPAC descriptors, target delta, and batch settings.
 
         This function integrates batch settings, abs_diff_% metric, target delta,
-        and electronic descriptors from the selected conformer's .aux file.
+        and electronic descriptors from the selected conformer's .out file.
 
         Args:
             csv_manager: BatchCSVManager instance
@@ -239,7 +239,7 @@ class CSVManagerExtensions:
             # Calculate signed target delta for delta-learning
             target_delta = DeltaCalculations.calculate_target_delta(h298_cbs, h298_pm7)
 
-            # Extract electronic descriptors from selected conformer's .aux file
+            # Extract electronic descriptors from selected conformer's .out file
             descriptors: dict[str, Any] = {}
             if selected_conformer is None:
                 logger.warning(
@@ -262,7 +262,7 @@ class CSVManagerExtensions:
                 "abs_diff_%": abs_diff_pct,
                 "target_delta_kcalmol": target_delta,
                 "k_selected_pm7": k_selected_pm7,
-                # Electronic descriptors from .aux
+                # Electronic descriptors from .out
                 "mopac_dipole_debye": descriptors.get("mopac_dipole_debye"),
                 "mopac_ionization_potential_ev": descriptors.get(
                     "mopac_ionization_potential_ev"

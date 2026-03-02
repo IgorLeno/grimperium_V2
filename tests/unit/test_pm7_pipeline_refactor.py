@@ -1,9 +1,9 @@
-"""Tests for PM7 pipeline refactoring: PM7-only selection + .aux descriptor parsing.
+"""Tests for PM7 pipeline refactoring: PM7-only selection + .out descriptor parsing.
 
 Covers:
-- MOPAC input keywords (EF, AUX, no 1SCF)
+- MOPAC input keywords (EF, no AUX, no 1SCF)
 - PM7Result.get_selected_conformer() and k_selected_pm7
-- MOPAC .aux file parsing (Fortran D notation, HOMO/LUMO, descriptors)
+- MOPAC .out file parsing (HOMO/LUMO, dipole, descriptors)
 - CSV update with target_delta and k_selected_pm7
 - Execution manager integration
 """
@@ -25,35 +25,51 @@ from grimperium.crest_pm7.csv_enhancements import (
 )
 from grimperium.crest_pm7.molecule_processor import ConformerData, PM7Result
 from grimperium.crest_pm7.mopac_descriptors import (
-    _parse_aux_file,
+    _parse_out_file,
     extract_mopac_descriptors,
-    parse_fortran_float,
 )
 
-# ─── Real H2O .aux fixture (MOPAC2016.22.234L with PM7 PRECISE EF AUX) ───
+# ─── Realistic H2O .out fixture (MOPAC2016 PM7 PRECISE EF) ───
 
+H2O_OUT_CONTENT = """\
+ *******************************************************************************
+ ** Site#:    0         For non-commercial use only    Version 22.234L 64BITS **
+ *******************************************************************************
+ ** Cite this program as: MOPAC2016, Version: 22.234L, James J. P. Stewart,  **
+ *******************************************************************************
 
-H2O_AUX_CONTENT = """\
- START OF MOPAC FILE
- KEYWORDS=PM7 PRECISE EF AUX
- ATOM_X:ANGSTROMS[3]=
-  +0.000000D+00   +0.000000D+00   +0.000000D+00
- ATOM_EL[3]=
-O   H   H
- AO_ATOMINDEX[6]=
-1   1   1   1   2   3
- NUM_ELECTRONS=08
- EIGENVALUES[6]=
- -39.89625  -18.62879   -14.57682  -12.21355   4.25810   6.33574
- DIPOLE:DEBYE=+0.212919D+01
- IONIZATION_POTENTIAL:EV=+0.121155D+02
- AREA:SQUARE ANGSTROMS=+0.424300D+02
- VOLUME:CUBIC ANGSTROMS=+0.251718D+02
- GRADIENT_NORM:KCAL/MOL/ANGSTROM=+0.883541D-02
- NUMBER_SCF_CYCLES=7
- POINT_GROUP=C2v
- CPU_TIME:SECONDS= 0.09
- END OF MOPAC FILE
+                              PM7 CALCULATION RESULTS
+
+ FINAL HEAT OF FORMATION =        -57.7997 KCAL/MOL =     -241.8260 KJ/MOL
+
+          TOTAL ENERGY            =       -351.49337 EV
+          ELECTRONIC ENERGY       =       -496.32441 EV
+          CORE-CORE REPULSION     =        144.83104 EV
+
+          GRADIENT NORM           =          0.00884
+          IONIZATION POTENTIAL    =         12.11550 EV
+          HOMO LUMO ENERGIES (EV) =        -12.214   4.258
+          NO. OF FILLED LEVELS    =          4
+          MOLECULAR WEIGHT        =         18.0153
+
+          SCF CALCULATIONS        =          7
+
+          WALL-CLOCK TIME         =          0.090 SECONDS
+          COMPUTATION TIME        =          0.083 SECONDS
+
+       FINAL  POINT  AND  DERIVATIVES
+
+   ATOM   CHEMICAL          X               Y               Z
+  NUMBER   SYMBOL      (ANGSTROMS)     (ANGSTROMS)     (ANGSTROMS)
+
+     1       O         0.00000000      0.00000000      0.00000000
+     2       H         0.96000000      0.00000000      0.00000000
+     3       H         0.00000000      0.96000000      0.00000000
+
+          DIPOLE           =   2.12919 DEBYE    POINT GROUP:       C2v
+
+          COSMO AREA              =   42.43 SQUARE ANGSTROMS
+          COSMO VOLUME            =   25.17 CUBIC ANGSTROMS
 """
 
 
@@ -62,10 +78,10 @@ O   H   H
 
 @pytest.mark.unit
 class TestMopacInputKeywords:
-    """Tests for EF+AUX keywords in MOPAC input."""
+    """Tests for EF keyword in MOPAC input (AUX removed)."""
 
-    def test_mopac_input_includes_ef_aux_keywords(self, tmp_path: Path) -> None:
-        """EF and AUX must appear in MOPAC keyword line."""
+    def test_mopac_input_keywords_no_aux(self, tmp_path: Path) -> None:
+        """EF must appear in MOPAC keyword line; AUX must NOT."""
         from grimperium.crest_pm7.mopac_optimizer import _create_mopac_input
 
         xyz = tmp_path / "test.xyz"
@@ -77,7 +93,7 @@ class TestMopacInputKeywords:
         content = mop.read_text()
         first_line = content.split("\n")[0]
         assert "EF" in first_line
-        assert "AUX" in first_line
+        assert "AUX" not in first_line
 
     def test_mopac_input_no_1scf(self, tmp_path: Path) -> None:
         """1SCF must NOT appear in MOPAC input (removed)."""
@@ -188,92 +204,92 @@ class TestPM7ResultSelection:
         assert pd.isna(df_out.loc[0, "k_selected_pm7"])
 
 
-# ─── Step 4: .aux file parsing ───
+# ─── Step 4: .out file parsing ───
 
 
 @pytest.mark.unit
-class TestAuxFileParsing:
-    """Tests for MOPAC .aux descriptor parsing."""
+class TestOutFileParsing:
+    """Tests for MOPAC .out descriptor parsing."""
 
-    def test_parse_fortran_float_basic(self) -> None:
-        """Fortran D notation converts correctly."""
-        assert parse_fortran_float("+0.577997D+02") == pytest.approx(57.7997)
-        assert parse_fortran_float("-0.123456D-03") == pytest.approx(-1.23456e-4)
-        assert parse_fortran_float("+0.883541D-02") == pytest.approx(0.00883541)
-
-    def test_aux_file_parsing_water_molecule(self) -> None:
-        """Full H2O .aux parsing extracts all expected descriptors."""
-        result = _parse_aux_file(H2O_AUX_CONTENT)
+    def test_out_parsing_extracts_all_fields(self) -> None:
+        """Full H2O .out parsing extracts all expected descriptors."""
+        result = _parse_out_file(H2O_OUT_CONTENT)
 
         assert result["mopac_dipole_debye"] == pytest.approx(2.12919)
         assert result["mopac_ionization_potential_ev"] == pytest.approx(12.1155)
+        assert result["mopac_homo_ev"] == pytest.approx(-12.214)
+        assert result["mopac_lumo_ev"] == pytest.approx(4.258)
+        assert result["mopac_gap_ev"] == pytest.approx(4.258 - (-12.214))
         assert result["mopac_cosmo_area_a2"] == pytest.approx(42.43)
-        assert result["mopac_cosmo_volume_a3"] == pytest.approx(25.1718)
-        assert result["mopac_gradient_norm"] == pytest.approx(0.00883541)
+        assert result["mopac_cosmo_volume_a3"] == pytest.approx(25.17)
+        assert result["mopac_gradient_norm"] == pytest.approx(0.00884)
         assert result["mopac_num_scf_cycles"] == 7
         assert result["mopac_point_group"] == "C2v"
-        assert result["mopac_time_s"] == pytest.approx(0.09)
+        assert result["mopac_time_s"] == pytest.approx(0.090)
 
-    def test_aux_parsing_homo_lumo_from_eigenvalues(self) -> None:
-        """HOMO/LUMO derived from NUM_ELECTRONS=08 + EIGENVALUES array."""
-        result = _parse_aux_file(H2O_AUX_CONTENT)
+    @pytest.mark.parametrize(
+        "homo_lumo_line, expected_homo, expected_lumo",
+        [
+            # Variant 1: standard spacing
+            (
+                "          HOMO LUMO ENERGIES (EV) =        -12.214   4.258",
+                -12.214,
+                4.258,
+            ),
+            # Variant 2: compact spacing
+            (
+                "          HOMO LUMO ENERGIES (EV) = -12.214  4.258",
+                -12.214,
+                4.258,
+            ),
+            # Variant 3: no space before parenthesis
+            (
+                "          HOMO LUMO ENERGIES(EV) =  -12.214   4.258",
+                -12.214,
+                4.258,
+            ),
+        ],
+        ids=["standard", "compact", "no-space-paren"],
+    )
+    def test_out_parsing_homo_lumo_variants(
+        self,
+        homo_lumo_line: str,
+        expected_homo: float,
+        expected_lumo: float,
+    ) -> None:
+        """HOMO/LUMO parsing handles format variants in MOPAC .out files."""
+        content = f"SOME HEADER\n{homo_lumo_line}\nSOME FOOTER\n"
+        result = _parse_out_file(content)
+        assert result["mopac_homo_ev"] == pytest.approx(expected_homo)
+        assert result["mopac_lumo_ev"] == pytest.approx(expected_lumo)
+        assert result["mopac_gap_ev"] == pytest.approx(expected_lumo - expected_homo)
 
-        # H2O: 8 electrons -> HOMO at idx 3, LUMO at idx 4
-        assert result["mopac_homo_ev"] == pytest.approx(-12.21355)
-        assert result["mopac_lumo_ev"] == pytest.approx(4.25810)
-        assert result["mopac_gap_ev"] == pytest.approx(4.25810 - (-12.21355))
-
-    def test_parsing_handles_missing_fields_returns_nan(self) -> None:
-        """Minimal .aux content returns NaN for missing descriptors."""
-        result = _parse_aux_file("START OF MOPAC FILE\nEND OF MOPAC FILE\n")
+    def test_out_parsing_missing_fields_returns_nan(self) -> None:
+        """Minimal .out content returns NaN for missing descriptors."""
+        result = _parse_out_file("SOME MOPAC OUTPUT WITH NO DESCRIPTOR LINES\n")
 
         assert np.isnan(result["mopac_dipole_debye"])
         assert np.isnan(result["mopac_homo_ev"])
         assert np.isnan(result["mopac_lumo_ev"])
         assert np.isnan(result["mopac_gap_ev"])
+        assert np.isnan(result["mopac_gradient_norm"])
         assert result["mopac_point_group"] is None
 
     def test_extract_mopac_descriptors_missing_file(self, tmp_path: Path) -> None:
-        """Missing .aux file returns NaN dict with warning."""
+        """Missing .out file returns NaN dict with warning."""
         result = extract_mopac_descriptors(tmp_path / "nonexistent.out")
 
         assert np.isnan(result["mopac_dipole_debye"])
         assert np.isnan(result["mopac_homo_ev"])
 
     def test_extract_mopac_descriptors_real_file(self, tmp_path: Path) -> None:
-        """Real .aux file on disk is parsed correctly."""
-        aux_path = tmp_path / "test.aux"
-        aux_path.write_text(H2O_AUX_CONTENT)
+        """Real .out file on disk is parsed correctly."""
         out_path = tmp_path / "test.out"
+        out_path.write_text(H2O_OUT_CONTENT)
 
         result = extract_mopac_descriptors(out_path)
         assert result["mopac_dipole_debye"] == pytest.approx(2.12919)
-
-    def test_aux_parsing_odd_electron_count_returns_defined_values(self) -> None:
-        """Odd electron count does not crash; values extracted via integer division."""
-        aux_odd = H2O_AUX_CONTENT.replace("NUM_ELECTRONS=08", "NUM_ELECTRONS=07")
-        result = _parse_aux_file(aux_odd)
-        # With 7 electrons: homo_idx=2, lumo_idx=3, both within the 6-element array
-        # Pipeline uses closed-shell floor-division; result must be a float, not NaN.
-        assert isinstance(result["mopac_homo_ev"], float)
-        assert not np.isnan(result["mopac_homo_ev"])
-        assert isinstance(result["mopac_lumo_ev"], float)
-        assert not np.isnan(result["mopac_lumo_ev"])
-
-    def test_aux_parsing_malformed_fortran_d_returns_nan(self) -> None:
-        """Corrupted Fortran D notation and partial lines return NaN, not errors."""
-        malformed = (
-            " START OF MOPAC FILE\n"
-            " DIPOLE:DEBYE=+INVALID_D+01\n"
-            " IONIZATION_POTENTIAL:EV=+0.12D\n"
-            " GRADIENT_NORM:KCAL/MOL/ANGSTROM=\n"
-            " END OF MOPAC FILE\n"
-        )
-        result = _parse_aux_file(malformed)
-        assert np.isnan(result["mopac_dipole_debye"])
-        assert np.isnan(result["mopac_ionization_potential_ev"])
-        assert np.isnan(result["mopac_gradient_norm"])
-        assert result["mopac_point_group"] is None
+        assert result["mopac_homo_ev"] == pytest.approx(-12.214)
 
 
 # ─── Step 5: CSV update calculations ───
@@ -335,7 +351,7 @@ class TestCSVUpdateCalculations:
             mopac_status=MOPACStatus.SUCCESS,
             hof_extraction_successful=True,
             energy_hof=-55.0,
-            mopac_output_file=tmp_path / "fake.out",  # no .aux, descriptors will be NaN
+            mopac_output_file=tmp_path / "fake.out",  # no .out, descriptors will be NaN
         )
 
         success = CSVManagerExtensions.update_molecule_with_mopac_results(

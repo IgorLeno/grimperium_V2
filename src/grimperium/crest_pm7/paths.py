@@ -191,7 +191,7 @@ class TemporaryDirectoryManager:
             conformer_idx: Conformer index
 
         Returns:
-            Dictionary with keys: input, output, auxiliary, log
+            Dictionary with keys: input, output, log
 
         Example:
             >>> files = get_mopac_temp_files("batch_0001", "mol_00001", 0)
@@ -205,7 +205,7 @@ class TemporaryDirectoryManager:
         return {
             "input": mol_dir / f"mopac_conf_{conformer_idx}.mop",
             "output": mol_dir / f"mopac_conf_{conformer_idx}.out",
-            "auxiliary": mol_dir / f"mopac_conf_{conformer_idx}.aux",
+
             "log": mol_dir / f"mopac_conf_{conformer_idx}.log",
             "directory": mol_dir,
         }
@@ -273,7 +273,7 @@ class TemporaryDirectoryManager:
             │   │   ├── crest_conformers.xyz
             │   │   ├── mopac_conf_0.mop
             │   │   ├── mopac_conf_0.out
-            │   │   └── mopac_conf_0.aux
+            │   │   └── mopac_conf_0.log
             │   └── mol_00002/
             │       └── ...
             └── batch_0002/
