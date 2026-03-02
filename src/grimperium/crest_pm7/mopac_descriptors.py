@@ -124,10 +124,14 @@ def _parse_out_file(out_content: str) -> dict[str, Any]:
             re.IGNORECASE,
         )
         if m:
+        if m:
             try:
-                _homo = float(m.group(1))
-                _lumo = float(m.group(2))
+                if _homo is None:
+                    _homo = float(m.group(1))
+                if _lumo is None:
+                    _lumo = float(m.group(2))
             except ValueError:
+                LOG.warning("Failed to parse HOMO/LUMO (variant 2): %s", m.group(0))
                 LOG.warning("Failed to parse HOMO/LUMO (variant 2): %s", m.group(0))
 
     # Variant 3: separate HOMO ENERGY / LUMO ENERGY lines

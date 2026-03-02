@@ -176,11 +176,13 @@ def main() -> None:
     if mop_files:
         for mop_path in mop_files[:10]:
             try:
-                content = mop_path.read_text()
+                first_line = mop_path.read_text().split("\n")[0]
             except (OSError, UnicodeDecodeError) as e:
                 print(f"  ⚠️  Could not read {mop_path.name}: {e}")
                 continue
-            if "AUX" in content.split("\n")[0]:  # Check first line (keywords)
+            # Check for AUX as a standalone keyword (space or start/end bounded)
+            keywords = first_line.upper().split()
+            if "AUX" in keywords:
                 mop_with_aux.append(mop_path)
 
         if mop_with_aux:
