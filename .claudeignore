@@ -1,0 +1,53 @@
+# Python build artifacts
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Virtual environments and tooling
+.venv/
+venv/
+.tox/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Coverage reports
+htmlcov/
+.coverage
+coverage.xml
+
+# Data: exclude large raw datasets (keep sample for context)
+data/raw/**
+!data/raw/sample_10.csv
+
+# Results: large batch outputs not needed for context
+results/large_batches/**
+
+# Temporary files
+tmp/**
+*.tmp
+
+# MOPAC calculation files (binary/large, not useful as context)
+*.aux
+*.out
+*.mop
+*.arc
+*.den
+*.mos
+*.end
+
+# OS artifacts
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+
+# IDE
+.idea/
+.vscode/
+*.code-workspace
