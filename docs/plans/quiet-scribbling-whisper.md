@@ -37,6 +37,32 @@ batch_order, batch_failure_policy, assigned_crest_timeout, assigned_mopac_timeou
 
 ---
 
+## Migration Strategy for Existing CSVs
+
+### Schema Version Field
+- Write a `schema_version` column (integer) to every CSV when first writing with the new schema. Set `schema_version = 2` for new files; absence of this field or value `1` indicates the old format.
+- The loader (`CSVDataLoader`) must check for `schema_version` and emit a `DeprecationWarning` if a v1 CSV is loaded without migration.
+
+### Idempotent Migration Script
+Create `scripts/migrate_csv_schema.py` with the following behaviour:
+1. **Column renames**: copy values from old names to new (`reference_hof` → `H298_cbs`, `crest_time` → `crest_time_s`, `mopac_time` → `mopac_time_s`, `nrotbonds` → `rdkit_nrotbonds`).
+2. **New columns**: fill `multiplicity` with `1`, `charge` with `0`, all 15 `rdkit_*` columns with `None`/empty, `schema_version` with `2`.
+3. **Removed columns**: drop `abs_diff`, `has_heteroatoms`, `quality_grade`, `success`, `error_message`, `total_execution_time`, `crest_error`, `precise_scf`, `scf_threshold`, `crest_optlev`, `threads`, `retry_count`, `last_error_message`, `max_retries`, all `reserved_*` columns.
+4. **Column reorder**: rewrite CSV with columns in the exact 58-column order from `BatchCSVManager.get_schema()`.
+5. The script is idempotent: running it twice on a v2 CSV produces no change.
+
+### Partially-Completed Batches
+- Rows with `status == RUNNING` at migration time must be treated carefully: lock the file (advisory file lock), migrate only rows with `status != RUNNING`, and flag in-progress rows with `migration_state = pending_restart` (write to a separate `migration_state` column if needed, or simply reset to `PENDING` and increment `reruns`).
+- Rows with `status == OK` or `status == SKIP` are migrated as-is (rename/fill columns, preserve data).
+- Any row whose migration produces inconsistent data (e.g., non-numeric where numeric expected) should be written to a `migration_errors.csv` sidecar file for manual review.
+
+### Migration Mode: Batch (one-time) vs Automatic On-Load
+- **Recommended**: one-time batch migration run before restarting the pipeline. This avoids coupling migration logic into the hot path.
+- **On-load migration**: `CSVDataLoader._add_missing_columns()` already fills missing columns with defaults (see `OPTIONAL_COLUMNS` dict) and maps old column names to new ones (see alias mapping in `_add_missing_columns`). This provides transparent backwards compatibility for small/incremental differences.
+- **Rollback**: before migration, the script must write a backup as `<filename>.pre_migration_backup.csv`. If post-migration validation (run `BatchCSVManager.get_schema()` and verify all columns present; check row count matches) fails, restore from backup and abort.
+
+---
+
 ## Implementation Steps
 
 ### Step 1: `.gitignore` fix
@@ -50,6 +76,9 @@ batch_order, batch_failure_policy, assigned_crest_timeout, assigned_mopac_timeou
 Replace the 13-key dict with 15 keys matching the CSV schema:
 - Keep (renamed): `nrotbonds` -> `rdkit_nrotbonds`, `tpsa` -> `rdkit_tpsa`, `fraction_csp3` -> `rdkit_fsp3`, `mol_wt` -> `rdkit_mol_weight`, `hbd` -> `rdkit_hbond_donors`, `hba` -> `rdkit_hbond_acceptors`, `arom_ring_count` -> `rdkit_num_rings`
 - **NEW** atom counts: `rdkit_nC`, `rdkit_nH`, `rdkit_nO`, `rdkit_nN` (iterate `Chem.AddHs(mol).GetAtoms()`)
+  - Only count atoms with symbol in `{"C", "H", "O", "N"}`; increment the corresponding counter.
+  - Do **not** count S, P, halogens, or other elements in any of the four counters.
+  - If any atom with a symbol outside `{C, H, O, N}` is encountered, emit `LOG.warning("Molecule contains non-CHON atom: %s", symbol)` so callers are aware; do not crash.
 - **NEW** bond counts: `rdkit_bonds_single`, `rdkit_bonds_double`, `rdkit_bonds_triple`, `rdkit_bonds_aromatic` (iterate `mol.GetBonds()`, check `GetBondType()`)
 - **REMOVE:** `logp`, `ring_count`, `sat_ring_count`, `num_heteroatoms`, `labute_asa`, `bertz_ct`
 
@@ -124,13 +153,37 @@ BATCH_CONFIG_COLUMNS = [
 **File:** `src/grimperium/crest_pm7/batch/csv_manager.py`
 
 ```python
-def reset_stuck_running(self) -> int:
-    """Reset RUNNING molecules to PENDING on startup recovery."""
+def reset_stuck_running(self, stale_after_seconds: float = 3600.0) -> int:
+    """Reset stale RUNNING molecules to PENDING on startup recovery.
+
+    Only resets rows that have been in RUNNING status longer than
+    `stale_after_seconds` (default: 1 hour), using the `timestamp` column
+    as the start-of-processing reference.  Rows with a `pid` column set to a
+    currently-running OS process are treated as owned and skipped.
+
+    Single-process assumption: this method is designed for single-worker
+    recovery at startup.  In multi-worker scenarios callers must acquire an
+    advisory file lock (e.g. `filelock.FileLock`) before calling this method
+    and before any subsequent `select_batch()` call so that only one process
+    performs the recovery.
+
+    Args:
+        stale_after_seconds: Rows in RUNNING status for longer than this many
+            seconds are considered stuck and reset (default 3600 = 1 hour).
+
+    Returns:
+        Number of rows reset to PENDING.
+    """
 ```
 
-Resets status to PENDING, increments `reruns`, saves CSV, returns count.
+Implementation details:
+- Check `timestamp` column (ISO string) against `datetime.now(UTC)`. Skip row if elapsed < `stale_after_seconds`.
+- If a `pid` column exists, call `psutil.pid_exists(pid)` (or `os.kill(pid, 0)`) and skip rows whose process is still alive.
+- Rows that are reset: set `status = PENDING`, increment `reruns`, clear `timestamp`.
+- Wrap CSV read/write with a file lock (or at minimum document the single-process assumption in the docstring).
+- Save CSV and return count of reset rows.
 
-**Call sites** (add before `select_batch()`):
+**Call sites** (add before `select_batch()`, under the same file lock):
 - `src/grimperium/cli/views/batch_view.py`
 - `src/grimperium/cli/views/databases_view.py`
 
@@ -144,10 +197,10 @@ Resets status to PENDING, increments `reruns`, saves CSV, returns count.
 ### Step 7: Harden HOMO/LUMO/GAP parser
 **File:** `src/grimperium/crest_pm7/mopac_descriptors.py`
 
-- Add negative lookbehind `(?<![A-Z_])` to EIGENVALUES regex to avoid matching `ALPHA_EIGENVALUES`
-- Validate parsed eigenvalue count against declared count `EIGENVALUES[N]`
-- Add bounds checking for HOMO/LUMO indices with diagnostic logging
-- Upgrade silent failures from `LOG.debug` to `LOG.warning`
+- Add negative lookbehind `(?<![A-Z_])` to the EIGENVALUES regex so that tokens like `ALPHA_EIGENVALUES` are not matched (only bare `EIGENVALUES[N]` should trigger the parser).
+- After extracting eigenvalues, compare the parsed count to the declared count `N` from `EIGENVALUES[N]`; if they differ emit `LOG.warning("EIGENVALUES count mismatch: declared %d, parsed %d", declared, parsed)` and treat the result as unreliable (return `None` for HOMO/LUMO/GAP).
+- Before indexing the eigenvalues array for HOMO index `homo_idx` and LUMO index `lumo_idx = homo_idx + 1`, assert `0 <= homo_idx < len(eigenvalues)` and `lumo_idx < len(eigenvalues)`; if bounds fail emit a `LOG.warning` with the molecule identifier and the bad index value, and return `None` for the affected descriptor(s).
+- Promote any existing `LOG.debug` calls that indicate parsing failures (e.g., regex no-match, empty eigenvalue list) to `LOG.warning` so issues are visible in normal log output.
 
 ### Step 8: Update `models.py`
 **File:** `src/grimperium/crest_pm7/batch/models.py`
@@ -156,19 +209,29 @@ Update `BatchRowCSV` Pydantic model to match new 57-column schema.
 
 ### Step 9: Update tests
 **Files:**
-- `tests/unit/test_csv_schema.py` - Update column count (-> 57), column lists, remove RETRY/PHASE_B tests, add RDKIT tests
-- `tests/test_csv_schema.py` - Update `EXPECTED_COLUMNS` list
-- `tests/test_csv_manager_retry.py` - Adapt to use `reruns` instead of `retry_count`
+- `tests/unit/test_csv_schema.py` - Update column count (→ 58), fix docstring breakdown, update column lists, remove RETRY/PHASE_B tests, add RDKIT tests
+- `tests/test_csv_schema.py` - Update `EXPECTED_COLUMNS` list (58 entries) and `reruns` semantics (not `retry_count`)
+- `tests/test_csv_manager_retry.py` - Adapt to use `reruns` instead of `retry_count`; ensure rows written in helper `_write_csv` include `crest_status` and `mopac_status` columns
 - `tests/unit/test_pm7_pipeline_refactor.py` - Remove `abs_diff` from test DataFrames
 - `tests/test_csv_enhancements_batch_settings.py` - Remove deleted settings
-- **NEW tests:** `reset_stuck_running()`, RDKit descriptor atom/bond counts
+
+**NEW tests to add:**
+- **Full pipeline integration test**: exercise CSV ingestion through `BatchCSVManager.load_csv()` → `select_batch()` → `mark_ok()` / `mark_rerun()` with a 58-column CSV (matching `get_schema()`); assert rerun semantics use `reruns` column.
+- **RDKit edge-case test**: call `extract_all_rdkit_descriptors()` with SMILES containing S/P/halogen atoms (e.g., `"CCCS"` for propanethiol); assert `rdkit_nC`, `rdkit_nH`, `rdkit_nO`, `rdkit_nN` contain only C/H/O/N counts, a warning was emitted, and no KeyError is raised.
+- **Concurrency test** (`tests/test_csv_manager_concurrency.py`): spawn two threads both calling `reset_stuck_running()` simultaneously on the same CSV; assert final `reruns` count equals exactly 1 (not 2), verifying locking/atomicity.
+- **Backward-compatibility test** (`tests/test_csv_compatibility.py`): write a minimal old-format CSV (with columns `reference_hof`, `crest_time`, `nrotbonds`) and load it through `CSVDataLoader`; assert the loader produces clear, actionable error or deprecation messages and that data is preserved under `H298_cbs`, `crest_time_s`, `rdkit_nrotbonds`.
 
 ---
 
 ## Verification
 
 1. `pytest tests/ -x` - All tests pass
-2. `python -c "from grimperium.crest_pm7.batch.csv_manager import BatchCSVManager; m = BatchCSVManager(None); print(len(m.get_schema()), m.get_schema())"` - Verify 57 columns in exact order
-3. `python -c "from grimperium.core.descriptors import extract_all_rdkit_descriptors; print(extract_all_rdkit_descriptors('CCO'))"` - Verify 15 keys with `rdkit_` prefix
-4. Verify `.gitignore` excludes `conformer_details/` directory
-5. `ruff check src/` - No lint errors
+2. `python -c "from grimperium.crest_pm7.batch.csv_manager import BatchCSVManager; m = BatchCSVManager(None); print(len(m.get_schema()), m.get_schema())"` - Verify 58 columns in exact order
+3. `python -c "from grimperium.core.descriptors import extract_all_rdkit_descriptors; print(extract_all_rdkit_descriptors('CCO'))"` - Verify 15 keys with `rdkit_` prefix and expected value ranges (e.g., `rdkit_nC == 2`, `rdkit_nO == 1` for ethanol)
+4. `python -c "from grimperium.core.descriptors import extract_all_rdkit_descriptors; print(extract_all_rdkit_descriptors('c1ccccc1'))"` - Spot-check benzene: `rdkit_nC == 6`, `rdkit_nH == 6`, `rdkit_bonds_aromatic == 6`
+5. Verify `.gitignore` excludes `conformer_details/` directory
+6. `ruff check src/` - No lint errors
+7. **CSV I/O integration**: instantiate `BatchCSVManager`, load a real CSV, modify a row, save, reload; assert row count and column set match the 58-column schema from `get_schema()`.
+8. **HOMO/LUMO regression**: run the MOPAC descriptor parser on previously failing molecules (molecules where `ALPHA_EIGENVALUES` appears in output) and confirm no `None` is returned due to the regex fix.
+9. **Performance micro-benchmark**: measure `BatchCSVManager.load_csv()` + `save_csv()` round-trip for a 1000-row CSV with the new 58-column schema; ensure it completes under 2 seconds (to confirm no regression from added columns).
+10. **`reset_stuck_running()` idempotency**: call `reset_stuck_running()` twice on the same CSV with one stale RUNNING row; assert count is `1` on first call and `0` on second call (no double-increment of `reruns`).

@@ -48,6 +48,12 @@ def _count_atoms_by_symbol(mol: Any, symbol: str) -> int:
 
     Returns:
         Count of atoms with the given symbol
+
+    Example:
+        >>> from rdkit import Chem
+        >>> mol = Chem.AddHs(Chem.MolFromSmiles("O"))
+        >>> _count_atoms_by_symbol(mol, "H")
+        2
     """
     return sum(1 for atom in mol.GetAtoms() if atom.GetSymbol() == symbol)
 
@@ -60,6 +66,13 @@ def _count_bonds_by_type(mol: Any) -> dict[str, int]:
 
     Returns:
         Dict with keys: single, double, triple, aromatic
+
+    Example:
+        >>> from rdkit import Chem
+        >>> mol = Chem.MolFromSmiles("C=O")
+        >>> counts = _count_bonds_by_type(mol)
+        >>> counts == {"single": 0, "double": 1, "triple": 0, "aromatic": 0}
+        True
     """
     from rdkit.Chem import rdchem
 
@@ -108,6 +121,15 @@ def extract_all_rdkit_descriptors(smiles: str) -> dict[str, float | int]:
     # Molecule with explicit hydrogens for atom counting
     mol_h = Chem.AddHs(mol)
 
+    # Warn if molecule contains atoms outside {C, H, O, N} — counts remain CHON-only
+    _CHON = {"C", "H", "O", "N"}
+    non_chon = {atom.GetSymbol() for atom in mol_h.GetAtoms()} - _CHON
+    if non_chon:
+        logger.warning(
+            "Molecule contains non-CHON atoms: %s; rdkit_nC/nH/nO/nN count only C/H/O/N",
+            sorted(non_chon),
+        )
+
     # Bond counts (on molecule without explicit H, to match aromatic perception)
     bond_counts = _count_bonds_by_type(mol)
 
@@ -119,19 +141,15 @@ def extract_all_rdkit_descriptors(smiles: str) -> dict[str, float | int]:
         "rdkit_num_rings": _safe_descriptor(
             getattr(Descriptors, "NumAromaticRings", None), mol
         ),
-        "rdkit_fsp3": _safe_descriptor(
-            getattr(Descriptors, "FractionCSP3", None), mol
-        ),
-        "rdkit_mol_weight": _safe_descriptor(
-            getattr(Descriptors, "MolWt", None), mol
-        ),
+        "rdkit_fsp3": _safe_descriptor(getattr(Descriptors, "FractionCSP3", None), mol),
+        "rdkit_mol_weight": _safe_descriptor(getattr(Descriptors, "MolWt", None), mol),
         "rdkit_hbond_donors": _safe_descriptor(
             getattr(Descriptors, "NumHDonors", None), mol
         ),
         "rdkit_hbond_acceptors": _safe_descriptor(
             getattr(Descriptors, "NumHAcceptors", None), mol
         ),
-        # Atom counts (on mol with explicit H)
+        # Atom counts (on mol with explicit H); only C, H, O, N are tallied
         "rdkit_nC": _count_atoms_by_symbol(mol_h, "C"),
         "rdkit_nH": _count_atoms_by_symbol(mol_h, "H"),
         "rdkit_nO": _count_atoms_by_symbol(mol_h, "O"),

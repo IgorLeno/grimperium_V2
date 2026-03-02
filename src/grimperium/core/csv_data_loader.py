@@ -171,7 +171,27 @@ class CSVDataLoader:
             )
 
     def _add_missing_columns(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Add missing optional columns with default values."""
+        """Add missing optional columns with default values.
+
+        Also migrates legacy column names to their new standardised equivalents
+        so that older CSV files are transparently supported without data loss.
+        """
+        # Alias mapping: old_name -> new_name
+        _ALIASES: dict[str, str] = {
+            "nrotbonds": "rdkit_nrotbonds",
+            "crest_time": "crest_time_s",
+            "mopac_time": "mopac_time_s",
+        }
+        for old_name, new_name in _ALIASES.items():
+            if old_name in df.columns and new_name not in df.columns:
+                df[new_name] = df[old_name]
+                logger.warning(
+                    "Deprecated column '%s' mapped to '%s'; "
+                    "please migrate your CSV to use the new column name.",
+                    old_name,
+                    new_name,
+                )
+
         for col, default in self.OPTIONAL_COLUMNS.items():
             if col not in df.columns:
                 df[col] = default

@@ -197,6 +197,8 @@ class TestResetStuckRunning:
                     "nheavy": 1,
                     "status": MoleculeStatus.PENDING.value,
                     "reruns": 0,
+                    "crest_status": "",
+                    "mopac_status": "",
                 },
             ],
         )

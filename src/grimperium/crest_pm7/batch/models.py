@@ -3,7 +3,7 @@
 This module defines data models for:
 - BatchResult: Summary statistics from batch execution
 - Batch: Selected molecules for processing
-- BatchRowCSV: Schema for CSV tracking file (57 columns)
+- BatchRowCSV: Schema for CSV tracking file (58 columns)
 - ConformerDetail: Per-molecule JSON detail file
 """
 
@@ -159,10 +159,31 @@ class Batch(BaseModel):
 
 
 class BatchRowCSV(BaseModel):
-    """Schema for a row in the batch tracking CSV file (57 columns).
+    """Schema for a row in the batch tracking CSV file (58 columns).
 
     This model defines the CSV columns matching the target schema.
     Used for validation and documentation.
+
+    Column groups:
+    - Identity (3): mol_id, status, smiles
+    - Molecular Properties (7): multiplicity, charge, nheavy, H298_cbs,
+      H298_pm7, target_delta_kcalmol, abs_diff_%
+    - Batch Info (4): batch_id, timestamp, total_time, reruns
+    - RDKit Descriptors (15): rdkit_nrotbonds, rdkit_tpsa, rdkit_num_rings,
+      rdkit_fsp3, rdkit_mol_weight, rdkit_hbond_donors, rdkit_hbond_acceptors,
+      rdkit_nC, rdkit_nH, rdkit_nO, rdkit_nN, rdkit_bonds_single,
+      rdkit_bonds_double, rdkit_bonds_triple, rdkit_bonds_aromatic
+    - CREST (12): crest_status, xtb, v3, qm, nci, c_method, energy_window,
+      rmsd_threshold, opt_lvl, crest_conformers_generated,
+      num_conformers_selected, crest_time_s
+    - MOPAC (13): mopac_status, k_selected_pm7, mopac_dipole_debye,
+      mopac_ionization_potential_ev, mopac_homo_ev, mopac_lumo_ev,
+      mopac_gap_ev, mopac_cosmo_area_a2, mopac_cosmo_volume_a3,
+      mopac_gradient_norm, mopac_num_scf_cycles, mopac_point_group,
+      mopac_time_s
+    - Batch Config (4): batch_order, batch_failure_policy,
+      assigned_crest_timeout, assigned_mopac_timeout
+    Total: 3+7+4+15+12+13+4 = 58 columns
     """
 
     # === Identity (3) ===
@@ -179,9 +200,7 @@ class BatchRowCSV(BaseModel):
     H298_cbs: float | None = Field(
         default=None, description="CBS-QB3 reference enthalpy (kcal/mol)"
     )
-    H298_pm7: float | None = Field(
-        default=None, description="PM7 enthalpy (kcal/mol)"
-    )
+    H298_pm7: float | None = Field(default=None, description="PM7 enthalpy (kcal/mol)")
     target_delta_kcalmol: float | None = Field(
         default=None, description="Signed delta: H298_cbs - H298_pm7"
     )
@@ -251,9 +270,7 @@ class BatchRowCSV(BaseModel):
     )
     mopac_homo_ev: float | None = Field(default=None, description="HOMO energy (eV)")
     mopac_lumo_ev: float | None = Field(default=None, description="LUMO energy (eV)")
-    mopac_gap_ev: float | None = Field(
-        default=None, description="HOMO-LUMO gap (eV)"
-    )
+    mopac_gap_ev: float | None = Field(default=None, description="HOMO-LUMO gap (eV)")
     mopac_cosmo_area_a2: float | None = Field(
         default=None, description="COSMO area (A^2)"
     )

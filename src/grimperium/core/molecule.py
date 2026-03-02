@@ -306,14 +306,14 @@ class Molecule:
             row.get("crest_conformers_generated"), "crest_conformers_generated"
         )
         crest_time, _ = MoleculeValueConverter.to_float(
-            row.get("crest_time_s"), "crest_time_s"
+            row.get("crest_time_s") or row.get("crest_time"), "crest_time_s"
         )
 
         mopac_status, _ = MoleculeValueConverter.to_string(
             row.get("mopac_status"), "mopac_status", allow_empty=True
         )
         mopac_time, _ = MoleculeValueConverter.to_float(
-            row.get("mopac_time_s"), "mopac_time_s"
+            row.get("mopac_time_s") or row.get("mopac_time"), "mopac_time_s"
         )
 
         delta_1, _ = MoleculeValueConverter.to_float(row.get("delta_1"), "delta_1")

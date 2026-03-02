@@ -47,7 +47,9 @@ class BatchCSVManager:
         df: Pandas DataFrame with molecule data (loaded lazily)
     """
 
-    # ── Column group definitions (57 columns total) ──
+    # ── Column group definitions (58 columns total) ──
+
+    DEFAULT_MAX_RERUNS: int = 3
 
     IDENTITY_COLUMNS = ["mol_id", "status", "smiles"]
 
@@ -148,14 +150,21 @@ class BatchCSVManager:
         "reruns",
     ]
 
-    def __init__(self, csv_path: Path | None) -> None:
+    def __init__(
+        self,
+        csv_path: Path | None,
+        max_reruns: int = DEFAULT_MAX_RERUNS,
+    ) -> None:
         """Initialize CSV manager.
 
         Args:
             csv_path: Path to CSV tracking file (can be None for schema-only use)
+            max_reruns: Maximum number of rerun attempts before a molecule is
+                marked SKIP (default: DEFAULT_MAX_RERUNS = 3).
         """
         self.csv_path = Path(csv_path) if csv_path is not None else None
         self.df: pd.DataFrame | None = None
+        self.max_reruns = max_reruns
         # FUTURE PARALLELIZATION: Add threading.Lock() here
         # self._lock = threading.Lock()
 
@@ -163,7 +172,7 @@ class BatchCSVManager:
         """Get the full CSV schema with all column names.
 
         Returns:
-            List of 57 column names in order:
+            List of 58 column names in order:
             - Identity (3): mol_id, status, smiles
             - Molecular properties (7): multiplicity, charge, nheavy, H298_cbs, etc.
             - Batch info (4): batch_id, timestamp, total_time, reruns
@@ -738,7 +747,7 @@ class BatchCSVManager:
 
         # Increment reruns count
         reruns = self._safe_int(df.at[idx, "reruns"], default=0) + 1
-        max_reruns = 3  # Default max reruns
+        max_reruns = self.max_reruns
 
         df.at[idx, "reruns"] = reruns
 
@@ -753,8 +762,7 @@ class BatchCSVManager:
         else:
             df.at[idx, "status"] = MoleculeStatus.RERUN.value
             LOG.warning(
-                f"Marked {mol_id} as RERUN "
-                f"({reruns}/{max_reruns}): {error_message}"
+                f"Marked {mol_id} as RERUN " f"({reruns}/{max_reruns}): {error_message}"
             )
 
         # Apply partial results if provided
@@ -769,7 +777,6 @@ class BatchCSVManager:
         self,
         mol_id: str,
         error_message: str,
-        force: bool = False,
     ) -> None:
         """Mark molecule as permanently skipped.
 
@@ -778,7 +785,6 @@ class BatchCSVManager:
         Args:
             mol_id: Molecule identifier
             error_message: Error that caused the skip
-            force: Skip validation when True
         """
         # FUTURE PARALLELIZATION: Wrap with self._lock
         idx = self._get_row_index(mol_id)

@@ -21,7 +21,7 @@ class TestCSVSchema:
         return BatchCSVManager(tmp_path / "test.csv")
 
     def test_schema_length(self, manager: BatchCSVManager) -> None:
-        """Verify schema has expected 57-column count.
+        """Verify schema has expected 58-column count.
 
         - 3 identity columns
         - 7 molecular property columns
@@ -29,13 +29,14 @@ class TestCSVSchema:
         - 15 RDKit descriptor columns
         - 12 CREST columns
         - 13 MOPAC columns
-        - 3 batch config columns (batch_order moved here)
+        - 4 batch config columns
+        Total: 3+7+4+15+12+13+4 = 58
         """
         schema = manager.get_schema()
         assert len(schema) == 58, f"Expected 58 columns, got {len(schema)}"
 
     def test_schema_exact_order(self, manager: BatchCSVManager) -> None:
-        """Verify schema matches target 57-column order exactly."""
+        """Verify schema matches target 58-column order exactly."""
         schema = manager.get_schema()
         expected = [
             "mol_id", "status", "smiles",
