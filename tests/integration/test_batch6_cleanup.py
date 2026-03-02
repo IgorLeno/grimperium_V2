@@ -4,12 +4,13 @@ from pathlib import Path
 
 import pytest
 
-CONFORMER_DETAILS_DIR = Path("data/molecules_pm7/conformer_details")
-HAS_CONFORMER_DETAILS = CONFORMER_DETAILS_DIR.exists() and any(
+CONFORMER_DETAILS_DIR: Path = Path("data/molecules_pm7/conformer_details")
+HAS_CONFORMER_DETAILS: bool = CONFORMER_DETAILS_DIR.exists() and any(
     CONFORMER_DETAILS_DIR.glob("*.json")
 )
 
 
+@pytest.mark.integration
 class TestBatch6Cleanup:
     """Test suite verifying Batch 6 cleanup operations."""
 

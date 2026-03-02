@@ -13,11 +13,43 @@ from pathlib import Path
 
 from grimperium.crest_pm7.mopac_descriptors import extract_mopac_descriptors
 
+# Required descriptor keys for validation
+REQUIRED_KEYS: list[str] = [
+    "mopac_dipole_debye",
+    "mopac_ionization_potential_ev",
+    "mopac_homo_ev",
+    "mopac_lumo_ev",
+    "mopac_gap_ev",
+    "mopac_cosmo_area_a2",
+    "mopac_cosmo_volume_a3",
+    "mopac_gradient_norm",
+    "mopac_num_scf_cycles",
+    "mopac_point_group",
+    "mopac_time_s",
+]
+
 
 def validate_out_file(out_path: Path) -> dict[str, bool]:
     """Validate a single .out file parsing.
 
-    Returns dict with validation results.
+    Args:
+        out_path: Path to the MOPAC .out file to validate.
+
+    Returns:
+        A dict mapping check names to bool results:
+        - ``file_exists``: whether the file exists on disk.
+        - ``parsing_succeeds``: whether ``extract_mopac_descriptors`` completed
+          without raising an exception.
+        - ``homo_valid``: whether the HOMO energy is a non-NaN float.
+        - ``lumo_valid``: whether the LUMO energy is a non-NaN float.
+        - ``gap_valid``: whether the HOMO-LUMO gap is a non-NaN positive float.
+        - ``all_descriptors_present``: whether at least 10 of 11 descriptors
+          have valid (non-None, non-NaN) values.
+
+    Example:
+        >>> results = validate_out_file(Path("mol_001_conf_0.out"))
+        >>> results["homo_valid"]
+        True
     """
     results: dict[str, bool] = {
         "file_exists": out_path.exists(),
@@ -47,23 +79,9 @@ def validate_out_file(out_path: Path) -> dict[str, bool]:
         )
 
         # Check all 11 descriptors
-        required_keys = [
-            "mopac_dipole_debye",
-            "mopac_ionization_potential_ev",
-            "mopac_homo_ev",
-            "mopac_lumo_ev",
-            "mopac_gap_ev",
-            "mopac_cosmo_area_a2",
-            "mopac_cosmo_volume_a3",
-            "mopac_gradient_norm",
-            "mopac_num_scf_cycles",
-            "mopac_point_group",
-            "mopac_time_s",
-        ]
-
         valid_count = sum(
             1
-            for key in required_keys
+            for key in REQUIRED_KEYS
             if key in desc
             and desc[key] is not None
             and (
@@ -80,7 +98,23 @@ def validate_out_file(out_path: Path) -> dict[str, bool]:
 
 
 def main() -> None:
-    """Run validation checks."""
+    """Run validation checks for the .out parsing migration.
+
+    Validates that:
+
+    1. No ``.aux`` files are generated in new batch runs.
+    2. ``.out`` files are successfully parsed (sample of up to 10 files).
+    3. ``.mop`` input files do not contain the legacy ``AUX`` keyword.
+
+    Prints a summary of each check and a final pass/fail verdict.
+
+    Returns:
+        None. All results are printed to stdout.
+
+    Side Effects:
+        Reads files from the MOPAC temp directory
+        (``src/grimperium/crest_pm7/tmp``). Prints validation status to stdout.
+    """
     print("🔍 Validating .out parsing migration...\n")
 
     # Find temp directory
@@ -97,10 +131,12 @@ def main() -> None:
     aux_files = list(temp_dir.rglob("*.aux"))
     print("✓ Check 1: .aux files in temp/")
     if aux_files:
+        aux_check_passed = False
         print(f"  ⚠️  Found {len(aux_files)} .aux files (should be 0 for new runs)")
         for f in aux_files[:5]:
             print(f"     - {f.relative_to(temp_dir)}")
     else:
+        aux_check_passed = True
         print("  ✅ No .aux files found (correct)")
 
     print()
@@ -117,7 +153,6 @@ def main() -> None:
     sample = out_files[:10]
 
     all_valid = True
-    mop_with_aux: list[Path] = []
 
     for out_path in sample:
         results = validate_out_file(out_path)
@@ -135,11 +170,16 @@ def main() -> None:
 
     # Check 3: .mop files do not contain "AUX"
     mop_files = list(temp_dir.rglob("*.mop"))
+    mop_with_aux: list[Path] = []
     print(f"✓ Check 3: .mop input keywords ({len(mop_files)} files found)")
 
     if mop_files:
         for mop_path in mop_files[:10]:
-            content = mop_path.read_text()
+            try:
+                content = mop_path.read_text()
+            except (OSError, UnicodeDecodeError) as e:
+                print(f"  ⚠️  Could not read {mop_path.name}: {e}")
+                continue
             if "AUX" in content.split("\n")[0]:  # Check first line (keywords)
                 mop_with_aux.append(mop_path)
 
@@ -152,7 +192,7 @@ def main() -> None:
 
     print()
     print("=" * 60)
-    if all_valid and not mop_with_aux:
+    if all_valid and aux_check_passed and not mop_with_aux:
         print("✅ All validation checks passed!")
     else:
         print("⚠️  Some checks failed. Review output above.")

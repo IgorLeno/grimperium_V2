@@ -14,7 +14,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 **Summary:** MOPAC descriptor extraction migrated from `.aux` format to `.out` format for improved robustness and simplicity.
 
 **Changes:**
-- **Breaking:** MOPAC input keyword changed from `PM7 EF AUX` to `PM7 EF` (no `AUX` keyword)
+- **Internal change (no user action required):** MOPAC input keyword generation
+  changed from `PM7 EF AUX` to `PM7 EF`. The `AUX` keyword is dropped
+  automatically at runtime before MOPAC is invoked — no user scripts, templates,
+  or batch configs that previously ran successfully need updating. Keyword
+  normalization is fully handled by the library (`mopac_optimizer.py`).
 - All 11 descriptors now extracted from `.out` format:
   - HOF (H298_pm7)
   - Dipole moment (Debye)
@@ -30,14 +34,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Format 2: `HOMO (SOMO) / LUMO ENERGIES (EV) = -10.096 / -0.351`
   - Format 3: Two separate lines `HOMO ENERGY (EV) = ...` / `LUMO ENERGY (EV) = ...`
 - Removed internal functions: `parse_fortran_float()`, `_parse_aux_file()`
-- Parser code reduced by ~50% (eliminated Fortran D notation conversion and eigenvalue indexing)
+- Parser code reduced by ~50% (eliminated Fortran D notation conversion and
+  eigenvalue indexing; measured by comparing the line count of `_parse_aux_file`
+  in the previous commit against `_parse_out_file` in this commit:
+  `git diff HEAD~1 HEAD -- src/grimperium/crest_pm7/mopac_descriptors.py`)
 - Path management: removed `"auxiliary"` key from `get_mopac_temp_files()` dict
 
 **Why this change:**
 - Original `.aux` parser had fragile HOMO/LUMO extraction (required inferring orbital indices from `NUM_ELECTRONS` + truncated `EIGENVALUES` arrays)
 - Analysis showed `.aux` files contained only 20 eigenvalues for molecules with 50+ electrons, causing systematic failures
 - `.out` format provides HOMO/LUMO explicitly in summary block, eliminating off-by-one indexing errors
-- Smaller file size (`.out` typically 5-8KB vs `.aux` 15-20KB) without robustness trade-off
+- Smaller file size (`.out` typically 5-8KB vs `.aux` 15-20KB) without
+  robustness trade-off (sample: 10 representative molecules from the CHON
+  dataset; measured with `ls -la`; MOPAC 2016 on Linux x86_64; actual sizes
+  vary with molecule complexity and number of electrons)
 
 **Migration impact:**
 - **No user action required** for existing batches
@@ -53,7 +63,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `tests/unit/test_pm7_pipeline_refactor.py` — replaced 7 `.aux` tests with 7 `.out` tests
 
 **Verification:**
-- Tests: 494/495 passing (1 pre-existing failure unrelated to this change)
+- Tests: 494/495 passing (1 pre-existing failure unrelated to this change —
+  identify with `pytest tests/ -v 2>&1 | grep FAILED` on the branch before
+  this migration; the failure existed on `main` prior to the `.out` work)
 - Quality gates: mypy strict ✓, ruff clean ✓, black formatted ✓
 - 17/17 targeted tests passing (including parametrized HOMO/LUMO format variants)
 

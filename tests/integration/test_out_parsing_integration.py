@@ -14,7 +14,16 @@ from grimperium.crest_pm7.mopac_descriptors import extract_mopac_descriptors
 
 @pytest.fixture
 def sample_out_file(tmp_path: Path) -> Path:
-    """Create a minimal but realistic .out file for testing."""
+    """Create a minimal but realistic .out file for testing.
+
+    Args:
+        tmp_path: Pytest-provided temporary directory unique to this test
+            invocation.
+
+    Returns:
+        Path to the created ``sample.out`` file containing a representative
+        MOPAC summary block with all 11 descriptor fields populated.
+    """
     out_path = tmp_path / "sample.out"
 
     # Minimal realistic MOPAC .out content (summary block only)
@@ -47,6 +56,7 @@ def sample_out_file(tmp_path: Path) -> Path:
     return out_path
 
 
+@pytest.mark.integration
 def test_out_parsing_returns_all_descriptors(sample_out_file: Path) -> None:
     """Test that parser extracts all 11 descriptors from .out."""
     desc = extract_mopac_descriptors(sample_out_file)
@@ -83,6 +93,7 @@ def test_out_parsing_returns_all_descriptors(sample_out_file: Path) -> None:
     assert desc["mopac_time_s"] == pytest.approx(0.473, abs=0.001)
 
 
+@pytest.mark.integration
 def test_out_parsing_missing_file_returns_defaults(tmp_path: Path) -> None:
     """Test that parser returns NaN/None defaults for missing file."""
     nonexistent = tmp_path / "does_not_exist.out"
@@ -98,11 +109,16 @@ def test_out_parsing_missing_file_returns_defaults(tmp_path: Path) -> None:
     assert desc["mopac_point_group"] is None
 
 
-def test_out_parsing_gap_calculation() -> None:
-    """Test that GAP is correctly computed as LUMO - HOMO."""
-    # HOMO = -10.0, LUMO = -2.0 → GAP should be 8.0
-    homo = -10.0
-    lumo = -2.0
-    gap = lumo - homo
+@pytest.mark.integration
+def test_out_parsing_gap_calculation(tmp_path: Path) -> None:
+    """Test that GAP is correctly computed as LUMO - HOMO via the real parser."""
+    out_path = tmp_path / "gap_test.out"
+    out_path.write_text(
+        "          HOMO LUMO ENERGIES (EV)  =    -10.000     -2.000\n"
+    )
 
-    assert gap == pytest.approx(8.0, abs=0.001)
+    desc = extract_mopac_descriptors(out_path)
+
+    assert desc["mopac_homo_ev"] == pytest.approx(-10.0, abs=0.001)
+    assert desc["mopac_lumo_ev"] == pytest.approx(-2.0, abs=0.001)
+    assert desc["mopac_gap_ev"] == pytest.approx(8.0, abs=0.001)

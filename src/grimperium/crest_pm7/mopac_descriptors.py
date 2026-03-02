@@ -95,9 +95,13 @@ def _parse_out_file(out_content: str) -> dict[str, Any]:
             pass
 
     # HOMO/LUMO: three known format variants
-    #   1) "HOMO LUMO ENERGIES (EV) =  -12.214   4.258"
-    #   2) "HOMO LUMO ENERGIES (EV) = -12.214  4.258"
-    #   3) "HOMO LUMO ENERGIES(EV) =  -12.214   4.258"
+    #   1) Standard: "HOMO LUMO ENERGIES (EV) =  -10.096    -0.351"
+    #   2) Open-shell/SOMO: "HOMO (SOMO) / LUMO ENERGIES (EV) = -10.096 / -0.351"
+    #   3) Multiline: "HOMO ENERGY (EV) = -10.096" / "LUMO ENERGY (EV) = -0.351"
+    _homo: float | None = None
+    _lumo: float | None = None
+
+    # Variant 1: standard joint line
     m = re.search(
         r"HOMO\s+LUMO\s+ENERGIES\s*\(EV\)\s*=\s*"
         r"([-+]?\d+\.?\d*)\s+([-+]?\d+\.?\d*)",
@@ -106,11 +110,63 @@ def _parse_out_file(out_content: str) -> dict[str, Any]:
     )
     if m:
         try:
-            result["mopac_homo_ev"] = float(m.group(1))
-            result["mopac_lumo_ev"] = float(m.group(2))
-            result["mopac_gap_ev"] = result["mopac_lumo_ev"] - result["mopac_homo_ev"]
+            _homo = float(m.group(1))
+            _lumo = float(m.group(2))
         except ValueError:
-            pass
+            LOG.warning("Failed to parse HOMO/LUMO (variant 1): %s", m.group(0))
+
+    # Variant 2: open-shell SOMO joint line
+    if _homo is None or _lumo is None:
+        m = re.search(
+            r"HOMO.*?\(SOMO\).*?/.*?LUMO\s+ENERGIES?\s*\(EV\)\s*=\s*"
+            r"([-+]?\d+\.?\d*)\s*/\s*([-+]?\d+\.?\d*)",
+            out_content,
+            re.IGNORECASE,
+        )
+        if m:
+            try:
+                _homo = float(m.group(1))
+                _lumo = float(m.group(2))
+            except ValueError:
+                LOG.warning("Failed to parse HOMO/LUMO (variant 2): %s", m.group(0))
+
+    # Variant 3: separate HOMO ENERGY / LUMO ENERGY lines
+    if _homo is None or _lumo is None:
+        m_homo = re.search(
+            r"HOMO\s+ENERG(?:Y|IES)\s*\(EV\)\s*=\s*([-+]?\d+\.?\d*)",
+            out_content,
+            re.IGNORECASE,
+        )
+        m_lumo = re.search(
+            r"LUMO\s+ENERG(?:Y|IES)\s*\(EV\)\s*=\s*([-+]?\d+\.?\d*)",
+            out_content,
+            re.IGNORECASE,
+        )
+        try:
+            if m_homo and _homo is None:
+                _homo = float(m_homo.group(1))
+        except ValueError:
+            LOG.warning("Failed to parse HOMO (variant 3)")
+        try:
+            if m_lumo and _lumo is None:
+                _lumo = float(m_lumo.group(1))
+        except ValueError:
+            LOG.warning("Failed to parse LUMO (variant 3)")
+
+    # Store results and compute GAP with validation
+    if _homo is not None:
+        result["mopac_homo_ev"] = _homo
+    if _lumo is not None:
+        result["mopac_lumo_ev"] = _lumo
+    if _homo is not None and _lumo is not None:
+        if _lumo <= _homo:
+            LOG.warning(
+                "LUMO (%.3f eV) <= HOMO (%.3f eV); GAP set to NaN",
+                _lumo,
+                _homo,
+            )
+        else:
+            result["mopac_gap_ev"] = _lumo - _homo
 
     # COSMO area: "COSMO AREA              =  X.XX SQUARE ANGSTROMS"
     m = re.search(
@@ -155,7 +211,10 @@ def _parse_out_file(out_content: str) -> dict[str, Any]:
         re.IGNORECASE,
     )
     if m:
-        result["mopac_num_scf_cycles"] = int(m.group(1))
+        try:
+            result["mopac_num_scf_cycles"] = int(m.group(1))
+        except ValueError:
+            pass
 
     # Point group: "POINT GROUP:    C2v"
     m = re.search(
@@ -223,14 +282,14 @@ def extract_mopac_descriptors(mopac_out_path: Path) -> dict[str, Any]:
         9.745
     """
     if not mopac_out_path.exists():
-        LOG.warning(f"MOPAC .out file not found: {mopac_out_path}")
+        LOG.warning("MOPAC .out file not found: %s", mopac_out_path)
         return _empty_descriptors()
 
     try:
         content = mopac_out_path.read_text(encoding="utf-8", errors="replace")
         descriptors = _parse_out_file(content)
-        LOG.info(f"Extracted MOPAC descriptors from {mopac_out_path.name}")
+        LOG.info("Extracted MOPAC descriptors from %s", mopac_out_path.name)
         return descriptors
     except Exception as exc:
-        LOG.warning(f"Failed to parse MOPAC .out file {mopac_out_path}: {exc}")
+        LOG.warning("Failed to parse MOPAC .out file %s: %s", mopac_out_path, exc)
         return _empty_descriptors()
