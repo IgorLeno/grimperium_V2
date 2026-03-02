@@ -156,7 +156,7 @@ class TestPM7ResultSelection:
                 "smiles": ["O"],
                 "nheavy": [1],
                 "status": ["RUNNING"],
-                "abs_diff": [None],
+
                 "abs_diff_%": [None],
                 "target_delta_kcalmol": [None],
                 "k_selected_pm7": [None],
@@ -316,7 +316,7 @@ class TestCSVUpdateCalculations:
                 "smiles": ["CCO"],
                 "nheavy": [2],
                 "status": ["RUNNING"],
-                "abs_diff": [None],
+
                 "abs_diff_%": [None],
                 "target_delta_kcalmol": [None],
                 "k_selected_pm7": [None],

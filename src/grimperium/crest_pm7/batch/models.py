@@ -3,14 +3,14 @@
 This module defines data models for:
 - BatchResult: Summary statistics from batch execution
 - Batch: Selected molecules for processing
-- BatchRowCSV: Schema for CSV tracking file
+- BatchRowCSV: Schema for CSV tracking file (57 columns)
 - ConformerDetail: Per-molecule JSON detail file
 """
 
 from datetime import datetime, timezone
 from pathlib import Path
 
-from pydantic import BaseModel, Field, computed_field, field_serializer, model_validator
+from pydantic import BaseModel, Field, computed_field, field_serializer
 
 from grimperium.crest_pm7.batch.enums import (
     BatchFailurePolicy,
@@ -109,7 +109,7 @@ class BatchMolecule(BaseModel):
     nrotbonds: int = Field(default=0, description="Number of rotatable bonds")
 
     # Retry tracking
-    retry_count: int = Field(default=0, description="Number of previous attempts")
+    reruns: int = Field(default=0, description="Number of previous attempts")
 
 
 class Batch(BaseModel):
@@ -159,49 +159,125 @@ class Batch(BaseModel):
 
 
 class BatchRowCSV(BaseModel):
-    """Schema for a row in the batch tracking CSV file.
+    """Schema for a row in the batch tracking CSV file (57 columns).
 
-    This model defines the Phase A CSV columns.
+    This model defines the CSV columns matching the target schema.
     Used for validation and documentation.
     """
 
-    # === Identification (from input) ===
+    # === Identity (3) ===
     mol_id: str = Field(..., description="Unique molecule identifier")
-    smiles: str = Field(..., description="SMILES string")
-
-    # === Molecular Descriptors (from input) ===
-    nheavy: int = Field(..., description="Number of heavy atoms")
-    nrotbonds: int = Field(default=0, description="Number of rotatable bonds")
-    tpsa: float | None = Field(default=None, description="Topological PSA")
-    aromatic_rings: int | None = Field(
-        default=None, description="Number of aromatic rings"
-    )
-    has_heteroatoms: bool | None = Field(
-        default=None, description="Whether has heteroatoms"
-    )
-
-    # === Reference Data (from input) ===
-    reference_hof: float | None = Field(
-        default=None, description="CBS-QB3 reference HOF (kcal/mol)"
-    )
-
-    # === Batch Status ===
     status: MoleculeStatus = Field(
         default=MoleculeStatus.PENDING, description="Current processing status"
     )
-    retry_count: int = Field(default=0, description="Number of retry attempts")
-    max_retries: int = Field(default=3, description="Max retries before Skip")
+    smiles: str = Field(..., description="SMILES string")
 
-    # === Batch Assignment ===
+    # === Molecular Properties (7) ===
+    multiplicity: int = Field(default=1, description="Spin multiplicity")
+    charge: int = Field(default=0, description="Molecular charge")
+    nheavy: int = Field(..., description="Number of heavy atoms")
+    H298_cbs: float | None = Field(
+        default=None, description="CBS-QB3 reference enthalpy (kcal/mol)"
+    )
+    H298_pm7: float | None = Field(
+        default=None, description="PM7 enthalpy (kcal/mol)"
+    )
+    target_delta_kcalmol: float | None = Field(
+        default=None, description="Signed delta: H298_cbs - H298_pm7"
+    )
+    abs_diff_pct: float | None = Field(
+        default=None, alias="abs_diff_%", description="Percentage difference"
+    )
+
+    # === Batch Info (4) ===
     batch_id: str | None = Field(default=None, description="Current batch ID")
+    timestamp: str | None = Field(default=None, description="Processing timestamp")
+    total_time: float | None = Field(default=None, description="Total time (min)")
+    reruns: int = Field(default=0, description="Number of reruns")
+
+    # === RDKit Descriptors (15) ===
+    rdkit_nrotbonds: int | None = Field(default=None, description="Rotatable bonds")
+    rdkit_tpsa: float | None = Field(default=None, description="Topological PSA")
+    rdkit_num_rings: int | None = Field(default=None, description="Aromatic rings")
+    rdkit_fsp3: float | None = Field(default=None, description="Fraction sp3 carbons")
+    rdkit_mol_weight: float | None = Field(default=None, description="Molecular weight")
+    rdkit_hbond_donors: int | None = Field(default=None, description="H-bond donors")
+    rdkit_hbond_acceptors: int | None = Field(
+        default=None, description="H-bond acceptors"
+    )
+    rdkit_nC: int | None = Field(default=None, description="Carbon atom count")
+    rdkit_nH: int | None = Field(default=None, description="Hydrogen atom count")
+    rdkit_nO: int | None = Field(default=None, description="Oxygen atom count")
+    rdkit_nN: int | None = Field(default=None, description="Nitrogen atom count")
+    rdkit_bonds_single: int | None = Field(default=None, description="Single bonds")
+    rdkit_bonds_double: int | None = Field(default=None, description="Double bonds")
+    rdkit_bonds_triple: int | None = Field(default=None, description="Triple bonds")
+    rdkit_bonds_aromatic: int | None = Field(default=None, description="Aromatic bonds")
+
+    # === CREST (12) ===
+    crest_status: str | None = Field(default=None, description="CREST status")
+    xtb: bool | None = Field(default=None, description="xTB pre-optimization")
+    v3: bool | None = Field(default=None, description="CREST v3 algorithm")
+    qm: bool | None = Field(default=None, description="CREST quick mode enabled")
+    nci: bool | None = Field(default=None, description="CREST NCI mode")
+    c_method: str | None = Field(default=None, description="CREST method")
+    energy_window: float | None = Field(
+        default=None, description="CREST energy window (kcal/mol)"
+    )
+    rmsd_threshold: float | None = Field(
+        default=None, description="CREST RMSD threshold (A)"
+    )
+    opt_lvl: int | None = Field(
+        default=None, description="CREST optimization level (0-2)"
+    )
+    crest_conformers_generated: int | None = Field(
+        default=None, description="Conformers from CREST"
+    )
+    num_conformers_selected: int | None = Field(
+        default=None, description="Conformers sent to MOPAC"
+    )
+    crest_time_s: float | None = Field(
+        default=None, description="CREST execution time (s)"
+    )
+
+    # === MOPAC (13) ===
+    mopac_status: str | None = Field(default=None, description="MOPAC status")
+    k_selected_pm7: int | None = Field(
+        default=None, description="CREST rank of PM7-selected conformer"
+    )
+    mopac_dipole_debye: float | None = Field(default=None, description="Dipole (Debye)")
+    mopac_ionization_potential_ev: float | None = Field(
+        default=None, description="Ionization potential (eV)"
+    )
+    mopac_homo_ev: float | None = Field(default=None, description="HOMO energy (eV)")
+    mopac_lumo_ev: float | None = Field(default=None, description="LUMO energy (eV)")
+    mopac_gap_ev: float | None = Field(
+        default=None, description="HOMO-LUMO gap (eV)"
+    )
+    mopac_cosmo_area_a2: float | None = Field(
+        default=None, description="COSMO area (A^2)"
+    )
+    mopac_cosmo_volume_a3: float | None = Field(
+        default=None, description="COSMO volume (A^3)"
+    )
+    mopac_gradient_norm: float | None = Field(
+        default=None, description="Gradient norm (kcal/mol/A)"
+    )
+    mopac_num_scf_cycles: int | None = Field(
+        default=None, description="SCF cycle count"
+    )
+    mopac_point_group: str | None = Field(default=None, description="Point group")
+    mopac_time_s: float | None = Field(
+        default=None, description="MOPAC execution time (s)"
+    )
+
+    # === Batch Config (4) ===
     batch_order: int | None = Field(
         default=None, description="Position in batch (1-indexed)"
     )
     batch_failure_policy: BatchFailurePolicy | None = Field(
         default=None, description="Failure policy for current batch"
     )
-
-    # === Timeout Configuration (per batch) ===
     assigned_crest_timeout: float | None = Field(
         default=None, description="Assigned CREST timeout (minutes)"
     )
@@ -209,107 +285,9 @@ class BatchRowCSV(BaseModel):
         default=None, description="Assigned MOPAC timeout (minutes)"
     )
 
-    # === CREST Configuration (per batch) ===
-    v3: bool | None = Field(default=None, description="CREST v3 algorithm")
-    qm: bool | None = Field(default=None, description="CREST quick mode enabled")
-    nci: bool | None = Field(default=None, description="CREST NCI mode")
-    c_method: str | None = Field(default=None, description="CREST method")
-    energy_window: float | None = Field(
-        default=None, gt=0, description="CREST energy window (kcal/mol)"
-    )
-    rmsd_threshold: float | None = Field(
-        default=None, gt=0, description="CREST RMSD threshold (A)"
-    )
-    opt_lvl: int | None = Field(
-        default=None, ge=0, le=2, description="CREST optimization level (0-2)"
-    )
-    crest_optlev: str | None = Field(
-        default=None, description="CREST optimization label"
-    )
-    threads: int | None = Field(default=None, gt=0, description="CREST threads")
-    xtb: bool | None = Field(default=None, description="xTB pre-optimization")
-
-    # === MOPAC Configuration (per batch) ===
-    precise_scf: bool | None = Field(default=None, description="MOPAC precise SCF")
-    scf_threshold: float | None = Field(default=None, description="MOPAC SCF threshold")
-
-    # === CREST Execution Results ===
-    crest_status: str | None = Field(default=None, description="CREST status")
-    crest_conformers_generated: int | None = Field(
-        default=None, description="Conformers from CREST"
-    )
-    crest_time: float | None = Field(
-        default=None, description="CREST execution time (s)"
-    )
-    crest_error: str | None = Field(default=None, description="CREST error message")
-
-    # === MOPAC Execution Results ===
-    num_conformers_selected: int | None = Field(
-        default=None, description="Conformers sent to MOPAC"
-    )
-    most_stable_hof: float | None = Field(
-        default=None, description="Best HOF (kcal/mol)"
-    )
-    quality_grade: str | None = Field(default=None, description="Quality grade")
-
-    # === Delta-E (Energy Spread) ===
-    delta_e_12: float | None = Field(
-        default=None, description="Energy diff conf1-conf2 (kcal/mol)"
-    )
-    delta_e_13: float | None = Field(
-        default=None, description="Energy diff conf1-conf3 (kcal/mol)"
-    )
-    delta_e_15: float | None = Field(
-        default=None, description="Energy diff conf1-conf5 (kcal/mol)"
-    )
-
-    # === Final Status ===
-    success: bool | None = Field(default=None, description="Processing succeeded")
-    error_message: str | None = Field(default=None, description="Error if failed")
-    total_execution_time: float | None = Field(
-        default=None, description="Total time (s)"
-    )
-    total_time: float | None = Field(default=None, description="Total time (min)")
-
-    # === Actual Timeouts Used ===
-    actual_crest_timeout_used: float | None = Field(
-        default=None, description="Actual CREST timeout (min)"
-    )
-    actual_mopac_timeout_used: float | None = Field(
-        default=None, description="Actual MOPAC timeout (min)"
-    )
-
-    # === Timestamps ===
-    timestamp: datetime | None = Field(
-        default=None, description="Last processing timestamp"
-    )
-
-    # === Error Tracking ===
-    last_error_message: str | None = Field(
-        default=None, description="Most recent error (kept for audit)"
-    )
-
-    @field_serializer("timestamp", mode="plain")
-    def serialize_timestamp(self, v: datetime | None) -> str | None:
-        """Serialize datetime to ISO format."""
-        return v.isoformat() if v is not None else None
-
-    @model_validator(mode="after")
-    def _sync_total_time_fields(self) -> "BatchRowCSV":
-        """Keep `total_execution_time` (s) and `total_time` (min) consistent.
-
-        Canonical field is `total_execution_time` in seconds.
-        If only `total_time` is provided, derive seconds from minutes.
-        If seconds are provided, always derive minutes from seconds.
-        """
-        if self.total_execution_time is not None:
-            self.total_time = self.total_execution_time / 60.0
-        elif self.total_time is not None:
-            self.total_execution_time = self.total_time * 60.0
-        return self
-
     model_config = {
         "use_enum_values": True,
+        "populate_by_name": True,
     }
 
 

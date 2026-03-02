@@ -47,26 +47,91 @@ class BatchCSVManager:
         df: Pandas DataFrame with molecule data (loaded lazily)
     """
 
+    # ── Column group definitions (57 columns total) ──
+
+    IDENTITY_COLUMNS = ["mol_id", "status", "smiles"]
+
+    MOLECULAR_PROPERTIES_COLUMNS = [
+        "multiplicity",
+        "charge",
+        "nheavy",
+        "H298_cbs",
+        "H298_pm7",
+        "target_delta_kcalmol",
+        "abs_diff_%",
+    ]
+
+    BATCH_INFO_COLUMNS = ["batch_id", "timestamp", "total_time", "reruns"]
+
+    RDKIT_COLUMNS = [
+        "rdkit_nrotbonds",
+        "rdkit_tpsa",
+        "rdkit_num_rings",
+        "rdkit_fsp3",
+        "rdkit_mol_weight",
+        "rdkit_hbond_donors",
+        "rdkit_hbond_acceptors",
+        "rdkit_nC",
+        "rdkit_nH",
+        "rdkit_nO",
+        "rdkit_nN",
+        "rdkit_bonds_single",
+        "rdkit_bonds_double",
+        "rdkit_bonds_triple",
+        "rdkit_bonds_aromatic",
+    ]
+
+    CREST_COLUMNS = [
+        "crest_status",
+        "xtb",
+        "v3",
+        "qm",
+        "nci",
+        "c_method",
+        "energy_window",
+        "rmsd_threshold",
+        "opt_lvl",
+        "crest_conformers_generated",
+        "num_conformers_selected",
+        "crest_time_s",
+    ]
+
+    MOPAC_COLUMNS = [
+        "mopac_status",
+        "k_selected_pm7",
+        "mopac_dipole_debye",
+        "mopac_ionization_potential_ev",
+        "mopac_homo_ev",
+        "mopac_lumo_ev",
+        "mopac_gap_ev",
+        "mopac_cosmo_area_a2",
+        "mopac_cosmo_volume_a3",
+        "mopac_gradient_norm",
+        "mopac_num_scf_cycles",
+        "mopac_point_group",
+        "mopac_time_s",
+    ]
+
+    BATCH_CONFIG_COLUMNS = [
+        "batch_order",
+        "batch_failure_policy",
+        "assigned_crest_timeout",
+        "assigned_mopac_timeout",
+    ]
+
     # Result columns that are cleared when resetting a batch
     RESULT_COLUMNS = [
         "crest_status",
         "crest_conformers_generated",
-        "crest_time",
-        "crest_error",
-        "mopac_status",  # NEW: Overall MOPAC status
+        "crest_time_s",
+        "mopac_status",
         "num_conformers_selected",
-        "mopac_time",  # NEW: Aggregated MOPAC execution time
-        "H298_pm7",  # Renamed from most_stable_hof
-        "abs_diff",  # NEW
-        "abs_diff_%",  # NEW
-        "quality_grade",
-        "success",
-        "error_message",
-        "total_execution_time",
-        "assigned_crest_timeout",  # Renamed from actual_crest_timeout_used
-        "assigned_mopac_timeout",  # Renamed from actual_mopac_timeout_used
-        "target_delta_kcalmol",  # Signed: H298_cbs - H298_pm7
-        "k_selected_pm7",  # CREST rank of PM7-selected conformer (1..5)
+        "H298_pm7",
+        "abs_diff_%",
+        "assigned_crest_timeout",
+        "assigned_mopac_timeout",
+        "target_delta_kcalmol",
+        "k_selected_pm7",
         "mopac_dipole_debye",
         "mopac_ionization_potential_ev",
         "mopac_homo_ev",
@@ -79,70 +144,8 @@ class BatchCSVManager:
         "mopac_point_group",
         "mopac_time_s",
         "timestamp",
-        "total_time",  # NEW: total time in minutes
-        "reruns",  # NEW
-    ]
-
-    # Identity column
-    IDENTITY_COLUMNS = ["mol_id"]
-
-    # Molecular properties columns
-    MOLECULAR_PROPERTIES_COLUMNS = [
-        "smiles",
-        "nheavy",
-        "nrotbonds",
-        "tpsa",
-        "aromatic_rings",
-        "has_heteroatoms",
-        "reference_hof",
-    ]
-
-    # Batch info columns
-    BATCH_INFO_COLUMNS = [
-        "status",
-        "batch_id",
-        "batch_order",
-        "batch_failure_policy",
-    ]
-
-    # CREST configuration columns
-    CREST_CONFIG_COLUMNS = [
-        "v3",  # Renamed from crest_v3
-        "qm",  # Renamed from crest_quick
-        "nci",  # Renamed from crest_nci
-        "c_method",  # Renamed from crest_gfnff
-        "energy_window",  # Renamed from crest_ewin
-        "rmsd_threshold",  # Renamed from crest_rthr
-        "opt_lvl",  # NEW: numeric optimization level
-        "crest_optlev",  # Keep old name for now
-        "threads",  # Renamed from crest_threads
-        "xtb",  # Renamed from crest_xtb_preopt
-    ]
-
-    # MOPAC configuration columns
-    MOPAC_CONFIG_COLUMNS = [
-        "precise_scf",  # Renamed from mopac_precise
-        "scf_threshold",  # Renamed from mopac_scfcrt
-        # Note: mopac_itry, mopac_pulay, mopac_prtall, mopac_archive not in Phase A CSV
-    ]
-
-    # Retry tracking columns
-    RETRY_TRACKING_COLUMNS = [
-        "retry_count",
-        "last_error_message",
-        "max_retries",
-    ]
-
-    # Phase B reserved columns (for future ML features)
-    PHASE_B_RESERVED_COLUMNS = [
-        "reserved_42",
-        "reserved_43",
-        "reserved_44",
-        "reserved_45",
-        "reserved_46",
-        "reserved_47",
-        "reserved_48",
-        "reserved_49",
+        "total_time",
+        "reruns",
     ]
 
     def __init__(self, csv_path: Path | None) -> None:
@@ -160,25 +163,23 @@ class BatchCSVManager:
         """Get the full CSV schema with all column names.
 
         Returns:
-            List of column names in order (Phase A schema):
-            - Identity (1): mol_id
-            - Molecular properties (7): smiles, nheavy, nrotbonds, tpsa, etc.
-            - Batch info (4): status, batch_id, batch_order, batch_failure_policy
-            - CREST configuration (10): v3, qm, nci, c_method, energy_window, etc.
-            - MOPAC configuration (2): precise_scf, scf_threshold
-            - Results (23): crest_status, H298_pm7, deltas, mopac_time, etc.
-            - Retry tracking (3): retry_count, last_error_message, max_retries
-            - Phase B reserved (8): reserved_42 through reserved_49
+            List of 57 column names in order:
+            - Identity (3): mol_id, status, smiles
+            - Molecular properties (7): multiplicity, charge, nheavy, H298_cbs, etc.
+            - Batch info (4): batch_id, timestamp, total_time, reruns
+            - RDKit descriptors (15): rdkit_nrotbonds, rdkit_tpsa, etc.
+            - CREST (12): crest_status, xtb, v3, qm, etc.
+            - MOPAC (13): mopac_status, k_selected_pm7, etc.
+            - Batch config (4): batch_order, batch_failure_policy, etc.
         """
         return (
             self.IDENTITY_COLUMNS
             + self.MOLECULAR_PROPERTIES_COLUMNS
             + self.BATCH_INFO_COLUMNS
-            + self.CREST_CONFIG_COLUMNS
-            + self.MOPAC_CONFIG_COLUMNS
-            + self.RESULT_COLUMNS
-            + self.RETRY_TRACKING_COLUMNS
-            + self.PHASE_B_RESERVED_COLUMNS
+            + self.RDKIT_COLUMNS
+            + self.CREST_COLUMNS
+            + self.MOPAC_COLUMNS
+            + self.BATCH_CONFIG_COLUMNS
         )
 
     def load_csv(self) -> pd.DataFrame:
@@ -205,10 +206,7 @@ class BatchCSVManager:
                 "batch_id": str,
                 "batch_failure_policy": str,
                 "crest_status": str,
-                "quality_grade": str,
-                "crest_error": str,
-                "error_message": str,
-                "last_error_message": str,
+                "mopac_status": str,
                 # Force string type for timestamp to avoid float64 issues
                 "timestamp": str,
             },
@@ -234,14 +232,6 @@ class BatchCSVManager:
             LOG.warning(
                 "Normalized CSV column names (trimmed whitespace) to match schema."
             )
-
-        # Ensure boolean columns use object dtype to avoid FutureWarning
-        # when assigning True/False to columns that may contain NaN
-        bool_columns = ["success"]
-        for col in bool_columns:
-            if col in self.df.columns:
-                # Convert to object dtype to allow mixed bool/NaN values
-                self.df[col] = self.df[col].astype(object)
 
         # Validate required columns
         required_cols = {"mol_id", "smiles", "nheavy", "status"}
@@ -292,7 +282,7 @@ class BatchCSVManager:
     def _safe_int(self, val: Any, default: int = 0) -> int:
         """Safely convert value to int, handling NaN and invalid types.
 
-        WARNING: Truncates decimal values (e.g., 3.9 → 3).
+        WARNING: Truncates decimal values (e.g., 3.9 -> 3).
         Use with caution on CSV fields that may contain floats.
         A LOG.warning is emitted when truncation occurs.
         Uses math.isclose() to avoid spurious warnings from floating-point precision.
@@ -303,32 +293,20 @@ class BatchCSVManager:
 
         Returns:
             int: Converted value (truncated if float), or default
-
-        Behavior:
-            1. If NaN/None → return default
-            2. Try int(val) → return if succeeds
-            3. Try int(float(val)) → check for fractional part:
-               - If has fraction (e.g., 3.9) → LOG.warning + return truncated int
-               - If no fraction (e.g., 3.0) → return int silently
-            4. If all fail → LOG.warning + return default
         """
         if pd.isna(val):
             return default
 
         try:
-            # Direct conversion works for integers
             return int(val)
         except (ValueError, TypeError):
-            # Try float→int conversion (handles "3.0", 3.5, etc.)
             try:
                 if isinstance(val, str):
-                    val = val.strip()  # Remove whitespace
+                    val = val.strip()
 
                 float_val = float(val)
                 int_val = int(float_val)
 
-                # Warn if truncating non-integer float
-                # Use math.isclose to avoid spurious float precision warnings
                 if not math.isclose(float_val, int_val, rel_tol=1e-9, abs_tol=1e-9):
                     LOG.warning(
                         f"Truncating float {float_val} to int {int_val}. "
@@ -339,7 +317,6 @@ class BatchCSVManager:
                 return int_val
 
             except (ValueError, TypeError):
-                # Last resort: log and return default
                 LOG.warning(
                     f"Cannot convert '{val}' to int, using default {default}. "
                     f"Type: {type(val).__name__}"
@@ -376,18 +353,16 @@ class BatchCSVManager:
         try:
             df = self._ensure_loaded()
             idx = self._get_row_index(mol_id)
-            if "reference_hof" in df.columns:
-                val = df.at[idx, "reference_hof"]
-            elif "H298_cbs" in df.columns:
+            if "H298_cbs" in df.columns:
                 val = df.at[idx, "H298_cbs"]
             else:
-                LOG.debug(f"[{mol_id}] CSV missing reference_hof/H298_cbs columns")
+                LOG.debug(f"[{mol_id}] CSV missing H298_cbs column")
                 return None
             if pd.isna(val):
                 return None
             return float(val)
         except (KeyError, ValueError, TypeError) as e:
-            LOG.debug(f"[{mol_id}] Could not get reference_hof: {e}")
+            LOG.debug(f"[{mol_id}] Could not get H298_cbs: {e}")
             return None
 
     def generate_batch_id(self) -> str:
@@ -399,21 +374,17 @@ class BatchCSVManager:
         """
         df = self._ensure_loaded()
 
-        # Extract existing batch numbers from batch_id column
         existing_batches = df["batch_id"].dropna().unique()
         batch_numbers = []
 
         for batch_id in existing_batches:
-            # Extract number from format 'batch_NNNN'
             if isinstance(batch_id, str) and batch_id.startswith("batch_"):
                 try:
                     num = int(batch_id.replace("batch_", ""))
                     batch_numbers.append(num)
                 except ValueError:
-                    # Skip malformed batch IDs
                     pass
 
-        # Get next number
         next_number = max(batch_numbers, default=0) + 1
         return f"batch_{next_number:04d}"
 
@@ -446,7 +417,6 @@ class BatchCSVManager:
             ValueError: If parameters are invalid
             RuntimeError: If molecules are currently RUNNING
         """
-        # Validate parameters
         if batch_size < 1:
             raise ValueError("batch_size must be >= 1")
         if crest_timeout_minutes <= 0:
@@ -505,8 +475,8 @@ class BatchCSVManager:
                 smiles=row["smiles"],
                 batch_order=batch_order,
                 nheavy=self._safe_int(row["nheavy"], 0),
-                nrotbonds=self._safe_int(row.get("nrotbonds", 0), 0),
-                retry_count=self._safe_int(row.get("retry_count", 0), 0),
+                nrotbonds=self._safe_int(row.get("rdkit_nrotbonds", 0), 0),
+                reruns=self._safe_int(row.get("reruns", 0), 0),
             )
             molecules.append(mol)
 
@@ -548,7 +518,6 @@ class BatchCSVManager:
             Sorted DataFrame
         """
         if strategy == BatchSortingStrategy.RERUN_FIRST_THEN_EASY:
-            # RERUN first (sorted by mol_id), then PENDING (sorted by mol_id)
             df = df.copy()
             df["_sort_priority"] = df["status"].apply(
                 lambda x: 0 if x == MoleculeStatus.RERUN.value else 1
@@ -564,11 +533,11 @@ class BatchCSVManager:
             return df.sort_values("nheavy")
 
         elif strategy == BatchSortingStrategy.BY_NROTBONDS:
-            if "nrotbonds" in df.columns:
-                return df.sort_values("nrotbonds")
+            if "rdkit_nrotbonds" in df.columns:
+                return df.sort_values("rdkit_nrotbonds")
             else:
                 LOG.warning(
-                    "Column 'nrotbonds' not found, skipping BY_NROTBONDS sorting"
+                    "Column 'rdkit_nrotbonds' not found, skipping BY_NROTBONDS sorting"
                 )
                 return df
 
@@ -720,7 +689,7 @@ class BatchCSVManager:
 
         Args:
             mol_id: Molecule identifier
-            result_update: Dict with CSV column updates from _pm7result_to_csv_update
+            result_update: Dict with CSV column updates from pm7result_to_csv_update
         """
         # FUTURE PARALLELIZATION: Wrap with self._lock
         idx = self._get_row_index(mol_id)
@@ -740,11 +709,6 @@ class BatchCSVManager:
             if col in df.columns:
                 df.at[idx, col] = val
 
-        # Keep reruns aligned with retry_count for legacy schema compatibility
-        if "retry_count" in df.columns and "reruns" in df.columns:
-            retry_count = self._safe_int(df.at[idx, "retry_count"], default=0)
-            df.at[idx, "reruns"] = retry_count
-
         self.save_csv()
         LOG.debug(f"Marked {mol_id} as OK")
 
@@ -756,8 +720,8 @@ class BatchCSVManager:
     ) -> None:
         """Mark molecule for retry.
 
-        Transition: RUNNING -> RERUN (if retry_count < max_retries)
-        Transition: RUNNING -> SKIP (if retry_count >= max_retries)
+        Transition: RUNNING -> RERUN (if reruns < max allowed)
+        Transition: RUNNING -> SKIP (if reruns >= max allowed)
 
         Args:
             mol_id: Molecule identifier
@@ -772,37 +736,25 @@ class BatchCSVManager:
         if current_status != MoleculeStatus.RUNNING.value:
             LOG.warning(f"mark_rerun({mol_id}): expected RUNNING, got {current_status}")
 
-        # Increment retry count
-        retry_count = self._safe_int(df.at[idx, "retry_count"], default=0) + 1
+        # Increment reruns count
+        reruns = self._safe_int(df.at[idx, "reruns"], default=0) + 1
+        max_reruns = 3  # Default max reruns
 
-        # Handle max_retries explicitly (0 is valid)
-        max_retries_val = df.at[idx, "max_retries"]
-        if pd.isna(max_retries_val):
-            max_retries = 3
-        else:
-            max_retries = int(max_retries_val)
-            if max_retries < 0:
-                raise ValueError(f"max_retries must be >= 0, got {max_retries}")
-
-        df.at[idx, "retry_count"] = retry_count
+        df.at[idx, "reruns"] = reruns
 
         error_base = (error_message or "").strip()
         if not error_base:
             error_base = "Unknown error"
-        final_error_message = f"{error_base} (attempt {retry_count})"
-
-        if "last_error_message" in df.columns:
-            df.at[idx, "last_error_message"] = final_error_message
 
         # Determine next status
-        if retry_count >= max_retries:
+        if reruns >= max_reruns:
             df.at[idx, "status"] = MoleculeStatus.SKIP.value
-            LOG.warning(f"Marked {mol_id} as SKIP (retry_count={retry_count} >= max)")
+            LOG.warning(f"Marked {mol_id} as SKIP (reruns={reruns} >= max)")
         else:
             df.at[idx, "status"] = MoleculeStatus.RERUN.value
             LOG.warning(
                 f"Marked {mol_id} as RERUN "
-                f"({retry_count}/{max_retries}): {error_message}"
+                f"({reruns}/{max_reruns}): {error_message}"
             )
 
         # Apply partial results if provided
@@ -810,14 +762,6 @@ class BatchCSVManager:
             for col, val in result_update.items():
                 if col in df.columns:
                     df.at[idx, col] = val
-
-        # Always store final error message for audit/UI usage
-        if "error_message" in df.columns:
-            df.at[idx, "error_message"] = final_error_message
-
-        # Keep reruns aligned with retry_count for legacy schema compatibility
-        if "retry_count" in df.columns and "reruns" in df.columns:
-            df.at[idx, "reruns"] = retry_count
 
         self.save_csv()
 
@@ -834,52 +778,22 @@ class BatchCSVManager:
         Args:
             mol_id: Molecule identifier
             error_message: Error that caused the skip
-            force: Skip retry_count vs max_retries validation when True
+            force: Skip validation when True
         """
         # FUTURE PARALLELIZATION: Wrap with self._lock
         idx = self._get_row_index(mol_id)
         df = self._ensure_loaded()
 
-        retry_count = self._safe_int(df.at[idx, "retry_count"], default=0)
-        if "max_retries" in df.columns:
-            max_retries_val = df.at[idx, "max_retries"]
-        else:
-            max_retries_val = None
-        if pd.isna(max_retries_val):
-            max_retries = None
-        else:
-            max_retries = int(max_retries_val)
-            if max_retries < 0:
-                raise ValueError(f"max_retries must be >= 0, got {max_retries}")
-        if max_retries is None:
-            if not force:
-                raise ValueError(
-                    f"mark_skip({mol_id}): max_retries is missing or NaN "
-                    f"(retry_count={retry_count})"
-                )
-        elif not force and retry_count != max_retries:
-            raise ValueError(
-                f"mark_skip({mol_id}): retry_count={retry_count} "
-                f"does not match max_retries={max_retries}"
-            )
+        reruns = self._safe_int(df.at[idx, "reruns"], default=0)
 
         error_base = (error_message or "").strip()
         if not error_base:
             error_base = "Unknown error"
-        final_error_message = f"{error_base} (attempt {retry_count})"
 
         df.at[idx, "status"] = MoleculeStatus.SKIP.value
-        if "last_error_message" in df.columns:
-            df.at[idx, "last_error_message"] = final_error_message
-        if "error_message" in df.columns:
-            df.at[idx, "error_message"] = final_error_message
-
-        # Keep reruns aligned with retry_count for legacy schema compatibility
-        if "retry_count" in df.columns and "reruns" in df.columns:
-            df.at[idx, "reruns"] = retry_count
 
         self.save_csv()
-        LOG.warning(f"Marked {mol_id} as SKIP: {final_error_message}")
+        LOG.warning(f"Marked {mol_id} as SKIP (reruns={reruns}): {error_base}")
 
     def _update_extra_fields(
         self,
@@ -900,15 +814,6 @@ class BatchCSVManager:
 
         Raises:
             KeyError: If mol_id not found in CSV
-
-        Example:
-            >>> csv_manager.mark_success(mol_id, result_update)
-            >>> csv_manager._update_extra_fields(mol_id, {
-            ...     'delta_1': 0.0,
-            ...     'delta_2': 0.45,
-            ...     'v3': False,
-            ...     'c_method': 'gfn2-xtb',
-            ... })
         """
         # FUTURE PARALLELIZATION: Wrap with self._lock
         idx = self._get_row_index(mol_id)
@@ -945,7 +850,7 @@ class BatchCSVManager:
         1. failure_policy == ALL_OR_NOTHING
         2. Batch completed with at least one failure
 
-        Resets status to PENDING but keeps retry_count for audit.
+        Resets status to PENDING but keeps reruns for audit.
 
         Args:
             batch_id: Batch to reset
@@ -980,7 +885,6 @@ class BatchCSVManager:
             # Clear execution results
             self._clear_execution_results(idx)
 
-            # Keep retry_count and last_error_message for audit
             reset_count += 1
 
             LOG.debug(f"Reset {df.at[idx, 'mol_id']}: {current_status} -> PENDING")
@@ -1000,6 +904,37 @@ class BatchCSVManager:
         for col in self.RESULT_COLUMNS:
             if col in df.columns:
                 df.at[idx, col] = None
+
+    def reset_stuck_running(self) -> int:
+        """Reset RUNNING molecules to PENDING on startup recovery.
+
+        When a batch is interrupted (crash, Ctrl+C, etc.), molecules may be
+        left in RUNNING status. This method recovers them by resetting to
+        PENDING and incrementing reruns.
+
+        Returns:
+            Number of molecules reset
+        """
+        df = self._ensure_loaded()
+
+        running_mask = df["status"] == MoleculeStatus.RUNNING.value
+        if not running_mask.any():
+            return 0
+
+        count = int(running_mask.sum())
+        for idx in df[running_mask].index:
+            mol_id = df.at[idx, "mol_id"]
+            reruns = self._safe_int(df.at[idx, "reruns"], default=0)
+            df.at[idx, "status"] = MoleculeStatus.PENDING.value
+            df.at[idx, "reruns"] = reruns + 1
+            LOG.warning(
+                f"Reset stuck RUNNING molecule {mol_id} to PENDING "
+                f"(reruns={reruns + 1})"
+            )
+
+        self.save_csv()
+        LOG.info(f"Reset {count} stuck RUNNING molecules to PENDING")
+        return count
 
     def pm7result_to_csv_update(
         self,
@@ -1026,32 +961,20 @@ class BatchCSVManager:
         Returns:
             Dict with CSV column updates
         """
-        # Calculate metrics if H298_cbs and H298_pm7 are available
+        # Calculate H298_pm7
         h298_pm7 = (
             round(result.most_stable_hof, 2)
             if getattr(result, "most_stable_hof", None) is not None
             else None
         )
-        h298_cbs = result.H298_cbs if hasattr(result, "H298_cbs") else None
 
-        abs_diff = None
+        # Calculate abs_diff_%
+        h298_cbs = result.H298_cbs if hasattr(result, "H298_cbs") else None
         abs_diff_pct = None
         if h298_pm7 is not None and h298_cbs is not None:
-            abs_diff = round(abs(h298_cbs - h298_pm7), 4)
+            abs_diff = abs(h298_cbs - h298_pm7)
             if h298_cbs != 0:
                 abs_diff_pct = round((abs_diff / abs(h298_cbs)) * 100, 2)
-
-        # Calculate mopac_time (aggregate from all conformers)
-        mopac_time = None
-        if hasattr(result, "conformers") and result.conformers:
-            times = [
-                c.mopac_execution_time
-                for c in result.conformers
-                if hasattr(c, "mopac_execution_time")
-                and c.mopac_execution_time is not None
-            ]
-            if times:
-                mopac_time = round(sum(times), 1)
 
         # Calculate mopac_status (overall status based on conformers)
         mopac_status = None
@@ -1068,50 +991,35 @@ class BatchCSVManager:
         if mopac_status is None:
             mopac_status = MOPAC_STATUS_NOT_ATTEMPTED
 
-        return {
-            # RDKit Descriptors (from PM7Result)
-            "nrotbonds": result.nrotbonds if hasattr(result, "nrotbonds") else None,
-            "tpsa": (
-                round(result.tpsa, 2)
-                if hasattr(result, "tpsa") and result.tpsa is not None
-                else None
-            ),
-            "aromatic_rings": (
-                result.aromatic_rings if hasattr(result, "aromatic_rings") else None
-            ),
+        # Map RDKit descriptors from result
+        rdkit_updates: dict[str, Any] = {}
+        rdkit_desc = getattr(result, "rdkit_descriptors", None) or {}
+        for key in self.RDKIT_COLUMNS:
+            rdkit_updates[key] = rdkit_desc.get(key)
+
+        update: dict[str, Any] = {
+            # RDKit descriptors
+            **rdkit_updates,
             # CREST Execution
             "crest_status": (
                 result.crest_status.value if result.crest_status is not None else None
             ),
             "crest_conformers_generated": result.crest_conformers_generated,
-            "crest_time": (
+            "crest_time_s": (
                 round(result.crest_time, 1) if result.crest_time is not None else None
             ),
-            "crest_error": result.crest_error,
             # MOPAC Execution
-            "mopac_status": mopac_status,  # NEW: Computed from conformers
+            "mopac_status": mopac_status,
             "num_conformers_selected": result.num_conformers_selected,
-            "mopac_time": mopac_time,  # NEW: Aggregated from all conformers
-            "H298_pm7": h298_pm7,  # Renamed from most_stable_hof
-            "abs_diff": abs_diff,  # NEW: |H298_cbs - H298_pm7|
-            "abs_diff_%": abs_diff_pct,  # NEW: Percentage difference
-            "quality_grade": (
-                result.quality_grade.value if result.quality_grade is not None else None
-            ),
-            "success": result.success,
-            "error_message": result.error_message,
-            "total_execution_time": (
-                round(result.total_execution_time, 1)
-                if result.total_execution_time is not None
-                else None
-            ),
+            "H298_pm7": h298_pm7,
+            "abs_diff_%": abs_diff_pct,
             "total_time": (
                 round(result.total_execution_time / 60.0, 2)
                 if result.total_execution_time is not None
                 else None
             ),
-            "assigned_crest_timeout": round(crest_timeout_used, 1),  # Renamed
-            "assigned_mopac_timeout": round(mopac_timeout_used, 1),  # Renamed
+            "assigned_crest_timeout": round(crest_timeout_used, 1),
+            "assigned_mopac_timeout": round(mopac_timeout_used, 1),
             # PM7 selection & descriptors (populated by csv_enhancements)
             "target_delta_kcalmol": None,
             "k_selected_pm7": None,
@@ -1136,6 +1044,8 @@ class BatchCSVManager:
                 else None
             ),
         }
+
+        return update
 
     def get_status_counts(self) -> dict[str, int]:
         """Get count of molecules by status.

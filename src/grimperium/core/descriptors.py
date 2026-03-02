@@ -39,23 +39,63 @@ def _safe_descriptor(
         return None
 
 
-def extract_all_rdkit_descriptors(smiles: str) -> dict[str, float]:
-    """Extract RDKit descriptors useful for delta-learning.
+def _count_atoms_by_symbol(mol: Any, symbol: str) -> int:
+    """Count atoms of a given element in a molecule (including implicit H).
+
+    Args:
+        mol: RDKit molecule (should have explicit Hs added for H counts)
+        symbol: Atomic symbol (e.g. "C", "H", "O", "N")
+
+    Returns:
+        Count of atoms with the given symbol
+    """
+    return sum(1 for atom in mol.GetAtoms() if atom.GetSymbol() == symbol)
+
+
+def _count_bonds_by_type(mol: Any) -> dict[str, int]:
+    """Count bonds by type in a molecule.
+
+    Args:
+        mol: RDKit molecule
+
+    Returns:
+        Dict with keys: single, double, triple, aromatic
+    """
+    from rdkit.Chem import rdchem
+
+    counts = {"single": 0, "double": 0, "triple": 0, "aromatic": 0}
+    bond_type_map = {
+        rdchem.BondType.SINGLE: "single",
+        rdchem.BondType.DOUBLE: "double",
+        rdchem.BondType.TRIPLE: "triple",
+        rdchem.BondType.AROMATIC: "aromatic",
+    }
+    for bond in mol.GetBonds():
+        btype = bond_type_map.get(bond.GetBondType())
+        if btype:
+            counts[btype] += 1
+    return counts
+
+
+def extract_all_rdkit_descriptors(smiles: str) -> dict[str, float | int]:
+    """Extract RDKit descriptors matching the CSV schema (15 rdkit_* columns).
 
     Args:
         smiles: SMILES string
 
     Returns:
-        Dictionary of descriptor values (empty if SMILES invalid)
+        Dictionary with 15 rdkit_* descriptor values (empty if SMILES invalid)
 
     Example:
         >>> descriptors = extract_all_rdkit_descriptors("CCO")
-        >>> "mol_wt" in descriptors
+        >>> "rdkit_mol_weight" in descriptors
+        True
+        >>> len(descriptors) == 15
         True
     """
     try:
         from rdkit import Chem
-        from rdkit.Chem import Crippen, Descriptors
+        from rdkit.Chem import Descriptors
     except ImportError:
         logger.warning("RDKit not available, returning empty descriptor set")
         return {}
@@ -65,30 +105,42 @@ def extract_all_rdkit_descriptors(smiles: str) -> dict[str, float]:
         logger.warning("Invalid SMILES for RDKit descriptors: %s", smiles)
         return {}
 
-    descriptors: dict[str, float | None] = {
-        "mol_wt": _safe_descriptor(getattr(Descriptors, "MolWt", None), mol),
-        "hbd": _safe_descriptor(getattr(Descriptors, "NumHDonors", None), mol),
-        "hba": _safe_descriptor(getattr(Descriptors, "NumHAcceptors", None), mol),
-        "logp": _safe_descriptor(getattr(Crippen, "MolLogP", None), mol),
-        "ring_count": _safe_descriptor(getattr(Descriptors, "RingCount", None), mol),
-        "sat_ring_count": _safe_descriptor(
-            getattr(Descriptors, "NumSaturatedRings", None), mol
-        ),
-        "arom_ring_count": _safe_descriptor(
-            getattr(Descriptors, "NumAromaticRings", None), mol
-        ),
-        "num_heteroatoms": _safe_descriptor(
-            getattr(Descriptors, "NumHeteroatoms", None), mol
-        ),
-        "fraction_csp3": _safe_descriptor(
-            getattr(Descriptors, "FractionCSP3", None), mol
-        ),
-        "labute_asa": _safe_descriptor(getattr(Descriptors, "LabuteASA", None), mol),
-        "bertz_ct": _safe_descriptor(getattr(Descriptors, "BertzCT", None), mol),
-        "tpsa": _safe_descriptor(getattr(Descriptors, "TPSA", None), mol),
-        "nrotbonds": _safe_descriptor(
+    # Molecule with explicit hydrogens for atom counting
+    mol_h = Chem.AddHs(mol)
+
+    # Bond counts (on molecule without explicit H, to match aromatic perception)
+    bond_counts = _count_bonds_by_type(mol)
+
+    descriptors: dict[str, float | int | None] = {
+        "rdkit_nrotbonds": _safe_descriptor(
             getattr(Descriptors, "NumRotatableBonds", None), mol
         ),
+        "rdkit_tpsa": _safe_descriptor(getattr(Descriptors, "TPSA", None), mol),
+        "rdkit_num_rings": _safe_descriptor(
+            getattr(Descriptors, "NumAromaticRings", None), mol
+        ),
+        "rdkit_fsp3": _safe_descriptor(
+            getattr(Descriptors, "FractionCSP3", None), mol
+        ),
+        "rdkit_mol_weight": _safe_descriptor(
+            getattr(Descriptors, "MolWt", None), mol
+        ),
+        "rdkit_hbond_donors": _safe_descriptor(
+            getattr(Descriptors, "NumHDonors", None), mol
+        ),
+        "rdkit_hbond_acceptors": _safe_descriptor(
+            getattr(Descriptors, "NumHAcceptors", None), mol
+        ),
+        # Atom counts (on mol with explicit H)
+        "rdkit_nC": _count_atoms_by_symbol(mol_h, "C"),
+        "rdkit_nH": _count_atoms_by_symbol(mol_h, "H"),
+        "rdkit_nO": _count_atoms_by_symbol(mol_h, "O"),
+        "rdkit_nN": _count_atoms_by_symbol(mol_h, "N"),
+        # Bond counts
+        "rdkit_bonds_single": bond_counts["single"],
+        "rdkit_bonds_double": bond_counts["double"],
+        "rdkit_bonds_triple": bond_counts["triple"],
+        "rdkit_bonds_aromatic": bond_counts["aromatic"],
     }
 
     return {key: value for key, value in descriptors.items() if value is not None}

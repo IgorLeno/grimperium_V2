@@ -24,7 +24,7 @@ def csv_path(tmp_path: Path) -> Path:
 @pytest.fixture
 def sample_csv_content() -> str:
     """Sample CSV content with 3 molecules."""
-    return """mol_id,smiles,nheavy,nrotbonds,status,batch_id,batch_order,batch_failure_policy,retry_count,last_error_message,crest_status,crest_conformers_generated,crest_time,crest_error,num_conformers_selected,most_stable_hof,quality_grade,success,error_message,total_execution_time,actual_crest_timeout_used,actual_mopac_timeout_used,delta_e_12,delta_e_13,delta_e_15,timestamp,tpsa,aromatic_rings,has_heteroatoms,reference_hof,crest_v3,crest_quick,crest_nci,crest_gfnff,crest_ewin,crest_rthr,crest_optlev,crest_threads,crest_xtb_preopt,mopac_precise,mopac_scfcrt,mopac_itry,mopac_pulay,mopac_prtall,mopac_archive,max_retries
+    return """mol_id,smiles,nheavy,nrotbonds,status,batch_id,batch_order,batch_failure_policy,retry_count,last_error_message,crest_status,crest_conformers_generated,crest_time,crest_error,num_conformers_selected,most_stable_hof,quality_grade,success,error_message,total_execution_time,actual_crest_timeout_used,actual_mopac_timeout_used,delta_e_12,delta_e_13,delta_e_15,timestamp,tpsa,aromatic_rings,has_heteroatoms,H298_cbs,crest_v3,crest_quick,crest_nci,crest_gfnff,crest_ewin,crest_rthr,crest_optlev,crest_threads,crest_xtb_preopt,mopac_precise,mopac_scfcrt,mopac_itry,mopac_pulay,mopac_prtall,mopac_archive,max_retries
 id_00001,C,1,0,PENDING,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,3
 id_00002,CC,2,1,PENDING,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,3
 id_00003,CCC,3,2,PENDING,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,3
@@ -176,7 +176,7 @@ class TestGetReferenceHof:
 
     def test_get_reference_hof_returns_value(self, tmp_path: Path) -> None:
         """Test that get_reference_hof returns float when value exists."""
-        csv_content = """mol_id,smiles,nheavy,reference_hof,status
+        csv_content = """mol_id,smiles,nheavy,H298_cbs,status
 id_001,C,1,-42.5,PENDING
 id_002,CC,2,,PENDING
 """
@@ -190,7 +190,7 @@ id_002,CC,2,,PENDING
 
     def test_get_reference_hof_returns_none_for_empty(self, tmp_path: Path) -> None:
         """Test that get_reference_hof returns None when value is empty/NaN."""
-        csv_content = """mol_id,smiles,nheavy,reference_hof,status
+        csv_content = """mol_id,smiles,nheavy,H298_cbs,status
 id_001,C,1,-42.5,PENDING
 id_002,CC,2,,PENDING
 """
@@ -206,7 +206,7 @@ id_002,CC,2,,PENDING
         self, tmp_path: Path
     ) -> None:
         """Test that get_reference_hof returns None for non-existent mol_id."""
-        csv_content = """mol_id,smiles,nheavy,reference_hof,status
+        csv_content = """mol_id,smiles,nheavy,H298_cbs,status
 id_001,C,1,-42.5,PENDING
 """
         csv_path = tmp_path / "test.csv"

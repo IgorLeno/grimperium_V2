@@ -350,6 +350,13 @@ class BatchView(BaseView):
             processor_adapter=processor,
         )
 
+        # Recover any molecules stuck in RUNNING from interrupted batches
+        stuck_count = csv_manager.reset_stuck_running()
+        if stuck_count > 0:
+            self.console.print(
+                f"[yellow]Recovered {stuck_count} stuck RUNNING molecule(s) → PENDING[/yellow]"
+            )
+
         # Create batch
         batch_id = csv_manager.generate_batch_id()
         batch = csv_manager.select_batch(

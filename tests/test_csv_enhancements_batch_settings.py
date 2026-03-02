@@ -1,6 +1,6 @@
 """Tests for batch settings persistence in CSV.
 
-This module tests that batch configuration settings (CREST/MOPAC parameters)
+This module tests that batch configuration settings (CREST parameters)
 are correctly saved to CSV during batch execution.
 
 Bug fixed: BATCH 13 - SPEC #1
@@ -35,14 +35,9 @@ def test_batch_settings_persist_to_csv(tmp_path):
             "energy_window": [None],
             "rmsd_threshold": [None],
             "opt_lvl": [None],
-            "crest_optlev": [None],
-            "threads": [None],
             "xtb": [None],
-            "precise_scf": [None],
-            "scf_threshold": [None],
             "target_delta_kcalmol": [None],
             "k_selected_pm7": [None],
-            "abs_diff": [None],
             "abs_diff_%": [None],
         }
     )
@@ -52,7 +47,7 @@ def test_batch_settings_persist_to_csv(tmp_path):
     csv_manager = BatchCSVManager(csv_path)
     csv_manager.load_csv()
 
-    # Mock batch settings (typical CREST/MOPAC config)
+    # Mock batch settings (typical CREST config)
     batch_settings = {
         "v3": False,
         "qm": False,
@@ -61,11 +56,7 @@ def test_batch_settings_persist_to_csv(tmp_path):
         "energy_window": 10.0,
         "rmsd_threshold": 0.125,
         "opt_lvl": 1,
-        "crest_optlev": "normal",
-        "threads": 4,
         "xtb": True,
-        "precise_scf": True,
-        "scf_threshold": 1.0,
     }
 
     # Update molecule with settings
@@ -92,13 +83,7 @@ def test_batch_settings_persist_to_csv(tmp_path):
     assert df_updated.loc[0, "energy_window"] == 10.0
     assert df_updated.loc[0, "rmsd_threshold"] == 0.125
     assert df_updated.loc[0, "opt_lvl"] == 1
-    assert df_updated.loc[0, "crest_optlev"] == "normal"
-    assert df_updated.loc[0, "threads"] == 4
     assert df_updated.loc[0, "xtb"] == True  # noqa: E712
-
-    # Check MOPAC settings
-    assert df_updated.loc[0, "precise_scf"] == True  # noqa: E712
-    assert df_updated.loc[0, "scf_threshold"] == 1.0
 
     # Verify target delta is signed: -17.5 - (-15.3) = -2.2
     assert df_updated.loc[0, "target_delta_kcalmol"] == pytest.approx(-2.2)
@@ -117,7 +102,7 @@ def test_batch_settings_with_nan_deltas(tmp_path):
             "v3": [None],
             "c_method": [None],
             "energy_window": [None],
-            "target_delta_kcalmol": [None],  # NaN when h298 values missing
+            "target_delta_kcalmol": [None],
             "k_selected_pm7": [None],
         }
     )
@@ -132,7 +117,6 @@ def test_batch_settings_with_nan_deltas(tmp_path):
         "energy_window": 5.0,
     }
 
-    # Call with empty HOF values (not used for delta calculation anyway)
     success = CSVManagerExtensions.update_molecule_with_mopac_results(
         csv_manager=csv_manager,
         mol_id="mol_001",
@@ -156,7 +140,7 @@ def test_batch_settings_with_nan_deltas(tmp_path):
 
 
 def test_update_extra_fields_method(tmp_path):
-    """Test the new _update_extra_fields() method directly."""
+    """Test the _update_extra_fields() method directly."""
     csv_path = tmp_path / "test.csv"
     df = pd.DataFrame(
         {
@@ -165,7 +149,7 @@ def test_update_extra_fields_method(tmp_path):
             "nheavy": [2, 1],
             "status": ["OK", "RUNNING"],
             "v3": [None, None],
-            "abs_diff": [None, None],
+            "abs_diff_%": [None, None],
         }
     )
     df.to_csv(csv_path, index=False)
@@ -178,16 +162,16 @@ def test_update_extra_fields_method(tmp_path):
         mol_id="mol_001",
         field_updates={
             "v3": False,
-            "abs_diff": 2.2,
+            "abs_diff_%": 12.57,
         },
     )
 
     # Verify only mol_001 updated
     df_updated = pd.read_csv(csv_path)
     assert df_updated.loc[0, "v3"] == False  # noqa: E712
-    assert df_updated.loc[0, "abs_diff"] == 2.2
+    assert df_updated.loc[0, "abs_diff_%"] == 12.57
     assert pd.isna(df_updated.loc[1, "v3"])  # mol_002 unchanged
-    assert pd.isna(df_updated.loc[1, "abs_diff"])
+    assert pd.isna(df_updated.loc[1, "abs_diff_%"])
 
 
 def test_update_extra_fields_unknown_column_warning(tmp_path, caplog):
@@ -236,7 +220,6 @@ def test_multiple_molecules_batch_settings(tmp_path):
             "status": ["RUNNING", "RUNNING", "RUNNING"],
             "v3": [None, None, None],
             "c_method": [None, None, None],
-            "threads": [None, None, None],
         }
     )
     df.to_csv(csv_path, index=False)
@@ -248,7 +231,6 @@ def test_multiple_molecules_batch_settings(tmp_path):
     batch_settings = {
         "v3": False,
         "c_method": "gfn2-xtb",
-        "threads": 4,
     }
 
     for mol_id in ["mol_001", "mol_002", "mol_003"]:
@@ -267,7 +249,6 @@ def test_multiple_molecules_batch_settings(tmp_path):
     for i in range(3):
         assert df_updated.loc[i, "v3"] == False  # noqa: E712
         assert df_updated.loc[i, "c_method"] == "gfn2-xtb"
-        assert df_updated.loc[i, "threads"] == 4
 
 
 def test_fallback_path_missing_mol_id_returns_false(tmp_path, monkeypatch, caplog):
@@ -368,7 +349,7 @@ def test_fallback_path_save_only_after_successful_update(tmp_path, monkeypatch):
             "smiles": ["CCO"],
             "nheavy": [2],
             "status": ["RUNNING"],
-            "abs_diff": [None],  # Field that will be updated
+            "abs_diff_%": [None],  # Field that will be updated
         }
     )
     df.to_csv(csv_path, index=False)
@@ -390,7 +371,7 @@ def test_fallback_path_save_only_after_successful_update(tmp_path, monkeypatch):
 
     batch_settings = {}
 
-    # Update - abs_diff field exists and will be updated
+    # Update - abs_diff_% field exists and will be updated
     success = CSVManagerExtensions.update_molecule_with_mopac_results(
         csv_manager=csv_manager,
         mol_id="mol_001",
@@ -402,7 +383,7 @@ def test_fallback_path_save_only_after_successful_update(tmp_path, monkeypatch):
     )
 
     assert success
-    # save_csv should be called because abs_diff exists and was updated
+    # save_csv should be called because abs_diff_% exists and was updated
     assert len(save_called) == 1
 
 

@@ -7,7 +7,7 @@
 ║  Issue Fixed: #1 (CSV Fields - auto-calculate 11 missing columns)              ║
 ║                                                                                ║
 ║  Location: src/grimperium/crest_pm7/csv_enhancements.py                       ║
-║  Status: Production Ready (354 lines)                                         ║
+║  Status: Production Ready                                                     ║
 ║                                                                                ║
 ╚════════════════════════════════════════════════════════════════════════════════╝
 """
@@ -54,32 +54,6 @@ class DeltaCalculations:
         >>> best_idx  # Index of best conformer
         0
     """
-
-    @staticmethod
-    def calculate_abs_diff(h298_cbs: float | None, h298_pm7: float | None) -> float:
-        """
-        Calculate absolute difference between CBS and PM7 enthalpies.
-
-        Args:
-            h298_cbs: CBS-level enthalpy at 298K (kcal/mol)
-            h298_pm7: PM7 enthalpy at 298K (kcal/mol)
-
-        Returns:
-            Absolute difference |H298_CBS - H298_PM7|
-
-        Example:
-            >>> calculate_abs_diff(-17.5, -15.3)
-            2.2
-        """
-        if (
-            h298_cbs is None
-            or h298_pm7 is None
-            or pd.isna(h298_cbs)
-            or pd.isna(h298_pm7)
-        ):
-            return float(np.nan)
-
-        return float(abs(h298_cbs - h298_pm7))
 
     @staticmethod
     def calculate_abs_diff_pct(h298_cbs: float | None, h298_pm7: float | None) -> float:
@@ -162,16 +136,12 @@ class BatchSettingsCapture:
             pm7_config: PM7Config instance from grimperium.crest_pm7.config
 
         Returns:
-            Dictionary with settings:
-            - CREST settings: v3, qm, nci, c_method, energy_window, rmsd_threshold,
-              opt_lvl, threads, xtb
-            - MOPAC settings: precise_scf, scf_threshold
+            Dictionary with CREST settings: v3, qm, nci, c_method,
+            energy_window, rmsd_threshold, opt_lvl, xtb
 
         Example:
             >>> settings = capture_batch_settings(pm7_config)
             >>> settings['v3']
-            True
-            >>> settings['precise_scf']
             True
         """
 
@@ -209,24 +179,9 @@ class BatchSettingsCapture:
         settings["opt_lvl"] = getattr(
             pm7_config, "crest_opt_level", crest_config.get("opt_lvl")
         )
-        settings["crest_optlev"] = crest_config.get(
-            "crest_optlev", getattr(pm7_config, "crest_optlev_label", None)
-        )
-        settings["threads"] = getattr(
-            pm7_config, "crest_threads", crest_config.get("threads", 4)
-        )
         settings["xtb"] = crest_config.get(
             "xtb",
             getattr(pm7_config, "xtb_preopt", True),
-        )
-
-        # MOPAC settings
-        mopac_config = getattr(pm7_config, "mopac_config", {})
-        settings["precise_scf"] = getattr(
-            pm7_config, "mopac_precise_scf", mopac_config.get("precise_scf", True)
-        )
-        settings["scf_threshold"] = getattr(
-            pm7_config, "mopac_scf_threshold", mopac_config.get("scf_threshold", 1.0)
         )
 
         logger.debug(f"Captured batch settings: {settings}")
@@ -261,7 +216,7 @@ class CSVManagerExtensions:
     ) -> bool:
         """Update CSV with MOPAC descriptors, target delta, and batch settings.
 
-        This function integrates batch settings, abs_diff metrics, target delta,
+        This function integrates batch settings, abs_diff_% metric, target delta,
         and electronic descriptors from the selected conformer's .aux file.
 
         Args:
@@ -278,8 +233,7 @@ class CSVManagerExtensions:
         """
 
         try:
-            # Calculate absolute differences
-            abs_diff = DeltaCalculations.calculate_abs_diff(h298_cbs, h298_pm7)
+            # Calculate percentage difference
             abs_diff_pct = DeltaCalculations.calculate_abs_diff_pct(h298_cbs, h298_pm7)
 
             # Calculate signed target delta for delta-learning
@@ -305,7 +259,6 @@ class CSVManagerExtensions:
 
             # Prepare update dictionary
             updates: dict[str, Any] = {
-                "abs_diff": abs_diff,
                 "abs_diff_%": abs_diff_pct,
                 "target_delta_kcalmol": target_delta,
                 "k_selected_pm7": k_selected_pm7,
@@ -331,11 +284,7 @@ class CSVManagerExtensions:
                 "energy_window": batch_settings.get("energy_window"),
                 "rmsd_threshold": batch_settings.get("rmsd_threshold"),
                 "opt_lvl": batch_settings.get("opt_lvl"),
-                "crest_optlev": batch_settings.get("crest_optlev"),
-                "threads": batch_settings.get("threads"),
                 "xtb": batch_settings.get("xtb"),
-                "precise_scf": batch_settings.get("precise_scf"),
-                "scf_threshold": batch_settings.get("scf_threshold"),
             }
 
             # Update CSV via BatchCSVManager's update method
@@ -413,12 +362,10 @@ if __name__ == "__main__":
     target = DeltaCalculations.calculate_target_delta(-17.5, -15.3)
     print(f"   Target delta (CBS=-17.5, PM7=-15.3): {target:.2f}")
 
-    # Test abs diff
-    print("\n2. Testing absolute differences...")
-    abs_diff_val = DeltaCalculations.calculate_abs_diff(-17.5, -15.3)
+    # Test abs diff %
+    print("\n2. Testing percentage difference...")
     abs_diff_pct_val = DeltaCalculations.calculate_abs_diff_pct(-17.5, -15.3)
     print("   CBS: -17.5, PM7: -15.3")
-    print(f"   Absolute difference: {abs_diff_val:.2f}")
     print(f"   Percentage difference: {abs_diff_pct_val:.2f}%")
 
     # Test batch settings
@@ -432,7 +379,6 @@ if __name__ == "__main__":
     settings = BatchSettingsCapture.capture_batch_settings(config)
     print(f"   v3: {settings['v3']}")
     print(f"   energy_window: {settings['energy_window']}")
-    print(f"   precise_scf: {settings['precise_scf']}")
 
     # Test warning suppression
     print("\n4. Testing warning suppression...")

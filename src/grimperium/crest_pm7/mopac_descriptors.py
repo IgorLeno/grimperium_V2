@@ -112,24 +112,46 @@ def _parse_aux_file(aux_content: str) -> dict[str, Any]:
             pass
 
     # HOMO/LUMO from NUM_ELECTRONS + EIGENVALUES
+    # Use negative lookbehind to avoid matching ALPHA_EIGENVALUES or BETA_EIGENVALUES
     m_electrons = re.search(r"NUM_ELECTRONS=(\d+)", aux_content)
     m_eigenvalues = re.search(
-        r"EIGENVALUES\[\d+\]=\s*([\s\S]*?)(?:\n\s*[A-Z]|\Z)", aux_content
+        r"(?<![A-Z_])EIGENVALUES\[(\d+)\]=\s*([\s\S]*?)(?:\n\s*[A-Z]|\Z)", aux_content
     )
 
     if m_electrons and m_eigenvalues:
         try:
             num_electrons = int(m_electrons.group(1))
+            declared_count = int(m_eigenvalues.group(1))
+
             # Parse eigenvalue array (plain floats, whitespace-separated)
-            eigenvalue_text = m_eigenvalues.group(1).strip()
+            eigenvalue_text = m_eigenvalues.group(2).strip()
             eigenvalues = [float(v) for v in eigenvalue_text.split()]
+
+            # Validate parsed count against declared count
+            if len(eigenvalues) != declared_count:
+                LOG.warning(
+                    f"EIGENVALUES count mismatch: declared {declared_count}, "
+                    f"parsed {len(eigenvalues)}. Using parsed values cautiously."
+                )
 
             homo_idx = (num_electrons // 2) - 1  # 0-indexed
             lumo_idx = num_electrons // 2
 
-            if 0 <= homo_idx < len(eigenvalues):
+            # Bounds checking with diagnostic logging
+            if homo_idx < 0 or homo_idx >= len(eigenvalues):
+                LOG.warning(
+                    f"HOMO index {homo_idx} out of range for {len(eigenvalues)} "
+                    f"eigenvalues (num_electrons={num_electrons})"
+                )
+            else:
                 result["mopac_homo_ev"] = eigenvalues[homo_idx]
-            if 0 <= lumo_idx < len(eigenvalues):
+
+            if lumo_idx < 0 or lumo_idx >= len(eigenvalues):
+                LOG.warning(
+                    f"LUMO index {lumo_idx} out of range for {len(eigenvalues)} "
+                    f"eigenvalues (num_electrons={num_electrons})"
+                )
+            else:
                 result["mopac_lumo_ev"] = eigenvalues[lumo_idx]
 
             if not np.isnan(result["mopac_homo_ev"]) and not np.isnan(
@@ -139,7 +161,7 @@ def _parse_aux_file(aux_content: str) -> dict[str, Any]:
                     result["mopac_lumo_ev"] - result["mopac_homo_ev"]
                 )
         except (ValueError, IndexError) as exc:
-            LOG.debug(f"Failed to parse HOMO/LUMO from eigenvalues: {exc}")
+            LOG.warning(f"Failed to parse HOMO/LUMO from eigenvalues: {exc}")
 
     return result
 

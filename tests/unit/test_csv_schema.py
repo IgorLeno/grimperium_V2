@@ -20,80 +20,111 @@ class TestCSVSchema:
         """Create BatchCSVManager with dummy path."""
         return BatchCSVManager(tmp_path / "test.csv")
 
-    def test_schema_contains_crest_settings(self, manager: BatchCSVManager) -> None:
-        """Verify CREST columns exist."""
-        schema = manager.get_schema()
-
-        crest_columns = [
-            "v3",  # Renamed from crest_v3
-            "qm",  # Renamed from crest_quick
-            "nci",  # Renamed from crest_nci
-            "c_method",  # Renamed from crest_gfnff
-            "energy_window",  # Renamed from crest_ewin
-            "rmsd_threshold",  # Renamed from crest_rthr
-            "opt_lvl",  # New numeric optimization level
-            "crest_optlev",  # Keep old name for now
-            "threads",  # Renamed from crest_threads
-            "xtb",  # Renamed from crest_xtb_preopt
-        ]
-
-        for col in crest_columns:
-            assert col in schema, f"Missing CREST column: {col}"
-
-    def test_schema_contains_mopac_settings(self, manager: BatchCSVManager) -> None:
-        """Verify MOPAC columns exist (Phase A names)."""
-        schema = manager.get_schema()
-
-        mopac_columns = [
-            "precise_scf",  # Renamed from mopac_precise
-            "scf_threshold",  # Renamed from mopac_scfcrt
-            # Note: mopac_itry, mopac_pulay, mopac_prtall, mopac_archive not in Phase A
-        ]
-
-        for col in mopac_columns:
-            assert col in schema, f"Missing MOPAC column: {col}"
-
-    def test_crest_xtb_preopt_in_schema(self, manager: BatchCSVManager) -> None:
-        """Verify xtb column exists (renamed from crest_xtb_preopt)."""
-        schema = manager.get_schema()
-        assert "xtb" in schema
-
     def test_schema_length(self, manager: BatchCSVManager) -> None:
-        """Verify schema has expected column count.
+        """Verify schema has expected 57-column count.
 
-        Current: 67 columns (Phase A complete schema with PM7 descriptors)
-        - 1 identity column
+        - 3 identity columns
         - 7 molecular property columns
         - 4 batch info columns
-        - 10 CREST config columns
-        - 2 MOPAC config columns
-        - 32 results columns (was 23, +13 descriptors, -4 old deltas)
-        - 3 retry tracking columns
-        - 8 reserved Phase B placeholder columns
+        - 15 RDKit descriptor columns
+        - 12 CREST columns
+        - 13 MOPAC columns
+        - 3 batch config columns (batch_order moved here)
         """
         schema = manager.get_schema()
-        assert len(schema) == 67, f"Expected 67 columns, got {len(schema)}"
+        assert len(schema) == 58, f"Expected 58 columns, got {len(schema)}"
 
-    def test_schema_order(self, manager: BatchCSVManager) -> None:
-        """Verify schema column order."""
+    def test_schema_exact_order(self, manager: BatchCSVManager) -> None:
+        """Verify schema matches target 57-column order exactly."""
         schema = manager.get_schema()
-
-        assert schema[0] == "mol_id"
-        assert schema[1] == "smiles"
-        assert "status" in schema
-        assert "xtb" in schema  # Renamed from crest_xtb_preopt
-        assert "retry_count" in schema
-        assert "last_error_message" in schema
-
-        retry_idx = schema.index("retry_count")
-        last_error_idx = schema.index("last_error_message")
-        assert retry_idx < last_error_idx
+        expected = [
+            "mol_id", "status", "smiles",
+            "multiplicity", "charge", "nheavy", "H298_cbs",
+            "H298_pm7", "target_delta_kcalmol", "abs_diff_%",
+            "batch_id", "timestamp", "total_time", "reruns",
+            "rdkit_nrotbonds", "rdkit_tpsa", "rdkit_num_rings", "rdkit_fsp3",
+            "rdkit_mol_weight", "rdkit_hbond_donors", "rdkit_hbond_acceptors",
+            "rdkit_nC", "rdkit_nH", "rdkit_nO", "rdkit_nN",
+            "rdkit_bonds_single", "rdkit_bonds_double", "rdkit_bonds_triple",
+            "rdkit_bonds_aromatic",
+            "crest_status", "xtb", "v3", "qm", "nci", "c_method",
+            "energy_window", "rmsd_threshold", "opt_lvl",
+            "crest_conformers_generated", "num_conformers_selected", "crest_time_s",
+            "mopac_status", "k_selected_pm7",
+            "mopac_dipole_debye", "mopac_ionization_potential_ev",
+            "mopac_homo_ev", "mopac_lumo_ev", "mopac_gap_ev",
+            "mopac_cosmo_area_a2", "mopac_cosmo_volume_a3",
+            "mopac_gradient_norm", "mopac_num_scf_cycles", "mopac_point_group",
+            "mopac_time_s",
+            "batch_order", "batch_failure_policy",
+            "assigned_crest_timeout", "assigned_mopac_timeout",
+        ]
+        assert schema == expected
 
     def test_schema_no_duplicates(self, manager: BatchCSVManager) -> None:
         """Verify no duplicate columns."""
         schema = manager.get_schema()
         unique_columns = set(schema)
         assert len(schema) == len(unique_columns), "Duplicate columns found"
+
+    def test_schema_contains_crest_settings(self, manager: BatchCSVManager) -> None:
+        """Verify CREST columns exist."""
+        schema = manager.get_schema()
+
+        crest_columns = [
+            "crest_status", "xtb", "v3", "qm", "nci", "c_method",
+            "energy_window", "rmsd_threshold", "opt_lvl",
+            "crest_conformers_generated", "num_conformers_selected", "crest_time_s",
+        ]
+
+        for col in crest_columns:
+            assert col in schema, f"Missing CREST column: {col}"
+
+    def test_schema_contains_mopac_columns(self, manager: BatchCSVManager) -> None:
+        """Verify MOPAC columns exist."""
+        schema = manager.get_schema()
+
+        mopac_columns = [
+            "mopac_status", "k_selected_pm7",
+            "mopac_dipole_debye", "mopac_ionization_potential_ev",
+            "mopac_homo_ev", "mopac_lumo_ev", "mopac_gap_ev",
+            "mopac_cosmo_area_a2", "mopac_cosmo_volume_a3",
+            "mopac_gradient_norm", "mopac_num_scf_cycles", "mopac_point_group",
+            "mopac_time_s",
+        ]
+
+        for col in mopac_columns:
+            assert col in schema, f"Missing MOPAC column: {col}"
+
+    def test_schema_contains_rdkit_columns(self, manager: BatchCSVManager) -> None:
+        """Verify RDKit descriptor columns exist with rdkit_ prefix."""
+        schema = manager.get_schema()
+
+        rdkit_columns = [
+            "rdkit_nrotbonds", "rdkit_tpsa", "rdkit_num_rings", "rdkit_fsp3",
+            "rdkit_mol_weight", "rdkit_hbond_donors", "rdkit_hbond_acceptors",
+            "rdkit_nC", "rdkit_nH", "rdkit_nO", "rdkit_nN",
+            "rdkit_bonds_single", "rdkit_bonds_double", "rdkit_bonds_triple",
+            "rdkit_bonds_aromatic",
+        ]
+
+        for col in rdkit_columns:
+            assert col in schema, f"Missing RDKit column: {col}"
+
+    def test_schema_removed_old_columns(self, manager: BatchCSVManager) -> None:
+        """Verify old columns are no longer in schema."""
+        schema = manager.get_schema()
+
+        removed = [
+            "reference_hof", "has_heteroatoms", "quality_grade",
+            "success", "error_message", "total_execution_time",
+            "crest_error", "mopac_time", "precise_scf", "scf_threshold",
+            "crest_optlev", "threads", "retry_count", "last_error_message",
+            "max_retries", "reserved_42", "reserved_43", "reserved_44",
+        ]
+
+        for col in removed:
+            assert col not in schema, f"Old column still present: {col}"
 
     def test_result_columns_in_schema(self, manager: BatchCSVManager) -> None:
         """Verify RESULT_COLUMNS are in schema."""
@@ -104,51 +135,25 @@ class TestCSVSchema:
 
     def test_identity_columns(self, manager: BatchCSVManager) -> None:
         """Verify identity columns class attribute."""
-        assert ["mol_id"] == manager.IDENTITY_COLUMNS
+        assert ["mol_id", "status", "smiles"] == manager.IDENTITY_COLUMNS
 
     def test_molecular_properties_columns(self, manager: BatchCSVManager) -> None:
         """Verify molecular properties columns class attribute."""
         expected = [
-            "smiles",
-            "nheavy",
-            "nrotbonds",
-            "tpsa",
-            "aromatic_rings",
-            "has_heteroatoms",
-            "reference_hof",
+            "multiplicity", "charge", "nheavy", "H298_cbs",
+            "H298_pm7", "target_delta_kcalmol", "abs_diff_%",
         ]
         assert expected == manager.MOLECULAR_PROPERTIES_COLUMNS
 
     def test_batch_info_columns(self, manager: BatchCSVManager) -> None:
         """Verify batch info columns class attribute."""
-        expected = ["status", "batch_id", "batch_order", "batch_failure_policy"]
+        expected = ["batch_id", "timestamp", "total_time", "reruns"]
         assert expected == manager.BATCH_INFO_COLUMNS
 
-    def test_crest_config_columns(self, manager: BatchCSVManager) -> None:
-        """Verify CREST config columns class attribute (Phase A names)."""
+    def test_batch_config_columns(self, manager: BatchCSVManager) -> None:
+        """Verify batch config columns class attribute."""
         expected = [
-            "v3",  # Renamed from crest_v3
-            "qm",  # Renamed from crest_quick
-            "nci",  # Renamed from crest_nci
-            "c_method",  # Renamed from crest_gfnff
-            "energy_window",  # Renamed from crest_ewin
-            "rmsd_threshold",  # Renamed from crest_rthr
-            "opt_lvl",  # New numeric optimization level
-            "crest_optlev",  # Keep old name for now
-            "threads",  # Renamed from crest_threads
-            "xtb",  # Renamed from crest_xtb_preopt
+            "batch_order", "batch_failure_policy",
+            "assigned_crest_timeout", "assigned_mopac_timeout",
         ]
-        assert expected == manager.CREST_CONFIG_COLUMNS
-
-    def test_mopac_config_columns(self, manager: BatchCSVManager) -> None:
-        """Verify MOPAC config columns class attribute (Phase A names)."""
-        expected = [
-            "precise_scf",  # Renamed from mopac_precise
-            "scf_threshold",  # Renamed from mopac_scfcrt
-        ]
-        assert expected == manager.MOPAC_CONFIG_COLUMNS
-
-    def test_retry_tracking_columns(self, manager: BatchCSVManager) -> None:
-        """Verify retry tracking columns class attribute."""
-        expected = ["retry_count", "last_error_message", "max_retries"]
-        assert expected == manager.RETRY_TRACKING_COLUMNS
+        assert expected == manager.BATCH_CONFIG_COLUMNS

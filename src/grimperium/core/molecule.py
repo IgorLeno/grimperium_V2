@@ -306,14 +306,14 @@ class Molecule:
             row.get("crest_conformers_generated"), "crest_conformers_generated"
         )
         crest_time, _ = MoleculeValueConverter.to_float(
-            row.get("crest_time"), "crest_time"
+            row.get("crest_time_s"), "crest_time_s"
         )
 
         mopac_status, _ = MoleculeValueConverter.to_string(
             row.get("mopac_status"), "mopac_status", allow_empty=True
         )
         mopac_time, _ = MoleculeValueConverter.to_float(
-            row.get("mopac_time"), "mopac_time"
+            row.get("mopac_time_s"), "mopac_time_s"
         )
 
         delta_1, _ = MoleculeValueConverter.to_float(row.get("delta_1"), "delta_1")
@@ -405,11 +405,11 @@ class Molecule:
                 if self.results.crest_conformers_generated is not None
                 else ""
             ),
-            "crest_time": (
+            "crest_time_s": (
                 self.results.crest_time if self.results.crest_time is not None else ""
             ),
             "mopac_status": self.results.mopac_status or "",  # strings OK with `or`
-            "mopac_time": (
+            "mopac_time_s": (
                 self.results.mopac_time if self.results.mopac_time is not None else ""
             ),
             "delta_1": self.results.delta_1 if self.results.delta_1 is not None else "",
