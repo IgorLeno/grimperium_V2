@@ -122,8 +122,8 @@ def extract_all_rdkit_descriptors(smiles: str) -> dict[str, float | int]:
     mol_h = Chem.AddHs(mol)
 
     # Warn if molecule contains atoms outside {C, H, O, N} — counts remain CHON-only
-    _CHON = {"C", "H", "O", "N"}
-    non_chon = {atom.GetSymbol() for atom in mol_h.GetAtoms()} - _CHON
+    chon_symbols = {"C", "H", "O", "N"}
+    non_chon = {atom.GetSymbol() for atom in mol_h.GetAtoms()} - chon_symbols
     if non_chon:
         logger.warning(
             "Molecule contains non-CHON atoms: %s; rdkit_nC/nH/nO/nN count only C/H/O/N",
@@ -139,7 +139,7 @@ def extract_all_rdkit_descriptors(smiles: str) -> dict[str, float | int]:
         ),
         "rdkit_tpsa": _safe_descriptor(getattr(Descriptors, "TPSA", None), mol),
         "rdkit_num_rings": _safe_descriptor(
-            getattr(Descriptors, "NumAromaticRings", None), mol
+            getattr(Descriptors, "RingCount", None), mol
         ),
         "rdkit_fsp3": _safe_descriptor(getattr(Descriptors, "FractionCSP3", None), mol),
         "rdkit_mol_weight": _safe_descriptor(getattr(Descriptors, "MolWt", None), mol),

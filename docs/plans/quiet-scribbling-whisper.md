@@ -10,11 +10,11 @@ The CSV tracking system for batch molecule processing has several issues:
 5. HOMO/LUMO/GAP parsing may silently fail for some molecules
 6. `conformer_details/` directory files are being tracked by git
 
-The user provided the exact 57-column target schema (see below).
+The user provided the exact 58-column target schema (see below).
 
 ---
 
-## Target Schema (57 columns, exact order)
+## Target Schema (58 columns, exact order)
 
 ```
 mol_id, status, smiles, multiplicity, charge, nheavy, H298_cbs, H298_pm7,
@@ -33,7 +33,7 @@ batch_order, batch_failure_policy, assigned_crest_timeout, assigned_mopac_timeou
 ### Changes vs Current Schema
 - **NEW columns:** `multiplicity`, `charge`, 15x `rdkit_*` columns (atom/bond counts)
 - **RENAMED:** `reference_hof` -> `H298_cbs`, `crest_time` -> `crest_time_s`
-- **REMOVED:** `abs_diff`, `has_heteroatoms`, `quality_grade`, `success`, `error_message`, `total_execution_time`, `crest_error`, `mopac_time`, `precise_scf`, `scf_threshold`, `crest_optlev`, `threads`, `retry_count`, `last_error_message`, `max_retries`, all `reserved_*` columns
+- **REMOVED:** `abs_diff`, `has_heteroatoms`, `quality_grade`, `success`, `error_message`, `total_execution_time`, `crest_error`, `precise_scf`, `scf_threshold`, `crest_optlev`, `threads`, `retry_count`, `last_error_message`, `max_retries`, all `reserved_*` columns
 
 ---
 
@@ -52,14 +52,14 @@ Create `scripts/migrate_csv_schema.py` with the following behaviour:
 5. The script is idempotent: running it twice on a v2 CSV produces no change.
 
 ### Partially-Completed Batches
-- Rows with `status == RUNNING` at migration time must be treated carefully: lock the file (advisory file lock), migrate only rows with `status != RUNNING`, and flag in-progress rows with `migration_state = pending_restart` (write to a separate `migration_state` column if needed, or simply reset to `PENDING` and increment `reruns`).
+- Rows with `status == RUNNING` at migration time: **preferred approach is option 2 (no schema change)**. Under an advisory file lock, reset `status` from `RUNNING` to `PENDING` and increment `reruns`. Do not introduce `migration_state` in the target 58-column schema unless a separate migration-tracking design is explicitly approved.
 - Rows with `status == OK` or `status == SKIP` are migrated as-is (rename/fill columns, preserve data).
 - Any row whose migration produces inconsistent data (e.g., non-numeric where numeric expected) should be written to a `migration_errors.csv` sidecar file for manual review.
 
 ### Migration Mode: Batch (one-time) vs Automatic On-Load
 - **Recommended**: one-time batch migration run before restarting the pipeline. This avoids coupling migration logic into the hot path.
 - **On-load migration**: `CSVDataLoader._add_missing_columns()` already fills missing columns with defaults (see `OPTIONAL_COLUMNS` dict) and maps old column names to new ones (see alias mapping in `_add_missing_columns`). This provides transparent backwards compatibility for small/incremental differences.
-- **Rollback**: before migration, the script must write a backup as `<filename>.pre_migration_backup.csv`. If post-migration validation (run `BatchCSVManager.get_schema()` and verify all columns present; check row count matches) fails, restore from backup and abort.
+- **Rollback**: before migration, target backup `<filename>.pre_migration_backup.csv` and first check whether it already exists. If it exists, log and abort with a clear error that references the backup filename and instructs removing or versioning the existing backup before continuing. In this error path, do **not** call `BatchCSVManager.get_schema()` and do not run migration. If backup creation succeeds, continue; if post-migration validation fails (run `BatchCSVManager.get_schema()` and verify all columns present; check row count matches), restore from backup and abort.
 
 ---
 
@@ -85,7 +85,7 @@ Replace the 13-key dict with 15 keys matching the CSV schema:
 ### Step 3: Rewrite CSV schema in `BatchCSVManager`
 **File:** `src/grimperium/crest_pm7/batch/csv_manager.py`
 
-Replace all class-level column lists to produce the exact 57-column schema:
+Replace all class-level column lists to produce the exact 58-column schema:
 
 ```python
 IDENTITY_COLUMNS = ["mol_id", "status", "smiles"]
@@ -161,11 +161,10 @@ def reset_stuck_running(self, stale_after_seconds: float = 3600.0) -> int:
     as the start-of-processing reference.  Rows with a `pid` column set to a
     currently-running OS process are treated as owned and skipped.
 
-    Single-process assumption: this method is designed for single-worker
-    recovery at startup.  In multi-worker scenarios callers must acquire an
-    advisory file lock (e.g. `filelock.FileLock`) before calling this method
-    and before any subsequent `select_batch()` call so that only one process
-    performs the recovery.
+    Multi-worker requirement: callers MUST acquire an advisory file lock
+    (e.g. `filelock.FileLock`) before calling this method and MUST keep the
+    same lock held before any subsequent `select_batch()` call so exactly one
+    process performs startup recovery + selection.
 
     Args:
         stale_after_seconds: Rows in RUNNING status for longer than this many
@@ -177,10 +176,10 @@ def reset_stuck_running(self, stale_after_seconds: float = 3600.0) -> int:
 ```
 
 Implementation details:
-- Check `timestamp` column (ISO string) against `datetime.now(UTC)`. Skip row if elapsed < `stale_after_seconds`.
+- Parse and normalize `timestamp` to timezone-aware UTC before comparing to `datetime.now(UTC)`: parse with `datetime.fromisoformat(...)`, treat naive timestamps as UTC by attaching `timezone.utc`, then convert via `.astimezone(timezone.utc)`. Compute `elapsed = (now_utc - ts_utc).total_seconds()` and skip when `elapsed < stale_after_seconds` (no naive-vs-aware comparisons).
 - If a `pid` column exists, call `psutil.pid_exists(pid)` (or `os.kill(pid, 0)`) and skip rows whose process is still alive.
 - Rows that are reset: set `status = PENDING`, increment `reruns`, clear `timestamp`.
-- Wrap CSV read/write with a file lock (or at minimum document the single-process assumption in the docstring).
+- Wrap CSV read/write with the same advisory file lock (`filelock.FileLock`) used by the caller, so recovery and immediate selection preserve single-process semantics.
 - Save CSV and return count of reset rows.
 
 **Call sites** (add before `select_batch()`, under the same file lock):
@@ -205,7 +204,7 @@ Implementation details:
 ### Step 8: Update `models.py`
 **File:** `src/grimperium/crest_pm7/batch/models.py`
 
-Update `BatchRowCSV` Pydantic model to match new 57-column schema.
+Update `BatchRowCSV` Pydantic model to match new 58-column schema.
 
 ### Step 9: Update tests
 **Files:**
@@ -218,7 +217,7 @@ Update `BatchRowCSV` Pydantic model to match new 57-column schema.
 **NEW tests to add:**
 - **Full pipeline integration test**: exercise CSV ingestion through `BatchCSVManager.load_csv()` → `select_batch()` → `mark_ok()` / `mark_rerun()` with a 58-column CSV (matching `get_schema()`); assert rerun semantics use `reruns` column.
 - **RDKit edge-case test**: call `extract_all_rdkit_descriptors()` with SMILES containing S/P/halogen atoms (e.g., `"CCCS"` for propanethiol); assert `rdkit_nC`, `rdkit_nH`, `rdkit_nO`, `rdkit_nN` contain only C/H/O/N counts, a warning was emitted, and no KeyError is raised.
-- **Concurrency test** (`tests/test_csv_manager_concurrency.py`): spawn two threads both calling `reset_stuck_running()` simultaneously on the same CSV; assert final `reruns` count equals exactly 1 (not 2), verifying locking/atomicity.
+- **Concurrency test** (`tests/test_csv_manager_concurrency.py`): spawn two threads both calling `reset_stuck_running()` simultaneously on the same CSV; assert final `reruns` count equals exactly 1 (not 2), explicitly validating that `filelock.FileLock` prevents concurrent recovery and enforces single-process semantics.
 - **Backward-compatibility test** (`tests/test_csv_compatibility.py`): write a minimal old-format CSV (with columns `reference_hof`, `crest_time`, `nrotbonds`) and load it through `CSVDataLoader`; assert the loader produces clear, actionable error or deprecation messages and that data is preserved under `H298_cbs`, `crest_time_s`, `rdkit_nrotbonds`.
 
 ---

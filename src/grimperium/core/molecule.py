@@ -299,6 +299,11 @@ class Molecule:
         )
 
         # Results (all optional)
+        def _get_with_fallback(primary_key: str, fallback_key: str) -> Any:
+            """Return primary value when present; otherwise fallback value."""
+            primary_val = row.get(primary_key)
+            return primary_val if primary_val is not None else row.get(fallback_key)
+
         crest_status, _ = MoleculeValueConverter.to_string(
             row.get("crest_status"), "crest_status", allow_empty=True
         )
@@ -306,14 +311,14 @@ class Molecule:
             row.get("crest_conformers_generated"), "crest_conformers_generated"
         )
         crest_time, _ = MoleculeValueConverter.to_float(
-            row.get("crest_time_s") or row.get("crest_time"), "crest_time_s"
+            _get_with_fallback("crest_time_s", "crest_time"), "crest_time_s"
         )
 
         mopac_status, _ = MoleculeValueConverter.to_string(
             row.get("mopac_status"), "mopac_status", allow_empty=True
         )
         mopac_time, _ = MoleculeValueConverter.to_float(
-            row.get("mopac_time_s") or row.get("mopac_time"), "mopac_time_s"
+            _get_with_fallback("mopac_time_s", "mopac_time"), "mopac_time_s"
         )
 
         delta_1, _ = MoleculeValueConverter.to_float(row.get("delta_1"), "delta_1")

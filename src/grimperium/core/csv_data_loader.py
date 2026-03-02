@@ -175,6 +175,14 @@ class CSVDataLoader:
 
         Also migrates legacy column names to their new standardised equivalents
         so that older CSV files are transparently supported without data loss.
+
+        Args:
+            df: DataFrame to check and update in place with optional columns
+                and legacy-to-current column aliases.
+
+        Returns:
+            pandas.DataFrame: The same DataFrame instance after in-place updates,
+            containing required optional columns and migrated legacy names.
         """
         # Alias mapping: old_name -> new_name
         _ALIASES: dict[str, str] = {
@@ -191,6 +199,7 @@ class CSVDataLoader:
                     old_name,
                     new_name,
                 )
+                df.drop(columns=[old_name], inplace=True)
 
         for col, default in self.OPTIONAL_COLUMNS.items():
             if col not in df.columns:

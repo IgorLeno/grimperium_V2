@@ -5,8 +5,6 @@ This module provides BatchCSVManager for:
 - Selecting molecules for batches
 - Managing status transitions
 - Mapping PM7Result to CSV columns
-
-FUTURE PARALLELIZATION: Add threading.Lock() to protect DataFrame operations.
 """
 
 import logging
@@ -165,8 +163,6 @@ class BatchCSVManager:
         self.csv_path = Path(csv_path) if csv_path is not None else None
         self.df: pd.DataFrame | None = None
         self.max_reruns = max_reruns
-        # FUTURE PARALLELIZATION: Add threading.Lock() here
-        # self._lock = threading.Lock()
 
     def get_schema(self) -> list[str]:
         """Get the full CSV schema with all column names.
@@ -579,7 +575,6 @@ class BatchCSVManager:
         Args:
             mol_id: Molecule identifier
         """
-        # FUTURE PARALLELIZATION: Wrap with self._lock
         idx = self._get_row_index(mol_id)
         df = self._ensure_loaded()
 
@@ -700,7 +695,6 @@ class BatchCSVManager:
             mol_id: Molecule identifier
             result_update: Dict with CSV column updates from pm7result_to_csv_update
         """
-        # FUTURE PARALLELIZATION: Wrap with self._lock
         idx = self._get_row_index(mol_id)
         df = self._ensure_loaded()
 
@@ -737,7 +731,6 @@ class BatchCSVManager:
             error_message: Error that caused the failure
             result_update: Optional partial results to save
         """
-        # FUTURE PARALLELIZATION: Wrap with self._lock
         idx = self._get_row_index(mol_id)
         df = self._ensure_loaded()
 
@@ -786,7 +779,6 @@ class BatchCSVManager:
             mol_id: Molecule identifier
             error_message: Error that caused the skip
         """
-        # FUTURE PARALLELIZATION: Wrap with self._lock
         idx = self._get_row_index(mol_id)
         df = self._ensure_loaded()
 
@@ -821,7 +813,6 @@ class BatchCSVManager:
         Raises:
             KeyError: If mol_id not found in CSV
         """
-        # FUTURE PARALLELIZATION: Wrap with self._lock
         idx = self._get_row_index(mol_id)
         df = self._ensure_loaded()
 
@@ -912,14 +903,14 @@ class BatchCSVManager:
                 df.at[idx, col] = None
 
     def reset_stuck_running(self) -> int:
-        """Reset RUNNING molecules to PENDING on startup recovery.
+        """Reset RUNNING molecules on startup recovery.
 
         When a batch is interrupted (crash, Ctrl+C, etc.), molecules may be
-        left in RUNNING status. This method recovers them by resetting to
-        PENDING and incrementing reruns.
+        left in RUNNING status. This method recovers them by incrementing
+        reruns and moving to PENDING or SKIP according to max_reruns.
 
         Returns:
-            Number of molecules reset
+            Number of RUNNING molecules recovered
         """
         df = self._ensure_loaded()
 
@@ -930,16 +921,24 @@ class BatchCSVManager:
         count = int(running_mask.sum())
         for idx in df[running_mask].index:
             mol_id = df.at[idx, "mol_id"]
-            reruns = self._safe_int(df.at[idx, "reruns"], default=0)
-            df.at[idx, "status"] = MoleculeStatus.PENDING.value
-            df.at[idx, "reruns"] = reruns + 1
-            LOG.warning(
-                f"Reset stuck RUNNING molecule {mol_id} to PENDING "
-                f"(reruns={reruns + 1})"
-            )
+            new_reruns = self._safe_int(df.at[idx, "reruns"], default=0) + 1
+            df.at[idx, "reruns"] = new_reruns
+
+            if new_reruns >= self.max_reruns:
+                df.at[idx, "status"] = MoleculeStatus.SKIP.value
+                LOG.warning(
+                    f"Reset stuck RUNNING molecule {mol_id} to SKIP "
+                    f"(reruns={new_reruns} >= max)"
+                )
+            else:
+                df.at[idx, "status"] = MoleculeStatus.PENDING.value
+                LOG.warning(
+                    f"Reset stuck RUNNING molecule {mol_id} to PENDING "
+                    f"(reruns={new_reruns}/{self.max_reruns})"
+                )
 
         self.save_csv()
-        LOG.info(f"Reset {count} stuck RUNNING molecules to PENDING")
+        LOG.info(f"Recovered {count} stuck RUNNING molecules")
         return count
 
     def pm7result_to_csv_update(

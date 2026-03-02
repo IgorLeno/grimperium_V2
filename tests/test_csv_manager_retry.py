@@ -162,6 +162,8 @@ class TestResetStuckRunning:
                     "nheavy": 1,
                     "status": MoleculeStatus.RUNNING.value,
                     "reruns": 0,
+                    "crest_status": "NOT_ATTEMPTED",
+                    "mopac_status": "NOT_ATTEMPTED",
                 },
                 {
                     "mol_id": "mol_002",
@@ -169,6 +171,8 @@ class TestResetStuckRunning:
                     "nheavy": 2,
                     "status": MoleculeStatus.PENDING.value,
                     "reruns": 0,
+                    "crest_status": "NOT_ATTEMPTED",
+                    "mopac_status": "NOT_ATTEMPTED",
                 },
             ],
         )
@@ -197,8 +201,8 @@ class TestResetStuckRunning:
                     "nheavy": 1,
                     "status": MoleculeStatus.PENDING.value,
                     "reruns": 0,
-                    "crest_status": "",
-                    "mopac_status": "",
+                    "crest_status": "NOT_ATTEMPTED",
+                    "mopac_status": "NOT_ATTEMPTED",
                 },
             ],
         )
@@ -208,3 +212,30 @@ class TestResetStuckRunning:
         count = manager.reset_stuck_running()
 
         assert count == 0
+
+    def test_reset_stuck_running_skips_at_max_reruns(self, csv_path: Path) -> None:
+        """RUNNING molecule is skipped when recovery reaches max reruns."""
+        _write_csv(
+            csv_path,
+            [
+                {
+                    "mol_id": "mol_003",
+                    "smiles": "CCC",
+                    "nheavy": 3,
+                    "status": MoleculeStatus.RUNNING.value,
+                    "reruns": 2,
+                    "crest_status": "NOT_ATTEMPTED",
+                    "mopac_status": "NOT_ATTEMPTED",
+                }
+            ],
+        )
+
+        manager = BatchCSVManager(csv_path)
+        manager.load_csv()
+        count = manager.reset_stuck_running()
+
+        assert count == 1
+
+        df = pd.read_csv(csv_path)
+        assert df.loc[0, "status"] == MoleculeStatus.SKIP.value
+        assert int(df.loc[0, "reruns"]) == 3
