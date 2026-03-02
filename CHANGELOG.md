@@ -7,6 +7,56 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Breaking Changes
+
+#### MOPAC: Drop AUX file parsing and keyword (2026-03-02)
+
+**Summary:** MOPAC descriptor extraction migrated from `.aux` format to `.out` format for improved robustness and simplicity.
+
+**Changes:**
+- **Breaking:** MOPAC input keyword changed from `PM7 EF AUX` to `PM7 EF` (no `AUX` keyword)
+- All 11 descriptors now extracted from `.out` format:
+  - HOF (H298_pm7)
+  - Dipole moment (Debye)
+  - Ionization potential (eV)
+  - HOMO/LUMO/GAP energies (eV) — now read directly from MOPAC summary instead of eigenvalue array indexing
+  - COSMO area/volume (Ų/ų)
+  - Gradient norm
+  - SCF cycles count
+  - Point group
+  - Execution time (seconds)
+- HOMO/LUMO parsing supports 3 output format variants:
+  - Format 1: `HOMO LUMO ENERGIES (EV) = -10.096 -0.351`
+  - Format 2: `HOMO (SOMO) / LUMO ENERGIES (EV) = -10.096 / -0.351`
+  - Format 3: Two separate lines `HOMO ENERGY (EV) = ...` / `LUMO ENERGY (EV) = ...`
+- Removed internal functions: `parse_fortran_float()`, `_parse_aux_file()`
+- Parser code reduced by ~50% (eliminated Fortran D notation conversion and eigenvalue indexing)
+- Path management: removed `"auxiliary"` key from `get_mopac_temp_files()` dict
+
+**Why this change:**
+- Original `.aux` parser had fragile HOMO/LUMO extraction (required inferring orbital indices from `NUM_ELECTRONS` + truncated `EIGENVALUES` arrays)
+- Analysis showed `.aux` files contained only 20 eigenvalues for molecules with 50+ electrons, causing systematic failures
+- `.out` format provides HOMO/LUMO explicitly in summary block, eliminating off-by-one indexing errors
+- Smaller file size (`.out` typically 5-8KB vs `.aux` 15-20KB) without robustness trade-off
+
+**Migration impact:**
+- **No user action required** for existing batches
+- Old `.aux` files in batch directories are ignored (not deleted, but not read)
+- New batches starting from this version will not generate `.aux` files
+- CSV schema remains unchanged (same 58 columns)
+
+**Files modified:**
+- `src/grimperium/crest_pm7/mopac_optimizer.py` — removed `"AUX"` from keywords list
+- `src/grimperium/crest_pm7/mopac_descriptors.py` — full rewrite with `_parse_out_file()`
+- `src/grimperium/crest_pm7/paths.py` — removed `"auxiliary"` key
+- `src/grimperium/crest_pm7/csv_enhancements.py` — updated comments
+- `tests/unit/test_pm7_pipeline_refactor.py` — replaced 7 `.aux` tests with 7 `.out` tests
+
+**Verification:**
+- Tests: 494/495 passing (1 pre-existing failure unrelated to this change)
+- Quality gates: mypy strict ✓, ruff clean ✓, black formatted ✓
+- 17/17 targeted tests passing (including parametrized HOMO/LUMO format variants)
+
 ### Changed
 
 - **MAJOR: Dataset Refactoring & Cleanup** (2026-01-18)

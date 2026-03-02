@@ -205,7 +205,6 @@ class TemporaryDirectoryManager:
         return {
             "input": mol_dir / f"mopac_conf_{conformer_idx}.mop",
             "output": mol_dir / f"mopac_conf_{conformer_idx}.out",
-
             "log": mol_dir / f"mopac_conf_{conformer_idx}.log",
             "directory": mol_dir,
         }

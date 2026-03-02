@@ -2,6 +2,13 @@
 
 from pathlib import Path
 
+import pytest
+
+CONFORMER_DETAILS_DIR = Path("data/molecules_pm7/conformer_details")
+HAS_CONFORMER_DETAILS = CONFORMER_DETAILS_DIR.exists() and any(
+    CONFORMER_DETAILS_DIR.glob("*.json")
+)
+
 
 class TestBatch6Cleanup:
     """Test suite verifying Batch 6 cleanup operations."""
@@ -27,9 +34,13 @@ class TestBatch6Cleanup:
             f"Found {len(csv_files)} CSV files: {csv_files}"
         )
 
+    @pytest.mark.skipif(
+        not HAS_CONFORMER_DETAILS,
+        reason="No conformer detail files in current environment",
+    )
     def test_conformer_details_renamed(self):
         """Verify all JSON files renamed to mol_XXXXX format."""
-        conformer_dir = Path("data/molecules_pm7/conformer_details")
+        conformer_dir = CONFORMER_DETAILS_DIR
 
         # No numeric files should remain
         numeric_files = list(conformer_dir.glob("[0-9].json")) + list(
