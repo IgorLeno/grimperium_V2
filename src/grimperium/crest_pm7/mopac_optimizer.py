@@ -81,11 +81,17 @@ def _create_mopac_input(
 
         # Build MOPAC keywords
         keywords = ["PM7", "EF"]
-        precise_scf = config.mopac_precise_scf if config is not None else True
-        if precise_scf:
-            keywords.append("PRECISE")
-            if config is not None:
-                keywords.append(f"SCFCRT={format(config.mopac_scf_threshold, '.1e')}")
+
+        # PRECISE is always forced ON for production-quality PM7 calculations.
+        # Warn if config explicitly requested False (it will be overridden).
+        if config is not None and not config.mopac_precise_scf:
+            LOG.warning(
+                "config.mopac_precise_scf=False is overridden; "
+                "PRECISE is always enabled for production PM7 runs"
+            )
+        keywords.append("PRECISE")
+        if config is not None:
+            keywords.append(f"SCFCRT={format(config.mopac_scf_threshold, '.1e')}")
         if charge != 0:
             keywords.append(f"CHARGE={charge}")
 

@@ -70,7 +70,12 @@ def _parse_out_file(out_content: str) -> dict[str, Any]:
     # HOF: "FINAL HEAT OF FORMATION = <value> KCAL/MOL"
     # (not extracted here — already handled by energy_extractor.py)
 
-    # Dipole: "DIPOLE           =   X.XXXX DEBYE" (summary line, not component table)
+    # Dipole moment — two known output formats:
+    #   Format 1 (summary): "DIPOLE           =   X.XXXX DEBYE"
+    #   Format 2 (table):   "SUM   -0.835   1.242   0.003   1.497" (TOTAL column)
+    _dipole: float | None = None
+
+    # Try summary format first (backward compatibility)
     m = re.search(
         r"^\s*DIPOLE\s*=\s*([\d.]+)\s*DEBYE",
         out_content,
@@ -78,9 +83,30 @@ def _parse_out_file(out_content: str) -> dict[str, Any]:
     )
     if m:
         try:
-            result["mopac_dipole_debye"] = float(m.group(1))
+            _dipole = float(m.group(1))
         except ValueError:
             pass
+
+    # Fallback: table format (MOPAC2016 default output)
+    # Matches the SUM row with X, Y, Z, TOTAL columns
+    if _dipole is None:
+        m = re.search(
+            r"^\s*SUM\s+"
+            r"[-+]?\d+\.?\d*\s+"
+            r"[-+]?\d+\.?\d*\s+"
+            r"[-+]?\d+\.?\d*\s+"
+            r"([\d.]+)\s*$",
+            out_content,
+            re.MULTILINE,
+        )
+        if m:
+            try:
+                _dipole = float(m.group(1))
+            except ValueError:
+                pass
+
+    if _dipole is not None:
+        result["mopac_dipole_debye"] = _dipole
 
     # IP: "IONIZATION POTENTIAL    =  X.XXXXX EV"
     m = re.search(
