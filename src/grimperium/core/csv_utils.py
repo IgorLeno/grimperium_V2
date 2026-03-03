@@ -27,7 +27,7 @@ def atomic_to_csv(path: Path, df: pd.DataFrame) -> None:
         4. ``os.replace`` (atomic on POSIX when same filesystem).
         5. On failure the temp file is removed and the original is untouched.
 
-    Parameters:
+    Args:
         path: Destination CSV file path.
         df: DataFrame to persist.
 
@@ -62,7 +62,7 @@ def atomic_to_csv(path: Path, df: pd.DataFrame) -> None:
 
         # Backup existing file (if non-empty) before replacing
         if path.exists() and path.stat().st_size > 0:
-            backup_path = Path(str(path) + ".bak")
+            backup_path = path.with_name(path.name + ".bak")
             shutil.copy2(path, backup_path)
 
         # Atomic rename

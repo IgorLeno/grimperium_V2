@@ -227,6 +227,8 @@ class BatchCSVManager:
             raise RuntimeError("csv_path is None - cannot load CSV")
 
         # --- Clean orphan temp files from interrupted atomic writes -----------
+        # Intentionally broad: atomic temp names do not encode target CSV name,
+        # so we remove all orphan *.csv.tmp files in this directory.
         for tmp in self.csv_path.parent.glob("*.csv.tmp"):
             try:
                 tmp.unlink()
@@ -258,7 +260,14 @@ class BatchCSVManager:
                     self.csv_path,
                 )
                 shutil.copy2(backup_path, self.csv_path)
-                self.df = pd.read_csv(self.csv_path, dtype=self._CSV_DTYPE)
+                try:
+                    self.df = pd.read_csv(self.csv_path, dtype=self._CSV_DTYPE)
+                except (pd.errors.ParserError, pd.errors.EmptyDataError) as bak_exc:
+                    raise CSVCorruptedError(
+                        "Backup restore failed: parsed backup "
+                        f"{backup_path} into {self.csv_path}, but resulting CSV "
+                        "is still unreadable."
+                    ) from bak_exc
                 LOG.warning("Recovered %d molecules from backup", len(self.df))
             else:
                 raise CSVCorruptedError(
