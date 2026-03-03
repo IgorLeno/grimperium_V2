@@ -87,7 +87,7 @@ class xTBSettings:
         timeout_seconds: Timeout for xTB pre-optimization.
     """
 
-    preopt: bool = False
+    preopt: bool = True
     timeout_seconds: int = 300
 
 

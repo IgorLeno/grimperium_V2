@@ -143,8 +143,8 @@ class PM7Config:
     max_conformers: int = 10
     energy_window: float = 6.0  # kcal/mol
     crest_rmsd_threshold: float = 0.125  # Angstrom
-    crest_opt_level: int = 1  # 0=loose, 1=normal, 2=tight
-    crest_optlev_label: str = "normal"
+    crest_opt_level: int = 2  # 0=loose, 1=normal, 2=tight
+    crest_optlev_label: str = "tight"
     crest_threads: int = 4
     crest_method: str = "gfn2"
     crest_quick_mode: str = "off"
@@ -155,11 +155,11 @@ class PM7Config:
     # MOPAC settings
     mopac_timeout_base: float = 120.0  # seconds
     mopac_timeout_margin: float = 1.3
-    mopac_precise_scf: bool = False
+    mopac_precise_scf: bool = True
     mopac_scf_threshold: float = 1.0e-4
 
     # xTB pre-optimization
-    xtb_preopt: bool = False
+    xtb_preopt: bool = True
 
     # Conformer selection thresholds (calibrated in Phase C)
     nrotbonds_threshold_rigid_to_medium: int = 1

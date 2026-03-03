@@ -81,7 +81,7 @@ class TestxTBSettings:
     def test_defaults(self) -> None:
         """Verify xTB default values (disabled by default)."""
         settings = xTBSettings()
-        assert settings.preopt is False
+        assert settings.preopt is True
         assert settings.timeout_seconds == 300
 
     def test_enable_preopt(self) -> None:
@@ -102,7 +102,7 @@ class TestSettingsManager:
         """Verify manager initializes with default settings."""
         assert manager.crest.v3 is True
         assert manager.mopac.precise is False
-        assert manager.xtb.preopt is False
+        assert manager.xtb.preopt is True
 
     def test_to_dict_contains_all_keys(self, manager: SettingsManager) -> None:
         """Verify to_dict() includes all expected settings keys."""
@@ -140,7 +140,7 @@ class TestSettingsManager:
         assert settings_dict["crest_threads"] == 4
         assert settings_dict["mopac_precise"] is False
         assert settings_dict["mopac_itry"] == 1000
-        assert settings_dict["crest_xtb_preopt"] is False
+        assert settings_dict["crest_xtb_preopt"] is True
 
     def test_to_dict_after_modification(self, manager: SettingsManager) -> None:
         """Verify to_dict() reflects modified values."""
@@ -211,7 +211,7 @@ class TestSettingsManager:
         manager.xtb.preopt = True
         manager.reset_xtb()
 
-        assert manager.xtb.preopt is False
+        assert manager.xtb.preopt is True
 
     def test_reset_all(self, manager: SettingsManager) -> None:
         """Verify reset_all() restores all defaults."""
@@ -223,7 +223,7 @@ class TestSettingsManager:
 
         assert manager.crest.ewin == 5.0
         assert manager.mopac.precise is False
-        assert manager.xtb.preopt is False
+        assert manager.xtb.preopt is True
 
     def test_help_text_coverage(self, manager: SettingsManager) -> None:
         """Verify help text exists for all expected settings."""
