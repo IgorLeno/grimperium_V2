@@ -58,3 +58,38 @@ class TestDipoleParsing:
 """
         result = _parse_out_file(content)
         assert result["mopac_dipole_debye"] == pytest.approx(3.889)
+
+
+class TestHomoLumoParsing:
+    """Tests for HOMO/LUMO energy extraction from MOPAC .out content."""
+
+    def test_standard_format(self) -> None:
+        """Standard 'HOMO LUMO ENERGIES (EV) = X Y' is parsed correctly."""
+        content = """
+ IONIZATION POTENTIAL    =    10.123 EV
+ HOMO LUMO ENERGIES (EV) =   -8.696   -0.081
+"""
+        result = _parse_out_file(content)
+        assert result["mopac_homo_ev"] == pytest.approx(-8.696)
+        assert result["mopac_lumo_ev"] == pytest.approx(-0.081)
+        assert result["mopac_gap_ev"] == pytest.approx(8.615)
+
+    def test_various_decimal_places(self) -> None:
+        """Values with many decimal places are parsed without truncation."""
+        content = """
+ HOMO LUMO ENERGIES (EV) =   -9.1234567   -0.7654321
+"""
+        result = _parse_out_file(content)
+        assert result["mopac_homo_ev"] == pytest.approx(-9.1234567)
+        assert result["mopac_lumo_ev"] == pytest.approx(-0.7654321)
+        assert result["mopac_gap_ev"] == pytest.approx(8.3580246)
+
+    def test_near_zero_values(self) -> None:
+        """Near-zero HOMO/LUMO values are handled correctly."""
+        content = """
+ HOMO LUMO ENERGIES (EV) =   -0.001    0.002
+"""
+        result = _parse_out_file(content)
+        assert result["mopac_homo_ev"] == pytest.approx(-0.001)
+        assert result["mopac_lumo_ev"] == pytest.approx(0.002)
+        assert result["mopac_gap_ev"] == pytest.approx(0.003)

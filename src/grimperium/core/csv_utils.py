@@ -56,7 +56,7 @@ def atomic_to_csv(path: Path, df: pd.DataFrame) -> None:
             raise
 
         with f:
-            df.to_csv(f, index=False)
+            df.to_csv(f, index=False, float_format="%.6f")
             f.flush()
             os.fsync(f.fileno())
 
