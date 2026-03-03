@@ -14,6 +14,7 @@ Test categories:
 
 from __future__ import annotations
 
+import os
 import re
 import threading
 import time
@@ -948,15 +949,20 @@ class TestCSVMonitorDetection:
         monitor.register_molecule("mol_001")
         monitor.start()
 
+        # Allow first poll to cache current state before updating
+        time.sleep(0.15)
+
         # Update CSV to trigger transition
         csv_path.write_text(
             "mol_id,status,crest_status,mopac_status\n"
             "mol_001,Running,NOT_ATTEMPTED,NOT_ATTEMPTED"
         )
+        # Ensure mtime differs from cached value (filesystem granularity)
+        os.utime(csv_path, (time.time() + 1, time.time() + 1))
 
         # Wait for event with timeout (deterministic synchronization)
         try:
-            event = event_queue.get(timeout=1.0)
+            event = event_queue.get(timeout=2.0)
         finally:
             monitor.stop()
 
