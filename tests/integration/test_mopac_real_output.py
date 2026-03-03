@@ -46,6 +46,7 @@ _MOPAC_OUT_CONTENT = """\
 """
 
 
+@pytest.mark.integration
 class TestRealOutputExtraction:
     """End-to-end descriptor extraction from realistic MOPAC output."""
 
