@@ -10,6 +10,8 @@ from typing import Any
 
 import pandas as pd
 
+from grimperium.core.csv_utils import atomic_to_csv
+
 LOG = logging.getLogger(__name__)
 
 
@@ -134,11 +136,8 @@ class DatasetManager:
         _ = settings  # Reserved for future use
         df = self.sync_from_source(n_molecules)
 
-        # Ensure parent directory exists
-        self.working_csv.parent.mkdir(parents=True, exist_ok=True)
-
-        # Save working CSV
-        df.to_csv(self.working_csv, index=False)
+        # Atomic save (creates parent dir + .bak backup)
+        atomic_to_csv(self.working_csv, df)
         LOG.info(
             "Created working CSV with %d molecules: %s", n_molecules, self.working_csv
         )

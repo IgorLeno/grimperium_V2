@@ -9,11 +9,13 @@ This module provides BatchCSVManager for:
 
 import logging
 import math
+import shutil
 from pathlib import Path
 from typing import Any
 
 import pandas as pd
 
+from grimperium.core.csv_utils import atomic_to_csv
 from grimperium.crest_pm7.batch.enums import (
     BatchFailurePolicy,
     BatchSortingStrategy,
@@ -29,6 +31,10 @@ from grimperium.crest_pm7.progress import (
 )
 
 LOG = logging.getLogger("grimperium.crest_pm7.batch.csv_manager")
+
+
+class CSVCorruptedError(Exception):
+    """Raised when both CSV and backup are corrupted or missing."""
 
 
 class BatchCSVManager:
@@ -187,35 +193,78 @@ class BatchCSVManager:
             + self.BATCH_CONFIG_COLUMNS
         )
 
+    _CSV_DTYPE: dict[str, type] = {
+        "mol_id": str,
+        "smiles": str,
+        "status": str,
+        "batch_id": str,
+        "batch_failure_policy": str,
+        "crest_status": str,
+        "mopac_status": str,
+        # Force string type for timestamp to avoid float64 issues
+        "timestamp": str,
+    }
+
     def load_csv(self) -> pd.DataFrame:
-        """Load CSV file into DataFrame.
+        """Load CSV file into DataFrame with automatic recovery.
+
+        Recovery behaviour:
+            1. Orphan ``.csv.tmp`` files from interrupted writes are removed.
+            2. If the CSV is 0-byte or unparseable, the ``.bak`` backup is
+               restored transparently.
+            3. If both CSV and backup are corrupt/missing,
+               :class:`CSVCorruptedError` is raised.
 
         Returns:
             Loaded DataFrame
 
         Raises:
-            FileNotFoundError: If CSV file doesn't exist
-            RuntimeError: If csv_path is None
+            FileNotFoundError: If CSV file doesn't exist (and no backup).
+            RuntimeError: If csv_path is None.
+            CSVCorruptedError: If CSV and backup are both unreadable.
         """
         if self.csv_path is None:
             raise RuntimeError("csv_path is None - cannot load CSV")
-        if not self.csv_path.exists():
-            raise FileNotFoundError(f"CSV file not found: {self.csv_path}")
 
-        self.df = pd.read_csv(
-            self.csv_path,
-            dtype={
-                "mol_id": str,
-                "smiles": str,
-                "status": str,
-                "batch_id": str,
-                "batch_failure_policy": str,
-                "crest_status": str,
-                "mopac_status": str,
-                # Force string type for timestamp to avoid float64 issues
-                "timestamp": str,
-            },
-        )
+        # --- Clean orphan temp files from interrupted atomic writes -----------
+        for tmp in self.csv_path.parent.glob("*.csv.tmp"):
+            try:
+                tmp.unlink()
+                LOG.warning("Removed orphan temp file: %s", tmp)
+            except OSError as exc:
+                LOG.debug("Could not remove orphan temp %s: %s", tmp, exc)
+
+        # --- Attempt to read, falling back to .bak on corruption -------------
+        backup_path = Path(str(self.csv_path) + ".bak")
+
+        if not self.csv_path.exists():
+            # Primary missing — try backup before giving up
+            if backup_path.exists() and backup_path.stat().st_size > 0:
+                LOG.error("CSV missing, restoring from backup: %s", backup_path)
+                shutil.copy2(backup_path, self.csv_path)
+            else:
+                raise FileNotFoundError(f"CSV file not found: {self.csv_path}")
+
+        try:
+            if self.csv_path.stat().st_size == 0:
+                raise pd.errors.EmptyDataError("CSV file is 0 bytes")
+            self.df = pd.read_csv(self.csv_path, dtype=self._CSV_DTYPE)
+        except (pd.errors.EmptyDataError, pd.errors.ParserError) as exc:
+            LOG.error("CSV unreadable (%s), checking backup...", exc)
+            if backup_path.exists() and backup_path.stat().st_size > 0:
+                LOG.error(
+                    "Restoring CSV from backup: %s -> %s",
+                    backup_path,
+                    self.csv_path,
+                )
+                shutil.copy2(backup_path, self.csv_path)
+                self.df = pd.read_csv(self.csv_path, dtype=self._CSV_DTYPE)
+                LOG.warning("Recovered %d molecules from backup", len(self.df))
+            else:
+                raise CSVCorruptedError(
+                    f"CSV and backup both corrupted/missing. "
+                    f"Restore manually: {self.csv_path}"
+                ) from exc
 
         # Normalize column names (trim whitespace) to avoid schema mismatches
         original_columns = list(self.df.columns)
@@ -269,14 +318,18 @@ class BatchCSVManager:
         return self.df
 
     def save_csv(self) -> None:
-        """Save DataFrame to CSV file."""
+        """Save DataFrame to CSV file atomically with backup.
+
+        Uses temp-file-then-rename to prevent corruption on Ctrl-C.
+        A ``.bak`` backup is created before overwriting.
+        """
         if self.csv_path is None:
             raise RuntimeError("csv_path is None - cannot save CSV")
         if self.df is None:
             raise RuntimeError("No DataFrame loaded - call load_csv() first")
 
-        self.df.to_csv(self.csv_path, index=False)
-        LOG.debug(f"Saved {len(self.df)} molecules to {self.csv_path}")
+        atomic_to_csv(self.csv_path, self.df)
+        LOG.info("Atomically saved %d molecules to %s", len(self.df), self.csv_path)
 
     def _ensure_loaded(self) -> pd.DataFrame:
         """Ensure DataFrame is loaded."""
