@@ -181,11 +181,12 @@ jobs:
           echo "Installing rdkit for enhanced test coverage..."
           poetry run pip install rdkit || \
             echo "rdkit install failed, CREST PM7 tests skipped"
+
       - name: Run tests (capture logs)
         run: |
           set +e
           poetry run pytest tests/ -v --cov=src/grimperium \
-            --cov-report=xml --tb=short \
+            --cov-report=xml --cov-report=term-missing --tb=short \
             > ${{ github.workspace }}/test-${{ matrix.python-version }}.log 2>&1
           echo "$?" > ${{ github.workspace }}/pytest.exitcode
           set -e
@@ -206,6 +207,7 @@ jobs:
             exit 1
           fi
           echo "✅ Tests passed."
+
       - name: Upload test log
         if: always()
         uses: actions/upload-artifact@v4
@@ -214,13 +216,26 @@ jobs:
           path: test-${{ matrix.python-version }}.log
           retention-days: 30
 
-      - name: Upload coverage
+      - name: Verify coverage.xml was generated
+        if: matrix.python-version == '3.11'
+        run: |
+          if [ -f coverage.xml ]; then
+            echo "✅ coverage.xml found ($(wc -c < coverage.xml) bytes)"
+          else
+            echo "❌ coverage.xml NOT found — pytest may have failed before generating it"
+            ls -la *.xml 2>/dev/null || echo "No XML files in workspace root"
+            exit 1
+          fi
+
+      - name: Upload coverage to Codecov
         if: matrix.python-version == '3.11'
         uses: codecov/codecov-action@v4
-        continue-on-error: true
         with:
           files: ./coverage.xml
+          token: ${{ secrets.CODECOV_TOKEN }}
           fail_ci_if_error: false
+          verbose: true
+          name: grimperium-coverage
 
   build:
     name: Build Package
