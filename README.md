@@ -1,6 +1,14 @@
 # Grimperium — Corrigindo Química com Machine Learning
 
-**Python:** 3.10+ | **Licença:** MIT | **Última atualização:** 2026-03-11
+[![CI](https://github.com/IgorLeno/grimperium_V2/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/IgorLeno/grimperium_V2/actions/workflows/ci.yml)
+[![Python](https://img.shields.io/badge/python-3.10%2B-blue?logo=python&logoColor=white)](https://www.python.org/downloads/)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
+[![codecov](https://codecov.io/gh/IgorLeno/grimperium_V2/branch/main/graph/badge.svg)](https://codecov.io/gh/IgorLeno/grimperium_V2)
+[![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
+[![Checked with mypy](https://www.mypy-lang.org/static/mypy_badge.svg)](https://mypy-lang.org/)
+[![pre-commit](https://img.shields.io/badge/pre--commit-enabled-brightgreen?logo=pre-commit)](https://pre-commit.com/)
+[![Claude Code](https://img.shields.io/badge/Claude%20Code-assisted-blueviolet?logo=anthropic)](https://claude.ai/code)
+[![CodeRabbit](https://img.shields.io/coderabbit/prs/github/IgorLeno/grimperium_V2?utm_source=oss&utm_medium=github&utm_campaign=IgorLeno%2Fgrimperium_V2&labelColor=171717&color=FF570A&link=https%3A%2F%2Fcoderabbit.ai&label=CodeRabbit+Reviews)](https://coderabbit.ai)
 
 ---
 
