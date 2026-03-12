@@ -81,55 +81,65 @@ Para cada molécula (representada como SMILES — uma string de texto):
 
 ## Instalação
 
-### Pré-requisitos
+> **Importante:** O Grimperium depende de **CREST** e **MOPAC**, ferramentas de química computacional que rodam nativamente apenas em **Linux**. Se você usa Windows, veja a seção [Windows (via WSL 2)](#-windows-via-wsl-2) logo abaixo.
 
-Você vai precisar de:
-- **Python 3.10 ou superior** — [download aqui](https://www.python.org/downloads/)
-- **Git** — [download aqui](https://git-scm.com/)
-- **CREST** (gerador de conformações) — [instruções oficiais](https://crest-lab.github.io/crest-docs/)
-- **MOPAC** (otimizador PM7) — [download gratuito](https://openmopac.net/)
+---
 
-> **Nota:** CREST e MOPAC são programas externos de química computacional. Para usar apenas o módulo de ML (treino e predição), eles não são obrigatórios.
+### 🐧 Linux (instalação nativa)
 
-### Passo a passo
+Esta é a forma recomendada para desenvolvimento e produção.
 
-**1. Clone o repositório**
+#### Pré-requisitos
+
+- **Python 3.10+** — `sudo apt install python3 python3-pip python3-venv`
+- **Git** — `sudo apt install git`
+- **Poetry** — gerenciador de dependências do projeto
+- **CREST** — [instruções oficiais](https://crest-lab.github.io/crest-docs/)
+- **MOPAC** — [download gratuito](https://openmopac.net/)
+
+> Para apenas explorar o código ou rodar os testes, CREST e MOPAC não são obrigatórios.
+
+#### Passo a passo
+
+**1. Instale o Poetry**
+```bash
+curl -sSL https://install.python-poetry.org | python3 -
+
+# Adicione ao PATH (se necessário)
+export PATH="$HOME/.local/bin:$PATH"
+
+# Verifique a instalação
+poetry --version
+```
+
+**2. Clone o repositório**
 ```bash
 git clone https://github.com/IgorLeno/grimperium_V2.git
 cd grimperium_V2
 ```
 
-**2. Crie um ambiente virtual**
-> Um ambiente virtual isola as dependências do projeto para não conflitar com outros projetos Python na sua máquina.
-
+**3. Instale as dependências com Poetry**
 ```bash
-# Criar o ambiente
-python -m venv venv
+# Cria o ambiente virtual e instala tudo automaticamente
+poetry install
 
-# Ativar no Linux/macOS
-source venv/bin/activate
-
-# Ativar no Windows
-venv\Scripts\activate
+# Para instalar também as dependências de desenvolvimento (testes, linting)
+poetry install --with dev
 ```
 
-Você saberá que funcionou quando `(venv)` aparecer no início do terminal.
-
-**3. Instale o projeto e suas dependências**
+**4. Ative o ambiente virtual**
 ```bash
-# Instala o Grimperium em modo de desenvolvimento
-pip install -e .
-
-# Instala as dependências de desenvolvimento (testes, linting)
-pip install -e ".[dev]"
+poetry shell
 ```
 
-**4. Configure os pre-commit hooks** *(opcional, recomendado para contribuidores)*
+Você saberá que funcionou quando `(grimperium-...)` aparecer no início do terminal.
+
+**5. Configure os pre-commit hooks** *(recomendado para contribuidores)*
 ```bash
 pre-commit install
 ```
 
-**5. Valide a instalação**
+**6. Valide a instalação**
 ```bash
 # Deve retornar "OK"
 python -c "from grimperium import GrimperiumAPI; print('OK')"
@@ -137,6 +147,99 @@ python -c "from grimperium import GrimperiumAPI; print('OK')"
 # Rode os testes
 pytest tests/ -v
 ```
+
+---
+
+### 🪟 Windows (via WSL 2)
+
+No Windows, o caminho recomendado é usar o **WSL 2** (Windows Subsystem for Linux) — ele cria um ambiente Linux real dentro do Windows, sem precisar de máquina virtual separada.
+
+> **Por que WSL 2 e não instalar direto no Windows?**
+> CREST e MOPAC são compilados para Linux e não possuem versões nativas para Windows. O WSL 2 resolve isso de forma transparente.
+
+#### Parte 1 — Instalar o Git for Windows *(para clonar pelo terminal Windows, opcional)*
+
+1. Acesse **[git-scm.com/download/win](https://git-scm.com/download/win)** e baixe o instalador
+2. Execute o instalador deixando **todas as opções padrão**
+3. Feche e reabra o terminal após a instalação
+4. Verifique: `git --version`
+
+#### Parte 2 — Instalar o WSL 2 com Ubuntu
+
+1. Abra o **PowerShell como Administrador** (`Win + X` → *Terminal (Admin)*)
+2. Execute:
+```powershell
+wsl --install
+```
+3. **Reinicie o computador** quando solicitado
+4. Após reiniciar, o Ubuntu abrirá automaticamente pedindo para criar um **usuário e senha Linux** — defina-os e anote
+5. Verifique que está no WSL 2:
+```powershell
+wsl --list --verbose
+# Deve mostrar VERSION 2 ao lado do Ubuntu
+```
+
+#### Parte 3 — Configurar o ambiente dentro do WSL
+
+Abra o terminal Ubuntu (pelo Menu Iniciar ou digitando `ubuntu` no PowerShell) e execute:
+
+```bash
+# Atualizar pacotes
+sudo apt update && sudo apt upgrade -y
+
+# Instalar dependências base
+sudo apt install -y python3 python3-pip python3-venv git curl
+
+# Instalar Poetry
+curl -sSL https://install.python-poetry.org | python3 -
+export PATH="$HOME/.local/bin:$PATH"
+echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
+
+# Verificar
+poetry --version
+```
+
+#### Parte 4 — Clonar e instalar o Grimperium
+
+Dentro do terminal Ubuntu (WSL):
+
+```bash
+# Clone o repositório
+git clone https://github.com/IgorLeno/grimperium_V2.git
+cd grimperium_V2
+
+# Instale as dependências
+poetry install
+
+# Ative o ambiente
+poetry shell
+
+# Valide
+python -c "from grimperium import GrimperiumAPI; print('OK')"
+pytest tests/ -v
+```
+
+#### Parte 5 — Acessar os arquivos pelo Explorer do Windows *(opcional)*
+
+Você pode navegar pelos arquivos do WSL diretamente no Windows Explorer digitando na barra de endereço:
+```
+\\wsl$\Ubuntu\home\<seu-usuario>\grimperium_V2
+```
+
+Ou, de dentro do terminal WSL:
+```bash
+# Abre a pasta atual no Explorer do Windows
+explorer.exe .
+```
+
+#### Resumo — Linux vs Windows
+
+| | Linux nativo | Windows (WSL 2) |
+|---|---|---|
+| CREST + MOPAC | ✅ Funciona direto | ✅ Funciona via WSL |
+| Performance | ✅ Máxima | ⚡ Muito boa (WSL 2 é quase nativo) |
+| Configuração | Simples | Requer instalação do WSL |
+| Recomendado para | Produção / servidores | Desenvolvimento no Windows |
 
 ---
 
