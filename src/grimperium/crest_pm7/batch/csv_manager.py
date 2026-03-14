@@ -65,6 +65,7 @@ class BatchCSVManager:
         "H298_pm7",
         "target_delta_kcalmol",
         "abs_diff_%",
+        "cbs_quality_flag",
     ]
 
     BATCH_INFO_COLUMNS = ["batch_id", "timestamp", "total_time", "reruns"]

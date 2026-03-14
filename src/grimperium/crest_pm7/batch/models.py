@@ -207,6 +207,9 @@ class BatchRowCSV(BaseModel):
     abs_diff_pct: float | None = Field(
         default=None, alias="abs_diff_%", description="Percentage difference"
     )
+    cbs_quality_flag: str = Field(
+        default="", description='CBS reference quality: "OK", "SUSPECT", or ""'
+    )
 
     # === Batch Info (4) ===
     batch_id: str | None = Field(default=None, description="Current batch ID")

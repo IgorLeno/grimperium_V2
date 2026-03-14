@@ -6,13 +6,12 @@ Displays and manages molecular databases.
 
 from __future__ import annotations
 
-import json
 import logging
-import os
 import threading
 from datetime import date, datetime
+from pathlib import Path
 from queue import Queue
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 import pandas as pd
 from rich.live import Live
@@ -20,8 +19,8 @@ from rich.panel import Panel
 from rich.table import Table
 
 from grimperium.cli.constants import DATA_DIR, PHASE_A_RESULTS_FILE
+from grimperium.cli.database_registry import DatabaseInfo, DatabaseRegistry
 from grimperium.cli.menu import MenuOption, show_back_menu
-from grimperium.cli.mock_data import DATABASES, Database
 from grimperium.cli.progress_tracker import (
     CSVMonitor,
     ProgressEvent,
@@ -30,6 +29,7 @@ from grimperium.cli.progress_tracker import (
 )
 from grimperium.cli.styles import COLORS, ICONS
 from grimperium.cli.views.base_view import BaseView
+from grimperium.crest_pm7.database_analyzer import AnalysisReport
 
 if TYPE_CHECKING:
     from grimperium.cli.controller import CliController
@@ -47,115 +47,16 @@ class DatabasesView(BaseView):
     def __init__(self, controller: CliController) -> None:
         """Initialize the databases view."""
         super().__init__(controller)
-        self.selected_db: Database | None = None
+        self.registry = DatabaseRegistry(DATA_DIR)
+        self.selected_db: DatabaseInfo | None = None
 
-    @staticmethod
-    def load_real_phase_a_results() -> Database | None:
-        """Load real Phase A CREST PM7 results with CSV fallback.
-
-        Priority:
-        1. Load from phase_a_results.json if exists and has n_molecules > 0
-        2. Fallback to counting rows in data/thermo_pm7.csv
-        3. Return None if no data source available
+    def get_databases(self) -> list[DatabaseInfo]:
+        """Get list of databases from the registry.
 
         Returns:
-            Database object with real data, or None if no data available.
+            List of DatabaseInfo objects enriched with live CSV data.
         """
-        molecules_count = 0
-        last_updated: date | None = None
-
-        # Strategy 1: Try loading from JSON
-        if PHASE_A_RESULTS_FILE.exists():
-            try:
-                with open(PHASE_A_RESULTS_FILE, encoding="utf-8") as f:
-                    data: dict[str, Any] = json.load(f)
-
-                molecules_count = data.get("n_molecules", 0)
-                results = data.get("results", [])
-
-                # Extract timestamp from results
-                last_updated_str = None
-                if results:
-                    last_result = results[-1]
-                    timestamp = last_result.get("timestamp", "")
-                    if timestamp:
-                        last_updated_str = timestamp[:10]
-
-                if last_updated_str:
-                    last_updated = date.fromisoformat(last_updated_str)
-                else:
-                    # Infer from file modification time
-                    try:
-                        file_mtime = os.path.getmtime(PHASE_A_RESULTS_FILE)
-                        last_updated = date.fromtimestamp(file_mtime)
-                    except OSError:
-                        last_updated = None
-
-            except (json.JSONDecodeError, OSError, ValueError):
-                # JSON exists but is corrupted, will fallback to CSV
-                molecules_count = 0
-
-        # Strategy 2: Fallback to CSV if JSON missing or has 0 molecules
-        if molecules_count == 0:
-            csv_path = DATA_DIR / "thermo_pm7.csv"
-            if csv_path.exists():
-                try:
-                    df = pd.read_csv(csv_path, low_memory=False)
-
-                    # ✅ FIX: Count ONLY molecules with status="OK"
-                    # (calculated molecules, not PENDING)
-                    if "status" in df.columns:
-                        molecules_count = len(df[df["status"] == "OK"])
-                    else:
-                        # Legacy CSV without status column
-                        molecules_count = len(df)
-
-                    # Use CSV modification time if no JSON timestamp
-                    if last_updated is None:
-                        try:
-                            file_mtime = os.path.getmtime(csv_path)
-                            last_updated = date.fromtimestamp(file_mtime)
-                        except OSError:
-                            last_updated = None
-
-                except (pd.errors.EmptyDataError, OSError, ValueError):
-                    # CSV exists but is empty or corrupted
-                    molecules_count = 0
-
-        # Strategy 3: Return None if no valid data source
-        if (
-            molecules_count == 0
-            and not PHASE_A_RESULTS_FILE.exists()
-            and not (DATA_DIR / "thermo_pm7.csv").exists()
-        ):
-            return None
-
-        # Return Database object with molecule count from JSON or CSV
-        return Database(
-            name="CREST PM7",
-            description="CREST conformer search with PM7 optimization",
-            molecules=molecules_count,
-            last_updated=last_updated,
-            status="ready" if molecules_count > 0 else "in_development",
-            properties=["H298_pm7", "conformers", "smiles", "quality_grade"],
-        )
-
-    def get_databases(self) -> list[Database]:
-        """Get list of databases, replacing CREST PM7 with real data if available.
-
-        Returns:
-            List of Database objects with CREST PM7 from real calculations.
-        """
-        real_pm7 = self.load_real_phase_a_results()
-        databases = []
-
-        for db in DATABASES:
-            if db.name == "CREST PM7" and real_pm7 is not None:
-                databases.append(real_pm7)
-            else:
-                databases.append(db)
-
-        return databases
+        return self.registry.load()
 
     def _format_last_updated(self, value: datetime | date | None) -> str:
         """Format database last_updated timestamp consistently.
@@ -203,18 +104,10 @@ class DatabasesView(BaseView):
                     f"[{COLORS['in_dev']}]{ICONS['in_dev']} In Dev[/{COLORS['in_dev']}]"
                 )
 
-            # Format last_updated consistently
-            if isinstance(db.last_updated, datetime):
-                last_updated_str = db.last_updated.strftime("%Y-%m-%d %H:%M:%S")
-            elif isinstance(db.last_updated, date):
-                last_updated_str = db.last_updated.strftime("%Y-%m-%d")
-            elif db.last_updated is None:
-                last_updated_str = "-"
-            else:
-                last_updated_str = str(db.last_updated)
+            last_updated_str = self._format_last_updated(db.last_updated)
 
             table.add_row(
-                db.name,
+                f"{db.alias} ({db.name})",
                 f"{db.molecules:,}" if db.molecules > 0 else "-",
                 last_updated_str,
                 status,
@@ -223,7 +116,7 @@ class DatabasesView(BaseView):
         self.console.print(table)
         self.console.print()
 
-    def render_database_detail(self, db: Database) -> None:
+    def render_database_detail(self, db: DatabaseInfo) -> None:
         """Render detailed view for a specific database."""
         self.clear_screen()
         self.show_header()
@@ -239,7 +132,9 @@ class DatabasesView(BaseView):
 
         info = f"""
 [bold]Name:[/bold]         {db.name}
+[bold]Alias:[/bold]        {db.alias}
 [bold]Description:[/bold]  {db.description}
+[bold]Pipeline:[/bold]     {db.pipeline}
 [bold]Molecules:[/bold]    {db.molecules:,}
 [bold]Last Updated:[/bold] {last_updated_str}
 [bold]Status:[/bold]       {status_text}
@@ -252,7 +147,7 @@ class DatabasesView(BaseView):
         self.console.print(
             Panel(
                 info,
-                title=f"[bold {COLORS['databases']}]{db.name}[/bold {COLORS['databases']}]",
+                title=f"[bold {COLORS['databases']}]{db.alias} — {db.name}[/bold {COLORS['databases']}]",
                 border_style=COLORS["databases"],
                 padding=(1, 2),
             )
@@ -265,8 +160,8 @@ class DatabasesView(BaseView):
         for db in self.get_databases():
             options.append(
                 MenuOption(
-                    label=f"View {db.name}",
-                    value=f"view_{db.name}",
+                    label=db.alias,
+                    value=f"view_{db.alias}",
                     icon=ICONS["databases"],
                 )
             )
@@ -274,15 +169,10 @@ class DatabasesView(BaseView):
         options.extend(
             [
                 MenuOption(
-                    label="Calculate PM7 Values",
-                    value="calculate",
-                    disabled=False,
-                ),
-                MenuOption(
-                    label="Refresh Database",
+                    label="Refresh Databases",
                     value="refresh",
                     icon="",
-                    description="Resync working CSV from source",
+                    description="Re-scan CSV files and reload registry",
                 ),
                 MenuOption(
                     label="Add New Database",
@@ -299,9 +189,16 @@ class DatabasesView(BaseView):
         """Return menu options for database detail view."""
         return [
             MenuOption(
-                label="Calculate PM7 Values",
-                value="calculate",
-                disabled=False,
+                label="Run Calculation",
+                value="calculate_run",
+            ),
+            MenuOption(
+                label="Configuration",
+                value="calculate_config",
+            ),
+            MenuOption(
+                label="Analyze Database",
+                value="analyze",
             ),
             MenuOption(
                 label="Edit Database",
@@ -326,24 +223,24 @@ class DatabasesView(BaseView):
             return "main"
 
         if action and action.startswith("view_"):
-            db_name = action.removeprefix("view_")
-            found = False
-            for db in self.get_databases():
-                if db.name == db_name:
-                    self.selected_db = db
-                    found = True
-                    break
-
-            if not found:
-                self.selected_db = None
-
+            alias = action.removeprefix("view_")
+            self.selected_db = self.registry.get_by_alias(alias)
             return None
 
-        if action == "calculate":
+        if action == "calculate_run":
             self.handle_calculate_pm7()
             return None
 
+        if action == "calculate_config":
+            self._handle_calculate_config()
+            return None
+
+        if action == "analyze":
+            self._handle_analyze()
+            return None
+
         if action == "refresh":
+            self.registry.reload()
             self.refresh_databases_from_filesystem()
             self.console.input("[dim]Press Enter to continue...[/dim]")
             return None
@@ -353,6 +250,285 @@ class DatabasesView(BaseView):
             return None
 
         return None
+
+    def _handle_calculate_config(self) -> None:
+        """Show CREST/MOPAC configuration submenus."""
+        settings_manager: SettingsManager | None = getattr(
+            self.controller, "settings_manager", None
+        )
+        if settings_manager is None:
+            self.console.print(
+                f"[{COLORS['warning']}]Settings manager not available.[/{COLORS['warning']}]"
+            )
+            self.wait_for_enter()
+            return
+
+        config_options = [
+            MenuOption(label="CREST Settings", value="crest_config"),
+            MenuOption(label="MOPAC Settings", value="mopac_config"),
+        ]
+        result = show_back_menu(options=config_options, title="Configuration")
+
+        if result == "crest_config":
+            settings_manager.display_crest_menu()
+        elif result == "mopac_config":
+            settings_manager.display_mopac_menu()
+
+    def _handle_analyze(self) -> None:
+        """Run database analysis and display the report."""
+        if self.selected_db is None:
+            return
+
+        csv_path = (
+            DATA_DIR / self.selected_db.csv_path if self.selected_db.csv_path else None
+        )
+        if csv_path is None or not csv_path.exists():
+            self.console.print(
+                f"[{COLORS['warning']}]No CSV file available for {self.selected_db.alias}.[/{COLORS['warning']}]"
+            )
+            self.wait_for_enter()
+            return
+
+        from grimperium.crest_pm7.database_analyzer import DatabaseAnalyzer
+
+        detail_path = DATA_DIR / "molecules_pm7" / "conformer_details"
+        detail_dir: Path | None = detail_path if detail_path.exists() else None
+
+        self.console.print(
+            f"\n[bold {COLORS['databases']}]Analyzing {self.selected_db.alias}...[/bold {COLORS['databases']}]"
+        )
+
+        analyzer = DatabaseAnalyzer()
+        report = analyzer.analyze(csv_path, detail_dir=detail_dir)
+        self.render_analysis_report(report)
+
+    def render_analysis_report(self, report: AnalysisReport) -> None:
+        """Render a full analysis report with Rich panels.
+
+        Args:
+            report: AnalysisReport from DatabaseAnalyzer.
+        """
+        self.clear_screen()
+        self.show_header()
+
+        db_color = COLORS["databases"]
+
+        # ── Panel 1: STATUS OVERVIEW ──
+        status_lines = [f"[bold]Total rows:[/bold] {report.total_rows:,}"]
+        status_lines.append(f"[bold]OK:[/bold] {report.ok_count:,}")
+        for status_name, count in sorted(report.status_counts.items()):
+            if status_name != "OK":
+                pct = count / report.total_rows * 100 if report.total_rows else 0
+                status_lines.append(f"  {status_name}: {count:,} ({pct:.1f}%)")
+        if report.orphan_running > 0:
+            status_lines.append(
+                f"[yellow]Orphaned RUNNING: {report.orphan_running}[/yellow]"
+            )
+        if report.cbs_ok_count > 0 or report.cbs_suspect_count > 0:
+            total_flagged = report.cbs_ok_count + report.cbs_suspect_count
+            ok_pct = report.cbs_ok_count / total_flagged * 100 if total_flagged else 0
+            status_lines.append("")
+            status_lines.append("[bold]CBS Quality:[/bold]")
+            status_lines.append(
+                f"  Available for training: {report.cbs_ok_count:,} ({ok_pct:.1f}%)"
+            )
+            if report.cbs_suspect_count > 0:
+                status_lines.append(
+                    f"  [yellow]SUSPECT (excluded): {report.cbs_suspect_count}[/yellow]"
+                )
+        self.console.print(
+            Panel(
+                "\n".join(status_lines),
+                title=f"[bold {db_color}]Status Overview[/bold {db_color}]",
+                border_style=db_color,
+            )
+        )
+
+        # ── Panel 2: QUALITY GRADES ──
+        if report.grade_distribution:
+            grade_lines = []
+            total_graded = sum(report.grade_distribution.values())
+            bar_width = 30
+            for grade in ["A", "B", "C", "FAILED"]:
+                count = report.grade_distribution.get(grade, 0)
+                pct = count / total_graded if total_graded else 0
+                filled = int(pct * bar_width)
+                bar = "\u2588" * filled + "\u2591" * (bar_width - filled)
+                grade_lines.append(f"  {grade:>6}: {bar} {count:,} ({pct:.1%})")
+            threshold_color = (
+                COLORS["success"] if report.grade_ab_rate >= 0.67 else COLORS["warning"]
+            )
+            grade_lines.append(
+                f"\n[{threshold_color}]A+B rate: {report.grade_ab_rate:.1%} "
+                f"(threshold: 67%)[/{threshold_color}]"
+            )
+            self.console.print(
+                Panel(
+                    "\n".join(grade_lines),
+                    title=f"[bold {db_color}]Quality Grades[/bold {db_color}]",
+                    border_style=db_color,
+                )
+            )
+
+        # ── Panel 3: H298_PM7 ──
+        h298_lines = []
+        if report.h298_pm7_mean is not None:
+            h298_lines.append(
+                f"Mean: {report.h298_pm7_mean:.2f}  Std: {report.h298_pm7_std:.2f}"
+            )
+            h298_lines.append(
+                f"Min:  {report.h298_pm7_min:.2f}  Max: {report.h298_pm7_max:.2f}"
+            )
+            if report.h298_pm7_positive_count > 0:
+                h298_lines.append(
+                    f"[yellow]Positive H298: {report.h298_pm7_positive_count}[/yellow]"
+                )
+            if report.h298_pm7_extreme_count > 0:
+                h298_lines.append(
+                    f"[yellow]Extreme (per nheavy): {report.h298_pm7_extreme_count}[/yellow]"
+                )
+            if report.null_h298_pm7 > 0:
+                h298_lines.append(
+                    f"[yellow]Null in OK rows: {report.null_h298_pm7}[/yellow]"
+                )
+        else:
+            h298_lines.append("[dim]No H298_pm7 data available[/dim]")
+        self.console.print(
+            Panel(
+                "\n".join(h298_lines),
+                title=f"[bold {db_color}]H298_PM7[/bold {db_color}]",
+                border_style=db_color,
+            )
+        )
+
+        # ── Panel 4: TARGET DELTA ──
+        delta_lines = []
+        if report.target_delta_mean is not None:
+            delta_lines.append(
+                f"Mean: {report.target_delta_mean:.2f}  Std: {report.target_delta_std:.2f}"
+            )
+            delta_lines.append(
+                f"Min:  {report.target_delta_min:.2f}  Max: {report.target_delta_max:.2f}"
+            )
+            delta_lines.append(
+                f"Outliers >200: {report.target_delta_outliers_200}  "
+                f">500: {report.target_delta_outliers_500}"
+            )
+            if report.top_delta_outliers:
+                delta_lines.append("\n[bold]Top outliers:[/bold]")
+                for entry in report.top_delta_outliers[:10]:
+                    mol_id = entry.get("mol_id", "?")
+                    delta_val = entry.get("delta", 0)
+                    smiles = entry.get("smiles", "")
+                    nheavy = entry.get("nheavy", "?")
+                    delta_lines.append(
+                        f"  {mol_id}: {delta_val:+.1f} kcal/mol "
+                        f"(nheavy={nheavy}) {smiles}"
+                    )
+        else:
+            delta_lines.append("[dim]No target_delta data available[/dim]")
+        self.console.print(
+            Panel(
+                "\n".join(delta_lines),
+                title=f"[bold {db_color}]Target Delta[/bold {db_color}]",
+                border_style=db_color,
+            )
+        )
+
+        # ── Panel 5: ELECTRONIC DESCRIPTORS ──
+        elec_lines = []
+        if report.homo_mean is not None:
+            elec_lines.append(
+                f"HOMO mean: {report.homo_mean:.2f} eV  std: {report.homo_std:.2f}"
+            )
+        if report.lumo_mean is not None:
+            elec_lines.append(f"LUMO mean: {report.lumo_mean:.2f} eV")
+        if report.gap_mean is not None:
+            elec_lines.append(f"Gap mean:  {report.gap_mean:.2f} eV")
+        if report.homo_suspicious > 0:
+            elec_lines.append(
+                f"[yellow]|HOMO| > 100 eV: {report.homo_suspicious}[/yellow]"
+            )
+        if report.gap_negative_count > 0:
+            elec_lines.append(f"[red]Negative gap: {report.gap_negative_count}[/red]")
+        if report.gap_suspicious > 0:
+            elec_lines.append(f"[yellow]Gap > 100 eV: {report.gap_suspicious}[/yellow]")
+        if not elec_lines:
+            elec_lines.append("[dim]No electronic descriptor data available[/dim]")
+        self.console.print(
+            Panel(
+                "\n".join(elec_lines),
+                title=f"[bold {db_color}]Electronic Descriptors[/bold {db_color}]",
+                border_style=db_color,
+            )
+        )
+
+        # ── Panel 6: PIPELINE HEALTH ──
+        pipeline_lines = []
+        if report.reruns_distribution:
+            pipeline_lines.append("[bold]Reruns distribution:[/bold]")
+            for reruns, count in sorted(report.reruns_distribution.items()):
+                pipeline_lines.append(f"  reruns={reruns}: {count:,}")
+        if report.max_reruns_count > 0:
+            pipeline_lines.append(
+                f"[yellow]Max reruns (=3): {report.max_reruns_count}[/yellow]"
+            )
+        if report.crest_failed_count > 0:
+            pipeline_lines.append(f"CREST failed: {report.crest_failed_count}")
+        if report.mopac_failed_count > 0:
+            pipeline_lines.append(f"MOPAC failed: {report.mopac_failed_count}")
+        if report.crest_timeout_count > 0:
+            pipeline_lines.append(
+                f"[yellow]CREST timeouts: {report.crest_timeout_count}[/yellow]"
+            )
+        if report.mopac_timeout_count > 0:
+            pipeline_lines.append(
+                f"[yellow]MOPAC timeouts: {report.mopac_timeout_count}[/yellow]"
+            )
+        if report.conformers_mean is not None:
+            pipeline_lines.append(
+                f"Conformers mean: {report.conformers_mean:.1f}  "
+                f"zero: {report.conformers_zero_count}  "
+                f"one: {report.conformers_one_count}"
+            )
+        if report.crest_time_mean is not None:
+            pipeline_lines.append(
+                f"CREST time mean: {report.crest_time_mean:.0f}s  "
+                f"max: {report.crest_time_max:.0f}s"
+            )
+        if not pipeline_lines:
+            pipeline_lines.append("[dim]No pipeline health data available[/dim]")
+        self.console.print(
+            Panel(
+                "\n".join(pipeline_lines),
+                title=f"[bold {db_color}]Pipeline Health[/bold {db_color}]",
+                border_style=db_color,
+            )
+        )
+
+        # ── Panel 7: ALERTS ──
+        if report.alerts:
+            alert_lines = []
+            for alert in report.alerts:
+                alert_lines.append(alert)
+            self.console.print(
+                Panel(
+                    "\n".join(alert_lines),
+                    title="[bold yellow]Alerts[/bold yellow]",
+                    border_style="yellow",
+                )
+            )
+        else:
+            self.console.print(
+                Panel(
+                    "[green]No alerts — database looks healthy![/green]",
+                    title="[bold green]Alerts[/bold green]",
+                    border_style="green",
+                )
+            )
+
+        self.console.print()
+        self.wait_for_enter()
 
     def _refresh_database(self) -> None:
         """Trigger database refresh from source.

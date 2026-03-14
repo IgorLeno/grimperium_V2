@@ -21,27 +21,28 @@ class TestCSVSchema:
         return BatchCSVManager(tmp_path / "test.csv")
 
     def test_schema_length(self, manager: BatchCSVManager) -> None:
-        """Verify schema has expected 58-column count.
+        """Verify schema has expected 59-column count.
 
         - 3 identity columns
-        - 7 molecular property columns
+        - 8 molecular property columns
         - 4 batch info columns
         - 15 RDKit descriptor columns
         - 12 CREST columns
         - 13 MOPAC columns
         - 4 batch config columns
-        Total: 3+7+4+15+12+13+4 = 58
+        Total: 3+8+4+15+12+13+4 = 59
         """
         schema = manager.get_schema()
-        assert len(schema) == 58, f"Expected 58 columns, got {len(schema)}"
+        assert len(schema) == 59, f"Expected 59 columns, got {len(schema)}"
 
     def test_schema_exact_order(self, manager: BatchCSVManager) -> None:
-        """Verify schema matches target 58-column order exactly."""
+        """Verify schema matches target 59-column order exactly."""
         schema = manager.get_schema()
         expected = [
             "mol_id", "status", "smiles",
             "multiplicity", "charge", "nheavy", "H298_cbs",
             "H298_pm7", "target_delta_kcalmol", "abs_diff_%",
+            "cbs_quality_flag",
             "batch_id", "timestamp", "total_time", "reruns",
             "rdkit_nrotbonds", "rdkit_tpsa", "rdkit_num_rings", "rdkit_fsp3",
             "rdkit_mol_weight", "rdkit_hbond_donors", "rdkit_hbond_acceptors",
@@ -143,6 +144,7 @@ class TestCSVSchema:
         expected = [
             "multiplicity", "charge", "nheavy", "H298_cbs",
             "H298_pm7", "target_delta_kcalmol", "abs_diff_%",
+            "cbs_quality_flag",
         ]
         assert expected == manager.MOLECULAR_PROPERTIES_COLUMNS
 

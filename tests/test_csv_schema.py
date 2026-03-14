@@ -1,4 +1,4 @@
-"""Tests for CSV schema (58 columns, matching BatchCSVManager.get_schema())."""
+"""Tests for CSV schema (59 columns, matching BatchCSVManager.get_schema())."""
 
 from pathlib import Path
 
@@ -8,10 +8,11 @@ import pytest
 EXPECTED_COLUMNS = [
     # Identity (1-3)
     "mol_id", "status", "smiles",
-    # Molecular properties (4-10)
+    # Molecular properties (4-11)
     "multiplicity", "charge", "nheavy", "H298_cbs",
     "H298_pm7", "target_delta_kcalmol", "abs_diff_%",
-    # Batch info (11-14)
+    "cbs_quality_flag",
+    # Batch info (12-15)
     "batch_id", "timestamp", "total_time", "reruns",
     # RDKit descriptors (15-29)
     "rdkit_nrotbonds", "rdkit_tpsa", "rdkit_num_rings", "rdkit_fsp3",

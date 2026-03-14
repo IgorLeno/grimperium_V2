@@ -1,0 +1,53 @@
+[
+  {
+    "name": "CBS Reference (CHON-only)",
+    "alias": "CBS",
+    "csv_path": "thermo_cbs_chon.csv",
+    "description": "CHON-filtered CBS reference energies (C, H, O, N only). Recommended for Phase A.",
+    "pipeline": "reference",
+    "created_at": "2026-01-15",
+    "max_conformers": 10,
+    "reference_db": null,
+    "status": "ready",
+    "properties": [
+      "H298_cbs",
+      "H298_b3",
+      "smiles",
+      "charge",
+      "multiplicity"
+    ]
+  },
+  {
+    "name": "CREST PM7",
+    "alias": "PM7",
+    "csv_path": "thermo_pm7.csv",
+    "description": "CREST conformer search with PM7 optimization",
+    "pipeline": "crest_pm7",
+    "created_at": "2026-01-01",
+    "max_conformers": 10,
+    "reference_db": "CBS",
+    "status": "in_development",
+    "properties": [
+      "H298_pm7",
+      "conformers",
+      "smiles",
+      "quality_grade"
+    ]
+  },
+  {
+    "name": "NIST Experimental",
+    "alias": "NIST",
+    "csv_path": "",
+    "description": "NIST experimental thermochemistry data",
+    "pipeline": "reference",
+    "created_at": "2026-01-01",
+    "max_conformers": 10,
+    "reference_db": null,
+    "status": "in_development",
+    "properties": [
+      "H298_exp",
+      "uncertainty",
+      "reference"
+    ]
+  }
+]

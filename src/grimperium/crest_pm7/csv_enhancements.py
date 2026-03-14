@@ -205,6 +205,24 @@ class CSVManagerExtensions:
     """
 
     @staticmethod
+    def compute_cbs_quality_flag(
+        h298_cbs: float | None,
+        h298_pm7: float | None,
+        nheavy: int | None,
+    ) -> str:
+        """Flag CBS reference if delta is implausibly large.
+
+        Threshold: |delta| > 500 * nheavy suggests unit error.
+        Returns "OK" or "SUSPECT".
+        """
+        if h298_cbs is None or h298_pm7 is None or not nheavy:
+            return "OK"
+        delta = abs(h298_cbs - h298_pm7)
+        if delta > 500 * nheavy:
+            return "SUSPECT"
+        return "OK"
+
+    @staticmethod
     def update_molecule_with_mopac_results(
         csv_manager: Any,
         mol_id: str,
@@ -286,6 +304,27 @@ class CSVManagerExtensions:
                 "opt_lvl": batch_settings.get("opt_lvl"),
                 "xtb": batch_settings.get("xtb"),
             }
+
+            # CBS quality flag — preserve manual SUSPECT, auto-detect on first write
+            try:
+                df = csv_manager._ensure_loaded()
+                idx = csv_manager._get_row_index(mol_id)
+                current_flag = ""
+                if "cbs_quality_flag" in df.columns:
+                    current_flag = str(df.at[idx, "cbs_quality_flag"] or "")
+                if current_flag != "SUSPECT":
+                    nheavy_val = None
+                    if "nheavy" in df.columns:
+                        raw = df.at[idx, "nheavy"]
+                        if pd.notna(raw):
+                            nheavy_val = int(raw)
+                    updates["cbs_quality_flag"] = (
+                        CSVManagerExtensions.compute_cbs_quality_flag(
+                            h298_cbs, h298_pm7, nheavy_val
+                        )
+                    )
+            except Exception:
+                pass  # mol_id not found or nheavy unreadable — skip flag
 
             # Update CSV via BatchCSVManager's update method
             if hasattr(csv_manager, "_update_extra_fields"):

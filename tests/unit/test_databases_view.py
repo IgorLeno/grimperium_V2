@@ -4,156 +4,110 @@ import json
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+import pandas as pd
+
 from grimperium.cli.views.databases_view import DatabasesView
 
 
-def test_load_real_phase_a_results_from_json(tmp_path: Path) -> None:
-    """
-    Bug #2: Test loading molecule count from phase_a_results.json.
-
-    When JSON exists with n_molecules, that value should be used.
-    """
-    json_file = tmp_path / "phase_a_results.json"
-    json_data = {
-        "n_molecules": 29568,
-        "results": [
-            {"smiles": "CCO", "H298_pm7": -100.5, "timestamp": "2026-01-15T10:30:00"}
-        ],
-    }
-    json_file.write_text(json.dumps(json_data), encoding="utf-8")
-
-    with patch("grimperium.cli.views.databases_view.PHASE_A_RESULTS_FILE", json_file):
-        result = DatabasesView.load_real_phase_a_results()
-
-    assert result is not None
-    assert result.molecules == 29568
-    assert result.name == "CREST PM7"
-    assert result.status == "ready"  # Because molecules > 0
+def _create_view_with_registry(tmp_path: Path) -> DatabasesView:
+    """Create a DatabasesView pointing its registry at tmp_path."""
+    controller = MagicMock()
+    with patch("grimperium.cli.views.databases_view.DATA_DIR", tmp_path):
+        view = DatabasesView(controller)
+    return view
 
 
-def test_load_real_phase_a_results_from_csv_fallback(tmp_path: Path) -> None:
-    """
-    Bug #2: Test fallback to CSV row count when JSON doesn't exist.
+def test_get_databases_returns_defaults(tmp_path: Path) -> None:
+    """Registry auto-creates 3 default entries when no JSON exists."""
+    view = _create_view_with_registry(tmp_path)
+    databases = view.get_databases()
 
-    When phase_a_results.json is missing, should count rows in thermo_pm7.csv.
-    """
-    # JSON doesn't exist
-    json_file = tmp_path / "phase_a_results.json"
-
-    # CSV exists with data
-    csv_file = tmp_path / "thermo_pm7.csv"
-    csv_content = "smiles,H298_pm7,charge,multiplicity\nCCO,-100.5,0,1\nCC,-50.2,0,1\nC,-25.1,0,1\n"
-    csv_file.write_text(csv_content, encoding="utf-8")
-
-    with (
-        patch("grimperium.cli.views.databases_view.PHASE_A_RESULTS_FILE", json_file),
-        patch("grimperium.cli.views.databases_view.DATA_DIR", tmp_path),
-    ):
-        result = DatabasesView.load_real_phase_a_results()
-
-    assert result is not None
-    assert result.molecules == 3  # 3 data rows (excluding header)
-    assert result.name == "CREST PM7"
-    assert result.status == "ready"
+    assert len(databases) == 3
+    aliases = {db.alias for db in databases}
+    assert aliases == {"CBS", "PM7", "NIST"}
 
 
-def test_load_real_phase_a_results_empty_csv_fallback(tmp_path: Path) -> None:
-    """
-    Bug #2: Test CSV fallback with empty CSV (only header).
+def test_get_databases_enriches_pm7_from_csv(tmp_path: Path) -> None:
+    """PM7 entry gets molecule count from CSV (only OK rows)."""
+    # Create CSV with mixed statuses
+    df = pd.DataFrame(
+        {
+            "mol_id": ["m1", "m2", "m3"],
+            "status": ["OK", "OK", "PENDING"],
+            "smiles": ["C", "CC", "CCC"],
+        }
+    )
+    df.to_csv(tmp_path / "thermo_pm7.csv", index=False)
 
-    Should return Database with 0 molecules and in_development status.
-    """
-    json_file = tmp_path / "phase_a_results.json"
-    csv_file = tmp_path / "thermo_pm7.csv"
-    csv_file.write_text("smiles,H298_pm7,charge,multiplicity\n", encoding="utf-8")
+    view = _create_view_with_registry(tmp_path)
+    databases = view.get_databases()
 
-    with (
-        patch("grimperium.cli.views.databases_view.PHASE_A_RESULTS_FILE", json_file),
-        patch("grimperium.cli.views.databases_view.DATA_DIR", tmp_path),
-    ):
-        result = DatabasesView.load_real_phase_a_results()
-
-    assert result is not None
-    assert result.molecules == 0
-    assert result.status == "in_development"
-
-
-def test_load_real_phase_a_results_no_files(tmp_path: Path) -> None:
-    """
-    Bug #2: Test when neither JSON nor CSV exists.
-
-    Should return None to use mock data fallback.
-    """
-    json_file = tmp_path / "phase_a_results.json"
-    # Neither file exists
-
-    with (
-        patch("grimperium.cli.views.databases_view.PHASE_A_RESULTS_FILE", json_file),
-        patch("grimperium.cli.views.databases_view.DATA_DIR", tmp_path),
-    ):
-        result = DatabasesView.load_real_phase_a_results()
-
-    assert result is None
+    pm7 = next(db for db in databases if db.alias == "PM7")
+    assert pm7.molecules == 2  # Only OK rows
+    assert pm7.status == "ready"
 
 
-def test_load_real_phase_a_results_invalid_json(tmp_path: Path) -> None:
-    """
-    Bug #2: Test handling of corrupted JSON file.
+def test_get_databases_pm7_empty_csv(tmp_path: Path) -> None:
+    """PM7 with header-only CSV stays in_development."""
+    df = pd.DataFrame(columns=["mol_id", "status", "smiles"])
+    df.to_csv(tmp_path / "thermo_pm7.csv", index=False)
 
-    Should fallback to CSV count when JSON is invalid.
-    """
-    json_file = tmp_path / "phase_a_results.json"
-    json_file.write_text("{ invalid json }", encoding="utf-8")
+    view = _create_view_with_registry(tmp_path)
+    databases = view.get_databases()
 
-    csv_file = tmp_path / "thermo_pm7.csv"
-    csv_content = "smiles,H298_pm7\nCCO,-100.5\n"
-    csv_file.write_text(csv_content, encoding="utf-8")
-
-    with (
-        patch("grimperium.cli.views.databases_view.PHASE_A_RESULTS_FILE", json_file),
-        patch("grimperium.cli.views.databases_view.DATA_DIR", tmp_path),
-    ):
-        result = DatabasesView.load_real_phase_a_results()
-
-    assert result is not None
-    assert result.molecules == 1  # Fallback to CSV count
+    pm7 = next(db for db in databases if db.alias == "PM7")
+    assert pm7.molecules == 0
+    assert pm7.status == "in_development"
 
 
-def test_load_real_phase_a_results_json_with_zero_molecules(tmp_path: Path) -> None:
-    """
-    Bug #2: Test JSON with n_molecules=0 falls back to CSV.
+def test_get_databases_no_csv(tmp_path: Path) -> None:
+    """PM7 without any CSV file stays at 0 molecules."""
+    view = _create_view_with_registry(tmp_path)
+    databases = view.get_databases()
 
-    Even if JSON says 0 molecules, check CSV for actual data.
-    """
-    json_file = tmp_path / "phase_a_results.json"
-    json_data = {"n_molecules": 0, "results": []}
-    json_file.write_text(json.dumps(json_data), encoding="utf-8")
+    pm7 = next(db for db in databases if db.alias == "PM7")
+    assert pm7.molecules == 0
 
-    csv_file = tmp_path / "thermo_pm7.csv"
-    csv_content = "smiles,H298_pm7\nCCO,-100.5\nCC,-50.2\n"
-    csv_file.write_text(csv_content, encoding="utf-8")
 
-    with (
-        patch("grimperium.cli.views.databases_view.PHASE_A_RESULTS_FILE", json_file),
-        patch("grimperium.cli.views.databases_view.DATA_DIR", tmp_path),
-    ):
-        result = DatabasesView.load_real_phase_a_results()
+def test_menu_options_use_aliases(tmp_path: Path) -> None:
+    """Menu options display alias-based labels."""
+    view = _create_view_with_registry(tmp_path)
+    options = view.get_menu_options()
 
-    assert result is not None
-    assert result.molecules == 2  # Use CSV count, not JSON's 0
+    # First 3 options should be database entries
+    db_options = [o for o in options if o.value.startswith("view_")]
+    assert len(db_options) == 3
+    labels = {o.label for o in db_options}
+    assert labels == {"CBS", "PM7", "NIST"}
+    values = {o.value for o in db_options}
+    assert values == {"view_CBS", "view_PM7", "view_NIST"}
+
+
+def test_detail_menu_has_run_config_analyze(tmp_path: Path) -> None:
+    """Detail menu includes Run, Config, and Analyze options."""
+    view = _create_view_with_registry(tmp_path)
+    options = view.get_detail_menu_options()
+
+    values = [o.value for o in options]
+    assert "calculate_run" in values
+    assert "calculate_config" in values
+    assert "analyze" in values
+
+
+def test_handle_action_view_alias(tmp_path: Path) -> None:
+    """handle_action with view_{alias} selects correct database."""
+    view = _create_view_with_registry(tmp_path)
+    view.handle_action("view_PM7")
+
+    assert view.selected_db is not None
+    assert view.selected_db.alias == "PM7"
 
 
 def test_refresh_databases_from_filesystem_finds_csvs(tmp_path: Path) -> None:
-    """
-    Bug #4: Test that refresh discovers CSV files in data/ directory.
-
-    Should scan filesystem and return count of discovered databases.
-    """
-    # Create mock controller
+    """Refresh discovers CSV files in data/ directory."""
     controller = MagicMock()
     view = DatabasesView(controller)
 
-    # Create test CSV files
     (tmp_path / "thermo_cbs_chon.csv").write_text(
         "smiles,H298_cbs\nCCO,-100.5\nCC,-50.2\n", encoding="utf-8"
     )
@@ -164,15 +118,11 @@ def test_refresh_databases_from_filesystem_finds_csvs(tmp_path: Path) -> None:
     with patch("grimperium.cli.views.databases_view.DATA_DIR", tmp_path):
         count = view.refresh_databases_from_filesystem()
 
-    assert count == 2, "Should discover 2 CSV files"
+    assert count == 2
 
 
 def test_refresh_databases_from_filesystem_missing_directory(tmp_path: Path) -> None:
-    """
-    Bug #4: Test refresh handles missing data/ directory gracefully.
-
-    Should return 0 and not crash when data/ doesn't exist.
-    """
+    """Refresh handles missing data/ directory gracefully."""
     controller = MagicMock()
     view = DatabasesView(controller)
 
@@ -181,38 +131,28 @@ def test_refresh_databases_from_filesystem_missing_directory(tmp_path: Path) -> 
     with patch("grimperium.cli.views.databases_view.DATA_DIR", nonexistent_dir):
         count = view.refresh_databases_from_filesystem()
 
-    assert count == 0, "Should return 0 when directory doesn't exist"
+    assert count == 0
 
 
 def test_refresh_databases_from_filesystem_empty_directory(tmp_path: Path) -> None:
-    """
-    Bug #4: Test refresh handles empty data/ directory.
-
-    Should return 0 when no CSV files exist.
-    """
+    """Refresh handles empty data/ directory."""
     controller = MagicMock()
     view = DatabasesView(controller)
 
-    # Create empty directory
     empty_dir = tmp_path / "empty"
     empty_dir.mkdir()
 
     with patch("grimperium.cli.views.databases_view.DATA_DIR", empty_dir):
         count = view.refresh_databases_from_filesystem()
 
-    assert count == 0, "Should return 0 when directory is empty"
+    assert count == 0
 
 
 def test_refresh_databases_from_filesystem_counts_molecules(tmp_path: Path) -> None:
-    """
-    Bug #4: Test that refresh counts actual CSV rows for each database.
-
-    Should display molecule count for each discovered database.
-    """
+    """Refresh counts actual CSV rows for each database."""
     controller = MagicMock()
     view = DatabasesView(controller)
 
-    # Create CSV with known row count
     (tmp_path / "test_database.csv").write_text(
         "smiles,energy\nCCO,-100\nCC,-50\nC,-25\n", encoding="utf-8"
     )
@@ -220,4 +160,4 @@ def test_refresh_databases_from_filesystem_counts_molecules(tmp_path: Path) -> N
     with patch("grimperium.cli.views.databases_view.DATA_DIR", tmp_path):
         count = view.refresh_databases_from_filesystem()
 
-    assert count == 1, "Should discover 1 CSV file"
+    assert count == 1
