@@ -120,9 +120,7 @@ def train(
     learner.fit(X_train, y_cbs_train, y_pm7_train)
 
     # Step 5: Evaluate on both splits
-    train_metrics: DictStrAny = learner.evaluate(
-        X_train, y_cbs_train, y_pm7_train
-    )
+    train_metrics: DictStrAny = learner.evaluate(X_train, y_cbs_train, y_pm7_train)
     test_metrics: DictStrAny = learner.evaluate(X_test, y_cbs_test, y_pm7_test)
 
     if return_pipeline:
