@@ -8,6 +8,45 @@ from sklearn.impute import SimpleImputer
 
 from grimperium import MatrixFloat
 
+FEATURE_COLUMNS: list[str] = [
+    # Estrutural
+    "nheavy",
+    "multiplicity",
+    "charge",
+    # RDKit
+    "rdkit_nrotbonds",
+    "rdkit_tpsa",
+    "rdkit_num_rings",
+    "rdkit_fsp3",
+    "rdkit_mol_weight",
+    "rdkit_hbond_donors",
+    "rdkit_hbond_acceptors",
+    "rdkit_nC",
+    "rdkit_nH",
+    "rdkit_nO",
+    "rdkit_nN",
+    "rdkit_bonds_single",
+    "rdkit_bonds_double",
+    "rdkit_bonds_triple",
+    "rdkit_bonds_aromatic",
+    # CREST
+    "crest_conformers_generated",
+    "num_conformers_selected",
+    "crest_time_s",
+    # MOPAC eletrônico (12.4% NaN → tratados pelo SimpleImputer median)
+    "mopac_homo_ev",
+    "mopac_lumo_ev",
+    "mopac_gap_ev",
+    "mopac_dipole_debye",
+    "mopac_ionization_potential_ev",
+    "mopac_cosmo_area_a2",
+    "mopac_cosmo_volume_a3",
+    "mopac_gradient_norm",
+    "mopac_num_scf_cycles",
+    # Baseline semiempírico
+    "H298_pm7",
+]
+
 
 class FeaturePipeline:
     """Extract and impute feature columns from a DataFrame.

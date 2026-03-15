@@ -12,29 +12,55 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-# Features used by the ML pipeline
+# Features used by the ML pipeline (31 validated columns)
 FEATURE_COLS = (
     "nheavy",
+    "multiplicity",
+    "charge",
     "rdkit_nrotbonds",
+    "rdkit_tpsa",
+    "rdkit_num_rings",
+    "rdkit_fsp3",
+    "rdkit_mol_weight",
+    "rdkit_hbond_donors",
+    "rdkit_hbond_acceptors",
+    "rdkit_nC",
+    "rdkit_nH",
+    "rdkit_nO",
+    "rdkit_nN",
+    "rdkit_bonds_single",
+    "rdkit_bonds_double",
+    "rdkit_bonds_triple",
+    "rdkit_bonds_aromatic",
+    "crest_conformers_generated",
+    "num_conformers_selected",
+    "crest_time_s",
     "mopac_homo_ev",
     "mopac_lumo_ev",
     "mopac_gap_ev",
+    "mopac_dipole_debye",
+    "mopac_ionization_potential_ev",
+    "mopac_cosmo_area_a2",
+    "mopac_cosmo_volume_a3",
+    "mopac_gradient_norm",
+    "mopac_num_scf_cycles",
+    "H298_pm7",
 )
 
 # 10-row synthetic CSV with valid MoleculeStatus values and realistic data.
 # 2 rows have NaN in mopac columns to test imputation (~20%).
 _SYNTHETIC_CSV = """\
-mol_id,smiles,nheavy,status,charge,multiplicity,H298_cbs,H298_pm7,rdkit_nrotbonds,mopac_homo_ev,mopac_lumo_ev,mopac_gap_ev
-mol_00001,C,1,OK,0,1,-17.9,-15.2,0,-10.5,1.2,11.7
-mol_00002,CC,2,OK,0,1,-20.0,-17.8,0,-10.8,1.5,12.3
-mol_00003,CCC,3,OK,0,1,-25.0,-22.5,1,-10.3,1.1,11.4
-mol_00004,CCO,3,OK,0,1,-56.2,-52.0,0,-10.9,1.8,12.7
-mol_00005,CC(=O)O,4,OK,0,1,-103.4,-98.0,1,-11.2,0.5,11.7
-mol_00006,c1ccccc1,6,OK,0,1,19.8,22.5,0,-9.1,0.3,9.4
-mol_00007,CC(C)C,4,OK,0,1,-32.1,-29.0,0,-10.6,1.4,12.0
-mol_00008,CCCO,4,OK,0,1,-61.0,-57.0,1,-10.7,1.6,12.3
-mol_00009,CC=O,3,OK,0,1,-39.7,-36.5,0,,,
-mol_00010,COC,3,OK,0,1,-44.0,-41.0,0,,,
+mol_id,smiles,nheavy,status,cbs_quality_flag,charge,multiplicity,H298_cbs,H298_pm7,rdkit_nrotbonds,rdkit_tpsa,rdkit_num_rings,rdkit_fsp3,rdkit_mol_weight,rdkit_hbond_donors,rdkit_hbond_acceptors,rdkit_nC,rdkit_nH,rdkit_nO,rdkit_nN,rdkit_bonds_single,rdkit_bonds_double,rdkit_bonds_triple,rdkit_bonds_aromatic,crest_conformers_generated,num_conformers_selected,crest_time_s,mopac_homo_ev,mopac_lumo_ev,mopac_gap_ev,mopac_dipole_debye,mopac_ionization_potential_ev,mopac_cosmo_area_a2,mopac_cosmo_volume_a3,mopac_gradient_norm,mopac_num_scf_cycles
+mol_00001,C,1,OK,OK,0,1,-17.9,-15.2,0,0.0,0,1.0,16.04,0,0,1,4,0,0,4,0,0,0,5,1,1.2,-10.5,1.2,11.7,0.0,12.5,42.1,28.3,0.01,8
+mol_00002,CC,2,OK,OK,0,1,-20.0,-17.8,0,0.0,0,1.0,30.07,0,0,2,6,0,0,7,0,0,0,8,2,2.1,-10.8,1.5,12.3,0.0,12.8,58.2,45.1,0.02,10
+mol_00003,CCC,3,OK,OK,0,1,-25.0,-22.5,1,0.0,0,1.0,44.10,0,0,3,8,0,0,10,0,0,0,12,3,3.5,-10.3,1.1,11.4,0.1,12.3,74.5,62.0,0.01,9
+mol_00004,CCO,3,OK,OK,0,1,-56.2,-52.0,0,20.2,0,0.67,46.07,1,1,2,6,1,0,8,0,0,0,10,2,2.8,-10.9,1.8,12.7,1.7,13.0,68.9,55.2,0.03,11
+mol_00005,CC(=O)O,4,OK,OK,0,1,-103.4,-98.0,1,37.3,0,0.25,60.05,1,2,2,4,2,0,6,1,0,0,7,1,4.2,-11.2,0.5,11.7,1.9,13.5,78.1,60.3,0.02,12
+mol_00006,c1ccccc1,6,OK,OK,0,1,19.8,22.5,0,0.0,1,0.0,78.11,0,0,6,6,0,0,0,0,0,6,3,1,1.5,-9.1,0.3,9.4,0.0,11.0,95.3,80.1,0.01,7
+mol_00007,CC(C)C,4,OK,OK,0,1,-32.1,-29.0,0,0.0,0,1.0,58.12,0,0,4,10,0,0,13,0,0,0,15,4,5.0,-10.6,1.4,12.0,0.0,12.6,88.7,75.4,0.02,9
+mol_00008,CCCO,4,OK,OK,0,1,-61.0,-57.0,1,20.2,0,0.75,60.10,1,1,3,8,1,0,11,0,0,0,14,3,4.1,-10.7,1.6,12.3,1.5,12.9,85.2,70.8,0.01,10
+mol_00009,CC=O,3,OK,OK,0,1,-39.7,-36.5,0,17.1,0,0.5,44.05,0,1,2,4,1,0,5,1,0,0,6,1,1.8,,,,,,,,
+mol_00010,COC,3,OK,OK,0,1,-44.0,-41.0,0,18.5,0,0.67,46.07,0,2,2,6,1,0,8,0,0,0,9,2,2.0,,,,,,,,
 """
 
 
@@ -85,11 +111,11 @@ def csv_with_missing_target(tmp_path: Path) -> Path:
         Path: CSV path where one row has missing `H298_pm7`.
     """
     csv_content = (
-        "mol_id,smiles,nheavy,status,charge,multiplicity,"
+        "mol_id,smiles,nheavy,status,cbs_quality_flag,charge,multiplicity,"
         "H298_cbs,H298_pm7,rdkit_nrotbonds,mopac_homo_ev,"
         "mopac_lumo_ev,mopac_gap_ev\n"
-        "mol_01,C,1,OK,0,1,-17.9,-15.2,0,-10.5,1.2,11.7\n"
-        "mol_02,CC,2,OK,0,1,-20.0,,0,-10.8,1.5,12.3\n"
+        "mol_01,C,1,OK,OK,0,1,-17.9,-15.2,0,-10.5,1.2,11.7\n"
+        "mol_02,CC,2,OK,OK,0,1,-20.0,,0,-10.8,1.5,12.3\n"
     )
     csv_file = tmp_path / "missing_target.csv"
     csv_file.write_text(csv_content)
@@ -107,10 +133,10 @@ def csv_no_ok_status(tmp_path: Path) -> Path:
         Path: CSV path where all rows are filtered out by status.
     """
     csv_content = (
-        "mol_id,smiles,nheavy,status,charge,multiplicity,"
+        "mol_id,smiles,nheavy,status,cbs_quality_flag,charge,multiplicity,"
         "H298_cbs,H298_pm7,rdkit_nrotbonds,mopac_homo_ev,"
         "mopac_lumo_ev,mopac_gap_ev\n"
-        "mol_01,C,1,Pending,0,1,-17.9,-15.2,0,-10.5,1.2,11.7\n"
+        "mol_01,C,1,Pending,OK,0,1,-17.9,-15.2,0,-10.5,1.2,11.7\n"
     )
     csv_file = tmp_path / "no_ok.csv"
     csv_file.write_text(csv_content)

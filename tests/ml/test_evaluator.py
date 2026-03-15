@@ -31,10 +31,11 @@ class TestEvaluate:
         )
         metrics = evaluate(learner, synthetic_csv_path, pipeline=pipeline)
 
-        expected_keys = {"rmse", "mae", "r2", "mape", "max_error"}
+        expected_keys = {"rmse", "mae", "r2", "mape", "max_error", "gate_pass", "rmse_gate", "r2_gate"}
         assert set(metrics.keys()) == expected_keys
-        for key in expected_keys:
+        for key in ("rmse", "mae", "r2", "mape", "max_error", "rmse_gate", "r2_gate"):
             assert np.isfinite(metrics[key]), f"{key} is not finite"
+        assert isinstance(metrics["gate_pass"], bool)
 
     def test_full_dataset_evaluation(self, synthetic_csv_path: Path) -> None:
         """evaluate() on full dataset produces lower/equal RMSE than test-only."""

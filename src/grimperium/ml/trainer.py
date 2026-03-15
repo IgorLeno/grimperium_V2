@@ -10,16 +10,10 @@ from sklearn.model_selection import train_test_split
 from grimperium import DictStrAny, MatrixFloat
 from grimperium.core.delta_learning import DeltaLearner
 from grimperium.ml.data_loader import load_ml_data
-from grimperium.ml.features import FeaturePipeline
+from grimperium.ml.features import FEATURE_COLUMNS, FeaturePipeline
 
 # Default feature columns matching thermo_pm7.csv
-DEFAULT_FEATURE_COLS = (
-    "nheavy",
-    "rdkit_nrotbonds",
-    "mopac_homo_ev",
-    "mopac_lumo_ev",
-    "mopac_gap_ev",
-)
+DEFAULT_FEATURE_COLS = tuple(FEATURE_COLUMNS)
 
 
 @overload

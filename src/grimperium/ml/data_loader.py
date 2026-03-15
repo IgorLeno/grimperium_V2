@@ -22,7 +22,7 @@ def load_ml_data(
     """Load CSV and return only training-ready rows.
 
     Filters:
-        1. status == 'OK' only
+        1. status == 'OK' AND cbs_quality_flag == 'OK' only
         2. Drops rows where H298_cbs or H298_pm7 is NaN
 
     Args:
@@ -47,8 +47,8 @@ def load_ml_data(
     loader = CSVDataLoader(csv_path, strict=strict)
     df = loader.load_dataframe()
 
-    # Filter: status == OK
-    df = df[df["status"] == "OK"].copy()
+    # Filter: status == OK AND cbs_quality_flag == OK
+    df = df[(df["status"] == "OK") & (df["cbs_quality_flag"] == "OK")].copy()
 
     # Filter: both targets present
     df = df.dropna(subset=["H298_cbs", "H298_pm7"])

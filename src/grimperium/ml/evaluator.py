@@ -54,4 +54,8 @@ def evaluate(
     df, y_cbs, y_pm7 = load_ml_data(csv_path)
     X: MatrixFloat = pipeline.transform(df)
 
-    return learner.evaluate(X, y_cbs, y_pm7)
+    metrics: DictStrAny = learner.evaluate(X, y_cbs, y_pm7)
+    metrics["gate_pass"] = float(metrics["rmse"]) < 20.0 and float(metrics["r2"]) > 0.9
+    metrics["rmse_gate"] = 20.0
+    metrics["r2_gate"] = 0.9
+    return metrics
