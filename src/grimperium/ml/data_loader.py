@@ -34,6 +34,15 @@ def load_ml_data(
 
     Raises:
         ValueError: If no valid rows remain after filtering
+
+    Example:
+        >>> from pathlib import Path
+        >>> df, y_cbs, y_pm7 = load_ml_data(
+        ...     csv_path=Path("thermo_pm7.csv"),
+        ...     strict=False,
+        ... )
+        >>> df.shape[0] == len(y_cbs) == len(y_pm7)
+        True
     """
     loader = CSVDataLoader(csv_path, strict=strict)
     df = loader.load_dataframe()

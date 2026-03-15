@@ -58,12 +58,60 @@ def synthetic_df() -> pd.DataFrame:
     """Load the synthetic CSV as a DataFrame (bypassing CSVDataLoader).
 
     Returns:
-        pd.DataFrame: DataFrame loaded from _SYNTHETIC_CSV (bypassing CSVDataLoader).
+        pd.DataFrame: DataFrame loaded from _SYNTHETIC_CSV
+        (bypassing CSVDataLoader).
     """
     return pd.read_csv(StringIO(_SYNTHETIC_CSV))
 
 
 @pytest.fixture
 def feature_cols() -> list[str]:
-    """Feature column names used by the pipeline."""
+    """Feature column names used by the pipeline.
+
+    Returns:
+        list[str]: Feature column names sourced from FEATURE_COLS.
+    """
     return list(FEATURE_COLS)
+
+
+@pytest.fixture
+def csv_with_missing_target(tmp_path: Path) -> Path:
+    """Create a CSV fixture with one row missing target value.
+
+    Args:
+        tmp_path: Temporary directory provided by pytest.
+
+    Returns:
+        Path: CSV path where one row has missing `H298_pm7`.
+    """
+    csv_content = (
+        "mol_id,smiles,nheavy,status,charge,multiplicity,"
+        "H298_cbs,H298_pm7,rdkit_nrotbonds,mopac_homo_ev,"
+        "mopac_lumo_ev,mopac_gap_ev\n"
+        "mol_01,C,1,OK,0,1,-17.9,-15.2,0,-10.5,1.2,11.7\n"
+        "mol_02,CC,2,OK,0,1,-20.0,,0,-10.8,1.5,12.3\n"
+    )
+    csv_file = tmp_path / "missing_target.csv"
+    csv_file.write_text(csv_content)
+    return csv_file
+
+
+@pytest.fixture
+def csv_no_ok_status(tmp_path: Path) -> Path:
+    """Create a CSV fixture with no rows in status OK.
+
+    Args:
+        tmp_path: Temporary directory provided by pytest.
+
+    Returns:
+        Path: CSV path where all rows are filtered out by status.
+    """
+    csv_content = (
+        "mol_id,smiles,nheavy,status,charge,multiplicity,"
+        "H298_cbs,H298_pm7,rdkit_nrotbonds,mopac_homo_ev,"
+        "mopac_lumo_ev,mopac_gap_ev\n"
+        "mol_01,C,1,Pending,0,1,-17.9,-15.2,0,-10.5,1.2,11.7\n"
+    )
+    csv_file = tmp_path / "no_ok.csv"
+    csv_file.write_text(csv_content)
+    return csv_file

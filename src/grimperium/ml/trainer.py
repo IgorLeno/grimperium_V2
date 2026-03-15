@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Literal, overload
 
 from sklearn.model_selection import train_test_split
 
@@ -21,27 +22,72 @@ DEFAULT_FEATURE_COLS = (
 )
 
 
+@overload
 def train(
     csv_path: Path,
     *,
     feature_cols: list[str] | None = None,
     test_size: float = 0.2,
     random_state: int = 42,
-) -> tuple[DeltaLearner, DictStrAny, DictStrAny]:
+    return_pipeline: Literal[False] = False,
+) -> tuple[DeltaLearner, DictStrAny, DictStrAny]: ...
+
+
+@overload
+def train(
+    csv_path: Path,
+    *,
+    feature_cols: list[str] | None = None,
+    test_size: float = 0.2,
+    random_state: int = 42,
+    return_pipeline: Literal[True],
+) -> tuple[DeltaLearner, DictStrAny, DictStrAny, FeaturePipeline]: ...
+
+
+def train(
+    csv_path: Path,
+    *,
+    feature_cols: list[str] | None = None,
+    test_size: float = 0.2,
+    random_state: int = 42,
+    return_pipeline: bool = False,
+) -> (
+    tuple[DeltaLearner, DictStrAny, DictStrAny]
+    | tuple[DeltaLearner, DictStrAny, DictStrAny, FeaturePipeline]
+):
     """Train a DeltaLearner with proper train/test split.
 
     CRITICAL: Split happens on the DataFrame BEFORE fit_transform
     to prevent data leakage through imputation statistics.
 
-    Parameters:
-        csv_path: Path to thermo_pm7.csv
-        feature_cols: Feature column names (defaults to DEFAULT_FEATURE_COLS)
-        test_size: Fraction of data for test set
-        random_state: Random seed for reproducibility
+    Args:
+        csv_path: Path to `thermo_pm7.csv`.
+        feature_cols: Feature column names. If None, uses
+            `DEFAULT_FEATURE_COLS`.
+        test_size: Fraction of data for the test split. Must satisfy
+            0 < test_size < 1.
+        random_state: Random seed for reproducible splitting.
+        return_pipeline: If True, also returns the fitted FeaturePipeline for
+            leakage-safe downstream evaluation.
 
     Returns:
-        (learner, train_metrics, test_metrics)
+        Tuple with `(learner, train_metrics, test_metrics)` and, when
+        `return_pipeline=True`, an additional fitted `FeaturePipeline`.
+
+    Example:
+        >>> from pathlib import Path
+        >>> learner, train_metrics, test_metrics = train(
+        ...     Path("thermo_pm7.csv"),
+        ...     test_size=0.2,
+        ...     random_state=42,
+        ... )
+        >>> train_metrics["rmse"] >= 0
+        True
     """
+    if not 0 < test_size < 1:
+        msg = f"test_size must be between 0 and 1 (exclusive), got {test_size}"
+        raise ValueError(msg)
+
     if feature_cols is None:
         feature_cols = list(DEFAULT_FEATURE_COLS)
 
@@ -66,7 +112,7 @@ def train(
 
     # Step 3: Feature engineering — imputer fitted on train only
     pipeline = FeaturePipeline(feature_cols)
-    X_train: MatrixFloat = pipeline.fit_transform(df_train)
+    X_train: MatrixFloat = pipeline.train(df_train)
     X_test: MatrixFloat = pipeline.transform(df_test)
 
     # Step 4: Train DeltaLearner
@@ -74,7 +120,11 @@ def train(
     learner.fit(X_train, y_cbs_train, y_pm7_train)
 
     # Step 5: Evaluate on both splits
-    train_metrics: DictStrAny = learner.evaluate(X_train, y_cbs_train, y_pm7_train)
+    train_metrics: DictStrAny = learner.evaluate(
+        X_train, y_cbs_train, y_pm7_train
+    )
     test_metrics: DictStrAny = learner.evaluate(X_test, y_cbs_test, y_pm7_test)
 
+    if return_pipeline:
+        return learner, train_metrics, test_metrics, pipeline
     return learner, train_metrics, test_metrics

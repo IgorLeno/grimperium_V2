@@ -29,33 +29,17 @@ class TestLoadMLData:
         assert len(y_cbs) == 10
         assert len(y_pm7) == 10
 
-    def test_drops_rows_missing_targets(self, tmp_path: Path) -> None:
+    def test_drops_rows_missing_targets(
+        self, csv_with_missing_target: Path
+    ) -> None:
         """Rows where H298_cbs or H298_pm7 is NaN are dropped."""
-        # Create CSV with one row missing H298_pm7
-        csv_content = (
-            "mol_id,smiles,nheavy,status,charge,multiplicity,"
-            "H298_cbs,H298_pm7,rdkit_nrotbonds,mopac_homo_ev,mopac_lumo_ev,mopac_gap_ev\n"
-            "mol_01,C,1,OK,0,1,-17.9,-15.2,0,-10.5,1.2,11.7\n"
-            "mol_02,CC,2,OK,0,1,-20.0,,0,-10.8,1.5,12.3\n"  # missing H298_pm7
-        )
-        csv_file = tmp_path / "missing_target.csv"
-        csv_file.write_text(csv_content)
-
-        df, y_cbs, y_pm7 = load_ml_data(csv_file)
+        df, y_cbs, y_pm7 = load_ml_data(csv_with_missing_target)
         assert len(df) == 1  # Only first row survives
 
-    def test_raises_on_no_valid_rows(self, tmp_path: Path) -> None:
+    def test_raises_on_no_valid_rows(self, csv_no_ok_status: Path) -> None:
         """Raises ValueError if no rows remain after filtering."""
-        csv_content = (
-            "mol_id,smiles,nheavy,status,charge,multiplicity,"
-            "H298_cbs,H298_pm7,rdkit_nrotbonds,mopac_homo_ev,mopac_lumo_ev,mopac_gap_ev\n"
-            "mol_01,C,1,Pending,0,1,-17.9,-15.2,0,-10.5,1.2,11.7\n"
-        )
-        csv_file = tmp_path / "no_ok.csv"
-        csv_file.write_text(csv_content)
-
         with pytest.raises(ValueError, match="No valid"):
-            load_ml_data(csv_file)
+            load_ml_data(csv_no_ok_status)
 
     def test_preserves_feature_columns(self, synthetic_csv_path: Path) -> None:
         """Returned DataFrame contains feature columns needed by pipeline."""

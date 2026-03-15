@@ -5,8 +5,11 @@ from __future__ import annotations
 from pathlib import Path
 
 import numpy as np
+import pytest
+from sklearn.model_selection import train_test_split
 
 from grimperium.core.delta_learning import DeltaLearner
+from grimperium.ml.data_loader import load_ml_data
 from grimperium.ml.trainer import train
 
 
@@ -40,8 +43,8 @@ class TestTrain:
         """Split happens on DataFrame BEFORE fit_transform (no leakage).
 
         We verify by checking that train RMSE != test RMSE (they should differ
-        because train is fit on train data, test uses transform-only).
-        With 10 rows this is a weak check, but the architecture guarantees it.
+        because train is fit on train data, test uses transform-only), and by
+        asserting NaN values on held-out rows are imputed from TRAIN medians.
         """
         _, train_metrics, test_metrics = train(
             synthetic_csv_path, test_size=0.2, random_state=42
@@ -54,3 +57,41 @@ class TestTrain:
         assert train_metrics["rmse"] >= 0
         assert test_metrics["rmse"] >= 0
         assert not np.isclose(train_metrics["rmse"], test_metrics["rmse"])
+
+        # Controlled check: ensure held-out NaN rows are transformed with
+        # medians from train split only (no fit on full dataset).
+        _, _, _, pipeline = train(
+            synthetic_csv_path,
+            test_size=0.2,
+            random_state=0,
+            return_pipeline=True,
+        )
+        df, y_cbs, y_pm7 = load_ml_data(synthetic_csv_path)
+        df_train, df_test, *_ = train_test_split(
+            df,
+            y_cbs,
+            y_pm7,
+            test_size=0.2,
+            random_state=0,
+        )
+
+        mopac_cols = ["mopac_homo_ev", "mopac_lumo_ev", "mopac_gap_ev"]
+        test_nan_mask = df_test[mopac_cols].isna()
+        assert test_nan_mask.any().any(), "Fixture must place NaN in held-out rows."
+
+        train_medians = df_train[mopac_cols].median()
+        transformed_test = pipeline.transform(df_test)
+        feature_index = {col: idx for idx, col in enumerate(pipeline.feature_cols)}
+
+        for col in mopac_cols:
+            col_nan_rows = np.where(test_nan_mask[col].to_numpy())[0]
+            if len(col_nan_rows) == 0:
+                continue
+            col_idx = feature_index[col]
+            for row_idx in col_nan_rows:
+                assert np.isclose(transformed_test[row_idx, col_idx], train_medians[col])
+
+    def test_raises_on_invalid_test_size(self, synthetic_csv_path: Path) -> None:
+        """train validates test_size bounds before train_test_split call."""
+        with pytest.raises(ValueError, match="test_size must be between 0 and 1"):
+            train(synthetic_csv_path, test_size=1.0, random_state=42)
