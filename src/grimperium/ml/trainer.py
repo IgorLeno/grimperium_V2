@@ -12,13 +12,13 @@ from grimperium.ml.data_loader import load_ml_data
 from grimperium.ml.features import FeaturePipeline
 
 # Default feature columns matching thermo_pm7.csv
-DEFAULT_FEATURE_COLS = [
+DEFAULT_FEATURE_COLS = (
     "nheavy",
     "rdkit_nrotbonds",
     "mopac_homo_ev",
     "mopac_lumo_ev",
     "mopac_gap_ev",
-]
+)
 
 
 def train(
@@ -43,7 +43,7 @@ def train(
         (learner, train_metrics, test_metrics)
     """
     if feature_cols is None:
-        feature_cols = DEFAULT_FEATURE_COLS
+        feature_cols = list(DEFAULT_FEATURE_COLS)
 
     # Step 1: Load data
     df, y_cbs, y_pm7 = load_ml_data(csv_path)

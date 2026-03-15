@@ -8,22 +8,18 @@ from __future__ import annotations
 
 from io import StringIO
 from pathlib import Path
-from typing import TYPE_CHECKING
 
 import pandas as pd
 import pytest
 
-if TYPE_CHECKING:
-    pass
-
 # Features used by the ML pipeline
-FEATURE_COLS = [
+FEATURE_COLS = (
     "nheavy",
     "rdkit_nrotbonds",
     "mopac_homo_ev",
     "mopac_lumo_ev",
     "mopac_gap_ev",
-]
+)
 
 # 10-row synthetic CSV with valid MoleculeStatus values and realistic data.
 # 2 rows have NaN in mopac columns to test imputation (~20%).
@@ -44,7 +40,14 @@ mol_00010,COC,3,OK,0,1,-44.0,-41.0,0,,,
 
 @pytest.fixture
 def synthetic_csv_path(tmp_path: Path) -> Path:
-    """Write synthetic CSV to a temp file and return its path."""
+    """Write synthetic CSV to a temp file and return its path.
+
+    Args:
+        tmp_path: Temporary directory provided by pytest.
+
+    Returns:
+        Path: Path to the created synthetic CSV file.
+    """
     csv_file = tmp_path / "thermo_pm7.csv"
     csv_file.write_text(_SYNTHETIC_CSV)
     return csv_file
@@ -52,7 +55,11 @@ def synthetic_csv_path(tmp_path: Path) -> Path:
 
 @pytest.fixture
 def synthetic_df() -> pd.DataFrame:
-    """Load the synthetic CSV as a DataFrame (bypassing CSVDataLoader)."""
+    """Load the synthetic CSV as a DataFrame (bypassing CSVDataLoader).
+
+    Returns:
+        pd.DataFrame: DataFrame loaded from _SYNTHETIC_CSV (bypassing CSVDataLoader).
+    """
     return pd.read_csv(StringIO(_SYNTHETIC_CSV))
 
 

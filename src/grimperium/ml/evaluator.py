@@ -19,16 +19,26 @@ def evaluate(
 ) -> DictStrAny:
     """Evaluate a trained DeltaLearner on the full dataset.
 
-    Parameters:
-        learner: A fitted DeltaLearner instance.
-        csv_path: Path to thermo_pm7.csv
-        feature_cols: Feature column names (defaults to DEFAULT_FEATURE_COLS)
+    Args:
+        learner (DeltaLearner): A fitted DeltaLearner instance.
+        csv_path (str): Path to thermo_pm7.csv.
+        feature_cols (list[str], optional): Feature column names. If None, uses
+            a defensive copy of DEFAULT_FEATURE_COLS.
 
     Returns:
-        Dict with rmse, mae, r2, mape, max_error
+        DictStrAny: Metric dictionary with keys `rmse`, `mae`, `r2`, `mape`,
+        and `max_error` computed on the full dataset.
+
+    Example:
+        >>> from pathlib import Path
+        >>> from grimperium.ml.trainer import train
+        >>> learner, _, _ = train(Path("thermo_pm7.csv"))
+        >>> metrics = evaluate(learner, Path("thermo_pm7.csv"))
+        >>> sorted(metrics.keys())
+        ['mae', 'mape', 'max_error', 'r2', 'rmse']
     """
     if feature_cols is None:
-        feature_cols = DEFAULT_FEATURE_COLS
+        feature_cols = list(DEFAULT_FEATURE_COLS)
 
     df, y_cbs, y_pm7 = load_ml_data(csv_path)
 

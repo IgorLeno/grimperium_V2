@@ -6,6 +6,9 @@ from pathlib import Path
 
 import numpy as np
 
+from grimperium.core.delta_learning import DeltaLearner
+from grimperium.ml.trainer import train
+
 
 class TestTrain:
     """Tests for the train() function."""
@@ -14,9 +17,6 @@ class TestTrain:
         self, synthetic_csv_path: Path
     ) -> None:
         """train() returns (DeltaLearner, train_metrics, test_metrics)."""
-        from grimperium.core.delta_learning import DeltaLearner
-        from grimperium.ml.trainer import train
-
         learner, train_metrics, test_metrics = train(
             synthetic_csv_path, test_size=0.2, random_state=42
         )
@@ -28,8 +28,6 @@ class TestTrain:
 
     def test_metrics_contain_expected_keys(self, synthetic_csv_path: Path) -> None:
         """Both metric dicts contain rmse, mae, r2, mape, max_error."""
-        from grimperium.ml.trainer import train
-
         _, train_metrics, test_metrics = train(
             synthetic_csv_path, test_size=0.2, random_state=42
         )
@@ -45,8 +43,6 @@ class TestTrain:
         because train is fit on train data, test uses transform-only).
         With 10 rows this is a weak check, but the architecture guarantees it.
         """
-        from grimperium.ml.trainer import train
-
         _, train_metrics, test_metrics = train(
             synthetic_csv_path, test_size=0.2, random_state=42
         )
@@ -57,3 +53,4 @@ class TestTrain:
         # RMSE should be non-negative
         assert train_metrics["rmse"] >= 0
         assert test_metrics["rmse"] >= 0
+        assert not np.isclose(train_metrics["rmse"], test_metrics["rmse"])

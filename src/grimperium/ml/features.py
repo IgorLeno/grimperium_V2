@@ -15,19 +15,19 @@ class FeaturePipeline:
     Uses median imputation for NaN values (mopac_homo/lumo/gap_ev have ~12.4% NaN).
     The imputer is fitted on training data only to prevent data leakage.
 
-    Parameters:
+    Args:
         feature_cols: Column names to extract as features.
     """
 
     def __init__(self, feature_cols: list[str]) -> None:
-        self.feature_cols = feature_cols
-        self._imputer = SimpleImputer(strategy="median")
-        self._is_fitted = False
+        self.feature_cols: list[str] = list(feature_cols)
+        self._imputer: SimpleImputer = SimpleImputer(strategy="median")
+        self._is_fitted: bool = False
 
     def fit_transform(self, df: pd.DataFrame) -> MatrixFloat:
         """Fit imputer on df and return transformed feature matrix.
 
-        Parameters:
+        Args:
             df: Training DataFrame with feature columns.
 
         Returns:
@@ -44,7 +44,7 @@ class FeaturePipeline:
     def transform(self, df: pd.DataFrame) -> MatrixFloat:
         """Transform df using statistics learned during fit_transform.
 
-        Parameters:
+        Args:
             df: Test DataFrame with feature columns.
 
         Returns:

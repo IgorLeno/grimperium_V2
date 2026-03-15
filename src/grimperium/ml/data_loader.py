@@ -25,7 +25,7 @@ def load_ml_data(
         1. status == 'OK' only
         2. Drops rows where H298_cbs or H298_pm7 is NaN
 
-    Parameters:
+    Args:
         csv_path: Path to thermo_pm7.csv
         strict: If True, raise on validation errors; False = skip invalid rows
 
