@@ -61,6 +61,8 @@ mol_00007,CC(C)C,4,OK,OK,0,1,-32.1,-29.0,0,0.0,0,1.0,58.12,0,0,4,10,0,0,13,0,0,0
 mol_00008,CCCO,4,OK,OK,0,1,-61.0,-57.0,1,20.2,0,0.75,60.10,1,1,3,8,1,0,11,0,0,0,14,3,4.1,-10.7,1.6,12.3,1.5,12.9,85.2,70.8,0.01,10
 mol_00009,CC=O,3,OK,OK,0,1,-39.7,-36.5,0,17.1,0,0.5,44.05,0,1,2,4,1,0,5,1,0,0,6,1,1.8,,,,,,,,,
 mol_00010,COC,3,OK,OK,0,1,-44.0,-41.0,0,18.5,0,0.67,46.07,0,2,2,6,1,0,8,0,0,0,9,2,2.0,,,,,,,,,
+mol_00011,CN,2,OK,SUSPECT,0,1,-99999.0,-20.0,0,0.0,0,1.0,29.04,1,0,1,5,0,1,4,0,0,0,6,1,1.0,-9.0,1.0,10.0,1.0,11.0,50.0,35.0,0.01,8
+mol_00012,CO,2,PENDING,OK,0,1,-45.0,-42.0,0,18.5,0,0.5,32.04,1,1,1,4,1,0,5,0,0,0,6,1,1.5,-10.0,1.2,11.2,1.8,12.0,55.0,40.0,0.02,9
 """
 
 
@@ -75,6 +77,14 @@ def synthetic_csv_path(tmp_path: Path) -> Path:
         Path: Path to the created synthetic CSV file.
     """
     csv_file = tmp_path / "thermo_pm7.csv"
+    csv_file.write_text(_SYNTHETIC_CSV)
+    return csv_file
+
+
+@pytest.fixture
+def synthetic_csv_path_mixed(tmp_path: Path) -> Path:
+    """12-row CSV: 10 OK/OK, 1 OK/SUSPECT, 1 PENDING/OK."""
+    csv_file = tmp_path / "thermo_pm7_mixed.csv"
     csv_file.write_text(_SYNTHETIC_CSV)
     return csv_file
 

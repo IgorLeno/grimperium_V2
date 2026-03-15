@@ -21,11 +21,14 @@ class TestLoadMLData:
         assert isinstance(y_cbs, np.ndarray)
         assert isinstance(y_pm7, np.ndarray)
 
-    def test_filters_only_ok_status(self, synthetic_csv_path: Path) -> None:
-        """Only rows with status='OK' are returned."""
-        df, y_cbs, y_pm7 = load_ml_data(synthetic_csv_path)
-        # All 10 rows in fixture have status=OK
+    def test_filters_only_ok_and_flag_ok(
+        self, synthetic_csv_path_mixed: Path
+    ) -> None:
+        """Rows with SUSPECT flag or non-OK status are excluded."""
+        df, y_cbs, y_pm7 = load_ml_data(synthetic_csv_path_mixed)
         assert len(df) == 10
+        assert "SUSPECT" not in df["cbs_quality_flag"].values
+        assert "PENDING" not in df["status"].values
         assert len(y_cbs) == 10
         assert len(y_pm7) == 10
 
