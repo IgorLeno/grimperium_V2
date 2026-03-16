@@ -181,3 +181,18 @@ def trained_model_fixture(synthetic_csv_path: Path) -> dict[str, Any]:
             "test": test_metrics,
         },
     }
+
+
+@pytest.fixture
+def csv_with_predictions(tmp_path: Path) -> Path:
+    """Copy synthetic CSV (12 rows: 10 OK/OK + 2 non-eligible) for write testing.
+
+    Args:
+        tmp_path: Temporary directory provided by pytest.
+
+    Returns:
+        Path: Writable CSV path for batch prediction tests.
+    """
+    csv_file = tmp_path / "predict_target.csv"
+    csv_file.write_text(_SYNTHETIC_CSV)
+    return csv_file

@@ -23,10 +23,6 @@ if TYPE_CHECKING:
 
 _MODEL_NAME = "DeltaLearner v1"
 _MODEL_ALGORITHM = "KRR + XGBoost Ensemble"
-_MODEL_PATH = Path(
-    os.environ.get("GRIMPERIUM_MODEL_PATH", "models/delta_learner_v1.joblib")
-)
-_DATA_PATH = Path(os.environ.get("GRIMPERIUM_DATA_PATH", "data/thermo_pm7.csv"))
 
 
 def _safe_metric(value: Any, default: float = 0.0) -> float:
@@ -47,10 +43,20 @@ class ModelsView(BaseView):
         super().__init__(controller)
         self.selected_model: bool = False
 
+    def _get_model_path(self) -> Path:
+        """Resolve model path from env var (read fresh on each call)."""
+        return Path(
+            os.environ.get("GRIMPERIUM_MODEL_PATH", "models/delta_learner_v1.joblib")
+        )
+
+    def _get_data_path(self) -> Path:
+        """Resolve data path from env var (read fresh on each call)."""
+        return Path(os.environ.get("GRIMPERIUM_DATA_PATH", "data/thermo_pm7.csv"))
+
     def _load_model_info(self) -> dict[str, Any] | None:
         """Try to load model metadata. Returns None if model not trained yet."""
         try:
-            return load_model_metadata(_MODEL_PATH)
+            return load_model_metadata(self._get_model_path())
         except FileNotFoundError:
             return None
 
@@ -263,7 +269,7 @@ Model has not been trained yet. Use "Train New Model" to train.
 
         try:
             result = train_model(
-                _DATA_PATH,
+                self._get_data_path(),
                 return_pipeline=True,
                 random_state=42,
             )
@@ -285,7 +291,7 @@ Model has not been trained yet. Use "Train New Model" to train.
                     "test": test_m,
                 },
             }
-            save_model(bundle, _MODEL_PATH)
+            save_model(bundle, self._get_model_path())
 
             gate_pass = test_m.get("gate_pass", False)
             gate_icon = ICONS["success"] if gate_pass else ICONS["error"]
@@ -308,7 +314,7 @@ Model has not been trained yet. Use "Train New Model" to train.
                     padding=(1, 2),
                 )
             )
-            self.show_success(f"Model trained and saved to {_MODEL_PATH}")
+            self.show_success(f"Model trained and saved to {self._get_model_path()}")
         except Exception as e:
             self.show_error(f"Training failed: {e}")
 
