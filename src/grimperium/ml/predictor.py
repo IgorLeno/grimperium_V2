@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import overload
+from typing import Literal, overload
 
 import numpy as np
 import pandas as pd
@@ -23,7 +23,7 @@ def predict_batch(
     csv_path: Path,
     model_path: Path,
     *,
-    return_stats: bool = ...,
+    return_stats: Literal[False] = ...,
 ) -> pd.DataFrame: ...
 
 
@@ -32,8 +32,8 @@ def predict_batch(
     csv_path: Path,
     model_path: Path,
     *,
-    return_stats: bool,
-) -> pd.DataFrame | tuple[pd.DataFrame, DictStrAny]: ...
+    return_stats: Literal[True],
+) -> tuple[pd.DataFrame, DictStrAny]: ...
 
 
 def predict_batch(

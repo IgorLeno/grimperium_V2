@@ -41,24 +41,32 @@ class ResultsView(BaseView):
     color = COLORS["results"]
 
     def _get_model_path(self) -> Path:
-        """Resolve model path from env var (read fresh on each call)."""
+        """Resolve model path from env var (read fresh on each call).
+
+        Returns:
+            Path: The resolved model file path.
+        """
         return Path(
             os.environ.get("GRIMPERIUM_MODEL_PATH", "models/delta_learner_v1.joblib")
         )
 
     def _get_csv_path(self) -> Path:
-        """Resolve CSV path from env var (read fresh on each call)."""
+        """Resolve CSV path from env var (read fresh on each call).
+
+        Returns:
+            Path: The resolved CSV data file path.
+        """
         return Path(os.environ.get("GRIMPERIUM_DATA_PATH", "data/thermo_pm7.csv"))
 
     def _load_real_model_row(self) -> dict[str, Any] | None:
         """Load model metadata for display. Returns None if not available."""
         try:
             return load_model_metadata(self._get_model_path())
-        except FileNotFoundError:
+        except (FileNotFoundError, KeyError, Exception):
             return None
 
     def _compute_divergence_stats(self) -> list[DictStrAny] | None:
-        """Compute divergence stats from CSV with predictions.
+        """Compute divergence statistics from predictions vs CBS values.
 
         Returns None if CSV is missing or has no predictions.
         """
