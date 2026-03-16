@@ -196,3 +196,46 @@ def csv_with_predictions(tmp_path: Path) -> Path:
     csv_file = tmp_path / "predict_target.csv"
     csv_file.write_text(_SYNTHETIC_CSV)
     return csv_file
+
+
+@pytest.fixture
+def csv_with_predictions_for_charts(
+    tmp_path: Path, synthetic_csv_path_mixed: Path
+) -> Path:
+    """Train a model, predict, and return CSV path with H298_predicted column.
+
+    This fixture trains on the synthetic mixed CSV, saves the model, runs
+    ``predict_batch``, and returns the updated CSV path ready for chart tests.
+
+    Args:
+        tmp_path: Temporary directory provided by pytest.
+        synthetic_csv_path_mixed: Path to the 12-row mixed-status CSV.
+
+    Returns:
+        Path: CSV path containing ``H298_predicted`` column with predictions.
+    """
+    from grimperium.ml.persistence import save_model
+    from grimperium.ml.predictor import predict_batch
+    from grimperium.ml.trainer import train
+
+    # Train model on synthetic data
+    learner, train_metrics, test_metrics, pipeline = train(
+        synthetic_csv_path_mixed,
+        test_size=0.2,
+        random_state=42,
+        return_pipeline=True,
+    )
+
+    # Save model to tmp_path
+    model_path = tmp_path / "charts_model.joblib"
+    bundle: dict[str, Any] = {
+        "learner": learner,
+        "pipeline": pipeline,
+        "metrics": {"train": train_metrics, "test": test_metrics},
+    }
+    save_model(bundle, model_path)
+
+    # Run batch prediction (overwrites CSV with H298_predicted column)
+    predict_batch(synthetic_csv_path_mixed, model_path)
+
+    return synthetic_csv_path_mixed

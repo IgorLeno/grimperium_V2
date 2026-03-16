@@ -279,8 +279,7 @@ class ResultsView(BaseView):
             MenuOption(
                 label="Visualization Charts",
                 value="charts",
-                disabled=True,
-                disabled_reason="In Development",
+                icon=ICONS.get("results", "📊"),
             ),
         ]
 
@@ -293,12 +292,73 @@ class ResultsView(BaseView):
             self._handle_predict_batch()
             return None
 
-        # Handle in-development features
-        if action in ["detailed", "charts"]:
-            self.show_in_development(action.title())
+        if action == "charts":
+            self._handle_charts()
+            return None
+
+        if action == "detailed":
+            self.show_in_development("Detailed Metrics")
             return None
 
         return None
+
+    def _get_charts_dir(self) -> Path:
+        """Resolve charts output directory from env var.
+
+        Returns:
+            Path: The resolved charts output directory.
+        """
+        return Path(os.environ.get("GRIMPERIUM_CHARTS_DIR", "reports/charts"))
+
+    def _handle_charts(self) -> None:
+        """Generate visualization charts and display results."""
+        from grimperium.ml.charts import ChartGenerationResult, generate_charts
+
+        csv_path = self._get_csv_path()
+        charts_dir = self._get_charts_dir()
+
+        self.console.print()
+        self.console.print(
+            f"[bold {COLORS['results']}]Generating charts..."
+            f"[/bold {COLORS['results']}]"
+        )
+        self.console.print()
+
+        try:
+            result: ChartGenerationResult = generate_charts(csv_path, charts_dir)
+
+            result_text = f"""
+[bold]Charts Generated Successfully![/bold]
+
+[bold]Summary:[/bold]
+  Data points plotted:  {result.n_points}
+  RMSE:                 {result.rmse:.4f} kcal/mol
+  R\u00b2:                   {result.r2:.4f}
+
+[bold]Files:[/bold]
+  Parity plot:      {result.parity_plot}
+  Delta histogram:  {result.delta_histogram}
+  Residuals plot:   {result.residuals_plot}
+"""
+
+            self.console.print(
+                Panel(
+                    result_text,
+                    title=f"[bold {COLORS['success']}]Visualization Charts"
+                    f"[/bold {COLORS['success']}]",
+                    border_style=COLORS["success"],
+                    padding=(1, 2),
+                )
+            )
+            self.show_success("Charts saved!")
+        except FileNotFoundError as e:
+            self.show_error(str(e))
+        except ValueError as e:
+            self.show_error(str(e))
+        except Exception as e:
+            self.show_error(f"Chart generation failed: {e}")
+
+        self.wait_for_enter()
 
     def _handle_predict_batch(self) -> None:
         """Run batch prediction and display results."""

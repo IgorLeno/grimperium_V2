@@ -1,15 +1,32 @@
 """ML pipeline for Grimperium delta-learning.
 
 Modules:
-    data_loader — Load and filter CSV for ML training
-    features    — Feature engineering with imputation
-    trainer     — Train/test split and training orchestration
-    evaluator   — Full-dataset evaluation
+    data_loader  — Load and filter CSV for ML training
+    features     — Feature engineering with imputation
+    trainer      — Train/test split and training orchestration
+    evaluator    — Full-dataset evaluation
+    persistence  — Model serialization and deserialization
+    predictor    — Batch prediction
+    charts       — Visualization chart generation
 """
 
+from grimperium.ml.charts import ChartGenerationResult, generate_charts
 from grimperium.ml.data_loader import load_ml_data
 from grimperium.ml.evaluator import evaluate
 from grimperium.ml.features import FeaturePipeline
+from grimperium.ml.persistence import load_model, load_model_metadata, save_model
+from grimperium.ml.predictor import predict_batch
 from grimperium.ml.trainer import train
 
-__all__ = ["FeaturePipeline", "evaluate", "load_ml_data", "train"]
+__all__ = [
+    "ChartGenerationResult",
+    "FeaturePipeline",
+    "evaluate",
+    "generate_charts",
+    "load_ml_data",
+    "load_model",
+    "load_model_metadata",
+    "predict_batch",
+    "save_model",
+    "train",
+]
