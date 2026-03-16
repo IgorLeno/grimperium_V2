@@ -2,14 +2,24 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+from typing import Any
+
 import pytest
 
 
 class TestSaveModel:
     """Tests for save_model function."""
 
-    def test_save_creates_joblib_file(self, trained_model_fixture, tmp_path):
-        """save_model cria arquivo .joblib no caminho especificado."""
+    def test_save_creates_joblib_file(
+        self, trained_model_fixture: dict[str, Any], tmp_path: Path
+    ) -> None:
+        """Verify that save_model creates a .joblib file at the given path.
+
+        Args:
+            trained_model_fixture: Bundle dict with learner, pipeline, metrics.
+            tmp_path: Temporary directory provided by pytest.
+        """
         from grimperium.ml.persistence import save_model
 
         path = tmp_path / "model.joblib"
@@ -17,16 +27,30 @@ class TestSaveModel:
         assert path.exists()
         assert path.suffix == ".joblib"
 
-    def test_save_creates_parent_dirs(self, trained_model_fixture, tmp_path):
-        """save_model cria diretórios pai se não existirem."""
+    def test_save_creates_parent_dirs(
+        self, trained_model_fixture: dict[str, Any], tmp_path: Path
+    ) -> None:
+        """Verify that save_model creates parent directories when missing.
+
+        Args:
+            trained_model_fixture: Bundle dict with learner, pipeline, metrics.
+            tmp_path: Temporary directory provided by pytest.
+        """
         from grimperium.ml.persistence import save_model
 
         path = tmp_path / "nested" / "deep" / "model.joblib"
         save_model(trained_model_fixture, path)
         assert path.exists()
 
-    def test_save_includes_metadata(self, trained_model_fixture, tmp_path):
-        """Arquivo salvo contém chaves: learner, pipeline, metrics, version, trained_at."""
+    def test_save_includes_metadata(
+        self, trained_model_fixture: dict[str, Any], tmp_path: Path
+    ) -> None:
+        """Verify saved bundle contains all expected keys.
+
+        Args:
+            trained_model_fixture: Bundle dict with learner, pipeline, metrics.
+            tmp_path: Temporary directory provided by pytest.
+        """
         import joblib
 
         from grimperium.ml.persistence import save_model
@@ -45,9 +69,14 @@ class TestLoadModel:
     """Tests for load_model function."""
 
     def test_load_returns_learner_and_pipeline(
-        self, trained_model_fixture, tmp_path
-    ):
-        """load_model retorna (DeltaLearner, FeaturePipeline)."""
+        self, trained_model_fixture: dict[str, Any], tmp_path: Path
+    ) -> None:
+        """Verify load_model returns a (DeltaLearner, FeaturePipeline) tuple.
+
+        Args:
+            trained_model_fixture: Bundle dict with learner, pipeline, metrics.
+            tmp_path: Temporary directory provided by pytest.
+        """
         from grimperium.core.delta_learning import DeltaLearner
         from grimperium.ml.features import FeaturePipeline
         from grimperium.ml.persistence import load_model, save_model
@@ -58,8 +87,15 @@ class TestLoadModel:
         assert isinstance(learner, DeltaLearner)
         assert isinstance(pipeline, FeaturePipeline)
 
-    def test_load_model_is_fitted(self, trained_model_fixture, tmp_path):
-        """Modelo carregado deve estar fitted (pronto para predict)."""
+    def test_load_model_is_fitted(
+        self, trained_model_fixture: dict[str, Any], tmp_path: Path
+    ) -> None:
+        """Verify loaded model is fitted and ready for prediction.
+
+        Args:
+            trained_model_fixture: Bundle dict with learner, pipeline, metrics.
+            tmp_path: Temporary directory provided by pytest.
+        """
         from grimperium.ml.persistence import load_model, save_model
 
         path = tmp_path / "model.joblib"
@@ -67,17 +103,30 @@ class TestLoadModel:
         learner, _ = load_model(path)
         assert learner.is_fitted
 
-    def test_load_raises_on_missing_file(self, tmp_path):
-        """load_model levanta FileNotFoundError se arquivo não existe."""
+    def test_load_raises_on_missing_file(self, tmp_path: Path) -> None:
+        """Verify load_model raises FileNotFoundError for non-existent file.
+
+        Args:
+            tmp_path: Temporary directory provided by pytest.
+        """
         from grimperium.ml.persistence import load_model
 
         with pytest.raises(FileNotFoundError, match="Model file not found"):
             load_model(tmp_path / "nonexistent.joblib")
 
     def test_roundtrip_predictions_identical(
-        self, trained_model_fixture, synthetic_csv_path, tmp_path
-    ):
-        """Predições antes e depois de salvar/carregar devem ser idênticas."""
+        self,
+        trained_model_fixture: dict[str, Any],
+        synthetic_csv_path: Path,
+        tmp_path: Path,
+    ) -> None:
+        """Verify predictions before and after save/load are identical.
+
+        Args:
+            trained_model_fixture: Bundle dict with learner, pipeline, metrics.
+            synthetic_csv_path: Path to synthetic CSV fixture.
+            tmp_path: Temporary directory provided by pytest.
+        """
         import numpy as np
 
         from grimperium.ml.data_loader import load_ml_data

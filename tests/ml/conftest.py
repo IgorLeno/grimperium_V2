@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from io import StringIO
 from pathlib import Path
+from typing import Any
 
 import pandas as pd
 import pytest
@@ -154,8 +155,16 @@ def csv_no_ok_status(tmp_path: Path) -> Path:
 
 
 @pytest.fixture
-def trained_model_fixture(synthetic_csv_path: Path) -> dict:
-    """Treina modelo com CSV sintético e retorna bundle pronto para save_model."""
+def trained_model_fixture(synthetic_csv_path: Path) -> dict[str, Any]:
+    """Train a model on synthetic data and return a save-ready bundle.
+
+    Args:
+        synthetic_csv_path: Path to the synthetic CSV fixture.
+
+    Returns:
+        dict with keys ``learner``, ``pipeline``, and ``metrics``
+        (``{"train": {...}, "test": {...}}``).
+    """
     from grimperium.ml.trainer import train
 
     learner, train_metrics, test_metrics, pipeline = train(

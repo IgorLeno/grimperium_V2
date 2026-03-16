@@ -27,16 +27,20 @@ MODEL_VERSION = "1.0.0"
 # }
 
 
-def save_model(bundle: dict[str, Any], path: Path) -> None:
+def save_model(bundle: dict[str, Any], path: Path | str) -> None:
     """Serialize DeltaLearner + FeaturePipeline + metrics to a joblib file.
 
     Args:
         bundle: dict with required keys: learner, pipeline, metrics.
-        path: destination path (.joblib). Parent directories are created
-              automatically.
+        path: destination path (.joblib). Accepts ``Path`` or ``str``;
+              parent directories are created automatically.
 
     Raises:
         ValueError: if bundle is missing required keys.
+
+    Example:
+        >>> save_model({"learner": lr, "pipeline": pl, "metrics": m},
+        ...            Path("models/model.joblib"))
     """
     required = {"learner", "pipeline", "metrics"}
     missing = required - bundle.keys()
@@ -58,11 +62,14 @@ def save_model(bundle: dict[str, Any], path: Path) -> None:
     logger.info("Model saved to %s (version %s)", path, MODEL_VERSION)
 
 
-def load_model(path: Path) -> tuple[DeltaLearner, FeaturePipeline]:
+def load_model(path: Path | str) -> tuple[DeltaLearner, FeaturePipeline]:
     """Load DeltaLearner and FeaturePipeline from a joblib file.
 
+    Security: ``joblib.load`` deserializes objects and can execute
+    arbitrary code.  Only load model files from trusted sources.
+
     Args:
-        path: path to the .joblib file.
+        path: path to the ``.joblib`` file.  Accepts ``Path`` or ``str``.
 
     Returns:
         (DeltaLearner, FeaturePipeline) ready for predict and transform.
@@ -70,6 +77,9 @@ def load_model(path: Path) -> tuple[DeltaLearner, FeaturePipeline]:
     Raises:
         FileNotFoundError: if the file does not exist.
         ValueError: if the file is not a valid Grimperium bundle.
+
+    Example:
+        >>> learner, pipeline = load_model("models/model.joblib")
     """
     path = Path(path)
     if not path.exists():
@@ -96,18 +106,26 @@ def load_model(path: Path) -> tuple[DeltaLearner, FeaturePipeline]:
     return learner, pipeline
 
 
-def load_model_metadata(path: Path) -> DictStrAny:
+def load_model_metadata(path: Path | str) -> DictStrAny:
     """Load only bundle metadata for CLI display.
 
     Note: joblib deserializes the entire bundle (including learner and
     pipeline). The 'metadata-only' separation is logical, not a
     performance optimization.
 
+    Args:
+        path: path to the ``.joblib`` file.  Accepts ``Path`` or ``str``.
+
     Returns:
         dict with version, trained_at, metrics.
 
     Raises:
         FileNotFoundError: if the file does not exist.
+
+    Example:
+        >>> meta = load_model_metadata(Path("models/model.joblib"))
+        >>> meta["version"]
+        '1.0.0'
     """
     path = Path(path)
     if not path.exists():

@@ -6,6 +6,7 @@ Displays and manages trained ML models using real persistence data.
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -22,7 +23,15 @@ if TYPE_CHECKING:
 
 _MODEL_NAME = "DeltaLearner v1"
 _MODEL_ALGORITHM = "KRR + XGBoost Ensemble"
-_MODEL_PATH = Path("models/delta_learner_v1.joblib")
+_MODEL_PATH = Path(
+    os.environ.get("GRIMPERIUM_MODEL_PATH", "models/delta_learner_v1.joblib")
+)
+_DATA_PATH = Path(os.environ.get("GRIMPERIUM_DATA_PATH", "data/thermo_pm7.csv"))
+
+
+def _safe_metric(value: Any, default: float = 0.0) -> float:
+    """Return *value* if numeric, otherwise *default*."""
+    return default if value is None else float(value)
 
 
 class ModelsView(BaseView):
@@ -110,15 +119,15 @@ Model has not been trained yet. Use "Train New Model" to train.
             test_metrics = metadata.get("metrics", {}).get("test", {})
             train_metrics = metadata.get("metrics", {}).get("train", {})
 
-            mae_str = f"{test_metrics.get('mae', 0):.3f}"
-            r2_str = f"{test_metrics.get('r2', 0):.4f}"
-            rmse_str = f"{test_metrics.get('rmse', 0):.3f}"
-            mape_str = f"{test_metrics.get('mape', 0):.2f}"
-            max_err_str = f"{test_metrics.get('max_error', 0):.3f}"
+            mae_str = f"{_safe_metric(test_metrics.get('mae')):.3f}"
+            r2_str = f"{_safe_metric(test_metrics.get('r2')):.4f}"
+            rmse_str = f"{_safe_metric(test_metrics.get('rmse')):.3f}"
+            mape_str = f"{_safe_metric(test_metrics.get('mape')):.2f}"
+            max_err_str = f"{_safe_metric(test_metrics.get('max_error')):.3f}"
 
-            train_rmse = f"{train_metrics.get('rmse', 0):.3f}"
-            train_mae = f"{train_metrics.get('mae', 0):.3f}"
-            train_r2 = f"{train_metrics.get('r2', 0):.4f}"
+            train_rmse = f"{_safe_metric(train_metrics.get('rmse')):.3f}"
+            train_mae = f"{_safe_metric(train_metrics.get('mae')):.3f}"
+            train_r2 = f"{_safe_metric(train_metrics.get('r2')):.4f}"
 
             info = f"""
 [bold]Name:[/bold]          {_MODEL_NAME}
@@ -253,11 +262,20 @@ Model has not been trained yet. Use "Train New Model" to train.
         self.console.print()
 
         try:
-            learner, train_m, test_m, pipeline = train_model(
-                Path("data/thermo_pm7.csv"),
+            result = train_model(
+                _DATA_PATH,
                 return_pipeline=True,
                 random_state=42,
             )
+            if not isinstance(result, tuple) or len(result) != 4:
+                msg = (
+                    f"train_model(return_pipeline=True) returned "
+                    f"{type(result).__name__} with "
+                    f"{len(result) if isinstance(result, tuple) else 'N/A'} "
+                    f"elements; expected a 4-tuple"
+                )
+                raise TypeError(msg)
+            learner, train_m, test_m, pipeline = result
 
             bundle: dict[str, Any] = {
                 "learner": learner,
@@ -276,9 +294,9 @@ Model has not been trained yet. Use "Train New Model" to train.
 [bold]Training Complete![/bold]
 
 [bold]Test Results:[/bold]
-  RMSE:        {test_m.get('rmse', 0):.3f} kcal/mol
-  MAE:         {test_m.get('mae', 0):.3f} kcal/mol
-  R² Score:    {test_m.get('r2', 0):.4f}
+  RMSE:        {_safe_metric(test_m.get('rmse')):.3f} kcal/mol
+  MAE:         {_safe_metric(test_m.get('mae')):.3f} kcal/mol
+  R² Score:    {_safe_metric(test_m.get('r2')):.4f}
   Gate Pass:   {gate_icon} {'Yes' if gate_pass else 'No'}
 """
 
@@ -314,11 +332,11 @@ Model has not been trained yet. Use "Train New Model" to train.
 [bold]Trained at:[/bold]  {metadata.get('trained_at', 'unknown')}
 
 [bold]Test Metrics:[/bold]
-  RMSE:        {test_metrics.get('rmse', 0):.3f} kcal/mol
-  MAE:         {test_metrics.get('mae', 0):.3f} kcal/mol
-  R² Score:    {test_metrics.get('r2', 0):.4f}
-  MAPE:        {test_metrics.get('mape', 0):.2f}%
-  Max Error:   {test_metrics.get('max_error', 0):.3f} kcal/mol
+  RMSE:        {_safe_metric(test_metrics.get('rmse')):.3f} kcal/mol
+  MAE:         {_safe_metric(test_metrics.get('mae')):.3f} kcal/mol
+  R² Score:    {_safe_metric(test_metrics.get('r2')):.4f}
+  MAPE:        {_safe_metric(test_metrics.get('mape')):.2f}%
+  Max Error:   {_safe_metric(test_metrics.get('max_error')):.3f} kcal/mol
   Gate Pass:   {gate_icon} {'Yes' if gate_pass else 'No'}
 """
 
