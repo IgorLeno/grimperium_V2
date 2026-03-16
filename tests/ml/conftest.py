@@ -151,3 +151,24 @@ def csv_no_ok_status(tmp_path: Path) -> Path:
     csv_file = tmp_path / "no_ok.csv"
     csv_file.write_text(csv_content)
     return csv_file
+
+
+@pytest.fixture
+def trained_model_fixture(synthetic_csv_path: Path) -> dict:
+    """Treina modelo com CSV sintético e retorna bundle pronto para save_model."""
+    from grimperium.ml.trainer import train
+
+    learner, train_metrics, test_metrics, pipeline = train(
+        synthetic_csv_path,
+        test_size=0.2,
+        random_state=42,
+        return_pipeline=True,
+    )
+    return {
+        "learner": learner,
+        "pipeline": pipeline,
+        "metrics": {
+            "train": train_metrics,
+            "test": test_metrics,
+        },
+    }
