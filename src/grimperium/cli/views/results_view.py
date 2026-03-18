@@ -18,6 +18,7 @@ from rich.table import Table
 from grimperium.cli.menu import MenuOption, show_back_menu
 from grimperium.cli.styles import COLORS, ICONS
 from grimperium.cli.views.base_view import BaseView
+from grimperium.core.metrics import mae, max_error, r2_score, rmse
 from grimperium.ml.persistence import load_model_metadata
 
 if TYPE_CHECKING:
@@ -273,8 +274,7 @@ class ResultsView(BaseView):
             MenuOption(
                 label="Detailed Metrics",
                 value="detailed",
-                disabled=True,
-                disabled_reason="In Development",
+                icon=ICONS.get("results", "\U0001f4ca"),
             ),
             MenuOption(
                 label="Visualization Charts",
@@ -297,7 +297,7 @@ class ResultsView(BaseView):
             return None
 
         if action == "detailed":
-            self.show_in_development("Detailed Metrics")
+            self._handle_detailed_metrics()
             return None
 
         return None
@@ -309,6 +309,107 @@ class ResultsView(BaseView):
             Path: The resolved charts output directory.
         """
         return Path(os.environ.get("GRIMPERIUM_CHARTS_DIR", "reports/charts"))
+
+    def _handle_detailed_metrics(self) -> None:
+        """Compute and display detailed statistical metrics for predictions."""
+        csv_path = self._get_csv_path()
+        if not csv_path.exists():
+            self.show_error(f"Data file not found: {csv_path}")
+            self.wait_for_enter()
+            return
+
+        df = pd.read_csv(csv_path)
+        if "H298_predicted" not in df.columns or "H298_cbs" not in df.columns:
+            self.show_error(
+                "CSV must contain both 'H298_predicted' and 'H298_cbs' columns."
+            )
+            self.wait_for_enter()
+            return
+
+        valid = df.dropna(subset=["H298_predicted", "H298_cbs"])
+        if len(valid) == 0:
+            self.show_error("No valid rows with both predicted and CBS values.")
+            self.wait_for_enter()
+            return
+
+        y_cbs = valid["H298_cbs"].to_numpy()
+        y_pred = valid["H298_predicted"].to_numpy()
+
+        # Core metrics from metrics.py
+        mae_val = mae(y_cbs, y_pred)
+        rmse_val = rmse(y_cbs, y_pred)
+        r2_val = r2_score(y_cbs, y_pred)
+        max_err = max_error(y_cbs, y_pred)
+
+        # Additional statistics
+        errors = y_pred - y_cbs
+        abs_errors = np.abs(errors)
+        bias = float(np.mean(errors))
+
+        # Pearson r (handle constant arrays gracefully)
+        if np.std(y_cbs) == 0 or np.std(y_pred) == 0:
+            pearson_r = float("nan")
+        else:
+            pearson_r = float(np.corrcoef(y_cbs, y_pred)[0, 1])
+
+        # Percentage within thresholds
+        n = len(abs_errors)
+        pct_1 = float(np.sum(abs_errors <= 1.0) / n * 100)
+        pct_2 = float(np.sum(abs_errors <= 2.0) / n * 100)
+        pct_5 = float(np.sum(abs_errors <= 5.0) / n * 100)
+
+        # Display table
+        table = Table(
+            title="Detailed Prediction Metrics",
+            show_header=True,
+            header_style=f"bold {COLORS['results']}",
+            border_style=COLORS["border"],
+            show_edge=False,
+        )
+        table.add_column("Metric", style="bold")
+        table.add_column("Value", justify="right")
+
+        table.add_row("MAE (kcal/mol)", f"{mae_val:.4f}")
+        table.add_row("RMSE (kcal/mol)", f"{rmse_val:.4f}")
+        table.add_row("Max Error (kcal/mol)", f"{max_err:.4f}")
+        table.add_row("Bias (kcal/mol)", f"{bias:.4f}")
+        table.add_row("R\u00b2", f"{r2_val:.4f}")
+        table.add_row(
+            "Pearson r",
+            f"{pearson_r:.5f}" if not np.isnan(pearson_r) else "N/A",
+        )
+        table.add_row("", "")
+        table.add_row("Within \u00b11 kcal/mol", f"{pct_1:.1f}%")
+        table.add_row("Within \u00b12 kcal/mol", f"{pct_2:.1f}%")
+        table.add_row("Within \u00b15 kcal/mol", f"{pct_5:.1f}%")
+        table.add_row("", "")
+        table.add_row("Molecules analyzed", f"{n:,}")
+
+        self.console.print()
+        self.console.print(table)
+        self.console.print()
+
+        # Interpretation panel
+        interpretation = (
+            f"[bold]Interpretation:[/bold]\n\n"
+            f"\u2022 Mean absolute error: {mae_val:.4f} kcal/mol\n"
+            f"\u2022 Systematic bias: {bias:+.4f} kcal/mol "
+            f"({'overestimates' if bias > 0 else 'underestimates' if bias < 0 else 'unbiased'})\n"
+            f"\u2022 {pct_1:.1f}% of predictions within chemical accuracy (\u00b11 kcal/mol)\n"
+            f"\u2022 R\u00b2 = {r2_val:.4f} — "
+            f"{'excellent' if r2_val >= 0.999 else 'good' if r2_val >= 0.99 else 'moderate' if r2_val >= 0.95 else 'needs improvement'} fit"
+        )
+        self.console.print(
+            Panel(
+                interpretation,
+                title=f"[bold {COLORS['results']}]Analysis Summary"
+                f"[/bold {COLORS['results']}]",
+                border_style=COLORS["border"],
+                padding=(1, 2),
+            )
+        )
+        self.console.print()
+        self.wait_for_enter()
 
     def _handle_charts(self) -> None:
         """Generate visualization charts and display results."""

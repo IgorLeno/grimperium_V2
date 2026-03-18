@@ -13,6 +13,7 @@ from pathlib import Path
 from queue import Queue
 from typing import TYPE_CHECKING
 
+import numpy as np
 import pandas as pd
 from rich.live import Live
 from rich.panel import Panel
@@ -29,6 +30,7 @@ from grimperium.cli.progress_tracker import (
 )
 from grimperium.cli.styles import COLORS, ICONS
 from grimperium.cli.views.base_view import BaseView
+from grimperium.core.metrics import mae, r2_score
 from grimperium.crest_pm7.database_analyzer import AnalysisReport
 
 if TYPE_CHECKING:
@@ -187,7 +189,7 @@ class DatabasesView(BaseView):
 
     def get_detail_menu_options(self) -> list[MenuOption]:
         """Return menu options for database detail view."""
-        return [
+        options = [
             MenuOption(
                 label="Run Calculation",
                 value="calculate_run",
@@ -200,19 +202,41 @@ class DatabasesView(BaseView):
                 label="Analyze Database",
                 value="analyze",
             ),
-            MenuOption(
-                label="Edit Database",
-                value="edit",
-                disabled=True,
-                disabled_reason="In Development",
-            ),
-            MenuOption(
-                label="Delete Database",
-                value="delete",
-                disabled=True,
-                disabled_reason="In Development",
-            ),
         ]
+
+        # Conditionally add PM7 Baseline Analysis if CSV has required columns
+        if self.selected_db and self.selected_db.csv_path:
+            csv_path = DATA_DIR / self.selected_db.csv_path
+            if csv_path.exists():
+                try:
+                    csv_cols = pd.read_csv(csv_path, nrows=0).columns
+                    if "H298_pm7" in csv_cols and "H298_cbs" in csv_cols:
+                        options.append(
+                            MenuOption(
+                                label="PM7 Baseline Analysis",
+                                value="pm7_baseline",
+                            )
+                        )
+                except Exception:
+                    pass
+
+        options.extend(
+            [
+                MenuOption(
+                    label="Edit Database",
+                    value="edit",
+                    disabled=True,
+                    disabled_reason="In Development",
+                ),
+                MenuOption(
+                    label="Delete Database",
+                    value="delete",
+                    disabled=True,
+                    disabled_reason="In Development",
+                ),
+            ]
+        )
+        return options
 
     def handle_action(self, action: str) -> str | None:
         """Handle menu actions."""
@@ -237,6 +261,10 @@ class DatabasesView(BaseView):
 
         if action == "analyze":
             self._handle_analyze()
+            return None
+
+        if action == "pm7_baseline":
+            self._handle_pm7_baseline()
             return None
 
         if action == "refresh":
@@ -301,6 +329,109 @@ class DatabasesView(BaseView):
         analyzer = DatabaseAnalyzer()
         report = analyzer.analyze(csv_path, detail_dir=detail_dir)
         self.render_analysis_report(report)
+
+    def _handle_pm7_baseline(self) -> None:
+        """Compute and display PM7 baseline error analysis vs CBS reference."""
+        if self.selected_db is None:
+            return
+
+        csv_path = (
+            DATA_DIR / self.selected_db.csv_path if self.selected_db.csv_path else None
+        )
+        if csv_path is None or not csv_path.exists():
+            self.show_error(f"CSV file not found for {self.selected_db.alias}.")
+            self.wait_for_enter()
+            return
+
+        df = pd.read_csv(csv_path)
+        if "H298_pm7" not in df.columns or "H298_cbs" not in df.columns:
+            self.show_error("CSV must contain both 'H298_pm7' and 'H298_cbs' columns.")
+            self.wait_for_enter()
+            return
+
+        valid = df.dropna(subset=["H298_pm7", "H298_cbs"])
+        if len(valid) == 0:
+            self.show_error("No valid rows with both PM7 and CBS values.")
+            self.wait_for_enter()
+            return
+
+        h298_cbs = valid["H298_cbs"].to_numpy()
+        h298_pm7 = valid["H298_pm7"].to_numpy()
+
+        # Absolute metrics (all valid rows)
+        mare = mae(h298_cbs, h298_pm7)
+        bias = float(np.mean(h298_pm7 - h298_cbs))
+        r2 = r2_score(h298_cbs, h298_pm7)
+
+        # Relative metrics (exclude H298_cbs == 0)
+        nonzero_mask = valid["H298_cbs"] != 0.0
+        cbs_nz = valid.loc[nonzero_mask, "H298_cbs"].to_numpy()
+        pm7_nz = valid.loc[nonzero_mask, "H298_pm7"].to_numpy()
+
+        if len(cbs_nz) > 0:
+            re_pct = np.abs(pm7_nz - cbs_nz) / np.abs(cbs_nz) * 100
+            mre_pct = float(np.mean(re_pct))
+            mdre_pct = float(np.median(re_pct))
+            std_re_pct = float(np.std(re_pct, ddof=0))
+            max_re_pct = float(np.max(re_pct))
+            n_re = len(re_pct)
+            pct_lt_1 = float(np.sum(re_pct < 1.0) / n_re * 100)
+            pct_lt_5 = float(np.sum(re_pct < 5.0) / n_re * 100)
+            pct_lt_10 = float(np.sum(re_pct < 10.0) / n_re * 100)
+        else:
+            mre_pct = mdre_pct = std_re_pct = max_re_pct = 0.0
+            pct_lt_1 = pct_lt_5 = pct_lt_10 = 0.0
+
+        # Display table
+        db_color = COLORS["databases"]
+        table = Table(
+            title="PM7 Baseline Analysis",
+            show_header=True,
+            header_style=f"bold {db_color}",
+            border_style=COLORS["border"],
+            show_edge=False,
+        )
+        table.add_column("Metric", style="bold")
+        table.add_column("Value", justify="right")
+
+        table.add_row("MARE (kcal/mol)", f"{mare:.4f}")
+        table.add_row("Bias (kcal/mol)", f"{bias:.4f}")
+        table.add_row("R\u00b2", f"{r2:.4f}")
+        table.add_row("", "")
+        table.add_row("MRE%", f"{mre_pct:.2f}%")
+        table.add_row("MdRE%", f"{mdre_pct:.2f}%")
+        table.add_row("Std RE% (ddof=0)", f"{std_re_pct:.4f}%")
+        table.add_row("Max RE%", f"{max_re_pct:.2f}%")
+        table.add_row("", "")
+        table.add_row("RE% < 1%", f"{pct_lt_1:.1f}%")
+        table.add_row("RE% < 5%", f"{pct_lt_5:.1f}%")
+        table.add_row("RE% < 10%", f"{pct_lt_10:.1f}%")
+        table.add_row("", "")
+        table.add_row("Molecules analyzed", f"{len(valid):,}")
+
+        self.console.print()
+        self.console.print(table)
+        self.console.print()
+
+        # Interpretation panel
+        interpretation = (
+            f"[bold]PM7 Baseline Error Context:[/bold]\n\n"
+            f"\u2022 PM7 mean absolute error: {mare:.4f} kcal/mol vs CBS reference\n"
+            f"\u2022 Systematic bias: {bias:+.4f} kcal/mol "
+            f"({'PM7 overestimates' if bias > 0 else 'PM7 underestimates' if bias < 0 else 'unbiased'})\n"
+            f"\u2022 Mean relative error: {mre_pct:.2f}%\n"
+            f"\u2022 This is the error that delta-learning needs to correct"
+        )
+        self.console.print(
+            Panel(
+                interpretation,
+                title=f"[bold {db_color}]Interpretation[/bold {db_color}]",
+                border_style=COLORS["border"],
+                padding=(1, 2),
+            )
+        )
+        self.console.print()
+        self.wait_for_enter()
 
     def render_analysis_report(self, report: AnalysisReport) -> None:
         """Render a full analysis report with Rich panels.
