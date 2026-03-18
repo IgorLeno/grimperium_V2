@@ -160,6 +160,16 @@ def main() -> int:
     Returns:
         Exit code (0 for success, non-zero for errors)
     """
+    from grimperium.cli.constants import get_project_root
+    from grimperium.utils.logging import setup_logging
+
+    log_file = get_project_root() / "logs" / "grimperium.log"
+    setup_logging(
+        level="DEBUG",
+        log_file=log_file,
+        console_level="WARNING",
+    )
+
     app = GrimperiumCLI()
     return app.run()
 

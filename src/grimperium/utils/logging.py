@@ -16,6 +16,8 @@ Example:
 """
 
 import logging
+import sys
+from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from types import TracebackType
 
@@ -24,26 +26,66 @@ DEFAULT_FORMAT = "%(asctime)s | %(levelname)-8s | %(name)s | %(message)s"
 DEFAULT_DATE_FORMAT = "%Y-%m-%d %H:%M:%S"
 
 
+def _resolve_level(level: str | int) -> int:
+    """Convert string level name to int."""
+    if isinstance(level, int):
+        return level
+    numeric = getattr(logging, level.upper(), None)
+    if isinstance(numeric, int):
+        return numeric
+    raise ValueError(f"Invalid log level: {level}")
+
+
 def setup_logging(
     level: str | int = "INFO",
     log_file: str | Path | None = None,
     format_string: str = DEFAULT_FORMAT,
     date_format: str = DEFAULT_DATE_FORMAT,
+    max_bytes: int = 5 * 1024 * 1024,
+    backup_count: int = 3,
+    console_level: str | int = "WARNING",
 ) -> None:
     """
     Configure global logging for Grimperium.
 
     Args:
-        level: Logging level ('DEBUG', 'INFO', 'WARNING', 'ERROR')
+        level: Logging level for file handler ('DEBUG', 'INFO', 'WARNING', 'ERROR')
         log_file: Optional file path for log output
         format_string: Log message format
         date_format: Date/time format
+        max_bytes: Max size per log file before rotation (default 5MB)
+        backup_count: Number of rotated backup files to keep
+        console_level: Logging level for console/stderr handler
 
     Example:
         >>> setup_logging(level="DEBUG", log_file="grimperium.log")
 
     """
-    raise NotImplementedError("Will be implemented in Batch 5")
+    resolved_level = _resolve_level(level)
+    resolved_console_level = _resolve_level(console_level)
+    formatter = logging.Formatter(format_string, datefmt=date_format)
+
+    root = logging.getLogger()
+    root.setLevel(logging.DEBUG)
+    root.handlers.clear()
+
+    if log_file is not None:
+        log_path = Path(log_file)
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        file_handler = RotatingFileHandler(
+            str(log_path),
+            maxBytes=max_bytes,
+            backupCount=backup_count,
+            encoding="utf-8",
+        )
+        file_handler.setLevel(resolved_level)
+        file_handler.setFormatter(formatter)
+        root.addHandler(file_handler)
+
+    console_handler = logging.StreamHandler(sys.stderr)
+    console_handler.setLevel(resolved_console_level)
+    console_handler.setFormatter(formatter)
+    root.addHandler(console_handler)
 
 
 def get_logger(name: str) -> logging.Logger:
@@ -61,7 +103,7 @@ def get_logger(name: str) -> logging.Logger:
         >>> logger.info("Processing molecule...")
 
     """
-    raise NotImplementedError("Will be implemented in Batch 5")
+    return logging.getLogger(name)
 
 
 class ProgressLogger:
