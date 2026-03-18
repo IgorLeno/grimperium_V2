@@ -4,8 +4,10 @@ Settings Manager for GRIMPERIUM CLI.
 Manages CREST, MOPAC, and xTB configuration with interactive menus.
 """
 
+import json
 import os
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, ClassVar
 
 import questionary
@@ -389,6 +391,74 @@ class SettingsManager:
         self.reset_crest()
         self.reset_mopac()
         self.reset_xtb()
+
+    # ── Persistence ────────────────────────────────────────────────────
+
+    @staticmethod
+    def default_config_path() -> Path:
+        """Return the default path for the settings config file.
+
+        The file is stored in the current working directory (project root).
+
+        Returns:
+            Path to grimperium_settings.json.
+        """
+        return Path.cwd() / "grimperium_settings.json"
+
+    def save_to_file(self, path: Path | None = None) -> bool:
+        """Persist current settings to a JSON file.
+
+        Args:
+            path: Target file path. Defaults to default_config_path().
+
+        Returns:
+            True on success, False on failure.
+        """
+        target = path or self.default_config_path()
+        try:
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text(json.dumps(self.to_dict(), indent=2, ensure_ascii=False))
+            return True
+        except OSError:
+            return False
+
+    def load_from_file(self, path: Path | None = None) -> bool:
+        """Load settings from a JSON file.
+
+        If the file does not exist or contains invalid JSON, settings
+        remain unchanged and False is returned.
+
+        Args:
+            path: Source file path. Defaults to default_config_path().
+
+        Returns:
+            True if settings were loaded, False otherwise.
+        """
+        target = path or self.default_config_path()
+        if not target.is_file():
+            return False
+        try:
+            data = json.loads(target.read_text())
+        except (json.JSONDecodeError, OSError):
+            return False
+        self.from_dict(data)
+        return True
+
+    def delete_config_file(self, path: Path | None = None) -> bool:
+        """Remove the persisted config file.
+
+        Args:
+            path: File to delete. Defaults to default_config_path().
+
+        Returns:
+            True if file was removed, False if it didn't exist.
+        """
+        target = path or self.default_config_path()
+        try:
+            target.unlink()
+            return True
+        except FileNotFoundError:
+            return False
 
     def _status_icon(self, value: bool) -> str:
         """Return status icon for boolean value."""

@@ -94,6 +94,12 @@ class SettingsView(BaseView):
                 description="Display all current settings",
             ),
             MenuOption(
+                label="Save as Default",
+                value="save_as_default",
+                icon="💾",
+                description="Persist current settings to disk for future sessions",
+            ),
+            MenuOption(
                 label="Reset All to Defaults",
                 value="reset_all",
                 icon="🔄",
@@ -126,6 +132,9 @@ class SettingsView(BaseView):
             return None
         if action == "view_all":
             self._display_all_settings()
+            return None
+        if action == "save_as_default":
+            self._save_as_default()
             return None
         if action == "reset_all":
             self._reset_all_settings()
@@ -164,12 +173,21 @@ class SettingsView(BaseView):
         self.console.print()
         self.wait_for_enter()
 
+    def _save_as_default(self) -> None:
+        """Persist current settings to disk."""
+        if self.settings_manager.save_to_file():
+            self.show_success("Settings saved as default.")
+        else:
+            self.console.print("[red]Failed to save settings.[/red]")
+        self.wait_for_enter()
+
     def _reset_all_settings(self) -> None:
         """Reset all settings to defaults with confirmation."""
         from grimperium.cli.menu import confirm
 
         if confirm("Reset all settings to defaults?", default=False):
             self.settings_manager.reset_all()
+            self.settings_manager.delete_config_file()
             self.show_success("All settings reset to defaults.")
         else:
             self.console.print("[dim]Reset cancelled.[/dim]")

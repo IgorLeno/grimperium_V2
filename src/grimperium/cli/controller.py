@@ -37,6 +37,7 @@ class CliController:
         self.status: str = "Ready"
         self.console = Console(theme=CLI_THEME)
         self.settings_manager = SettingsManager(console=self.console)
+        self.settings_manager.load_from_file()
         self._views: dict[str, BaseView] = {}
         self._running: bool = False
 
