@@ -109,6 +109,7 @@ logs/
 
 # Chemperium data (large files)
 *.csv
+*.csv.bak
 *.parquet
 !tests/fixtures/*.csv
 

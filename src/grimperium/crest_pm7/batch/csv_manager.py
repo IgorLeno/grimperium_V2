@@ -503,16 +503,96 @@ class BatchCSVManager:
                 f"Cannot create batch: {running_mask.sum()} molecules still RUNNING"
             )
 
-        # Find available molecules (PENDING or RERUN)
-        available_mask = df["status"].isin(
-            [
-                MoleculeStatus.PENDING.value,
-                MoleculeStatus.RERUN.value,
-            ]
+        # ── Recover orphaned SELECTED from interrupted batches ──
+        if "batch_id" not in df.columns:
+            df["batch_id"] = pd.NA
+        orphan_mask = (df["status"] == MoleculeStatus.SELECTED.value) & (
+            df["batch_id"] != batch_id
         )
-        available_df = df[available_mask].copy()
+        orphan_df = df[orphan_mask].copy()
+        orphan_molecules: list[BatchMolecule] = []
 
-        if available_df.empty:
+        if not orphan_df.empty:
+            LOG.warning(
+                "Found %d orphaned SELECTED molecule(s) from previous batch(es). "
+                "Recovering with maximum priority.",
+                len(orphan_df),
+            )
+            orphan_df = orphan_df.sort_values("mol_id")
+            orphan_count = min(batch_size, len(orphan_df))
+            orphan_df = orphan_df.head(orphan_count)
+
+            for batch_order, (idx, row) in enumerate(orphan_df.iterrows(), start=1):
+                mol = BatchMolecule(
+                    mol_id=row["mol_id"],
+                    smiles=row["smiles"],
+                    batch_order=batch_order,
+                    nheavy=self._safe_int(row["nheavy"], 0),
+                    nrotbonds=self._safe_int(row.get("rdkit_nrotbonds", 0), 0),
+                    reruns=self._safe_int(row.get("reruns", 0), 0),
+                )
+                orphan_molecules.append(mol)
+                df.at[idx, "batch_id"] = batch_id
+                df.at[idx, "batch_order"] = batch_order
+                df.at[idx, "batch_failure_policy"] = failure_policy.value
+                df.at[idx, "assigned_crest_timeout"] = crest_timeout_minutes
+                df.at[idx, "assigned_mopac_timeout"] = mopac_timeout_minutes
+
+            self.save_csv()
+
+        remaining_capacity = batch_size - len(orphan_molecules)
+
+        # Find available molecules (PENDING or RERUN)
+        new_molecules: list[BatchMolecule] = []
+        if remaining_capacity > 0:
+            available_mask = df["status"].isin(
+                [
+                    MoleculeStatus.PENDING.value,
+                    MoleculeStatus.RERUN.value,
+                ]
+            )
+            available_df = df[available_mask].copy()
+
+            if not available_df.empty:
+                # Apply sorting strategy
+                available_df = self._apply_sorting_strategy(available_df, strategy)
+
+                actual_size = min(remaining_capacity, len(available_df))
+                if actual_size < remaining_capacity and not orphan_molecules:
+                    LOG.info(
+                        f"Requested {batch_size} molecules, "
+                        f"only {len(available_df)} available"
+                    )
+
+                selected_df = available_df.head(actual_size)
+                order_offset = len(orphan_molecules)
+
+                for batch_order, (idx, row) in enumerate(
+                    selected_df.iterrows(), start=order_offset + 1
+                ):
+                    mol = BatchMolecule(
+                        mol_id=row["mol_id"],
+                        smiles=row["smiles"],
+                        batch_order=batch_order,
+                        nheavy=self._safe_int(row["nheavy"], 0),
+                        nrotbonds=self._safe_int(row.get("rdkit_nrotbonds", 0), 0),
+                        reruns=self._safe_int(row.get("reruns", 0), 0),
+                    )
+                    new_molecules.append(mol)
+
+                    # Update DataFrame: mark as SELECTED
+                    df.at[idx, "status"] = MoleculeStatus.SELECTED.value
+                    df.at[idx, "batch_id"] = batch_id
+                    df.at[idx, "batch_order"] = batch_order
+                    df.at[idx, "batch_failure_policy"] = failure_policy.value
+                    df.at[idx, "assigned_crest_timeout"] = crest_timeout_minutes
+                    df.at[idx, "assigned_mopac_timeout"] = mopac_timeout_minutes
+
+                self.save_csv()
+
+        all_molecules = orphan_molecules + new_molecules
+
+        if not all_molecules:
             LOG.warning("No pending/rerun molecules available for batch")
             return Batch(
                 batch_id=batch_id,
@@ -523,48 +603,14 @@ class BatchCSVManager:
                 failure_policy=failure_policy,
             )
 
-        # Apply sorting strategy
-        available_df = self._apply_sorting_strategy(available_df, strategy)
-
-        # Limit to batch_size
-        actual_size = min(batch_size, len(available_df))
-        if actual_size < batch_size:
-            LOG.info(
-                f"Requested {batch_size} molecules, only {len(available_df)} available"
-            )
-
-        selected_df = available_df.head(actual_size)
-
-        # Create BatchMolecule list
-        molecules: list[BatchMolecule] = []
-        for batch_order, (idx, row) in enumerate(selected_df.iterrows(), start=1):
-            mol = BatchMolecule(
-                mol_id=row["mol_id"],
-                smiles=row["smiles"],
-                batch_order=batch_order,
-                nheavy=self._safe_int(row["nheavy"], 0),
-                nrotbonds=self._safe_int(row.get("rdkit_nrotbonds", 0), 0),
-                reruns=self._safe_int(row.get("reruns", 0), 0),
-            )
-            molecules.append(mol)
-
-            # Update DataFrame: mark as SELECTED
-            df.at[idx, "status"] = MoleculeStatus.SELECTED.value
-            df.at[idx, "batch_id"] = batch_id
-            df.at[idx, "batch_order"] = batch_order
-            df.at[idx, "batch_failure_policy"] = failure_policy.value
-            df.at[idx, "assigned_crest_timeout"] = crest_timeout_minutes
-            df.at[idx, "assigned_mopac_timeout"] = mopac_timeout_minutes
-
-        self.save_csv()
         LOG.info(
-            f"Selected {len(molecules)} molecules for batch {batch_id} "
+            f"Selected {len(all_molecules)} molecules for batch {batch_id} "
             f"(strategy={strategy.value}, policy={failure_policy.value})"
         )
 
         return Batch(
             batch_id=batch_id,
-            molecules=molecules,
+            molecules=all_molecules,
             crest_timeout_minutes=crest_timeout_minutes,
             mopac_timeout_minutes=mopac_timeout_minutes,
             sorting_strategy=strategy,
