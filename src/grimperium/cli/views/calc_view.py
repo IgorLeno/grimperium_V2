@@ -77,7 +77,6 @@ using the Delta-Learning model.
         table.add_column("Value")
 
         table.add_row("SMILES", f"[bold]{result.smiles}[/bold]")
-        table.add_row("Molecule", result.molecule_name)
         table.add_row(
             "H298 (PM7)",
             f"[bold {COLORS['success']}]{result.h298_pm7:.2f} kcal/mol[/bold {COLORS['success']}]",
@@ -90,7 +89,7 @@ using the Delta-Learning model.
             "H298 (Corrected)",
             f"[bold {COLORS['success']}]{result.h298_corrected:.2f} kcal/mol[/bold {COLORS['success']}]",
         )
-        table.add_row("Model Used", result.model_used)
+        table.add_row("Model Used", result.model_name)
         table.add_row("Model Version", result.model_version)
         table.add_row("Conformers", str(result.n_conformers))
         table.add_row(
@@ -124,7 +123,6 @@ using the Delta-Learning model.
         )
         table.add_column("#", justify="right")
         table.add_column("SMILES")
-        table.add_column("Molecule")
         table.add_column("H298 PM7", justify="right")
         table.add_column("Delta", justify="right")
         table.add_column("H298 Corrected", justify="right")
@@ -140,11 +138,10 @@ using the Delta-Learning model.
                     if len(result.smiles) > 15
                     else result.smiles
                 ),
-                result.molecule_name,
                 f"{result.h298_pm7:.2f}",
                 f"{result.delta_correction:.2f}",
                 f"{result.h298_corrected:.2f}",
-                result.model_used.split("_")[0] if result.model_used else "-",
+                result.model_name.split("_")[0] if result.model_name else "-",
                 str(result.n_conformers),
                 f"{result.execution_time:.1f}",
             )
@@ -297,16 +294,13 @@ using the Delta-Learning model.
         self.controller.settings_manager.apply_to_pm7_config(config)
 
         # Run pipeline
+        def progress_update(msg: str) -> None:
+            self.console.print(msg)
+
         try:
-            with self.console.status("⏳ Running pipeline...") as status:
-
-                def progress_update(msg: str) -> None:
-                    status.update(msg)
-
-                pipeline_result = run_single_molecule_prediction(
-                    smiles, mol_id, model_path, config, progress_update
-                )
-
+            pipeline_result = run_single_molecule_prediction(
+                smiles, mol_id, model_path, config, progress_update
+            )
         except CalcPipelineError as e:
             self.show_error(str(e))
             return True
@@ -315,15 +309,12 @@ using the Delta-Learning model.
             return True
 
         # Build PredictionResult from pipeline result
-        from grimperium.cli.mock_data import get_molecule_name
-
         result = PredictionResult(
             smiles=smiles,
-            molecule_name=get_molecule_name(smiles),
             h298_pm7=pipeline_result.h298_pm7,
             delta_correction=pipeline_result.delta_correction,
             h298_corrected=pipeline_result.h298_corrected,
-            model_used=self.controller.current_model,
+            model_name=self.controller.current_model,
             model_version=pipeline_result.model_version,
             execution_time=pipeline_result.execution_time,
             n_conformers=pipeline_result.n_conformers,

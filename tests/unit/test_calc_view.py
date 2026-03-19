@@ -1,9 +1,13 @@
 """Tests for calc view module."""
 
-from unittest.mock import MagicMock
+from pathlib import Path
+from unittest.mock import MagicMock, patch
 
 import pytest
 
+from grimperium.cli.calc_pipeline import CalcPipelineError, CalcPipelineResult
+from grimperium.cli.controller import CliController
+from grimperium.cli.mock_data import PredictionResult
 from grimperium.cli.views.calc_view import CalcView
 
 
@@ -12,6 +16,7 @@ def mock_controller() -> MagicMock:
     """Create mock controller for CalcView."""
     controller = MagicMock()
     controller.current_model = "DeltaXGB_v1.0"
+    controller.current_model_path = None
     return controller
 
 
@@ -19,6 +24,153 @@ def mock_controller() -> MagicMock:
 def calc_view(mock_controller: MagicMock) -> CalcView:
     """Create CalcView instance."""
     return CalcView(mock_controller)
+
+
+# ──────────────────────────────────────────────────
+# Tests: do_prediction pipeline integration
+# ──────────────────────────────────────────────────
+
+
+@patch("grimperium.cli.views.calc_view.text_input", return_value="CCO")
+def test_do_prediction_sem_modelo(
+    mock_input: MagicMock,
+    calc_view: CalcView,
+) -> None:
+    """No model found → show_error, pipeline never executes."""
+    calc_view._resolve_model_path = MagicMock(return_value=None)  # type: ignore[method-assign]
+    calc_view.render = MagicMock()
+    calc_view.show_error = MagicMock()
+
+    with patch(
+        "grimperium.cli.views.calc_view.run_single_molecule_prediction"
+    ) as mock_pipeline:
+        result = calc_view.do_prediction()
+
+    calc_view.show_error.assert_called_once()
+    error_msg = calc_view.show_error.call_args[0][0]
+    assert "model" in error_msg.lower() or "Model" in error_msg
+    mock_pipeline.assert_not_called()
+    assert result is False
+
+
+@patch("grimperium.cli.views.calc_view.text_input", return_value="CCO")
+def test_do_prediction_crest_falha(
+    mock_input: MagicMock,
+    calc_view: CalcView,
+) -> None:
+    """CREST failure → CalcPipelineError → show_error."""
+    calc_view._resolve_model_path = MagicMock(  # type: ignore[method-assign]
+        return_value=Path("/fake/model.joblib"),
+    )
+    calc_view.render = MagicMock()
+    calc_view.show_error = MagicMock()
+
+    with patch(
+        "grimperium.cli.views.calc_view.run_single_molecule_prediction",
+        side_effect=CalcPipelineError("Pipeline failed: CREST timeout"),
+    ):
+        result = calc_view.do_prediction()
+
+    calc_view.show_error.assert_called_once()
+    error_msg = calc_view.show_error.call_args[0][0]
+    assert "CREST" in error_msg
+    assert result is True
+    assert len(calc_view.history) == 0
+
+
+@patch("grimperium.cli.views.calc_view.text_input", return_value="CCO")
+def test_do_prediction_mopac_falha(
+    mock_input: MagicMock,
+    calc_view: CalcView,
+) -> None:
+    """MOPAC failure → CalcPipelineError → show_error."""
+    calc_view._resolve_model_path = MagicMock(  # type: ignore[method-assign]
+        return_value=Path("/fake/model.joblib"),
+    )
+    calc_view.render = MagicMock()
+    calc_view.show_error = MagicMock()
+
+    with patch(
+        "grimperium.cli.views.calc_view.run_single_molecule_prediction",
+        side_effect=CalcPipelineError("No successful MOPAC output found"),
+    ):
+        result = calc_view.do_prediction()
+
+    calc_view.show_error.assert_called_once()
+    error_msg = calc_view.show_error.call_args[0][0]
+    assert "MOPAC" in error_msg
+    assert result is True
+    assert len(calc_view.history) == 0
+
+
+@patch("grimperium.cli.views.calc_view.text_input", return_value="CCO")
+def test_do_prediction_sucesso_completo(
+    mock_input: MagicMock,
+    calc_view: CalcView,
+) -> None:
+    """Full pipeline success → PredictionResult with all real fields."""
+    calc_view._resolve_model_path = MagicMock(  # type: ignore[method-assign]
+        return_value=Path("/fake/model.joblib"),
+    )
+    calc_view.render = MagicMock()
+    calc_view.render_result = MagicMock()
+
+    fake_result = CalcPipelineResult(
+        h298_pm7=-45.32,
+        delta_correction=2.15,
+        h298_corrected=-43.17,
+        n_conformers=7,
+        execution_time=120.5,
+        model_version="v2.1",
+    )
+
+    with patch(
+        "grimperium.cli.views.calc_view.run_single_molecule_prediction",
+        return_value=fake_result,
+    ):
+        result = calc_view.do_prediction()
+
+    assert result is True
+    assert len(calc_view.history) == 1
+
+    pred = calc_view.history[0]
+    assert isinstance(pred, PredictionResult)
+    assert pred.smiles == "CCO"
+    assert pred.h298_pm7 == -45.32
+    assert pred.delta_correction == 2.15
+    assert pred.h298_corrected == -43.17
+    assert pred.n_conformers == 7
+    assert pred.execution_time == 120.5
+    assert pred.model_version == "v2.1"
+    assert pred.model_name == "DeltaXGB_v1.0"
+    # molecule_name must NOT exist
+    assert not hasattr(pred, "molecule_name")
+
+
+def test_set_model_com_path() -> None:
+    """set_model() with path updates current_model_path."""
+    controller = CliController()
+    model_path = Path("/models/delta_v2.joblib")
+
+    controller.set_model("DeltaRF_v2.0", model_path)
+
+    assert controller.current_model == "DeltaRF_v2.0"
+    assert controller.current_model_path == model_path
+
+
+def test_get_model_path_usa_controller() -> None:
+    """_resolve_model_path() prioritizes controller path over env var."""
+    controller = MagicMock()
+    controller.current_model = "DeltaXGB_v1.0"
+    controller_path = Path(__file__)  # use this test file (guaranteed to exist)
+    controller.current_model_path = controller_path
+
+    view = CalcView(controller)
+
+    with patch.dict("os.environ", {"GRIMPERIUM_MODEL_PATH": "/env/model.joblib"}):
+        resolved = view._resolve_model_path()
+
+    assert resolved == controller_path
 
 
 def test_validate_smiles_valid_molecules(calc_view: CalcView) -> None:

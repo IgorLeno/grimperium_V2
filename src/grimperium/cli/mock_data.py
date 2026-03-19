@@ -41,11 +41,10 @@ class PredictionResult:
     """Represents a prediction result from the real pipeline."""
 
     smiles: str
-    molecule_name: str
     h298_pm7: float  # Raw MOPAC HOF, kcal/mol
     delta_correction: float  # Model-predicted delta, kcal/mol
     h298_corrected: float  # h298_pm7 + delta_correction
-    model_used: str
+    model_name: str
     model_version: str  # From metadata
     execution_time: float  # Total seconds
     n_conformers: int  # Conformers from CREST
@@ -247,11 +246,10 @@ def mock_predict(
 
     return PredictionResult(
         smiles=smiles,
-        molecule_name=get_molecule_name(smiles),
         h298_pm7=round(h298_pm7, 2),
         delta_correction=round(delta_correction, 2),
         h298_corrected=round(h298_pm7 + delta_correction, 2),
-        model_used=model_name,
+        model_name=model_name,
         model_version="mock-v1",
         execution_time=rnd.uniform(30, 60),
         n_conformers=rnd.randint(3, 10),
