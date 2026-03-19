@@ -6,6 +6,7 @@ Manages navigation state and view transitions.
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from rich.console import Console
@@ -34,6 +35,7 @@ class CliController:
         self.history: list[str] = []
         self.current_view: str = "main"
         self.current_model: str = DEFAULT_MODEL
+        self.current_model_path: Path | None = None
         self.status: str = "Ready"
         self.console = Console(theme=CLI_THEME)
         self.settings_manager = SettingsManager(console=self.console)
@@ -124,14 +126,16 @@ class CliController:
 
         return " > ".join(parts)
 
-    def set_model(self, model_name: str) -> None:
+    def set_model(self, model_name: str, model_path: Path | None = None) -> None:
         """
-        Set the current active model.
+        Set the current active model and optional path to its file.
 
         Args:
             model_name: Name of the model to set as active
+            model_path: Optional path to the model file
         """
         self.current_model = model_name
+        self.current_model_path = model_path
 
     def set_status(self, status: str) -> None:
         """

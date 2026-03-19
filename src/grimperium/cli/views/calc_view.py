@@ -4,16 +4,24 @@ Calc view for GRIMPERIUM CLI.
 Handles molecular property predictions.
 """
 
+import hashlib
+import os
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from rdkit import Chem
 from rich.panel import Panel
 from rich.table import Table
 
+from grimperium.cli.calc_pipeline import (
+    CalcPipelineError,
+    run_single_molecule_prediction,
+)
 from grimperium.cli.menu import MenuOption, show_back_menu, text_input
-from grimperium.cli.mock_data import PredictionResult, mock_predict
+from grimperium.cli.mock_data import PredictionResult
 from grimperium.cli.styles import COLORS, ICONS
 from grimperium.cli.views.base_view import BaseView
+from grimperium.crest_pm7.config import PM7Config
 
 if TYPE_CHECKING:
     from grimperium.cli.controller import CliController
@@ -70,16 +78,25 @@ using the Delta-Learning model.
 
         table.add_row("SMILES", f"[bold]{result.smiles}[/bold]")
         table.add_row("Molecule", result.molecule_name)
-        table.add_row("Property", result.property_name)
         table.add_row(
-            "Predicted Value",
-            f"[bold {COLORS['success']}]{result.predicted_value:.2f} {result.unit}[/bold {COLORS['success']}]",
+            "H298 (PM7)",
+            f"[bold {COLORS['success']}]{result.h298_pm7:.2f} kcal/mol[/bold {COLORS['success']}]",
         )
         table.add_row(
-            "Confidence",
-            f"[{COLORS['success']}]{result.confidence * 100:.1f}%[/{COLORS['success']}]",
+            "Delta Correction",
+            f"{result.delta_correction:.2f} kcal/mol",
+        )
+        table.add_row(
+            "H298 (Corrected)",
+            f"[bold {COLORS['success']}]{result.h298_corrected:.2f} kcal/mol[/bold {COLORS['success']}]",
         )
         table.add_row("Model Used", result.model_used)
+        table.add_row("Model Version", result.model_version)
+        table.add_row("Conformers", str(result.n_conformers))
+        table.add_row(
+            "Execution Time",
+            f"{result.execution_time:.1f}s",
+        )
 
         self.console.print(
             Panel(
@@ -108,20 +125,28 @@ using the Delta-Learning model.
         table.add_column("#", justify="right")
         table.add_column("SMILES")
         table.add_column("Molecule")
-        table.add_column("HOF (kcal/mol)", justify="right")
-        table.add_column("Confidence", justify="right")
+        table.add_column("H298 PM7", justify="right")
+        table.add_column("Delta", justify="right")
+        table.add_column("H298 Corrected", justify="right")
+        table.add_column("Model", justify="center")
+        table.add_column("Conformers", justify="right")
+        table.add_column("Time (s)", justify="right")
 
         for i, result in enumerate(reversed(self.history[-10:]), 1):
             table.add_row(
                 str(i),
                 (
-                    result.smiles[:20] + "..."
-                    if len(result.smiles) > 20
+                    result.smiles[:15] + "..."
+                    if len(result.smiles) > 15
                     else result.smiles
                 ),
                 result.molecule_name,
-                f"{result.predicted_value:.2f}",
-                f"{result.confidence * 100:.1f}%",
+                f"{result.h298_pm7:.2f}",
+                f"{result.delta_correction:.2f}",
+                f"{result.h298_corrected:.2f}",
+                result.model_used.split("_")[0] if result.model_used else "-",
+                str(result.n_conformers),
+                f"{result.execution_time:.1f}",
             )
 
         self.console.print(table)
@@ -204,9 +229,37 @@ using the Delta-Learning model.
         summary = ", ".join(summary_parts)
         return valid, summary
 
+    def _resolve_model_path(self) -> Path | None:
+        """
+        Resolve the path to the current model file.
+
+        Checks in order:
+        1. Controller's current_model_path (if set and exists)
+        2. GRIMPERIUM_MODEL_PATH environment variable
+        3. Returns None if no valid path found
+
+        Returns:
+            Path to model file, or None if not found
+        """
+        # Check controller path
+        if (
+            self.controller.current_model_path
+            and self.controller.current_model_path.exists()
+        ):
+            return self.controller.current_model_path
+
+        # Check environment variable
+        env_path = os.environ.get("GRIMPERIUM_MODEL_PATH")
+        if env_path:
+            path = Path(env_path)
+            if path.exists():
+                return path
+
+        return None
+
     def do_prediction(self) -> bool:
         """
-        Perform a prediction interaction.
+        Perform a prediction interaction using the real pipeline.
 
         Returns:
             True to continue, False to go back
@@ -226,13 +279,56 @@ using the Delta-Learning model.
         if not smiles:
             return True
 
-        # Perform prediction
+        # Check for model availability
+        model_path = self._resolve_model_path()
+        if model_path is None:
+            self.show_error(
+                "No trained model found. Train a model first in the Models menu "
+                "or set GRIMPERIUM_MODEL_PATH environment variable."
+            )
+            return False
+
+        # Prepare pipeline
         self.console.print()
-        self.console.print(
-            f"[{COLORS['muted']}]Calculating prediction...[/{COLORS['muted']}]"
+        self.console.print()
+
+        mol_id = "calc_" + hashlib.sha1(smiles.encode()).hexdigest()[:6]
+        config = PM7Config()
+        self.controller.settings_manager.apply_to_pm7_config(config)
+
+        # Run pipeline
+        try:
+            with self.console.status("⏳ Running pipeline...") as status:
+
+                def progress_update(msg: str) -> None:
+                    status.update(msg)
+
+                pipeline_result = run_single_molecule_prediction(
+                    smiles, mol_id, model_path, config, progress_update
+                )
+
+        except CalcPipelineError as e:
+            self.show_error(str(e))
+            return True
+        except Exception as e:
+            self.show_error(f"Unexpected error: {str(e)}")
+            return True
+
+        # Build PredictionResult from pipeline result
+        from grimperium.cli.mock_data import get_molecule_name
+
+        result = PredictionResult(
+            smiles=smiles,
+            molecule_name=get_molecule_name(smiles),
+            h298_pm7=pipeline_result.h298_pm7,
+            delta_correction=pipeline_result.delta_correction,
+            h298_corrected=pipeline_result.h298_corrected,
+            model_used=self.controller.current_model,
+            model_version=pipeline_result.model_version,
+            execution_time=pipeline_result.execution_time,
+            n_conformers=pipeline_result.n_conformers,
         )
 
-        result = mock_predict(smiles, self.controller.current_model)
         self.last_result = result
         self.history.append(result)
 
@@ -315,7 +411,7 @@ using the Delta-Learning model.
             if self.last_result:
                 self.console.print(
                     f"[{COLORS['muted']}]Last prediction: {self.last_result.smiles} → "
-                    f"{self.last_result.predicted_value:.2f} {self.last_result.unit}[/{COLORS['muted']}]"
+                    f"H298={self.last_result.h298_corrected:.2f} kcal/mol[/{COLORS['muted']}]"
                 )
                 self.console.print()
 

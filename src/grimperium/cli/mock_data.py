@@ -38,15 +38,17 @@ class Model:
 
 @dataclass
 class PredictionResult:
-    """Represents a prediction result."""
+    """Represents a prediction result from the real pipeline."""
 
     smiles: str
     molecule_name: str
-    property_name: str
-    predicted_value: float
-    unit: str
-    confidence: float
+    h298_pm7: float  # Raw MOPAC HOF, kcal/mol
+    delta_correction: float  # Model-predicted delta, kcal/mol
+    h298_corrected: float  # h298_pm7 + delta_correction
     model_used: str
+    model_version: str  # From metadata
+    execution_time: float  # Total seconds
+    n_conformers: int  # Conformers from CREST
 
 
 @dataclass
@@ -233,25 +235,26 @@ def mock_predict(
     """
     Generate a mock prediction for a given SMILES string.
 
-    In MVP, this returns plausible mock values.
-    Will be replaced with real model inference later.
+    DEPRECATED: This function is replaced by the real pipeline.
+    Kept for backward compatibility and tests.
     """
     # Generate deterministic but varied values based on SMILES
-    # Use a local RNG to avoid mutating global random state
     seed = sum(ord(c) for c in smiles)
     rnd = Random(seed)
 
-    predicted_value = rnd.uniform(-100, 50)
-    confidence = rnd.uniform(0.85, 0.99)
+    h298_pm7 = rnd.uniform(-100, -20)
+    delta_correction = rnd.uniform(-5, 5)
 
     return PredictionResult(
         smiles=smiles,
         molecule_name=get_molecule_name(smiles),
-        property_name="Heat of Formation (HOF)",
-        predicted_value=round(predicted_value, 2),
-        unit="kcal/mol",
-        confidence=round(confidence, 3),
+        h298_pm7=round(h298_pm7, 2),
+        delta_correction=round(delta_correction, 2),
+        h298_corrected=round(h298_pm7 + delta_correction, 2),
         model_used=model_name,
+        model_version="mock-v1",
+        execution_time=rnd.uniform(30, 60),
+        n_conformers=rnd.randint(3, 10),
     )
 
 
