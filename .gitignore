@@ -127,6 +127,9 @@ anexos/
 .claude/settings.local.json
 docs/plans/
 
+# Git worktrees
+.worktrees/
+
 # LibreOffice lock files
 .~lock.*
 
