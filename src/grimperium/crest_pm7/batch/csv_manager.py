@@ -930,6 +930,7 @@ class BatchCSVManager:
 
         for col, val in field_updates.items():
             if col in df.columns:
+                df[col] = df[col].astype(object)
                 df.at[idx, col] = val
                 updated_count += 1
             else:

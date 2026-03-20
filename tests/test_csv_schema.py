@@ -1,4 +1,4 @@
-"""Tests for CSV schema (59 columns, matching BatchCSVManager.get_schema())."""
+"""Tests for CSV schema (61 columns, matching BatchCSVManager.get_schema())."""
 
 from pathlib import Path
 
@@ -34,6 +34,8 @@ EXPECTED_COLUMNS = [
     # Batch config (55-58)
     "batch_order", "batch_failure_policy",
     "assigned_crest_timeout", "assigned_mopac_timeout",
+    # Prediction outputs (59-61)
+    "H298_predicted", "delta_correction",
 ]
 
 
