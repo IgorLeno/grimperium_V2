@@ -3,12 +3,18 @@
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+import numpy as np
 import pytest
 
-from grimperium.cli.calc_pipeline import CalcPipelineError, CalcPipelineResult
+from grimperium.cli.calc_pipeline import (
+    CalcPipelineError,
+    CalcPipelineResult,
+    run_single_molecule_prediction,
+)
 from grimperium.cli.controller import CliController
 from grimperium.cli.mock_data import PredictionResult
 from grimperium.cli.views.calc_view import CalcView
+from grimperium.crest_pm7.config import PM7Config
 
 
 @pytest.fixture
@@ -138,6 +144,7 @@ def test_do_prediction_sucesso_completo(
     assert pred.smiles == "CCO"
     assert pred.h298_pm7 == -45.32
     assert pred.delta_correction == 2.15
+    assert isinstance(pred.delta_correction, float)
     assert pred.h298_corrected == -43.17
     assert pred.n_conformers == 7
     assert pred.execution_time == 120.5
@@ -145,6 +152,73 @@ def test_do_prediction_sucesso_completo(
     assert pred.model_name == "DeltaXGB_v1.0"
     # molecule_name must NOT exist
     assert not hasattr(pred, "molecule_name")
+
+
+def test_run_single_molecule_prediction_delta_correction_scalar() -> None:
+    """Pipeline returns scalar delta correction even when learner composes arrays."""
+
+    class FakeLearner:
+        def __init__(self) -> None:
+            self.y_pm7_seen: np.ndarray | None = None
+
+        def predict(self, X: np.ndarray, y_pm7: np.ndarray) -> np.ndarray:
+            self.y_pm7_seen = y_pm7
+            delta_pred = np.array([2.15])
+            return y_pm7 + delta_pred
+
+    fake_learner = FakeLearner()
+    fake_feature_pipeline = MagicMock()
+    fake_feature_pipeline.transform.return_value = np.array([[1.0, 2.0, 3.0]])
+
+    fake_conformer = MagicMock()
+    fake_conformer.mopac_output_file = Path("/fake/mol.out")
+
+    fake_pm7_result = MagicMock()
+    fake_pm7_result.success = True
+    fake_pm7_result.error_message = None
+    fake_pm7_result.most_stable_hof = -45.32
+    fake_pm7_result.nheavy = 2
+    fake_pm7_result.crest_conformers_generated = 7
+    fake_pm7_result.num_conformers_selected = 3
+    fake_pm7_result.crest_time = 12.0
+    fake_pm7_result.total_execution_time = 30.0
+    fake_pm7_result.get_selected_conformer.return_value = fake_conformer
+
+    with (
+        patch(
+            "grimperium.cli.calc_pipeline.CRESTPM7Pipeline"
+        ) as mock_pipeline_cls,
+        patch(
+            "grimperium.cli.calc_pipeline.load_model",
+            return_value=(fake_learner, fake_feature_pipeline),
+        ),
+        patch(
+            "grimperium.cli.calc_pipeline.load_model_metadata",
+            return_value={"version": "v2.1"},
+        ),
+        patch(
+            "grimperium.cli.calc_pipeline.extract_all_rdkit_descriptors",
+            return_value={"rdkit_nrotbonds": 1.0},
+        ),
+        patch(
+            "grimperium.cli.calc_pipeline.extract_mopac_descriptors",
+            return_value={"mopac_homo_ev": -10.5},
+        ),
+    ):
+        mock_pipeline_cls.return_value.process_molecule.return_value = fake_pm7_result
+
+        result = run_single_molecule_prediction(
+            smiles="CCO",
+            mol_id="calc_123456",
+            model_path=Path("/fake/model.joblib"),
+            config=PM7Config(),
+        )
+
+    assert fake_learner.y_pm7_seen is not None
+    assert fake_learner.y_pm7_seen.shape == (1,)
+    assert isinstance(result.delta_correction, float)
+    assert not isinstance(result.delta_correction, np.ndarray)
+    assert isinstance(result.h298_corrected, float)
 
 
 def test_set_model_com_path() -> None:

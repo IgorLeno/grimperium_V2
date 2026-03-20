@@ -155,7 +155,7 @@ def run_single_molecule_prediction(
         import numpy as np
 
         # DeltaLearner.predict requires both X and y_pm7
-        y_pm7_array = np.array([[h298_pm7]])
+        y_pm7_array = np.array([h298_pm7])
         delta_correction = float(learner.predict(X, y_pm7_array)[0])
     except Exception as e:
         raise CalcPipelineError(f"Prediction failed: {e}") from e
