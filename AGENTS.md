@@ -1,27 +1,33 @@
 # AGENTS.md - Grimperium
 
-ML framework for molecular thermodynamic property prediction with delta-learning. Python 3.10+.
+This file is a short compatibility entry point for agents that look for
+`AGENTS.md` first. The authoritative project-specific guidance now lives in
+[`CLAUDE.md`](/home/igor/Projetos/grimperium/CLAUDE.md). If this file and
+another local guide differ, follow `CLAUDE.md`.
 
-## Commands
-- **Test all:** `pytest tests/ -v --cov=src/grimperium`
-- **Single test:** `pytest tests/unit/test_file.py::test_name -v`
-- **Lint:** `ruff check src/ tests/` (zero warnings required)
-- **Format:** `black src/ tests/` (line-length 88)
-- **Type check:** `mypy src/ --strict`
-- **Pre-commit:** `pre-commit run --all-files`
+## Quick Orientation
 
-## Architecture
-- `src/grimperium/crest_pm7/` - Phase A: conformer generation, threshold monitoring, timeout prediction
-- `src/grimperium/core/` - Delta learning + metrics
-- `src/grimperium/models/` - ML models (XGBoost, KernelRidge, ensemble)
-- `src/grimperium/data/` - Data loading and fusion
-- `tests/{unit,integration}/` - Tests with fixtures in `conftest.py`
+- Python 3.10+ scientific/ML repository with CLI, CREST+MOPAC pipeline,
+  data-fusion, and ML training/prediction code.
+- Active package layout:
+  `src/grimperium/{cli,crest_pm7,core,data,ml,models,utils}`.
+- Active tests:
+  `tests/{unit,integration,experiments,cli,ml}` plus shared fixtures.
 
-## Code Style
-- **Type hints:** 100% required on all functions
-- **Docstrings:** Google-style with Args/Returns/Example sections
-- **Naming:** `snake_case` (functions), `PascalCase` (classes), `UPPER_CASE` (constants)
-- **Coverage:** Minimum 85%, markers: `@pytest.mark.unit`, `@pytest.mark.integration`
-- **No TODOs, placeholders, or skipped tests**
+## Standard Commands
 
-See `docs/CLAUDE.md` for detailed project guidelines.
+- `black src/ tests/`
+- `ruff check src/ tests/`
+- `mypy src/ --strict`
+- `pytest tests/ -v --cov=src/grimperium`
+- `pre-commit run --all-files`
+
+## Local Doc Map
+
+- Main authority: [`CLAUDE.md`](/home/igor/Projetos/grimperium/CLAUDE.md)
+- Workflow reference:
+  [`.claude/DEVELOPMENT_PROCEDURES.md`](/home/igor/Projetos/grimperium/.claude/DEVELOPMENT_PROCEDURES.md)
+- Changelog template:
+  [`.claude/CHANGELOG_TEMPLATE.md`](/home/igor/Projetos/grimperium/.claude/CHANGELOG_TEMPLATE.md)
+- Historical materials:
+  [`docs/.archive/`](/home/igor/Projetos/grimperium/docs/.archive/README.md)
