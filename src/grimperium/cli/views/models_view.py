@@ -6,6 +6,7 @@ Displays and manages trained ML models using real persistence data.
 
 from __future__ import annotations
 
+import logging
 import os
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -17,11 +18,13 @@ from grimperium.cli.menu import MenuOption, show_back_menu
 from grimperium.cli.styles import COLORS, ICONS
 from grimperium.cli.views.base_view import BaseView
 from grimperium.ml.persistence import load_model_metadata, save_model
+from grimperium.ml.trainer import train
 
 if TYPE_CHECKING:
     from grimperium.cli.controller import CliController
 
-_MODEL_NAME = "DeltaLearner v1"
+logger = logging.getLogger(__name__)
+
 _MODEL_ALGORITHM = "KRR + XGBoost Ensemble"
 
 
@@ -41,10 +44,10 @@ class ModelsView(BaseView):
     def __init__(self, controller: CliController) -> None:
         """Initialize the models view."""
         super().__init__(controller)
-        self.selected_model: bool = False
+        self.selected_model_path: Path | None = None
 
     def _get_model_path(self) -> Path:
-        """Resolve model path from env var (read fresh on each call)."""
+        """Resolve default model path from env var (read fresh on each call)."""
         return Path(
             os.environ.get("GRIMPERIUM_MODEL_PATH", "models/delta_learner_v1.joblib")
         )
@@ -53,21 +56,41 @@ class ModelsView(BaseView):
         """Resolve data path from env var (read fresh on each call)."""
         return Path(os.environ.get("GRIMPERIUM_DATA_PATH", "data/thermo_pm7.csv"))
 
-    def _load_model_info(self) -> dict[str, Any] | None:
-        """Try to load model metadata. Returns None if model not trained yet."""
-        try:
-            return load_model_metadata(self._get_model_path())
-        except FileNotFoundError:
-            return None
+    def _discover_models(self) -> list[dict[str, Any]]:
+        """Discover all .joblib model files in the models/ directory."""
+        models_dir = Path("models/")
+        if not models_dir.is_dir():
+            return []
+        results = []
+        for p in sorted(models_dir.glob("*.joblib")):
+            p = p.resolve()
+            try:
+                meta = load_model_metadata(p)
+            except Exception:
+                logger.warning("Skipping corrupted or unreadable model: %s", p)
+                continue
+            test_metrics = meta.get("metrics", {}).get("test", {})
+            results.append(
+                {
+                    "path": p,
+                    "display_name": p.stem.replace("_", " ").title(),
+                    "algorithm": _MODEL_ALGORITHM,
+                    "mae": test_metrics.get("mae"),
+                    "r2": test_metrics.get("r2"),
+                    "trained_at": meta.get("trained_at", "unknown"),
+                    "version": meta.get("version", "unknown"),
+                    "is_active": p == self.controller.current_model_path,
+                }
+            )
+        return results
 
     def render(self) -> None:
         """Render the models overview."""
         self.clear_screen()
         self.show_header()
 
-        metadata = self._load_model_info()
+        models = self._discover_models()
 
-        # Models table
         table = Table(
             title="Trained Models",
             show_header=True,
@@ -78,44 +101,45 @@ class ModelsView(BaseView):
         table.add_column("Algorithm")
         table.add_column("MAE", justify="right")
         table.add_column("R²", justify="right")
+        table.add_column("Active")
         table.add_column("Status")
 
-        if metadata is not None:
-            test_metrics = metadata.get("metrics", {}).get("test", {})
-            mae_val = test_metrics.get("mae")
-            r2_val = test_metrics.get("r2")
-            mae = f"{mae_val:.3f}" if mae_val is not None else "-"
-            r2 = f"{r2_val:.4f}" if r2_val is not None else "-"
-            status = (
-                f"[{COLORS['success']}]{ICONS['success']} Ready[/{COLORS['success']}]"
+        if not models:
+            self.console.print(
+                f"[{COLORS['muted']}]No trained models found. "
+                f"Use 'Train New Model' to create one.[/{COLORS['muted']}]"
             )
         else:
-            mae = "-"
-            r2 = "-"
-            status = f"[{COLORS['in_dev']}]{ICONS['in_dev']} Not Trained[/{COLORS['in_dev']}]"
+            for m in models:
+                mae = f"{m['mae']:.3f}" if m["mae"] is not None else "-"
+                r2 = f"{m['r2']:.4f}" if m["r2"] is not None else "-"
+                active = "★" if m["is_active"] else ""
+                status = f"[{COLORS['success']}]{ICONS['success']} Ready[/{COLORS['success']}]"
+                table.add_row(
+                    m["display_name"], m["algorithm"], mae, r2, active, status
+                )
+            self.console.print(table)
 
-        # Highlight default model
-        name = _MODEL_NAME
-        if self.controller.current_model == _MODEL_NAME:
-            name = f"[bold]{_MODEL_NAME}[/bold] ★"
-
-        table.add_row(name, _MODEL_ALGORITHM, mae, r2, status)
-
-        self.console.print(table)
         self.console.print()
         self.console.print(
-            f"[{COLORS['muted']}]★ = Default model for predictions[/{COLORS['muted']}]"
+            f"[{COLORS['muted']}]★ = Active model for predictions[/{COLORS['muted']}]"
         )
         self.console.print()
 
     def render_model_detail(self, metadata: dict[str, Any] | None) -> None:
-        """Render detailed view for a specific model."""
+        """Render detailed view for the selected model."""
         self.clear_screen()
         self.show_header()
 
+        display_name = (
+            self.selected_model_path.stem.replace("_", " ").title()
+            if self.selected_model_path is not None
+            else "Unknown"
+        )
+
         if metadata is None:
             info = f"""
-[bold]Name:[/bold]          {_MODEL_NAME}
+[bold]Name:[/bold]          {display_name}
 [bold]Algorithm:[/bold]     {_MODEL_ALGORITHM}
 [bold]Status:[/bold]        [{COLORS['in_dev']}]{ICONS['in_dev']} Not Trained[/{COLORS['in_dev']}]
 
@@ -136,7 +160,7 @@ Model has not been trained yet. Use "Train New Model" to train.
             train_r2 = f"{_safe_metric(train_metrics.get('r2')):.4f}"
 
             info = f"""
-[bold]Name:[/bold]          {_MODEL_NAME}
+[bold]Name:[/bold]          {display_name}
 [bold]Algorithm:[/bold]     {_MODEL_ALGORITHM}
 [bold]Version:[/bold]       {metadata.get('version', 'unknown')}
 [bold]Trained at:[/bold]    {metadata.get('trained_at', 'unknown')}
@@ -158,7 +182,7 @@ Model has not been trained yet. Use "Train New Model" to train.
         self.console.print(
             Panel(
                 info,
-                title=f"[bold {COLORS['models']}]{_MODEL_NAME}[/bold {COLORS['models']}]",
+                title=f"[bold {COLORS['models']}]{display_name}[/bold {COLORS['models']}]",
                 border_style=COLORS["models"],
                 padding=(1, 2),
             )
@@ -166,31 +190,33 @@ Model has not been trained yet. Use "Train New Model" to train.
         self.console.print()
 
     def get_menu_options(self) -> list[MenuOption]:
-        """Return menu options for the models view."""
-        options = [
-            MenuOption(
-                label=f"View {_MODEL_NAME}",
-                value="view_model",
-                icon=ICONS["models"],
-            ),
+        """Return menu options for the models view — one per discovered model."""
+        models = self._discover_models()
+        options: list[MenuOption] = []
+        for m in models:
+            options.append(
+                MenuOption(
+                    label=f"View {m['display_name']}",
+                    value=f"view_{m['path'].stem}",
+                    icon=ICONS["models"],
+                )
+            )
+        options.append(
             MenuOption(
                 label="Train New Model",
                 value="train",
-            ),
-            MenuOption(
-                label="Compare Models",
-                value="compare",
-                disabled=True,
-                disabled_reason="In Development",
-            ),
-        ]
+            )
+        )
         return options
 
     def get_detail_menu_options(self) -> list[MenuOption]:
         """Return menu options for model detail view."""
         options = []
 
-        is_default = self.controller.current_model == _MODEL_NAME
+        is_default = (
+            self.selected_model_path is not None
+            and self.selected_model_path == self.controller.current_model_path
+        )
         options.append(
             MenuOption(
                 label="Set as Default" if not is_default else "Already Default",
@@ -209,8 +235,6 @@ Model has not been trained yet. Use "Train New Model" to train.
                 MenuOption(
                     label="Retrain Model",
                     value="retrain",
-                    disabled=True,
-                    disabled_reason="In Development",
                 ),
                 MenuOption(
                     label="Export Model",
@@ -225,20 +249,25 @@ Model has not been trained yet. Use "Train New Model" to train.
 
     def handle_action(self, action: str | None) -> str | None:
         """Handle menu actions."""
-        # Handle None or "back" action
         if action is None or action == "back":
-            if self.selected_model:
-                self.selected_model = False
-                return "models"  # Stay in models view, just return to list
+            if self.selected_model_path is not None:
+                self.selected_model_path = None
+                return "models"
             return "main"
 
-        if action == "view_model":
-            self.selected_model = True
+        if action.startswith("view_"):
+            stem = action[len("view_") :]
+            for m in self._discover_models():
+                if m["path"].stem == stem:
+                    self.selected_model_path = m["path"]
+                    return None
             return None
 
         if action == "set_default":
-            self.controller.set_model(_MODEL_NAME)
-            self.show_success(f"Default model set to {_MODEL_NAME}")
+            if self.selected_model_path is not None:
+                name = self.selected_model_path.stem.replace("_", " ").title()
+                self.controller.set_model(name, model_path=self.selected_model_path)
+                self.show_success(f"Active model set to: {name}")
             return None
 
         if action == "train":
@@ -249,33 +278,34 @@ Model has not been trained yet. Use "Train New Model" to train.
             self._handle_test()
             return None
 
-        # Handle in-development features
-        if action in ["compare", "retrain", "export"]:
-            self.show_in_development(action.title())
+        if action == "retrain":
+            self._handle_retrain()
+            return None
+
+        if action == "export":
+            self.show_in_development("Export")
             return None
 
         return None
 
     def _handle_train(self) -> None:
         """Train a new model and save it."""
-        from grimperium.ml.trainer import train as train_model
-
         self.console.print()
         self.console.print(
-            f"[bold {COLORS['models']}]Training {_MODEL_NAME}...[/bold {COLORS['models']}] "
+            f"[bold {COLORS['models']}]Training new model...[/bold {COLORS['models']}] "
             "(this may take a minute)"
         )
         self.console.print()
 
         try:
-            result = train_model(
+            result = train(
                 self._get_data_path(),
                 return_pipeline=True,
                 random_state=42,
             )
             if not isinstance(result, tuple) or len(result) != 4:
                 msg = (
-                    f"train_model(return_pipeline=True) returned "
+                    f"train(return_pipeline=True) returned "
                     f"{type(result).__name__} with "
                     f"{len(result) if isinstance(result, tuple) else 'N/A'} "
                     f"elements; expected a 4-tuple"
@@ -320,20 +350,140 @@ Model has not been trained yet. Use "Train New Model" to train.
 
         self.wait_for_enter()
 
+    def _handle_retrain(self) -> None:
+        """Retrain the selected model in-place with before/after comparison."""
+        if self.selected_model_path is None:
+            self.show_error("No model selected.")
+            return
+
+        try:
+            old_meta = load_model_metadata(self.selected_model_path)
+        except Exception as e:
+            self.show_error(f"Could not load model metadata: {e}")
+            return
+
+        old_test = old_meta.get("metrics", {}).get("test", {})
+
+        try:
+            n_molecules = sum(1 for _ in self._get_data_path().open()) - 1
+            if n_molecules < 0:
+                n_molecules = 0
+        except Exception:
+            n_molecules = 0
+
+        display_name = self.selected_model_path.stem.replace("_", " ").title()
+
+        self.console.print()
+        self.console.print(
+            f"[bold]Retrain {display_name}?[/bold]\n"
+            f"  Data: {self._get_data_path()} ({n_molecules} molecules)\n"
+            f"  This will overwrite the existing model file.\n"
+        )
+        confirm = self.console.input("Type 'yes' to confirm: ").strip().lower()
+        if confirm not in ("yes", "y"):
+            self.console.print(
+                f"[{COLORS['muted']}]Retrain cancelled.[/{COLORS['muted']}]"
+            )
+            return
+
+        self.console.print()
+        self.console.print(
+            f"[bold {COLORS['models']}]Retraining {display_name}...[/bold {COLORS['models']}] "
+            "(this may take a minute)"
+        )
+
+        try:
+            result = train(
+                self._get_data_path(),
+                return_pipeline=True,
+                random_state=42,
+            )
+            if not isinstance(result, tuple) or len(result) != 4:
+                msg = (
+                    f"train(return_pipeline=True) returned "
+                    f"{type(result).__name__} with "
+                    f"{len(result) if isinstance(result, tuple) else 'N/A'} "
+                    f"elements; expected a 4-tuple"
+                )
+                raise TypeError(msg)
+            learner, train_m, test_m, pipeline = result
+
+            bundle: dict[str, Any] = {
+                "learner": learner,
+                "pipeline": pipeline,
+                "metrics": {
+                    "train": train_m,
+                    "test": test_m,
+                },
+            }
+            save_model(bundle, self.selected_model_path)
+
+            # Before/after comparison table
+            comp = Table(
+                title="Before vs After Retrain",
+                show_header=True,
+                header_style=f"bold {COLORS['models']}",
+                border_style=COLORS["border"],
+            )
+            comp.add_column("Metric")
+            comp.add_column("Before", justify="right")
+            comp.add_column("After", justify="right")
+            comp.add_column("Delta", justify="right")
+            comp.add_column("")
+
+            def _delta_row(
+                label: str,
+                before: float | None,
+                after: float | None,
+                lower_is_better: bool = True,
+            ) -> None:
+                b = _safe_metric(before)
+                a = _safe_metric(after)
+                delta = a - b
+                improved = (delta < 0) if lower_is_better else (delta > 0)
+                icon = ICONS["success"] if improved else ICONS["error"]
+                comp.add_row(label, f"{b:.4f}", f"{a:.4f}", f"{delta:+.4f}", icon)
+
+            _delta_row("MAE (kcal/mol)", old_test.get("mae"), test_m.get("mae"))
+            _delta_row("RMSE (kcal/mol)", old_test.get("rmse"), test_m.get("rmse"))
+            _delta_row(
+                "R²",
+                old_test.get("r2"),
+                test_m.get("r2"),
+                lower_is_better=False,
+            )
+            _delta_row(
+                "Max Error (kcal/mol)",
+                old_test.get("max_error"),
+                test_m.get("max_error"),
+            )
+
+            self.console.print(comp)
+            self.show_success(
+                f"Model retrained and saved to {self.selected_model_path}"
+            )
+        except Exception as e:
+            self.show_error(f"Retraining failed: {e}")
+
+        self.wait_for_enter()
+
     def _handle_test(self) -> None:
-        """Display test metrics for the trained model."""
-        metadata = self._load_model_info()
-        if metadata is None:
+        """Display test metrics for the selected model."""
+        model_path = self.selected_model_path or self._get_model_path()
+        try:
+            metadata = load_model_metadata(model_path)
+        except FileNotFoundError:
             self.show_error("No trained model found. Train first.")
             self.wait_for_enter()
             return
 
+        display_name = model_path.stem.replace("_", " ").title()
         test_metrics = metadata.get("metrics", {}).get("test", {})
         gate_pass = test_metrics.get("gate_pass", False)
         gate_icon = ICONS["success"] if gate_pass else ICONS["error"]
 
         result_text = f"""
-[bold]Model:[/bold]       {_MODEL_NAME}
+[bold]Model:[/bold]       {display_name}
 [bold]Version:[/bold]     {metadata.get('version', 'unknown')}
 [bold]Trained at:[/bold]  {metadata.get('trained_at', 'unknown')}
 
@@ -359,8 +509,13 @@ Model has not been trained yet. Use "Train New Model" to train.
     def run(self) -> str | None:
         """Run the models view interaction loop."""
         while True:
-            if self.selected_model:
-                metadata = self._load_model_info()
+            if self.selected_model_path is not None:
+                try:
+                    metadata: dict[str, Any] | None = load_model_metadata(
+                        self.selected_model_path
+                    )
+                except Exception:
+                    metadata = None
                 self.render_model_detail(metadata)
                 result = show_back_menu(
                     options=self.get_detail_menu_options(),
@@ -373,7 +528,6 @@ Model has not been trained yet. Use "Train New Model" to train.
                     title="Select Model",
                 )
 
-            # Always delegate to handle_action
             next_view = self.handle_action(result)
             if next_view:
                 return next_view
