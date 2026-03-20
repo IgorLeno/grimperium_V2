@@ -155,7 +155,7 @@ def test_do_prediction_sucesso_completo(
 
 
 def test_run_single_molecule_prediction_delta_correction_scalar() -> None:
-    """Pipeline returns scalar delta correction even when learner composes arrays."""
+    """Pipeline extracts pure delta from the final H298 prediction."""
 
     class FakeLearner:
         def __init__(self) -> None:
@@ -163,7 +163,7 @@ def test_run_single_molecule_prediction_delta_correction_scalar() -> None:
 
         def predict(self, X: np.ndarray, y_pm7: np.ndarray) -> np.ndarray:
             self.y_pm7_seen = y_pm7
-            delta_pred = np.array([2.15])
+            delta_pred = np.array([3.24])
             return y_pm7 + delta_pred
 
     fake_learner = FakeLearner()
@@ -176,7 +176,7 @@ def test_run_single_molecule_prediction_delta_correction_scalar() -> None:
     fake_pm7_result = MagicMock()
     fake_pm7_result.success = True
     fake_pm7_result.error_message = None
-    fake_pm7_result.most_stable_hof = -45.32
+    fake_pm7_result.most_stable_hof = -72.76
     fake_pm7_result.nheavy = 2
     fake_pm7_result.crest_conformers_generated = 7
     fake_pm7_result.num_conformers_selected = 3
@@ -219,6 +219,11 @@ def test_run_single_molecule_prediction_delta_correction_scalar() -> None:
     assert isinstance(result.delta_correction, float)
     assert not isinstance(result.delta_correction, np.ndarray)
     assert isinstance(result.h298_corrected, float)
+    assert result.h298_pm7 == pytest.approx(-72.76)
+    assert result.delta_correction == pytest.approx(3.24)
+    assert -10.0 < result.delta_correction < 10.0
+    assert result.h298_corrected == pytest.approx(-69.52)
+    assert result.h298_corrected != pytest.approx(result.h298_pm7 + result.h298_pm7)
 
 
 def test_set_model_com_path() -> None:

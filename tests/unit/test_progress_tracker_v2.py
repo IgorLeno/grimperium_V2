@@ -990,12 +990,17 @@ class TestCSVMonitorDetection:
         monitor.register_molecule("mol_001")
         monitor.start()
 
+        # Allow first poll to cache current state before updating
+        time.sleep(0.15)
+
         csv_path.write_text(
             "mol_id,status,crest_status,mopac_status\n" "mol_001,OK,SUCCESS,OK"
         )
+        # Ensure mtime differs from cached value (filesystem granularity)
+        os.utime(csv_path, (time.time() + 1, time.time() + 1))
 
         try:
-            event = event_queue.get(timeout=1.0)
+            event = event_queue.get(timeout=2.0)
         finally:
             monitor.stop()
 

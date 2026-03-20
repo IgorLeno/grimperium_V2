@@ -51,7 +51,7 @@ def run_single_molecule_prediction(
     1. CREST-PM7 processing (geometry, conformer search, MOPAC)
     2. Feature extraction (RDKit, CREST, MOPAC)
     3. Model loading and prediction
-    4. Delta correction computation
+    4. Delta correction extraction from the predicted H298
 
     Args:
         smiles: SMILES string
@@ -154,14 +154,15 @@ def run_single_molecule_prediction(
     try:
         import numpy as np
 
-        # DeltaLearner.predict requires both X and y_pm7
+        # DeltaLearner.predict returns the final H298 prediction, not the pure delta.
         y_pm7_array = np.array([h298_pm7])
-        delta_correction = float(learner.predict(X, y_pm7_array)[0])
+        h298_cbs_pred = float(learner.predict(X, y_pm7_array)[0])
+        delta_correction = h298_cbs_pred - h298_pm7
     except Exception as e:
         raise CalcPipelineError(f"Prediction failed: {e}") from e
 
     # Step 6: Compute corrected H298
-    h298_corrected = h298_pm7 + delta_correction
+    h298_corrected = h298_cbs_pred
 
     # Compute total execution time
     total_time = (pm7_result.total_execution_time or 0.0) + (
