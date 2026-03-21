@@ -3,8 +3,6 @@
 
 from __future__ import annotations
 
-import pytest
-
 from grimperium.ml.gate import GATE_MAE_MAX, GATE_R2_MIN, GATE_RMSE_MAX, evaluate_gate
 
 _GOOD = {"mae": 2.5, "r2": 0.98, "rmse": 3.5, "mape": 8.0, "max_error": 15.0}

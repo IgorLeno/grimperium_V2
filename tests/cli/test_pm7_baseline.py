@@ -41,7 +41,9 @@ class TestComputePm7StatsAbsoluteMetrics:
 
 class TestComputePm7StatsNoRelativeError:
     def test_mre_pct_key_absent(self) -> None:
-        df = _make_df([0.1, 0.2], [-3.9, -4.8])  # H298_cbs near zero → RE% would be huge
+        df = _make_df(
+            [0.1, 0.2], [-3.9, -4.8]
+        )  # H298_cbs near zero → RE% would be huge
         result = _compute_pm7_stats(df)
         assert "mre_pct" not in result
 

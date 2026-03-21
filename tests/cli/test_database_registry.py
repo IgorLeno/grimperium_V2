@@ -6,10 +6,8 @@ import json
 from pathlib import Path
 
 import pandas as pd
-import pytest
 
 from grimperium.cli.database_registry import DatabaseRegistry
-
 
 # ── Test 1: auto_creates_defaults ──
 

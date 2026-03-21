@@ -3,9 +3,10 @@
 Uses a representative snippet of MOPAC2016 output to verify end-to-end parsing.
 """
 
+from pathlib import Path
+
 import numpy as np
 import pytest
-from pathlib import Path
 
 from grimperium.crest_pm7.mopac_descriptors import extract_mopac_descriptors
 
