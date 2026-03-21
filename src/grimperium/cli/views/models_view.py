@@ -17,6 +17,7 @@ from rich.table import Table
 from grimperium.cli.menu import MenuOption, show_back_menu
 from grimperium.cli.styles import COLORS, ICONS
 from grimperium.cli.views.base_view import BaseView
+from grimperium.ml.gate import evaluate_gate
 from grimperium.ml.persistence import load_model_metadata, save_model
 from grimperium.ml.trainer import train
 
@@ -312,6 +313,7 @@ Model has not been trained yet. Use "Train New Model" to train.
                 )
                 raise TypeError(msg)
             learner, train_m, test_m, pipeline = result
+            test_m["gate_pass"] = evaluate_gate(test_m)
 
             bundle: dict[str, Any] = {
                 "learner": learner,
@@ -407,6 +409,7 @@ Model has not been trained yet. Use "Train New Model" to train.
                 )
                 raise TypeError(msg)
             learner, train_m, test_m, pipeline = result
+            test_m["gate_pass"] = evaluate_gate(test_m)
 
             bundle: dict[str, Any] = {
                 "learner": learner,
@@ -459,6 +462,11 @@ Model has not been trained yet. Use "Train New Model" to train.
             )
 
             self.console.print(comp)
+            gate_pass = test_m["gate_pass"]
+            gate_icon = ICONS["success"] if gate_pass else ICONS["error"]
+            self.console.print(
+                f"  Gate Pass: {gate_icon} {'Yes' if gate_pass else 'No'}"
+            )
             self.show_success(
                 f"Model retrained and saved to {self.selected_model_path}"
             )
