@@ -124,10 +124,11 @@ def test_pm7_baseline_computation_known_values(
     assert "8.4000" in output
     # Bias = +5.6
     assert "5.6000" in output
-    # MRE% = 4.2%
-    assert "4.20" in output
-    # MdRE% = 5.0%
-    assert "5.00" in output
+    # Absolute errors: [5, 10, 2, 20, 5] → P50 (median) = 5.0
+    assert "5.000" in output
+    # Relative-error metrics must NOT appear (RE% removed)
+    assert "MRE%" not in output
+    assert "MdRE%" not in output
 
 
 def test_pm7_baseline_excludes_zero_cbs(tmp_path: Path) -> None:
@@ -196,9 +197,11 @@ def test_pm7_baseline_interpretation_text(
 
 
 def test_pm7_baseline_percentage_thresholds(tmp_path: Path) -> None:
-    """Verify RE% threshold percentages with custom dataset."""
-    # RE%: [0.5, 3, 7, 12, 20]
-    # <1%: 1/5=20%, <5%: 2/5=40%, <10%: 3/5=60%
+    """Verify absolute-error threshold percentages with custom dataset."""
+    # |errors|: [1, 3, 7, 12, 20]
+    # |error| < 1 kcal/mol: 0/5 = 0.0%
+    # |error| < 2 kcal/mol: 1/5 = 20.0%
+    # |error| < 5 kcal/mol: 2/5 = 40.0%
     df = pd.DataFrame(
         {
             "H298_cbs": [-200.0, -100.0, -100.0, -100.0, -100.0],
@@ -217,6 +220,7 @@ def test_pm7_baseline_percentage_thresholds(tmp_path: Path) -> None:
         view._handle_pm7_baseline()
 
     output = buf.getvalue()
-    assert "20.0%" in output  # RE% < 1%
-    assert "40.0%" in output  # RE% < 5%
-    assert "60.0%" in output  # RE% < 10%
+    assert "20.0%" in output  # |error| < 2 kcal/mol
+    assert "40.0%" in output  # |error| < 5 kcal/mol
+    # Relative-error metrics must NOT appear
+    assert "MRE%" not in output

@@ -38,6 +38,41 @@ if TYPE_CHECKING:
     from grimperium.cli.settings_manager import SettingsManager
 
 
+def _compute_pm7_stats(valid: pd.DataFrame) -> dict[str, float]:
+    """Compute PM7 vs CBS absolute-error statistics from a validated DataFrame.
+
+    Args:
+        valid: DataFrame with non-null ``H298_cbs`` and ``H298_pm7`` columns.
+
+    Returns:
+        Dict with keys: mare, bias, r2, n, p50, p90, p95,
+        pct_lt_1, pct_lt_2, pct_lt_5.
+
+    Note:
+        Relative-error metrics (MRE%, MdRE%) are intentionally absent.
+        H298 heats of formation cross zero, making percentage errors
+        numerically undefined for molecules with small |H298_cbs|.
+    """
+    h298_cbs = valid["H298_cbs"].to_numpy(dtype=float)
+    h298_pm7 = valid["H298_pm7"].to_numpy(dtype=float)
+
+    abs_err = np.abs(h298_pm7 - h298_cbs)
+    n = len(abs_err)
+
+    return {
+        "mare": float(mae(h298_cbs, h298_pm7)),
+        "bias": float(np.mean(h298_pm7 - h298_cbs)),
+        "r2": float(r2_score(h298_cbs, h298_pm7)),
+        "n": n,
+        "p50": float(np.median(abs_err)),
+        "p90": float(np.percentile(abs_err, 90)),
+        "p95": float(np.percentile(abs_err, 95)),
+        "pct_lt_1": float(np.sum(abs_err < 1.0) / n * 100),
+        "pct_lt_2": float(np.sum(abs_err < 2.0) / n * 100),
+        "pct_lt_5": float(np.sum(abs_err < 5.0) / n * 100),
+    }
+
+
 class DatabasesView(BaseView):
     """View for managing molecular databases."""
 
@@ -355,32 +390,7 @@ class DatabasesView(BaseView):
             self.wait_for_enter()
             return
 
-        h298_cbs = valid["H298_cbs"].to_numpy()
-        h298_pm7 = valid["H298_pm7"].to_numpy()
-
-        # Absolute metrics (all valid rows)
-        mare = mae(h298_cbs, h298_pm7)
-        bias = float(np.mean(h298_pm7 - h298_cbs))
-        r2 = r2_score(h298_cbs, h298_pm7)
-
-        # Relative metrics (exclude H298_cbs == 0)
-        nonzero_mask = valid["H298_cbs"] != 0.0
-        cbs_nz = valid.loc[nonzero_mask, "H298_cbs"].to_numpy()
-        pm7_nz = valid.loc[nonzero_mask, "H298_pm7"].to_numpy()
-
-        if len(cbs_nz) > 0:
-            re_pct = np.abs(pm7_nz - cbs_nz) / np.abs(cbs_nz) * 100
-            mre_pct = float(np.mean(re_pct))
-            mdre_pct = float(np.median(re_pct))
-            std_re_pct = float(np.std(re_pct, ddof=0))
-            max_re_pct = float(np.max(re_pct))
-            n_re = len(re_pct)
-            pct_lt_1 = float(np.sum(re_pct < 1.0) / n_re * 100)
-            pct_lt_5 = float(np.sum(re_pct < 5.0) / n_re * 100)
-            pct_lt_10 = float(np.sum(re_pct < 10.0) / n_re * 100)
-        else:
-            mre_pct = mdre_pct = std_re_pct = max_re_pct = 0.0
-            pct_lt_1 = pct_lt_5 = pct_lt_10 = 0.0
+        stats = _compute_pm7_stats(valid)
 
         # Display table
         db_color = COLORS["databases"]
@@ -394,20 +404,20 @@ class DatabasesView(BaseView):
         table.add_column("Metric", style="bold")
         table.add_column("Value", justify="right")
 
-        table.add_row("MARE (kcal/mol)", f"{mare:.4f}")
-        table.add_row("Bias (kcal/mol)", f"{bias:.4f}")
-        table.add_row("R\u00b2", f"{r2:.4f}")
+        table.add_row("MARE (kcal/mol)", f"{stats['mare']:.4f}")
+        table.add_row("Bias (kcal/mol)", f"{stats['bias']:.4f}")
+        table.add_row("R\u00b2", f"{stats['r2']:.4f}")
         table.add_row("", "")
-        table.add_row("MRE%", f"{mre_pct:.2f}%")
-        table.add_row("MdRE%", f"{mdre_pct:.2f}%")
-        table.add_row("Std RE% (ddof=0)", f"{std_re_pct:.4f}%")
-        table.add_row("Max RE%", f"{max_re_pct:.2f}%")
+        table.add_row("Absolute Error Distribution", "")
+        table.add_row("  Median |error| (P50)", f"{stats['p50']:.3f} kcal/mol")
+        table.add_row("  P90", f"{stats['p90']:.3f} kcal/mol")
+        table.add_row("  P95", f"{stats['p95']:.3f} kcal/mol")
         table.add_row("", "")
-        table.add_row("RE% < 1%", f"{pct_lt_1:.1f}%")
-        table.add_row("RE% < 5%", f"{pct_lt_5:.1f}%")
-        table.add_row("RE% < 10%", f"{pct_lt_10:.1f}%")
+        table.add_row("  |error| < 1 kcal/mol", f"{stats['pct_lt_1']:.1f}%")
+        table.add_row("  |error| < 2 kcal/mol", f"{stats['pct_lt_2']:.1f}%")
+        table.add_row("  |error| < 5 kcal/mol", f"{stats['pct_lt_5']:.1f}%")
         table.add_row("", "")
-        table.add_row("Molecules analyzed", f"{len(valid):,}")
+        table.add_row("Molecules analyzed", f"{stats['n']:,}")
 
         self.console.print()
         self.console.print(table)
@@ -416,10 +426,10 @@ class DatabasesView(BaseView):
         # Interpretation panel
         interpretation = (
             f"[bold]PM7 Baseline Error Context:[/bold]\n\n"
-            f"\u2022 PM7 mean absolute error: {mare:.4f} kcal/mol vs CBS reference\n"
-            f"\u2022 Systematic bias: {bias:+.4f} kcal/mol "
-            f"({'PM7 overestimates' if bias > 0 else 'PM7 underestimates' if bias < 0 else 'unbiased'})\n"
-            f"\u2022 Mean relative error: {mre_pct:.2f}%\n"
+            f"\u2022 PM7 mean absolute error: {stats['mare']:.4f} kcal/mol vs CBS reference\n"
+            f"\u2022 Systematic bias: {stats['bias']:+.4f} kcal/mol "
+            f"({'PM7 overestimates' if stats['bias'] > 0 else 'PM7 underestimates' if stats['bias'] < 0 else 'unbiased'})\n"
+            f"\u2022 Median absolute error (P50): {stats['p50']:.3f} kcal/mol\n"
             f"\u2022 This is the error that delta-learning needs to correct"
         )
         self.console.print(
