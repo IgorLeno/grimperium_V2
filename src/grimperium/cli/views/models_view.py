@@ -462,7 +462,7 @@ Model has not been trained yet. Use "Train New Model" to train.
             )
 
             self.console.print(comp)
-            gate_pass = test_m["gate_pass"]
+            gate_pass = test_m.get("gate_pass", False)
             gate_icon = ICONS["success"] if gate_pass else ICONS["error"]
             self.console.print(
                 f"  Gate Pass: {gate_icon} {'Yes' if gate_pass else 'No'}"
