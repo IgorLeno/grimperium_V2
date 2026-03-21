@@ -63,7 +63,7 @@ def _compute_pm7_stats(valid: pd.DataFrame) -> dict[str, float]:
         "mare": float(mae(h298_cbs, h298_pm7)),
         "bias": float(np.mean(h298_pm7 - h298_cbs)),
         "r2": float(r2_score(h298_cbs, h298_pm7)),
-        "n": n,
+        "n": float(n),
         "p50": float(np.median(abs_err)),
         "p90": float(np.percentile(abs_err, 90)),
         "p95": float(np.percentile(abs_err, 95)),

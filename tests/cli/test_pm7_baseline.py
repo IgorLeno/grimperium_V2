@@ -102,3 +102,13 @@ class TestComputePm7StatsAbsoluteThresholds:
         result = _compute_pm7_stats(df)
         assert result["mare"] == pytest.approx((3.982 + 2.019) / 2, abs=0.01)
         assert "mre_pct" not in result
+
+    def test_single_row_does_not_raise(self) -> None:
+        """Single-molecule dataset — degenerate case where P50==P90==P95==|error|."""
+        df = _make_df([5.0], [3.0])  # |error| = 2.0
+        result = _compute_pm7_stats(df)
+        assert result["n"] == pytest.approx(1)
+        assert result["p50"] == pytest.approx(2.0)
+        assert result["p90"] == pytest.approx(2.0)
+        assert result["pct_lt_1"] == pytest.approx(0.0)
+        assert result["pct_lt_5"] == pytest.approx(100.0)
