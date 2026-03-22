@@ -26,6 +26,8 @@ from grimperium.crest_pm7.config import PM7Config
 if TYPE_CHECKING:
     from grimperium.cli.controller import CliController
 
+KCAL_TO_KJ: float = 4.184  # exact per IUPAC definition
+
 
 class CalcView(BaseView):
     """View for molecular property predictions."""
@@ -85,16 +87,19 @@ using the Delta-Learning model.
             "Delta Correction",
             f"{result.delta_correction:.2f} kcal/mol",
         )
+        h298_kj = result.h298_corrected * KCAL_TO_KJ
         table.add_row(
             "H298 (Corrected)",
-            f"[bold {COLORS['success']}]{result.h298_corrected:.2f} kcal/mol[/bold {COLORS['success']}]",
+            f"[bold {COLORS['success']}]{result.h298_corrected:.2f} kcal/mol  "
+            f"({h298_kj:.2f} kJ/mol)[/bold {COLORS['success']}]",
         )
         table.add_row("Model Used", result.model_name)
         table.add_row("Model Version", result.model_version)
         table.add_row("Conformers", str(result.n_conformers))
+        exec_min = result.execution_time / 60
         table.add_row(
             "Execution Time",
-            f"{result.execution_time:.1f}s",
+            f"{exec_min:.2f} min",
         )
 
         self.console.print(
@@ -128,7 +133,7 @@ using the Delta-Learning model.
         table.add_column("H298 Corrected", justify="right")
         table.add_column("Model", justify="center")
         table.add_column("Conformers", justify="right")
-        table.add_column("Time (s)", justify="right")
+        table.add_column("Time (min)", justify="right")
 
         for i, result in enumerate(reversed(self.history[-10:]), 1):
             table.add_row(
@@ -143,7 +148,7 @@ using the Delta-Learning model.
                 f"{result.h298_corrected:.2f}",
                 result.model_name.split("_")[0] if result.model_name else "-",
                 str(result.n_conformers),
-                f"{result.execution_time:.1f}",
+                f"{result.execution_time / 60:.2f}",
             )
 
         self.console.print(table)
@@ -400,9 +405,11 @@ using the Delta-Learning model.
 
             # Show last result if available
             if self.last_result:
+                _h298_kj = self.last_result.h298_corrected * KCAL_TO_KJ
                 self.console.print(
                     f"[{COLORS['muted']}]Last prediction: {self.last_result.smiles} → "
-                    f"H298={self.last_result.h298_corrected:.2f} kcal/mol[/{COLORS['muted']}]"
+                    f"H298={self.last_result.h298_corrected:.2f} kcal/mol "
+                    f"({_h298_kj:.2f} kJ/mol)[/{COLORS['muted']}]"
                 )
                 self.console.print()
 
