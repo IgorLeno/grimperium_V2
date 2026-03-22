@@ -73,6 +73,24 @@ def _compute_pm7_stats(valid: pd.DataFrame) -> dict[str, float]:
     }
 
 
+def _filter_suspect_rows(df: pd.DataFrame) -> tuple[pd.DataFrame, int]:
+    """Remove rows flagged as SUSPECT CBS reference values.
+
+    Args:
+        df: DataFrame that may contain a ``cbs_quality_flag`` column.
+
+    Returns:
+        Tuple of (filtered_df, suspect_count). If the column is absent,
+        returns (df, 0) unchanged — backward-compatible with datasets that
+        predate the flag.
+    """
+    if "cbs_quality_flag" not in df.columns:
+        return df, 0
+    suspect_mask = df["cbs_quality_flag"] == "SUSPECT"
+    suspect_count: int = int(suspect_mask.sum())
+    return df[~suspect_mask].copy(), suspect_count
+
+
 class DatabasesView(BaseView):
     """View for managing molecular databases."""
 
@@ -385,6 +403,7 @@ class DatabasesView(BaseView):
             return
 
         valid = df.dropna(subset=["H298_pm7", "H298_cbs"])
+        valid, suspect_count = _filter_suspect_rows(valid)
         if len(valid) == 0:
             self.show_error("No valid rows with both PM7 and CBS values.")
             self.wait_for_enter()
@@ -421,6 +440,12 @@ class DatabasesView(BaseView):
 
         self.console.print()
         self.console.print(table)
+        if suspect_count > 0:
+            self.console.print(
+                f"[yellow]\u26a0 {suspect_count} molecule(s) with cbs_quality_flag=SUSPECT excluded from this analysis. "
+                "These values originate from the CBS source dataset and are "
+                "flagged as unreliable. Retained in CSV for traceability.[/yellow]"
+            )
         self.console.print()
 
         # Interpretation panel

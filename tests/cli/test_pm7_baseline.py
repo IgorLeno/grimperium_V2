@@ -7,7 +7,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from grimperium.cli.views.databases_view import _compute_pm7_stats
+from grimperium.cli.views.databases_view import _compute_pm7_stats, _filter_suspect_rows
 
 
 def _make_df(cbs: list[float], pm7: list[float]) -> pd.DataFrame:
@@ -114,3 +114,42 @@ class TestComputePm7StatsAbsoluteThresholds:
         assert result["p90"] == pytest.approx(2.0)
         assert result["pct_lt_1"] == pytest.approx(0.0)
         assert result["pct_lt_5"] == pytest.approx(100.0)
+
+
+def _make_df_with_flag(
+    cbs: list[float],
+    pm7: list[float],
+    flags: list[str],
+) -> pd.DataFrame:
+    return pd.DataFrame({"H298_cbs": cbs, "H298_pm7": pm7, "cbs_quality_flag": flags})
+
+
+class TestFilterSuspectRows:
+    def test_suspect_rows_are_excluded_and_count_returned(self) -> None:
+        df = _make_df_with_flag(
+            cbs=[1.0, 2.0, -17307.0],
+            pm7=[1.1, 2.1, -33.2],
+            flags=["OK", "OK", "SUSPECT"],
+        )
+        filtered, count = _filter_suspect_rows(df)
+        assert count == 1
+        assert len(filtered) == 2
+        assert (filtered["cbs_quality_flag"] == "SUSPECT").sum() == 0
+
+    def test_no_suspect_rows_returns_full_df_and_zero_count(self) -> None:
+        df = _make_df_with_flag(
+            cbs=[1.0, 2.0],
+            pm7=[1.1, 2.1],
+            flags=["OK", "OK"],
+        )
+        filtered, count = _filter_suspect_rows(df)
+        assert count == 0
+        assert len(filtered) == 2
+
+    def test_missing_cbs_quality_flag_column_returns_df_unchanged_and_zero_count(
+        self,
+    ) -> None:
+        df = pd.DataFrame({"H298_cbs": [1.0, 2.0], "H298_pm7": [1.1, 2.1]})
+        filtered, count = _filter_suspect_rows(df)
+        assert count == 0
+        assert len(filtered) == 2
