@@ -28,6 +28,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - See `docs/known_issues.md` for full impact analysis and reproduction steps
 
 ### Changed
+- **ML bundle metadata for split volume** (2026-03-30)
+  - `src/grimperium/ml/trainer.py`: train/test metric dicts now persist
+    `n_samples`, `n_total`, and `test_size`
+  - `src/grimperium/ml/persistence.py`: `load_model_metadata()` now exposes
+    `n_train`, `n_test`, `n_total`, and `test_size` for CLI consumers
+  - `src/grimperium/cli/views/models_view.py`: model training/test screens now
+    show total molecules plus train/test split when metadata exists, while old
+    bundles remain compatible
+  - `README.md`: trained-model section now documents real train/test metrics
+
 - **CLI: H298 display units** (2026-03-21)
   - `src/grimperium/cli/views/results_view.py`: H298 now displayed in kJ/mol
     (converted from kcal/mol × 4.184) for consistency with SI conventions

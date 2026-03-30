@@ -35,7 +35,16 @@ class TestTrain:
             synthetic_csv_path, test_size=0.2, random_state=42
         )
 
-        expected_keys = {"rmse", "mae", "r2", "mape", "max_error"}
+        expected_keys = {
+            "rmse",
+            "mae",
+            "r2",
+            "mape",
+            "max_error",
+            "n_samples",
+            "n_total",
+            "test_size",
+        }
         assert set(train_metrics.keys()) == expected_keys
         assert set(test_metrics.keys()) == expected_keys
 
@@ -89,7 +98,9 @@ class TestTrain:
                 continue
             col_idx = feature_index[col]
             for row_idx in col_nan_rows:
-                assert np.isclose(transformed_test[row_idx, col_idx], train_medians[col])
+                assert np.isclose(
+                    transformed_test[row_idx, col_idx], train_medians[col]
+                )
 
     def test_raises_on_invalid_test_size(self, synthetic_csv_path: Path) -> None:
         """train validates test_size bounds before train_test_split call."""

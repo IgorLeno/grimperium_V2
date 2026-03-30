@@ -105,6 +105,9 @@ def train(
         test_size=test_size,
         random_state=random_state,
     )
+    n_total: int = len(df)
+    n_train: int = len(df_train)
+    n_test: int = len(df_test)
 
     # Step 3: Feature engineering — imputer fitted on train only
     pipeline = FeaturePipeline(feature_cols)
@@ -118,6 +121,13 @@ def train(
     # Step 5: Evaluate on both splits
     train_metrics: DictStrAny = learner.evaluate(X_train, y_cbs_train, y_pm7_train)
     test_metrics: DictStrAny = learner.evaluate(X_test, y_cbs_test, y_pm7_test)
+    train_metrics["n_samples"] = n_train
+    train_metrics["n_total"] = n_total
+    train_metrics["test_size"] = test_size
+
+    test_metrics["n_samples"] = n_test
+    test_metrics["n_total"] = n_total
+    test_metrics["test_size"] = test_size
 
     if return_pipeline:
         return learner, train_metrics, test_metrics, pipeline

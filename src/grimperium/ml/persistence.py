@@ -117,7 +117,8 @@ def load_model_metadata(path: Path | str) -> DictStrAny:
         path: path to the ``.joblib`` file.  Accepts ``Path`` or ``str``.
 
     Returns:
-        dict with version, trained_at, metrics.
+        dict with version, trained_at, metrics, n_train, n_test, n_total,
+        and test_size.
 
     Raises:
         FileNotFoundError: if the file does not exist.
@@ -133,8 +134,16 @@ def load_model_metadata(path: Path | str) -> DictStrAny:
         raise FileNotFoundError(msg)
 
     bundle: dict[str, Any] = joblib.load(path)
+    metrics = bundle.get("metrics", {})
+    train_m = metrics.get("train", {}) if isinstance(metrics, dict) else {}
+    test_m = metrics.get("test", {}) if isinstance(metrics, dict) else {}
+
     return {
         "version": bundle.get("version", "unknown"),
         "trained_at": bundle.get("trained_at", "unknown"),
-        "metrics": bundle.get("metrics", {}),
+        "metrics": metrics,
+        "n_train": train_m.get("n_samples"),
+        "n_test": test_m.get("n_samples"),
+        "n_total": test_m.get("n_total"),
+        "test_size": test_m.get("test_size"),
     }

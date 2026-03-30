@@ -34,6 +34,25 @@ def _safe_metric(value: Any, default: float = 0.0) -> float:
     return default if value is None else float(value)
 
 
+def _format_split_summary(meta: dict[str, Any]) -> str:
+    """Render training-volume metadata when present in the bundle."""
+    n_total = meta.get("n_total")
+    n_train = meta.get("n_train")
+    n_test = meta.get("n_test")
+    test_size = meta.get("test_size")
+
+    if n_total is None or n_train is None or n_test is None or test_size is None:
+        return ""
+
+    train_ratio = 100 * (1 - float(test_size))
+    test_ratio = 100 * float(test_size)
+    return (
+        f"\n  Total de moléculas: {int(n_total):,}"
+        f"\n  Divisão treino / teste: {int(n_train):,} / {int(n_test):,}"
+        f"  ({train_ratio:.0f}% / {test_ratio:.0f}%)"
+    )
+
+
 class ModelsView(BaseView):
     """View for managing ML models."""
 
@@ -159,6 +178,7 @@ Model has not been trained yet. Use "Train New Model" to train.
             train_rmse = f"{_safe_metric(train_metrics.get('rmse')):.3f}"
             train_mae = f"{_safe_metric(train_metrics.get('mae')):.3f}"
             train_r2 = f"{_safe_metric(train_metrics.get('r2')):.4f}"
+            split_summary = _format_split_summary(metadata)
 
             info = f"""
 [bold]Name:[/bold]          {display_name}
@@ -178,6 +198,7 @@ Model has not been trained yet. Use "Train New Model" to train.
   RMSE:            {train_rmse} kcal/mol
   MAE:             {train_mae} kcal/mol
   R² Score:        {train_r2}
+{split_summary}
 """
 
         self.console.print(
@@ -327,6 +348,14 @@ Model has not been trained yet. Use "Train New Model" to train.
 
             gate_pass = test_m.get("gate_pass", False)
             gate_icon = ICONS["success"] if gate_pass else ICONS["error"]
+            split_summary = _format_split_summary(
+                {
+                    "n_total": test_m.get("n_total"),
+                    "n_train": train_m.get("n_samples"),
+                    "n_test": test_m.get("n_samples"),
+                    "test_size": test_m.get("test_size"),
+                }
+            )
 
             result_text = f"""
 [bold]Training Complete![/bold]
@@ -336,6 +365,7 @@ Model has not been trained yet. Use "Train New Model" to train.
   MAE:         {_safe_metric(test_m.get('mae')):.3f} kcal/mol
   R² Score:    {_safe_metric(test_m.get('r2')):.4f}
   Gate Pass:   {gate_icon} {'Yes' if gate_pass else 'No'}
+{split_summary}
 """
 
             self.console.print(
@@ -467,6 +497,16 @@ Model has not been trained yet. Use "Train New Model" to train.
             self.console.print(
                 f"  Gate Pass: {gate_icon} {'Yes' if gate_pass else 'No'}"
             )
+            split_summary = _format_split_summary(
+                {
+                    "n_total": test_m.get("n_total"),
+                    "n_train": train_m.get("n_samples"),
+                    "n_test": test_m.get("n_samples"),
+                    "test_size": test_m.get("test_size"),
+                }
+            )
+            if split_summary:
+                self.console.print(split_summary)
             self.show_success(
                 f"Model retrained and saved to {self.selected_model_path}"
             )
@@ -489,6 +529,7 @@ Model has not been trained yet. Use "Train New Model" to train.
         test_metrics = metadata.get("metrics", {}).get("test", {})
         gate_pass = test_metrics.get("gate_pass", False)
         gate_icon = ICONS["success"] if gate_pass else ICONS["error"]
+        split_summary = _format_split_summary(metadata)
 
         result_text = f"""
 [bold]Model:[/bold]       {display_name}
@@ -501,6 +542,7 @@ Model has not been trained yet. Use "Train New Model" to train.
   R² Score:    {_safe_metric(test_metrics.get('r2')):.4f}
   MAPE:        {_safe_metric(test_metrics.get('mape')):.2f}%
   Max Error:   {_safe_metric(test_metrics.get('max_error')):.3f} kcal/mol
+{split_summary}
   Gate Pass:   {gate_icon} {'Yes' if gate_pass else 'No'}
 """
 

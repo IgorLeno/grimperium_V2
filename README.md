@@ -27,14 +27,25 @@
 
 ### Modelo ML Treinado
 
-| Métrica | Valor | O que significa |
-|---|---|---|
-| R² do modelo | 0.9970 | Quanto da variação do CBS-QB3 é explicada após a correção ML |
-| MAE do modelo | 2.50 kcal/mol | Erro médio absoluto após aplicar a correção delta |
-| RMSE do modelo | 3.54 kcal/mol | Penaliza erros grandes e resume a robustez global |
-| Gate pass | ✅ Sim | Modelo aprovado nos critérios de qualidade |
-| Moléculas de treino | - | Tamanho efetivo do conjunto usado no último treinamento |
-| Data do treino | 2026-03-30 10:33 UTC | Momento em que o bundle atual foi gerado |
+Algoritmo: **KRR + XGBoost Ensemble**  
+Versão: **1.0.0**  
+Treinado em: **2026-03-30**  
+Status: **✅ Gate pass**  
+Volume atual estimado (split 80/20): **~1.760 treino / ~440 teste**
+
+| Métrica | Treino | Teste | O que significa |
+|---|---|---|---|
+| R² | 0,9989 | 0,9970 | Modelo explica 99,7% da variação no conjunto de teste |
+| MAE | 1,479 kcal/mol | 2,502 kcal/mol | Erro médio por molécula |
+| RMSE | 2,142 kcal/mol | 3,539 kcal/mol | Penaliza erros grandes |
+| MAPE | — | 9,85% | Erro relativo médio |
+| Erro máximo | — | 19,238 kcal/mol | Pior caso observado no teste |
+| Overfitting gap | — | RMSE +1,4 kcal/mol | Baixo — modelo generaliza bem |
+
+> **Contexto:** O modelo foi treinado com 80% dos dados (split 80/20,
+> random_state=42) e avaliado nos 20% restantes nunca vistos durante o
+> treino. O gap pequeno entre treino e teste indica baixo overfitting para
+> o volume atual de dados.
 ---
 
 ## O que é este projeto?
