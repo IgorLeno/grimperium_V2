@@ -8,6 +8,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **ML quality gate** (`ml/gate.py`)
+  - Evaluates trained models against MAE ≤ 3.5, R² ≥ 0.97, RMSE ≤ 5.0 kcal/mol
+  - Thresholds derived from 1,537-molecule baseline (delta mean ≈ 5, std ≈ 6.45 kcal/mol)
+  - Models failing the gate are not persisted
+
 - **CBS_SUSPECT data quality tracking** (2026-03-22)
   - `docs/known_issues.md`: new document describing 13 anomalous H298_cbs rows
     in thermo_pm7.csv (values in −17k to −145k kcal/mol, likely unconverted Hartrees)

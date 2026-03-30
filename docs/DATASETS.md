@@ -334,6 +334,44 @@ df = load_real_subset(n=1000, stratified=True, random_state=42)
 
 ---
 
+## Resultados da Baseline PM7
+
+Métricas de comparação entre as entalpias PM7 (calculadas pelo pipeline) e as
+referências CBS-QB3, medidas sobre o conjunto limpo de ~2.200 moléculas (após
+remoção de 13 outliers CBS_SUSPECT):
+
+| Métrica | Valor | Interpretação |
+|---|---|---|
+| R² | 0,9845 | PM7 explica 98% da variância em relação ao CBS-QB3 |
+| MARE (erro absoluto médio) | 6,22 kcal/mol | Desvio médio entre PM7 e referência |
+| P50 (erro mediano) | 5,14 kcal/mol | Metade das moléculas tem erro abaixo desse limiar |
+| P90 (percentil 90) | 12,92 kcal/mol | 90% das moléculas tem erro abaixo desse limiar |
+| Bias (viés médio) | −5,00 kcal/mol | PM7 subestima sistematicamente a entalpia |
+
+### O que o viés sistemático significa
+
+O bias de −5,00 kcal/mol indica que o PM7 erra de forma **previsível e
+consistente**: ele subestima a entalpia na maioria dos casos. Esse padrão
+sistemático (e não aleatório) é exatamente o que torna a abordagem de
+delta-learning eficaz — o modelo ML não precisa "adivinhar" a direção do erro,
+apenas aprender a magnitude da correção para cada tipo de molécula.
+
+### Tratamento de outliers CBS_SUSPECT
+
+13 moléculas no `thermo_pm7.csv` apresentam valores de H298_cbs na faixa de
+−17.000 a −145.000 kcal/mol — fisicamente impossíveis para moléculas CHON com
+7–11 átomos pesados (faixa plausível: −300 a +50 kcal/mol). A causa mais
+provável é que a energia total em Hartrees do CBS-QB3 foi armazenada sem
+conversão para kcal/mol no dataset de origem (ex.: −232 Ha × 627,5 kcal/mol/Ha ≈
+−145.620 kcal/mol).
+
+Essas linhas são marcadas com `cbs_quality_flag = "SUSPECT"` e excluídas de toda
+análise e treinamento ML, mas retidas no CSV para rastreabilidade. Sem esse
+filtro, o MARE seria 757 kcal/mol e o R² seria −0,007. Detalhes completos em
+[`docs/known_issues.md`](known_issues.md).
+
+---
+
 **Last Updated:** March 30, 2026
 **Maintained By:** Grimperium Team
 **Review Cycle:** Quarterly (or on major dataset changes)

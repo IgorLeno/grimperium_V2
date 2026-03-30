@@ -12,6 +12,25 @@
 
 ---
 
+## Resultados Atuais
+
+O pipeline já processou **~2.200 moléculas** com o método semiempírico PM7 e comparou os resultados com a referência de alta precisão (CBS-QB3). Estes são os números da baseline, antes de aplicar qualquer correção de machine learning:
+
+| Métrica | Valor | O que significa |
+|---|---|---|
+| Moléculas calculadas | ~2.200 | Base de dados em crescimento ativo para treinar a correção ML |
+| Correlação PM7 vs CBS-QB3 (R²) | 0,9845 | PM7 captura 98% da variação real — os 2% restantes são o alvo do ML |
+| Erro absoluto mediano (P50) | 5,1 kcal/mol | Erro típico que o modelo ML precisará corrigir |
+| Erro no percentil 90 (P90) | 12,9 kcal/mol | Pior caso frequente — moléculas maiores ou mais complexas |
+| Erro absoluto médio (MARE) | 6,22 kcal/mol | Média geral dos erros, puxada para cima pelos casos mais difíceis |
+| Viés médio (bias) | −5,00 kcal/mol | PM7 subestima sistematicamente a entalpia — padrão previsível e corrigível |
+
+Esses números são animadores: um R² de 0,98 mostra que o PM7 já reproduz quase toda a tendência da referência CBS-QB3, e o viés sistemático de −5 kcal/mol indica um erro **previsível**, não aleatório. Erros previsíveis são exatamente o que modelos de delta-learning conseguem aprender e corrigir com eficácia. O próximo passo — treinar o modelo ML — parte de uma base sólida.
+
+> **Nota:** 13 moléculas com valores de referência fisicamente impossíveis (provável erro de conversão de unidades na origem) foram identificadas e marcadas como `CBS_SUSPECT`. Sem esse filtro, o R² seria −0,007 e o MARE seria 757 kcal/mol. Detalhes em [`docs/known_issues.md`](docs/known_issues.md).
+
+---
+
 ## O que é este projeto?
 
 Grimperium é um framework científico que usa **machine learning** para tornar cálculos de química quântica mais rápidos e precisos.
@@ -37,7 +56,7 @@ Essa abordagem chama-se **delta-learning** e tem duas vantagens principais:
 | Dataset | Moléculas | Uso |
 |---|---|---|
 | `thermo_cbs_chon.csv` | 29.568 moléculas CHON | Referência de alta precisão (CBS-QB3) |
-| `thermo_pm7.csv` | Sendo acumulado | Resultados PM7 gerados pelo pipeline |
+| `thermo_pm7.csv` | ~2.200 moléculas OK (em crescimento ativo) | Resultados PM7 gerados pelo pipeline |
 
 O dataset cobre moléculas formadas apenas por **C, H, O e N** — escolha deliberada para manter a física homogênea e facilitar o aprendizado do delta.
 
@@ -49,10 +68,12 @@ O dataset cobre moléculas formadas apenas por **C, H, O e N** — escolha delib
 [✅ Phase A]  Validação do pipeline CREST + MOPAC (PM7)
 [✅ Phase B]  Implementação da CLI interativa
 [✅ Phase C]  Error handling, retry system, estabilização do pipeline
-[🔄 Agora  ]  Acumulando moléculas PM7 → meta: 1.000 moléculas OK
-[⏳ Próximo]  Treinar o primeiro modelo ML com dados reais
+[🔄 Agora  ]  Acumulando moléculas PM7 → 2.200 OK (meta inicial de 1.000 superada)
+[⏳ Próximo]  Treinar o primeiro modelo ML — meta: RMSE ≤ 15 kcal/mol, R² > 0,9
 [⏳ Futuro ]  Escalar para 3k → 5k → 29k moléculas → deploy
 ```
+
+O quality gate de ML (`ml/gate.py`) já está implementado e avalia automaticamente se o modelo treinado atende limiares de MAE ≤ 3,5 kcal/mol, R² ≥ 0,97 e RMSE ≤ 5,0 kcal/mol antes de ser aceito. Ele aguarda o primeiro ciclo de treinamento com volume suficiente de dados.
 
 **Status dos quality gates:**
 
@@ -254,6 +275,8 @@ A CLI oferece menus para:
 - Rodar batches do pipeline CREST + PM7
 - Monitorar progresso das moléculas
 - Visualizar resultados
+
+> **Sobre unidades:** A CLI exibe H298 em kcal/mol e kJ/mol simultaneamente (conversão IUPAC: 1 kcal = 4,184 kJ). Tempo de execução é exibido em minutos. Internamente, todos os cálculos e o CSV usam kcal/mol e segundos.
 
 ### Carregar os dados via código
 ```python
