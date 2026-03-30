@@ -13,6 +13,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Thresholds derived from 1,537-molecule baseline (delta mean ≈ 5, std ≈ 6.45 kcal/mol)
   - Models failing the gate are not persisted
 
+- **CLI: README updater for live project metrics** (2026-03-30)
+  - `src/grimperium/cli/readme_updater.py`: new workflow to read PM7/model data,
+    preview diffs, and rewrite only the dynamic `## Resultados Atuais` block
+  - `src/grimperium/cli/views/settings_view.py`: new Settings action
+    "Atualizar Documentação do Projeto"
+  - `tests/cli/test_readme_updater.py`: coverage for PM7 stats, missing models,
+    dry-run updates, and README section preservation
+
 - **CBS_SUSPECT data quality tracking** (2026-03-22)
   - `docs/known_issues.md`: new document describing 13 anomalous H298_cbs rows
     in thermo_pm7.csv (values in −17k to −145k kcal/mol, likely unconverted Hartrees)

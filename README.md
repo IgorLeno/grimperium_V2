@@ -14,21 +14,27 @@
 
 ## Resultados Atuais
 
-O pipeline já processou **~2.200 moléculas** com o método semiempírico PM7 e comparou os resultados com a referência de alta precisão (CBS-QB3). Estes são os números da baseline, antes de aplicar qualquer correção de machine learning:
+### Baseline PM7
 
 | Métrica | Valor | O que significa |
 |---|---|---|
-| Moléculas calculadas | ~2.200 | Base de dados em crescimento ativo para treinar a correção ML |
-| Correlação PM7 vs CBS-QB3 (R²) | 0,9845 | PM7 captura 98% da variação real — os 2% restantes são o alvo do ML |
-| Erro absoluto mediano (P50) | 5,1 kcal/mol | Erro típico que o modelo ML precisará corrigir |
-| Erro no percentil 90 (P90) | 12,9 kcal/mol | Pior caso frequente — moléculas maiores ou mais complexas |
-| Erro absoluto médio (MARE) | 6,22 kcal/mol | Média geral dos erros, puxada para cima pelos casos mais difíceis |
-| Viés médio (bias) | −5,00 kcal/mol | PM7 subestima sistematicamente a entalpia — padrão previsível e corrigível |
+| Moléculas calculadas (status OK) | 2,222 | Base de dados em crescimento ativo para treinar a correção ML |
+| Correlação PM7 vs CBS-QB3 (R²) | 0.9858 | PM7 captura 98.6% da variação real |
+| Erro absoluto mediano (P50) | 4.95 kcal/mol | Erro típico que o modelo ML precisará corrigir |
+| Erro no percentil 90 (P90) | 11.65 kcal/mol | Pior caso frequente |
+| Erro absoluto médio (MARE) | 5.90 kcal/mol | Média geral dos erros |
+| Viés médio (bias) | -4.59 kcal/mol | PM7 subestima sistematicamente |
 
-Esses números são animadores: um R² de 0,98 mostra que o PM7 já reproduz quase toda a tendência da referência CBS-QB3, e o viés sistemático de −5 kcal/mol indica um erro **previsível**, não aleatório. Erros previsíveis são exatamente o que modelos de delta-learning conseguem aprender e corrigir com eficácia. O próximo passo — treinar o modelo ML — parte de uma base sólida.
+### Modelo ML Treinado
 
-> **Nota:** 13 moléculas com valores de referência fisicamente impossíveis (provável erro de conversão de unidades na origem) foram identificadas e marcadas como `CBS_SUSPECT`. Sem esse filtro, o R² seria −0,007 e o MARE seria 757 kcal/mol. Detalhes em [`docs/known_issues.md`](docs/known_issues.md).
-
+| Métrica | Valor | O que significa |
+|---|---|---|
+| R² do modelo | 0.9970 | Quanto da variação do CBS-QB3 é explicada após a correção ML |
+| MAE do modelo | 2.50 kcal/mol | Erro médio absoluto após aplicar a correção delta |
+| RMSE do modelo | 3.54 kcal/mol | Penaliza erros grandes e resume a robustez global |
+| Gate pass | ✅ Sim | Modelo aprovado nos critérios de qualidade |
+| Moléculas de treino | - | Tamanho efetivo do conjunto usado no último treinamento |
+| Data do treino | 2026-03-30 10:33 UTC | Momento em que o bundle atual foi gerado |
 ---
 
 ## O que é este projeto?

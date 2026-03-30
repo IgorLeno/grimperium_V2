@@ -931,3 +931,9 @@ class SettingsManager:
                 self.console.input("[dim]Press Enter to continue...[/dim]")
             elif choice == "toggle":
                 self.xtb.preopt = not self.xtb.preopt
+
+    def display_readme_updater_menu(self) -> None:
+        """Launch the README updater workflow from Settings."""
+        from grimperium.cli.readme_updater import ReadmeUpdater
+
+        ReadmeUpdater(console=self.console).display_menu()

@@ -106,6 +106,12 @@ class SettingsView(BaseView):
                 description="Reset all settings to default values",
             ),
             MenuOption(
+                label="Atualizar Documentação do Projeto",
+                value="update_docs",
+                icon="📊",
+                description="Atualizar a seção dinâmica do README com dados reais",
+            ),
+            MenuOption(
                 label="Back to Main Menu",
                 value="back",
                 icon="↩️",
@@ -138,6 +144,9 @@ class SettingsView(BaseView):
             return None
         if action == "reset_all":
             self._reset_all_settings()
+            return None
+        if action == "update_docs":
+            self.settings_manager.display_readme_updater_menu()
             return None
         return None
 
