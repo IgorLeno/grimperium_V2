@@ -19,7 +19,8 @@ from grimperium.cli.menu import MenuOption, show_back_menu
 from grimperium.cli.styles import COLORS, ICONS
 from grimperium.cli.views.base_view import BaseView
 from grimperium.core.metrics import mae, max_error, r2_score, rmse
-from grimperium.ml.persistence import load_model_metadata
+from grimperium.ml.gate import evaluate_gate
+from grimperium.ml.persistence import load_model_metadata, save_model
 
 if TYPE_CHECKING:
     from grimperium import DictStrAny
@@ -267,6 +268,11 @@ class ResultsView(BaseView):
         """Return menu options for the results view."""
         return [
             MenuOption(
+                label="Run New Analysis",
+                value="run_analysis",
+                icon=ICONS.get("models", "\U0001f916"),
+            ),
+            MenuOption(
                 label="Predict Batch",
                 value="predict_batch",
                 icon=ICONS.get("calc", "\u26a1"),
@@ -287,6 +293,10 @@ class ResultsView(BaseView):
         """Handle menu actions."""
         if action == "back":
             return "main"
+
+        if action == "run_analysis":
+            self._handle_run_analysis()
+            return None
 
         if action == "predict_batch":
             self._handle_predict_batch()
@@ -506,6 +516,220 @@ Results written to: {csv_path}
         except Exception as e:
             self.show_error(f"Prediction failed: {e}")
 
+        self.wait_for_enter()
+
+    def _handle_run_analysis(self) -> None:
+        """Run complete analysis: retrain model, predict batch, regenerate charts."""
+        from grimperium.ml.charts import generate_charts
+        from grimperium.ml.predictor import predict_batch
+        from grimperium.ml.trainer import train
+
+        model_path = self._get_model_path()
+        csv_path = self._get_csv_path()
+        charts_dir = self._get_charts_dir()
+
+        # Capture "before" metrics if model exists
+        old_metrics: dict[str, Any] | None = None
+        if model_path.exists():
+            try:
+                old_meta = load_model_metadata(model_path)
+                old_metrics = old_meta.get("metrics", {}).get("test", {})
+            except Exception:
+                old_metrics = None
+
+        # Count eligible molecules
+        if not csv_path.exists():
+            self.show_error(f"Data file not found: {csv_path}")
+            self.wait_for_enter()
+            return
+
+        try:
+            df_check = pd.read_csv(csv_path)
+            n_eligible = int(
+                (
+                    (df_check["status"] == "OK")
+                    & (df_check["cbs_quality_flag"] == "OK")
+                ).sum()
+            )
+        except Exception:
+            n_eligible = 0
+
+        # Confirmation prompt
+        self.console.print()
+        self.console.print(
+            f"[bold {COLORS['results']}]Run New Analysis"
+            f"[/bold {COLORS['results']}]\n"
+            f"  Data: {csv_path} ({n_eligible:,} eligible molecules)\n"
+            f"  Model: {model_path}\n\n"
+            f"  This will:\n"
+            f"    1. Retrain the model with current data\n"
+            f"    2. Run batch predictions for all eligible molecules\n"
+            f"    3. Regenerate visualization charts\n"
+        )
+        confirm = self.console.input("Type 'yes' to confirm: ").strip().lower()
+        if confirm not in ("yes", "y"):
+            self.console.print(
+                f"[{COLORS['muted']}]Analysis cancelled.[/{COLORS['muted']}]"
+            )
+            return
+
+        # --- Step 1: Retrain ---
+        self.console.print()
+        self.console.print(
+            f"[bold {COLORS['results']}]Step 1/3: Retraining model..."
+            f"[/bold {COLORS['results']}] (this may take a minute)"
+        )
+
+        try:
+            result = train(csv_path, return_pipeline=True, random_state=42)
+            if not isinstance(result, tuple) or len(result) != 4:
+                msg = (
+                    f"train(return_pipeline=True) returned "
+                    f"{type(result).__name__} with "
+                    f"{len(result) if isinstance(result, tuple) else 'N/A'} "
+                    f"elements; expected a 4-tuple"
+                )
+                raise TypeError(msg)
+            learner, train_m, test_m, pipeline = result
+            test_m["gate_pass"] = evaluate_gate(test_m)
+
+            bundle: dict[str, Any] = {
+                "learner": learner,
+                "pipeline": pipeline,
+                "metrics": {"train": train_m, "test": test_m},
+            }
+            save_model(bundle, model_path)
+            self.console.print(
+                f"  [{COLORS['success']}]{ICONS['success']} Model retrained"
+                f" and saved[/{COLORS['success']}]"
+            )
+        except Exception as e:
+            self.show_error(f"Training failed: {e}")
+            self.wait_for_enter()
+            return
+
+        # --- Step 2: Predict Batch ---
+        self.console.print(
+            f"[bold {COLORS['results']}]Step 2/3: Running batch predictions..."
+            f"[/bold {COLORS['results']}]"
+        )
+
+        try:
+            _df, pred_stats = predict_batch(csv_path, model_path, return_stats=True)
+            self.console.print(
+                f"  [{COLORS['success']}]{ICONS['success']} "
+                f"{pred_stats['n_predicted']:,} molecules predicted"
+                f"[/{COLORS['success']}]"
+            )
+        except Exception as e:
+            self.show_error(f"Batch prediction failed: {e}")
+            self.wait_for_enter()
+            return
+
+        # --- Step 3: Generate Charts ---
+        self.console.print(
+            f"[bold {COLORS['results']}]Step 3/3: Generating charts..."
+            f"[/bold {COLORS['results']}]"
+        )
+
+        chart_result = None
+        try:
+            chart_result = generate_charts(csv_path, charts_dir)
+            self.console.print(
+                f"  [{COLORS['success']}]{ICONS['success']} Charts saved"
+                f" to {charts_dir}[/{COLORS['success']}]"
+            )
+        except Exception as e:
+            self.console.print(
+                f"  [{COLORS['warning']}]{ICONS['warning']} "
+                f"Chart generation failed: {e}[/{COLORS['warning']}]"
+            )
+
+        # --- Display Results ---
+        self.console.print()
+
+        # Before/after comparison table
+        if old_metrics is not None:
+            comp = Table(
+                title="Before vs After Analysis",
+                show_header=True,
+                header_style=f"bold {COLORS['results']}",
+                border_style=COLORS["border"],
+            )
+            comp.add_column("Metric")
+            comp.add_column("Before", justify="right")
+            comp.add_column("After", justify="right")
+            comp.add_column("Delta", justify="right")
+            comp.add_column("")
+
+            def _delta_row(
+                label: str,
+                before: Any,
+                after: Any,
+                *,
+                lower_is_better: bool = True,
+            ) -> None:
+                b = float(before) if before is not None else 0.0
+                a = float(after) if after is not None else 0.0
+                delta = a - b
+                improved = (delta < 0) if lower_is_better else (delta > 0)
+                icon = ICONS["success"] if improved else ICONS["error"]
+                comp.add_row(label, f"{b:.4f}", f"{a:.4f}", f"{delta:+.4f}", icon)
+
+            _delta_row("MAE (kcal/mol)", old_metrics.get("mae"), test_m.get("mae"))
+            _delta_row("RMSE (kcal/mol)", old_metrics.get("rmse"), test_m.get("rmse"))
+            _delta_row(
+                "R\u00b2",
+                old_metrics.get("r2"),
+                test_m.get("r2"),
+                lower_is_better=False,
+            )
+            _delta_row(
+                "Max Error (kcal/mol)",
+                old_metrics.get("max_error"),
+                test_m.get("max_error"),
+            )
+
+            self.console.print(comp)
+            self.console.print()
+
+        # Summary panel
+        gate_pass = test_m.get("gate_pass", False)
+        gate_icon = ICONS["success"] if gate_pass else ICONS["error"]
+
+        mae_val = float(test_m.get("mae", 0))
+        r2_val = float(test_m.get("r2", 0))
+
+        summary = (
+            f"[bold]Analysis Complete![/bold]\n\n"
+            f"[bold]Model:[/bold]\n"
+            f"  MAE:         {mae_val:.3f} kcal/mol\n"
+            f"  R\u00b2:          {r2_val:.4f}\n"
+            f"  Gate Pass:   {gate_icon}"
+            f" {'Yes' if gate_pass else 'No'}\n\n"
+            f"[bold]Predictions:[/bold]\n"
+            f"  Molecules:   {pred_stats['n_predicted']:,}\n"
+            f"  Mean delta:  {pred_stats['mean_delta']:.4f} kcal/mol"
+        )
+
+        if chart_result is not None:
+            summary += (
+                f"\n\n[bold]Charts:[/bold]\n"
+                f"  Parity plot:      {chart_result.parity_plot}\n"
+                f"  Delta histogram:  {chart_result.delta_histogram}\n"
+                f"  Residuals plot:   {chart_result.residuals_plot}"
+            )
+
+        self.console.print(
+            Panel(
+                summary,
+                title=f"[bold {COLORS['success']}]New Analysis Results"
+                f"[/bold {COLORS['success']}]",
+                border_style=COLORS["success"],
+                padding=(1, 2),
+            )
+        )
+        self.show_success("Full analysis pipeline complete!")
         self.wait_for_enter()
 
     def run(self) -> str | None:

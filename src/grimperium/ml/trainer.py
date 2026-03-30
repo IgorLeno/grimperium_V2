@@ -24,7 +24,8 @@ def train(
     test_size: float = 0.2,
     random_state: int = 42,
     return_pipeline: Literal[False] = False,
-) -> tuple[DeltaLearner, DictStrAny, DictStrAny]: ...
+) -> tuple[DeltaLearner, DictStrAny, DictStrAny]:
+    ...
 
 
 @overload
@@ -35,7 +36,8 @@ def train(
     test_size: float = 0.2,
     random_state: int = 42,
     return_pipeline: Literal[True],
-) -> tuple[DeltaLearner, DictStrAny, DictStrAny, FeaturePipeline]: ...
+) -> tuple[DeltaLearner, DictStrAny, DictStrAny, FeaturePipeline]:
+    ...
 
 
 def train(

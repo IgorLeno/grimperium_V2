@@ -189,7 +189,9 @@ class DatabaseAnalyzer:
                 f"🚨 {elec['gap_negative']} molecules with " "negative HOMO-LUMO gap"
             )
         if elec["homo_suspicious"] > 0:
-            alerts.append(f"⚠️ {elec['homo_suspicious']} molecules with |HOMO| > 100 eV")
+            alerts.append(
+                f"⚠️ {elec['homo_suspicious']} molecules with |HOMO| > 100 eV"
+            )
 
         # Conformers
         conf = self._conformer_stats(ok_df)

@@ -286,15 +286,15 @@ def compute_molecular_descriptors(smiles: str) -> dict[str, Any]:
         if mol is None:
             return result
 
-        result["nheavy"] = Descriptors.HeavyAtomCount(mol)
+        result["nheavy"] = Descriptors.HeavyAtomCount(mol)  # type: ignore[no-untyped-call]
         result["nrotbonds"] = rdMolDescriptors.CalcNumRotatableBonds(mol)
-        result["tpsa"] = Descriptors.TPSA(mol)
+        result["tpsa"] = Descriptors.TPSA(mol)  # type: ignore[attr-defined]
         result["aromatic_rings"] = rdMolDescriptors.CalcNumAromaticRings(mol)
 
         # Check for heteroatoms (N, O, S, P, etc.)
         hetero_atoms = {"N", "O", "S", "P", "F", "Cl", "Br", "I"}
         has_hetero: bool = any(
-            atom.GetSymbol() in hetero_atoms for atom in mol.GetAtoms()
+            atom.GetSymbol() in hetero_atoms for atom in mol.GetAtoms()  # type: ignore[no-untyped-call]
         )
         result["has_heteroatoms"] = has_hetero
 
@@ -662,15 +662,15 @@ class MoleculeProcessor:
             mol = Chem.AddHs(mol)
 
             # Generate 3D coordinates
-            embed_result = AllChem.EmbedMolecule(mol, AllChem.ETKDG())
+            embed_result = AllChem.EmbedMolecule(mol, AllChem.ETKDG())  # type: ignore[attr-defined]
             if embed_result < 0:
                 # Try with random seed
-                embed_result = AllChem.EmbedMolecule(mol, randomSeed=42)
+                embed_result = AllChem.EmbedMolecule(mol, randomSeed=42)  # type: ignore[attr-defined]
                 if embed_result < 0:
                     return None
 
             # Optimize geometry and check result
-            optim_result = AllChem.MMFFOptimizeMolecule(mol)
+            optim_result = AllChem.MMFFOptimizeMolecule(mol)  # type: ignore[attr-defined]
             if optim_result == -1:
                 # -1 means missing force field parameters
                 mol_name = mol.GetProp("_Name") if mol.HasProp("_Name") else smiles[:50]
@@ -694,7 +694,7 @@ class MoleculeProcessor:
             with open(xyz_path, "w", encoding="utf-8") as f:
                 f.write(f"{mol.GetNumAtoms()}\n")
                 f.write(f"{mol_id} generated from SMILES\n")
-                for atom in mol.GetAtoms():
+                for atom in mol.GetAtoms():  # type: ignore[no-untyped-call]
                     pos = conf.GetAtomPosition(atom.GetIdx())
                     f.write(f"{atom.GetSymbol()} {pos.x:.6f} {pos.y:.6f} {pos.z:.6f}\n")
 

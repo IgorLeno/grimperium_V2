@@ -306,7 +306,7 @@ class TimeoutPredictor:
                 LOG.warning("Corrupted state: samples_nheavy contains invalid values")
                 return False
 
-            if not all(isinstance(x, (int, float)) and x > 0 for x in loaded_time):
+            if not all(isinstance(x, int | float) and x > 0 for x in loaded_time):
                 LOG.warning("Corrupted state: samples_time contains invalid values")
                 return False
 

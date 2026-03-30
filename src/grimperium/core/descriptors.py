@@ -123,7 +123,7 @@ def extract_all_rdkit_descriptors(smiles: str) -> dict[str, float | int]:
 
     # Warn if molecule contains atoms outside {C, H, O, N} — counts remain CHON-only
     chon_symbols = {"C", "H", "O", "N"}
-    non_chon = {atom.GetSymbol() for atom in mol_h.GetAtoms()} - chon_symbols
+    non_chon = {atom.GetSymbol() for atom in mol_h.GetAtoms()} - chon_symbols  # type: ignore[no-untyped-call]
     if non_chon:
         logger.warning(
             "Molecule contains non-CHON atoms: %s; rdkit_nC/nH/nO/nN count only C/H/O/N",
