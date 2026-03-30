@@ -33,8 +33,8 @@
 | MAE do modelo | 2.50 kcal/mol | Erro médio absoluto após aplicar a correção delta |
 | RMSE do modelo | 3.54 kcal/mol | Penaliza erros grandes e resume a robustez global |
 | Gate pass | ✅ Sim | Modelo aprovado nos critérios de qualidade |
-| Moléculas de treino | - | Tamanho efetivo do conjunto usado no último treinamento |
-| Data do treino | 2026-03-30 11:16 UTC | Momento em que o bundle atual foi gerado |
+| Moléculas de treino | 1,760 | Tamanho efetivo do conjunto usado no último treinamento |
+| Data do treino | 2026-03-30 18:29 UTC | Momento em que o bundle atual foi gerado |
 ---
 
 ## O que é este projeto?
