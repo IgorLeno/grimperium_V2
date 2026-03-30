@@ -98,7 +98,16 @@ Results from **CREST conformer generation + PM7 semiempirical optimization** pip
 | **pm7_enthalpy** or **H298_pm7** | PM7-optimized enthalpy |
 | **conformer_count** | Number of conformers generated |
 | **quality_grade** | Quality assessment (A/B/C/D/F) |
+| **cbs_quality_flag** | `"OK"` or `"SUSPECT"` — flags rows with anomalous H298_cbs values |
 | **batch_metadata** | Processing batch information |
+
+### Data Quality: CBS_SUSPECT Rows
+
+13 rows carry `cbs_quality_flag = "SUSPECT"` due to H298_cbs values in the
+range of −17,000 to −145,000 kcal/mol (likely unconverted Hartrees from the
+upstream source). These rows are **retained for traceability** but excluded from
+all analysis and ML training. See [`docs/known_issues.md`](known_issues.md) for
+full details, quantified impact, and reproduction steps.
 
 ### Use Cases
 
@@ -325,6 +334,6 @@ df = load_real_subset(n=1000, stratified=True, random_state=42)
 
 ---
 
-**Last Updated:** January 18, 2026
+**Last Updated:** March 30, 2026
 **Maintained By:** Grimperium Team
 **Review Cycle:** Quarterly (or on major dataset changes)

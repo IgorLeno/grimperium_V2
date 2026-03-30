@@ -58,7 +58,7 @@ O dataset cobre moléculas formadas apenas por **C, H, O e N** — escolha delib
 
 | Gate | Status |
 |---|---|
-| `pytest` | ✅ 494/495 passing |
+| `pytest` | ✅ 753 passing |
 | `mypy --strict` | ✅ Passando |
 | `ruff` | ✅ Passando |
 | `black` | ✅ Passando |

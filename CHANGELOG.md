@@ -7,6 +7,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **CBS_SUSPECT data quality tracking** (2026-03-22)
+  - `docs/known_issues.md`: new document describing 13 anomalous H298_cbs rows
+    in thermo_pm7.csv (values in −17k to −145k kcal/mol, likely unconverted Hartrees)
+  - `cbs_quality_flag` column marks suspect rows as `"SUSPECT"` in the CSV
+  - See `docs/known_issues.md` for full impact analysis and reproduction steps
+
+### Changed
+- **CLI: H298 display units** (2026-03-21)
+  - `src/grimperium/cli/views/results_view.py`: H298 now displayed in kJ/mol
+    (converted from kcal/mol × 4.184) for consistency with SI conventions
+  - `src/grimperium/cli/views/results_view.py`: execution time displayed in minutes
+    instead of raw seconds
+  - Verification: `pytest tests/cli/ -v`
+
+### Fixed
+- **CLI: exclude CBS_SUSPECT rows from PM7 baseline** (2026-03-22)
+  - `src/grimperium/cli/views/databases_view.py`: `_filter_suspect_rows()` excludes
+    `cbs_quality_flag=SUSPECT` from PM7 baseline analysis
+  - `src/grimperium/crest_pm7/database_analyzer.py`: `_target_delta_stats` and
+    `_top_delta_outliers` filter on `cbs_quality_flag == "OK"`
+  - Without filter: MARE=757 kcal/mol, R²=−0.007; with filter: MARE=6.22 kcal/mol, R²=0.985
+  - Verification: `pytest tests/cli/test_pm7_baseline.py -v`
+
+- **Type and formatting cleanup** (2026-03-30)
+  - Resolved pre-existing mypy errors: added `type: ignore` for RDKit untyped calls
+  - Fixed ruff UP038: `isinstance` uses `X | Y` syntax
+  - Reformatted 5 files with black
+  - `tests/unit/test_results_view_run_analysis.py`: new test for results view analysis
+
 ### Breaking Changes
 
 #### MOPAC: Drop AUX file parsing and keyword (2026-03-02)
