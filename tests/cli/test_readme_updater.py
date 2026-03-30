@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import joblib
 import pandas as pd
 import pytest
 
@@ -70,6 +71,42 @@ def test_collect_model_stats_no_model(tmp_path: Path) -> None:
 
     assert stats["model_found"] is False
     assert stats["r2"] is None
+
+
+def test_collect_model_stats_reads_nested_split_metadata(tmp_path: Path) -> None:
+    """Model stats read n_train/n_test from metrics nested in the bundle."""
+    models_dir = tmp_path / "models"
+    models_dir.mkdir()
+    bundle_path = models_dir / "delta_learner_v1.joblib"
+    joblib.dump(
+        {
+            "metrics": {
+                "train": {
+                    "r2": 0.9989,
+                    "mae": 1.479,
+                    "rmse": 2.142,
+                    "n_samples": 1760,
+                },
+                "test": {
+                    "r2": 0.9970,
+                    "mae": 2.502,
+                    "rmse": 3.539,
+                    "gate_pass": True,
+                    "n_samples": 440,
+                },
+            },
+            "trained_at": "2026-03-30T11:16:00+00:00",
+        },
+        bundle_path,
+    )
+
+    updater = ReadmeUpdater(model_bundle_path=models_dir)
+    stats = updater.collect_model_stats()
+
+    assert stats["model_found"] is True
+    assert stats["n_train"] == 1760
+    assert stats["n_test"] == 440
+    assert stats["date"] == "2026-03-30 11:16 UTC"
 
 
 def test_update_readme_dry_run(tmp_path: Path) -> None:

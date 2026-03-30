@@ -221,6 +221,27 @@ class ReadmeUpdater:
 
         return section_value.get(key)
 
+    def _extract_bundle_split_value(
+        self,
+        bundle: dict[str, object],
+        metrics: object,
+        section: str,
+        key: str,
+    ) -> int | None:
+        """Extract split metadata from nested metrics, falling back to bundle root."""
+        metric_value = self._extract_model_metric(metrics, section, key)
+        if metric_value is not None:
+            return self._coerce_int(metric_value)
+
+        fallback_map = {
+            ("train", "n_samples"): "n_train",
+            ("test", "n_samples"): "n_test",
+        }
+        fallback_key = fallback_map.get((section, key))
+        if fallback_key is None:
+            return None
+        return self._coerce_int(bundle.get(fallback_key))
+
     def _discover_model_candidates(self) -> list[Path]:
         """Return model files ordered from newest to oldest."""
         base_path = self._resolve_path(self.model_bundle_path)
@@ -392,8 +413,12 @@ class ReadmeUpdater:
                 "rmse": model_rmse,
                 "r2": model_r2,
                 "gate_pass": gate_pass,
-                "n_train": self._coerce_int(bundle.get("n_train")),
-                "n_test": self._coerce_int(bundle.get("n_test")),
+                "n_train": self._extract_bundle_split_value(
+                    bundle, metrics, "train", "n_samples"
+                ),
+                "n_test": self._extract_bundle_split_value(
+                    bundle, metrics, "test", "n_samples"
+                ),
                 "date": self._format_trained_at(bundle.get("trained_at")),
             }
 

@@ -74,12 +74,14 @@ O dataset cobre moléculas formadas apenas por **C, H, O e N** — escolha delib
 [✅ Phase A]  Validação do pipeline CREST + MOPAC (PM7)
 [✅ Phase B]  Implementação da CLI interativa
 [✅ Phase C]  Error handling, retry system, estabilização do pipeline
-[🔄 Agora  ]  Acumulando moléculas PM7 → 2.200 OK (meta inicial de 1.000 superada)
-[⏳ Próximo]  Treinar o primeiro modelo ML — meta: RMSE ≤ 15 kcal/mol, R² > 0,9
-[⏳ Futuro ]  Escalar para 3k → 5k → 29k moléculas → deploy
+[✅ Phase D]  2.222 moléculas PM7 OK acumuladas (meta de 1.000 superada)
+[✅ Phase E]  Primeiro modelo ML treinado — RMSE 3,54 kcal/mol, R² 0,997 (gate pass ✅)
+[🔄 Agora  ]  Escalando volume de dados: meta 3.000 → 5.000 moléculas OK
+[⏳ Próximo]  Re-treino com maior volume + validação cruzada k-fold
+[⏳ Futuro ]  Hiperparametrização (Bayesian), escalar para 29k moléculas → deploy
 ```
 
-O quality gate de ML (`ml/gate.py`) já está implementado e avalia automaticamente se o modelo treinado atende limiares de MAE ≤ 3,5 kcal/mol, R² ≥ 0,97 e RMSE ≤ 5,0 kcal/mol antes de ser aceito. Ele aguarda o primeiro ciclo de treinamento com volume suficiente de dados.
+O quality gate de ML (`ml/gate.py`) já está implementado e avalia automaticamente se o modelo treinado atende limiares de MAE ≤ 3,5 kcal/mol, R² ≥ 0,97 e RMSE ≤ 5,0 kcal/mol antes de ser aceito. O primeiro modelo foi treinado em 2026-03-30 e **passou o gate** (MAE 2,50 kcal/mol, RMSE 3,54 kcal/mol, R² 0,997). O foco agora é escalar o volume de dados para re-treinar com maior representatividade.
 
 **Status dos quality gates:**
 
@@ -386,10 +388,11 @@ pre-commit run --all-files
 
 ## Roadmap
 
-- **Agora:** Acumular ≥ 1.000 moléculas PM7 com `quality_grade` A ou B
-- **Próximo:** Treinar primeiro modelo — meta RMSE ≤ 15 kcal/mol, R² > 0.9
-- **Depois:** Escalar para 3k → 5k → 29k moléculas
-- **Futuro:** Hiperparametrização (grid/Bayesian), validação cruzada k-fold, deploy via `api.py`
+- **Concluído:** Pipeline PM7 estável — 2.222 moléculas OK
+- **Concluído:** Primeiro modelo ML treinado e aprovado — RMSE 3,54 kcal/mol, R² 0,997
+- **Agora:** Escalar para 3.000 → 5.000 moléculas OK para re-treino com maior volume
+- **Próximo:** Re-treino com validação cruzada k-fold, análise de moléculas outlier
+- **Futuro:** Hiperparametrização (grid/Bayesian), escalar para 29k moléculas → deploy via `api.py`
 
 ---
 
