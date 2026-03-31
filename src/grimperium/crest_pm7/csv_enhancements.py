@@ -323,8 +323,8 @@ class CSVManagerExtensions:
                     ] = CSVManagerExtensions.compute_cbs_quality_flag(
                         h298_cbs, h298_pm7, nheavy_val
                     )
-            except Exception:
-                pass  # mol_id not found or nheavy unreadable — skip flag
+            except Exception as exc:
+                logger.debug("Skipping cbs_quality_flag for %s: %s", mol_id, exc)
 
             # Update CSV via BatchCSVManager's update method
             if hasattr(csv_manager, "_update_extra_fields"):

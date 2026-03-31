@@ -6,6 +6,7 @@ Displays performance analytics and divergence analysis using real model data.
 
 from __future__ import annotations
 
+import logging
 import os
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -24,6 +25,8 @@ from grimperium.ml.persistence import load_model_metadata, save_model
 
 if TYPE_CHECKING:
     from grimperium import DictStrAny
+
+logger = logging.getLogger(__name__)
 
 # Static thresholds for divergence severity (no env dependency)
 _DIVERGENCE_THRESHOLDS = [
@@ -534,7 +537,8 @@ Results written to: {csv_path}
             try:
                 old_meta = load_model_metadata(model_path)
                 old_metrics = old_meta.get("metrics", {}).get("test", {})
-            except Exception:
+            except Exception as exc:
+                logger.debug("Could not load previous model metrics: %s", exc)
                 old_metrics = None
 
         # Count eligible molecules
@@ -551,7 +555,8 @@ Results written to: {csv_path}
                     & (df_check["cbs_quality_flag"] == "OK")
                 ).sum()
             )
-        except Exception:
+        except Exception as exc:
+            logger.debug("Could not count eligible molecules: %s", exc)
             n_eligible = 0
 
         # Confirmation prompt

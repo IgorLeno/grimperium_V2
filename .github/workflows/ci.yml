@@ -6,6 +6,11 @@ on:
   pull_request:
     branches: [main, develop]
 
+permissions:
+  contents: read
+  actions: read
+  checks: write
+
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
@@ -104,7 +109,7 @@ jobs:
       - name: Run Mypy (capture logs)
         run: |
           set +e
-          mypy src/grimperium --ignore-missing-imports \
+          mypy src/grimperium \
             > ${{ github.workspace }}/type.log 2>&1
           echo "$?" > ${{ github.workspace }}/mypy.exitcode
           set -e
@@ -241,7 +246,7 @@ jobs:
     name: Build Package
     runs-on: ubuntu-latest
     needs: [lint, typecheck, test]
-    if: always()
+    if: ${{ !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') }}
 
     steps:
       - uses: actions/checkout@v4

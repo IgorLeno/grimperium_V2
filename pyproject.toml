@@ -59,8 +59,7 @@ docs = ["pdoc", "sphinx", "sphinx-rtd-theme", "sphinx-autodoc-typehints"]
 cli = ["rich", "questionary"]
 
 [tool.poetry.scripts]
-grimperium = "grimperium.api:main"
-grimperium-cli = "grimperium.cli:main"
+grimperium = "grimperium.cli:main"
 
 [tool.ruff]
 target-version = "py310"

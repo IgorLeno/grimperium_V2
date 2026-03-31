@@ -400,7 +400,8 @@ Model has not been trained yet. Use "Train New Model" to train.
             n_molecules = sum(1 for _ in self._get_data_path().open()) - 1
             if n_molecules < 0:
                 n_molecules = 0
-        except Exception:
+        except Exception as exc:
+            logger.debug("Could not count molecules in data file: %s", exc)
             n_molecules = 0
 
         display_name = self.selected_model_path.stem.replace("_", " ").title()
@@ -564,7 +565,8 @@ Model has not been trained yet. Use "Train New Model" to train.
                     metadata: dict[str, Any] | None = load_model_metadata(
                         self.selected_model_path
                     )
-                except Exception:
+                except Exception as exc:
+                    logger.debug("Could not load model metadata: %s", exc)
                     metadata = None
                 self.render_model_detail(metadata)
                 result = show_back_menu(

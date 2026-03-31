@@ -1,6 +1,8 @@
-# Grimperium Agent Guide
+# CLAUDE.md
 
-This file is the authoritative local instruction file for Grimperium. It adds
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+This is the authoritative local instruction file for Grimperium. It adds
 project-specific rules on top of the global agent behavior model. If another
 local document disagrees with this file, follow this file.
 
@@ -12,6 +14,117 @@ local document disagrees with this file, follow this file.
   verified.
 - Do not widen scope silently. Ask before changing architecture, dependencies,
   or unrelated modules.
+
+## Development Commands
+
+### Quality Gates (aligned with pyproject.toml)
+
+```bash
+black src/ tests/                         # Format
+ruff check src/ tests/                    # Lint
+mypy src/ --strict                        # Type check
+pytest tests/ -v --cov=src/grimperium     # Full test suite with coverage
+pre-commit run --all-files                # All gates at once
+```
+
+### Running Tests
+
+```bash
+pytest tests/ -v                          # All tests
+pytest tests/unit/ -v                     # Unit tests only
+pytest tests/ml/ -v                       # ML pipeline tests only
+pytest tests/cli/ -v                      # CLI tests only
+pytest tests/integration/ -v              # Integration tests
+pytest tests/experiments/ -v              # Hypothesis/stress tests
+pytest tests/path/test_file.py -v         # Single file
+pytest tests/path/test_file.py::test_fn -v  # Single test
+pytest -m "not slow" -v                   # Skip slow-marked tests
+pytest -m integration -v                  # Only integration-marked tests
+```
+
+### Execution Rule
+
+- Run targeted checks while iterating.
+- Before handing off substantial code changes, run the broadest relevant gate
+  you can afford.
+- If a gate is skipped, blocked, or only partially run, say so explicitly.
+
+## Architecture Overview
+
+### Delta-Learning Pipeline (the core idea)
+
+Grimperium corrects fast-but-inaccurate quantum chemistry (PM7) using ML:
+
+```
+delta = H298_CBS (expensive, accurate) − H298_PM7 (cheap, ~80% correct)
+prediction = H298_PM7 + ensemble.predict(features)   ← the correction
+```
+
+The model learns the *error* (delta), not the absolute value. This converges
+with less training data.
+
+### Package Interaction
+
+```
+CLI (cli/)  →  API (api.py)  →  Core (core/)
+                                   ├── DeltaLearner (delta_learning.py)
+                                   ├── BatchOrchestrator
+                                   └── Molecule model
+                                        ↓
+                               ML Pipeline (ml/)
+                               data_loader → features → trainer → evaluator
+                                             → persistence → predictor → charts
+                                        ↓
+                            CREST+MOPAC Pipeline (crest_pm7/)
+                            pipeline.py → conformer_generator → conformer_selector
+                                        → mopac_optimizer → energy_extractor
+                                        → mopac_descriptors
+                                        ↓
+                               Data Layer (data/)
+                               loader.py, fusion.py, semiempirical adapters
+```
+
+### Data Leakage Prevention (critical design constraint)
+
+The ML pipeline enforces strict ordering to prevent leakage:
+1. CSV filtering (status/quality) **before** train/test split
+2. `FeaturePipeline` imputer fitted on **train only** (`features.py`)
+3. Test set transformed using train statistics
+4. `evaluator.py` requires a **pre-fitted** pipeline (never re-fits on eval data)
+5. `persistence.py` bundles the fitted pipeline with the model
+
+### Ensemble Architecture
+
+`DeltaLearningEnsemble` (models/delta_ensemble.py):
+- KRR (Kernel Ridge Regression) — captures smooth molecular similarity
+- XGBoost — captures non-linear interactions
+- Weighted average prediction (default 50/50, configurable)
+
+### ML Quality Gate (ml/gate.py)
+
+Auto-rejects models that fail: MAE ≤ 3.5 kcal/mol, R² ≥ 0.97, RMSE ≤ 5.0 kcal/mol.
+
+### Status Tracking (CSV columns)
+
+| Column             | Values                                    |
+|--------------------|-------------------------------------------|
+| `status`           | OK, PENDING, RERUN, SKIP, FAILED          |
+| `cbs_quality_flag` | OK, SUSPECT                               |
+| `crest_status`     | SUCCESS, TIMEOUT, ERROR, NOT_ATTEMPTED    |
+| `mopac_status`     | SUCCESS, TIMEOUT, ERROR, NOT_ATTEMPTED    |
+
+ML training filters to `status == 'OK' AND cbs_quality_flag == 'OK'`.
+
+### Configuration (config.py)
+
+Three nested dataclasses: `GrimperiumConfig` → `ModelConfig` + `FeatureConfig` +
+`DataConfig`. All defaults are in Python dataclass fields. No YAML/JSON loader yet.
+
+### Feature Vector (270 dimensions)
+
+- Tabular (3): nheavy, charge, multiplicity
+- Morgan Fingerprints (256): ECFP-like circular substructure patterns
+- RDKit descriptors (11): MolWt, TPSA, LogP, rotatable bonds, etc.
 
 ## Repo Snapshot
 
@@ -28,37 +141,15 @@ Current top-level package layout:
 - `src/grimperium/models/`: model wrappers and ensembles.
 - `src/grimperium/utils/`: validation, logging, feature helpers.
 
-Current test layout:
+Test layout:
 
-- `tests/unit/`
-- `tests/integration/`
-- `tests/experiments/`
-- `tests/cli/`
-- `tests/ml/`
-- shared fixtures in `tests/conftest.py` and package-specific `conftest.py`
-  files.
+- `tests/unit/`, `tests/integration/`, `tests/experiments/`, `tests/cli/`,
+  `tests/ml/`
+- Shared fixtures in `tests/conftest.py` and package-specific `conftest.py` files.
+- Markers: `@pytest.mark.slow`, `@pytest.mark.integration`, `@pytest.mark.unit`
 
 Do not describe the project as locked to an old fixed phase or numbered batch
 unless the current task explicitly provides that context.
-
-## Quality Gates
-
-Use repo-native commands and keep them aligned with `pyproject.toml`.
-
-Primary commands:
-
-- `black src/ tests/`
-- `ruff check src/ tests/`
-- `mypy src/ --strict`
-- `pytest tests/ -v --cov=src/grimperium`
-- `pre-commit run --all-files`
-
-Execution rule:
-
-- Run targeted checks while iterating.
-- Before handing off substantial code changes, run the broadest relevant gate
-  you can afford.
-- If a gate is skipped, blocked, or only partially run, say so explicitly.
 
 ## Project-Specific Rules
 

@@ -37,6 +37,8 @@ if TYPE_CHECKING:
     from grimperium.cli.controller import CliController
     from grimperium.cli.settings_manager import SettingsManager
 
+logger = logging.getLogger(__name__)
+
 
 def _compute_pm7_stats(valid: pd.DataFrame) -> dict[str, float]:
     """Compute PM7 vs CBS absolute-error statistics from a validated DataFrame.
@@ -270,8 +272,8 @@ class DatabasesView(BaseView):
                                 value="pm7_baseline",
                             )
                         )
-                except Exception:
-                    pass
+                except Exception as exc:
+                    logger.debug("Could not check CSV columns for PM7 menu: %s", exc)
 
         options.extend(
             [
