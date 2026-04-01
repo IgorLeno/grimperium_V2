@@ -8,7 +8,6 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pandas as pd
-import pytest
 from rich.console import Console
 
 from grimperium.cli.views.results_view import ResultsView
@@ -321,9 +320,7 @@ def test_before_after_comparison_shown(tmp_path: Path) -> None:
     charts_dir = tmp_path / "charts"
 
     old_meta = {
-        "metrics": {
-            "test": {"mae": 2.0, "rmse": 3.0, "r2": 0.990, "max_error": 8.0}
-        }
+        "metrics": {"test": {"mae": 2.0, "rmse": 3.0, "r2": 0.990, "max_error": 8.0}}
     }
 
     with (

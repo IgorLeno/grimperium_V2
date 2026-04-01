@@ -24,12 +24,12 @@ class TestxTBPreOptResult:
         """Test successful result initialization."""
         result = xTBPreOptResult(
             success=True,
-            output_xyz=Path("/tmp/test.xyz"),
+            output_xyz=Path("test.xyz"),
             error_message="",
             time_seconds=5.0,
         )
         assert result.success is True
-        assert result.output_xyz == Path("/tmp/test.xyz")
+        assert result.output_xyz == Path("test.xyz")
         assert result.error_message == ""
         assert result.time_seconds == 5.0
 

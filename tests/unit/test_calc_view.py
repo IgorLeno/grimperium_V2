@@ -185,9 +185,7 @@ def test_run_single_molecule_prediction_delta_correction_scalar() -> None:
     fake_pm7_result.get_selected_conformer.return_value = fake_conformer
 
     with (
-        patch(
-            "grimperium.cli.calc_pipeline.CRESTPM7Pipeline"
-        ) as mock_pipeline_cls,
+        patch("grimperium.cli.calc_pipeline.CRESTPM7Pipeline") as mock_pipeline_cls,
         patch(
             "grimperium.cli.calc_pipeline.load_model",
             return_value=(fake_learner, fake_feature_pipeline),

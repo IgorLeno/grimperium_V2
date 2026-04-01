@@ -24,8 +24,7 @@ def predict_batch(
     model_path: Path,
     *,
     return_stats: Literal[False] = ...,
-) -> pd.DataFrame:
-    ...
+) -> pd.DataFrame: ...
 
 
 @overload
@@ -34,8 +33,7 @@ def predict_batch(
     model_path: Path,
     *,
     return_stats: Literal[True],
-) -> tuple[pd.DataFrame, DictStrAny]:
-    ...
+) -> tuple[pd.DataFrame, DictStrAny]: ...
 
 
 def predict_batch(

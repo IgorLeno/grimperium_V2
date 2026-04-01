@@ -85,8 +85,10 @@ class DeltaLearner:
         y_delta = y_cbs - y_pm7
 
         # Sanity checks
-        assert X.shape[0] == len(y_cbs), "X and y_cbs must have same n_samples"
-        assert X.shape[0] == len(y_pm7), "X and y_pm7 must have same n_samples"
+        if X.shape[0] != len(y_cbs):
+            raise ValueError("X and y_cbs must have same n_samples")
+        if X.shape[0] != len(y_pm7):
+            raise ValueError("X and y_pm7 must have same n_samples")
 
         # STEP 2: Train ensemble on y_delta
         self.ensemble.fit(X, y_delta)

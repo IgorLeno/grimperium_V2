@@ -668,10 +668,9 @@ class BatchCSVManager:
         Returns:
             MoleculeStatus value (string)
         """
-        self._ensure_loaded()
-        assert self.df is not None  # Guaranteed by _ensure_loaded()
+        df = self._ensure_loaded()
         idx = self._get_row_index(mol_id)
-        return str(self.df.at[idx, "status"])
+        return str(df.at[idx, "status"])
 
     def mark_running(self, mol_id: str) -> None:
         """Mark molecule as currently running.

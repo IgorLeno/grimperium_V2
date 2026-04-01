@@ -84,9 +84,7 @@ def validate_out_file(out_path: Path) -> dict[str, bool]:
             for key in REQUIRED_KEYS
             if key in desc
             and desc[key] is not None
-            and (
-                not isinstance(desc[key], float) or not math.isnan(desc[key])
-            )
+            and (not isinstance(desc[key], float) or not math.isnan(desc[key]))
         )
 
         results["all_descriptors_present"] = valid_count >= 10  # Allow 1 missing
@@ -118,9 +116,7 @@ def main() -> None:
     print("🔍 Validating .out parsing migration...\n")
 
     # Find temp directory
-    temp_dir = (
-        Path(__file__).parent.parent / "src" / "grimperium" / "crest_pm7" / "tmp"
-    )
+    temp_dir = Path(__file__).parent.parent / "src" / "grimperium" / "crest_pm7" / "tmp"
 
     if not temp_dir.exists():
         print(f"⚠️  Temp directory not found: {temp_dir}")

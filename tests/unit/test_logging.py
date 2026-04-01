@@ -33,7 +33,9 @@ class TestSetupLogging:
         setup_logging()
         root = logging.getLogger()
         stream_handlers = [
-            h for h in root.handlers if isinstance(h, logging.StreamHandler)
+            h
+            for h in root.handlers
+            if isinstance(h, logging.StreamHandler)
             and not isinstance(h, RotatingFileHandler)
         ]
         assert len(stream_handlers) >= 1
@@ -43,7 +45,8 @@ class TestSetupLogging:
         setup_logging()
         root = logging.getLogger()
         console = next(
-            h for h in root.handlers
+            h
+            for h in root.handlers
             if isinstance(h, logging.StreamHandler)
             and not isinstance(h, RotatingFileHandler)
         )
@@ -54,7 +57,8 @@ class TestSetupLogging:
         setup_logging()
         root = logging.getLogger()
         console = next(
-            h for h in root.handlers
+            h
+            for h in root.handlers
             if isinstance(h, logging.StreamHandler)
             and not isinstance(h, RotatingFileHandler)
         )
@@ -73,9 +77,7 @@ class TestSetupLogging:
         log_file = tmp_path / "test.log"
         setup_logging(level="DEBUG", log_file=log_file)
         root = logging.getLogger()
-        rotating = next(
-            h for h in root.handlers if isinstance(h, RotatingFileHandler)
-        )
+        rotating = next(h for h in root.handlers if isinstance(h, RotatingFileHandler))
         assert rotating.level == logging.DEBUG
 
     def test_file_handler_rotation_config(self, tmp_path: Path) -> None:
@@ -83,9 +85,7 @@ class TestSetupLogging:
         log_file = tmp_path / "test.log"
         setup_logging(log_file=log_file)
         root = logging.getLogger()
-        rotating = next(
-            h for h in root.handlers if isinstance(h, RotatingFileHandler)
-        )
+        rotating = next(h for h in root.handlers if isinstance(h, RotatingFileHandler))
         assert rotating.maxBytes == 5 * 1024 * 1024
         assert rotating.backupCount == 3
 
@@ -100,9 +100,7 @@ class TestSetupLogging:
         log_file = tmp_path / "test.log"
         setup_logging(log_file=log_file, max_bytes=1024, backup_count=7)
         root = logging.getLogger()
-        rotating = next(
-            h for h in root.handlers if isinstance(h, RotatingFileHandler)
-        )
+        rotating = next(h for h in root.handlers if isinstance(h, RotatingFileHandler))
         assert rotating.maxBytes == 1024
         assert rotating.backupCount == 7
 
@@ -120,7 +118,8 @@ class TestSetupLogging:
         setup_logging(format_string=custom_fmt)
         root = logging.getLogger()
         console = next(
-            h for h in root.handlers
+            h
+            for h in root.handlers
             if isinstance(h, logging.StreamHandler)
             and not isinstance(h, RotatingFileHandler)
         )
@@ -132,7 +131,8 @@ class TestSetupLogging:
         setup_logging(console_level="ERROR")
         root = logging.getLogger()
         console = next(
-            h for h in root.handlers
+            h
+            for h in root.handlers
             if isinstance(h, logging.StreamHandler)
             and not isinstance(h, RotatingFileHandler)
         )
@@ -183,7 +183,9 @@ class TestLoggingIntegration:
         content = log_file.read_text()
         assert "test debug message" in content
 
-    def test_console_filters_debug(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    def test_console_filters_debug(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
         """DEBUG message does NOT reach the WARNING-level console handler."""
         setup_logging(console_level="WARNING")
         logger = get_logger("integration.filter")
@@ -205,4 +207,6 @@ class TestLoggingIntegration:
         content = log_file.read_text()
         # Expected: "2026-03-18 12:00:00 | INFO     | integration.format | format check"
         pattern = r"\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} \| INFO\s+\| integration\.format \| format check"
-        assert re.search(pattern, content), f"Log content did not match expected format:\n{content}"
+        assert re.search(
+            pattern, content
+        ), f"Log content did not match expected format:\n{content}"

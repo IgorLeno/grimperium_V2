@@ -21,9 +21,7 @@ class TestLoadMLData:
         assert isinstance(y_cbs, np.ndarray)
         assert isinstance(y_pm7, np.ndarray)
 
-    def test_filters_only_ok_and_flag_ok(
-        self, synthetic_csv_path_mixed: Path
-    ) -> None:
+    def test_filters_only_ok_and_flag_ok(self, synthetic_csv_path_mixed: Path) -> None:
         """Rows with SUSPECT flag or non-OK status are excluded."""
         df, y_cbs, y_pm7 = load_ml_data(synthetic_csv_path_mixed)
         assert len(df) == 10
@@ -32,9 +30,7 @@ class TestLoadMLData:
         assert len(y_cbs) == 10
         assert len(y_pm7) == 10
 
-    def test_drops_rows_missing_targets(
-        self, csv_with_missing_target: Path
-    ) -> None:
+    def test_drops_rows_missing_targets(self, csv_with_missing_target: Path) -> None:
         """Rows where H298_cbs or H298_pm7 is NaN are dropped."""
         df, y_cbs, y_pm7 = load_ml_data(csv_with_missing_target)
         assert len(df) == 1  # Only first row survives

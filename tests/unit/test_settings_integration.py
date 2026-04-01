@@ -27,9 +27,7 @@ def config_path(tmp_path: Path) -> Path:
 class TestControllerAutoLoad:
     """Controller must auto-load settings from config file on init."""
 
-    def test_controller_loads_existing_config(
-        self, config_path: Path
-    ) -> None:
+    def test_controller_loads_existing_config(self, config_path: Path) -> None:
         """If config file exists, controller must load it at init."""
         # Prepare a config file with non-default values
         data = SettingsManager(console=Console(force_terminal=False)).to_dict()
@@ -45,9 +43,7 @@ class TestControllerAutoLoad:
         assert ctrl.settings_manager.crest.ewin == 42.0
         assert ctrl.settings_manager.mopac.precise is True
 
-    def test_controller_works_without_config_file(
-        self, config_path: Path
-    ) -> None:
+    def test_controller_works_without_config_file(self, config_path: Path) -> None:
         """Without config file, controller uses defaults."""
         with patch.object(
             SettingsManager, "default_config_path", return_value=config_path
@@ -61,9 +57,7 @@ class TestControllerAutoLoad:
 class TestViewSaveAsDefault:
     """SettingsView must support 'save_as_default' action."""
 
-    def test_save_as_default_persists_to_file(
-        self, config_path: Path
-    ) -> None:
+    def test_save_as_default_persists_to_file(self, config_path: Path) -> None:
         """'save_as_default' action must write settings to disk."""
         with patch.object(
             SettingsManager, "default_config_path", return_value=config_path
@@ -92,9 +86,7 @@ class TestViewSaveAsDefault:
 class TestViewResetDeletesFile:
     """View reset_all must also delete persisted config file."""
 
-    def test_reset_all_deletes_config_file(
-        self, config_path: Path
-    ) -> None:
+    def test_reset_all_deletes_config_file(self, config_path: Path) -> None:
         """'reset_all' action must remove the persisted config file."""
         # Create a persisted config
         config_path.write_text(json.dumps({"crest_ewin": 99.0}))

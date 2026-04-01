@@ -318,10 +318,10 @@ class CSVManagerExtensions:
                         raw = df.at[idx, "nheavy"]
                         if pd.notna(raw):
                             nheavy_val = int(raw)
-                    updates[
-                        "cbs_quality_flag"
-                    ] = CSVManagerExtensions.compute_cbs_quality_flag(
-                        h298_cbs, h298_pm7, nheavy_val
+                    updates["cbs_quality_flag"] = (
+                        CSVManagerExtensions.compute_cbs_quality_flag(
+                            h298_cbs, h298_pm7, nheavy_val
+                        )
                     )
             except Exception as exc:
                 logger.debug("Skipping cbs_quality_flag for %s: %s", mol_id, exc)

@@ -113,9 +113,7 @@ def test_out_parsing_missing_file_returns_defaults(tmp_path: Path) -> None:
 def test_out_parsing_gap_calculation(tmp_path: Path) -> None:
     """Test that GAP is correctly computed as LUMO - HOMO via the real parser."""
     out_path = tmp_path / "gap_test.out"
-    out_path.write_text(
-        "          HOMO LUMO ENERGIES (EV)  =    -10.000     -2.000\n"
-    )
+    out_path.write_text("          HOMO LUMO ENERGIES (EV)  =    -10.000     -2.000\n")
 
     desc = extract_mopac_descriptors(out_path)
 

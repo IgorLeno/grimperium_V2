@@ -33,9 +33,7 @@ def _make_df(n: int = 5) -> pd.DataFrame:
 class TestAtomicSaveSurvivesInterruption:
     """Original CSV must remain intact if write fails mid-stream."""
 
-    def test_original_intact_after_write_error(
-        self, tmp_path: Path
-    ) -> None:
+    def test_original_intact_after_write_error(self, tmp_path: Path) -> None:
         csv_path = tmp_path / "thermo.csv"
         original_df = _make_df(3)
         original_df.to_csv(csv_path, index=False)
@@ -65,9 +63,7 @@ class TestAtomicSaveSurvivesInterruption:
 class TestAtomicSaveCreatesBackup:
     """Every atomic save of an existing file must create a .bak."""
 
-    def test_backup_created_with_all_columns(
-        self, tmp_path: Path
-    ) -> None:
+    def test_backup_created_with_all_columns(self, tmp_path: Path) -> None:
         csv_path = tmp_path / "thermo.csv"
         df = _make_df(5)
         # First save (no existing file -> no .bak yet)
@@ -115,9 +111,7 @@ class TestLoadCSVRecoversFromBackup:
 class TestOrphanTmpFilesCleaned:
     """Stale .tmp files from interrupted writes are removed on load."""
 
-    def test_tmp_files_removed_on_load(
-        self, tmp_path: Path
-    ) -> None:
+    def test_tmp_files_removed_on_load(self, tmp_path: Path) -> None:
         csv_path = tmp_path / "thermo_pm7.csv"
         df = _make_df(3)
         df.to_csv(csv_path, index=False)
@@ -135,9 +129,7 @@ class TestOrphanTmpFilesCleaned:
 class TestBothCSVAndBackupCorrupted:
     """Raises CSVCorruptedError with actionable message."""
 
-    def test_raises_csv_corrupted_error(
-        self, tmp_path: Path
-    ) -> None:
+    def test_raises_csv_corrupted_error(self, tmp_path: Path) -> None:
         csv_path = tmp_path / "thermo_pm7.csv"
         bak_path = tmp_path / "thermo_pm7.csv.bak"
 
@@ -149,9 +141,7 @@ class TestBothCSVAndBackupCorrupted:
         with pytest.raises(CSVCorruptedError, match="corrupted/missing"):
             mgr.load_csv()
 
-    def test_raises_when_no_backup_exists(
-        self, tmp_path: Path
-    ) -> None:
+    def test_raises_when_no_backup_exists(self, tmp_path: Path) -> None:
         csv_path = tmp_path / "thermo_pm7.csv"
         csv_path.write_text("")  # 0-byte, no .bak
 
@@ -163,9 +153,7 @@ class TestBothCSVAndBackupCorrupted:
 class TestDataFidelityAcrossCycles:
     """Float precision and all columns persist across 10 save/load cycles."""
 
-    def test_ten_cycles_preserve_precision(
-        self, tmp_path: Path
-    ) -> None:
+    def test_ten_cycles_preserve_precision(self, tmp_path: Path) -> None:
         csv_path = tmp_path / "thermo_pm7.csv"
 
         df = _make_df(5)
@@ -201,23 +189,17 @@ class TestAtomicToCsvEdgeCases:
         with pytest.raises(TypeError, match="path must not be None"):
             atomic_to_csv(None, _make_df())  # type: ignore[arg-type]
 
-    def test_none_df_raises_type_error(
-        self, tmp_path: Path
-    ) -> None:
+    def test_none_df_raises_type_error(self, tmp_path: Path) -> None:
         with pytest.raises(TypeError, match="df must not be None"):
             atomic_to_csv(tmp_path / "x.csv", None)  # type: ignore[arg-type]
 
-    def test_creates_parent_directories(
-        self, tmp_path: Path
-    ) -> None:
+    def test_creates_parent_directories(self, tmp_path: Path) -> None:
         deep = tmp_path / "a" / "b" / "c" / "data.csv"
         atomic_to_csv(deep, _make_df(2))
         assert deep.exists()
         assert len(pd.read_csv(deep)) == 2
 
-    def test_missing_primary_csv_recovered_from_backup(
-        self, tmp_path: Path
-    ) -> None:
+    def test_missing_primary_csv_recovered_from_backup(self, tmp_path: Path) -> None:
         csv_path = tmp_path / "thermo_pm7.csv"
         bak_path = tmp_path / "thermo_pm7.csv.bak"
 

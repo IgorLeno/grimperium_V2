@@ -181,13 +181,9 @@ def _convert_xyz_to_sdf_rdkit(
             conf.SetAtomPosition(i, Point3D(x, y, z))
         mol.AddConformer(conf, assignId=True)
 
-        # Export SDF with try/finally to ensure writer is closed
+        # Export SDF and close the RDKit writer exactly once.
         writer = Chem.SDWriter(str(sdf_file))
-        try:
-            writer.write(mol)
-        finally:
-            if writer is not None:
-                writer.close()
+        writer.write(mol)
 
         LOG.debug(f"Converted {xyz_file} to {sdf_file} via RDKit")
         return True
@@ -202,12 +198,12 @@ def _convert_xyz_to_sdf_rdkit(
         LOG.warning(f"RDKit conversion error: {e}")
         return False
     finally:
-        # Garantir que writer seja fechado mesmo em caso de exceção
+        # Garantir que writer seja fechado mesmo em caso de excecao
         if writer is not None:
             try:
                 writer.close()
-            except Exception:
-                pass
+            except Exception as exc:
+                LOG.debug(f"Failed to close RDKit writer for {sdf_file}: {exc}")
 
 
 def convert_xyz_to_sdf(

@@ -49,12 +49,8 @@ class TestPredictBatch:
         df = predict_batch(csv_with_predictions, model_path)
 
         # 10 eligible rows (OK/OK), 2 non-eligible (SUSPECT, PENDING)
-        eligible = df[
-            (df["status"] == "OK") & (df["cbs_quality_flag"] == "OK")
-        ]
-        non_eligible = df[
-            ~((df["status"] == "OK") & (df["cbs_quality_flag"] == "OK"))
-        ]
+        eligible = df[(df["status"] == "OK") & (df["cbs_quality_flag"] == "OK")]
+        non_eligible = df[~((df["status"] == "OK") & (df["cbs_quality_flag"] == "OK"))]
 
         assert eligible["H298_predicted"].notna().all()
         assert non_eligible["H298_predicted"].isna().all()
@@ -73,9 +69,7 @@ class TestPredictBatch:
 
         df = predict_batch(csv_with_predictions, model_path)
 
-        eligible = df[
-            (df["status"] == "OK") & (df["cbs_quality_flag"] == "OK")
-        ]
+        eligible = df[(df["status"] == "OK") & (df["cbs_quality_flag"] == "OK")]
         expected_delta = eligible["H298_predicted"] - eligible["H298_pm7"]
         np.testing.assert_allclose(
             eligible["delta_correction"].to_numpy(),
@@ -123,9 +117,7 @@ class TestPredictBatch:
         assert original_cols.issubset(set(df_after.columns))
 
         # Verify original data unchanged for a known column
-        pd.testing.assert_series_equal(
-            df_before["H298_pm7"], df_after["H298_pm7"]
-        )
+        pd.testing.assert_series_equal(df_before["H298_pm7"], df_after["H298_pm7"])
 
     def test_raises_on_missing_model(
         self,
@@ -164,9 +156,7 @@ class TestPredictBatch:
         model_path = tmp_path / "model.joblib"
         save_model(trained_model_fixture, model_path)
 
-        result = predict_batch(
-            csv_with_predictions, model_path, return_stats=True
-        )
+        result = predict_batch(csv_with_predictions, model_path, return_stats=True)
         assert isinstance(result, tuple)
         assert len(result) == 2
 

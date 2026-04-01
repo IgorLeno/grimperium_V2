@@ -13,9 +13,9 @@ from src.grimperium.crest_pm7.batch.artifact_manager import ArtifactManager
 
 
 @pytest.fixture
-def manager():
+def manager(tmp_path: Path):
     """Create a temporary ArtifactManager for testing."""
-    temp_dir = Path("/tmp/test_artifacts")
+    temp_dir = tmp_path / "test_artifacts"
     temp_dir.mkdir(exist_ok=True)
     return ArtifactManager(artifact_dir=temp_dir)
 

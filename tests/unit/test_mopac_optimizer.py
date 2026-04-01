@@ -49,7 +49,9 @@ class TestPreciseKeyword:
         """WARNING is logged when config.mopac_precise_scf=False."""
         config = PM7Config(mopac_precise_scf=False)
         mop = tmp_path / "out.mop"
-        with caplog.at_level(logging.WARNING, logger="grimperium.crest_pm7.mopac_optimizer"):
+        with caplog.at_level(
+            logging.WARNING, logger="grimperium.crest_pm7.mopac_optimizer"
+        ):
             _create_mopac_input(sample_xyz, mop, config=config)
         assert any("overridden" in r.message for r in caplog.records)
 
@@ -59,7 +61,9 @@ class TestPreciseKeyword:
         """No warning when config.mopac_precise_scf=True (default)."""
         config = PM7Config()
         mop = tmp_path / "out.mop"
-        with caplog.at_level(logging.WARNING, logger="grimperium.crest_pm7.mopac_optimizer"):
+        with caplog.at_level(
+            logging.WARNING, logger="grimperium.crest_pm7.mopac_optimizer"
+        ):
             _create_mopac_input(sample_xyz, mop, config=config)
         assert not any("overridden" in r.message for r in caplog.records)
 
@@ -72,9 +76,7 @@ class TestPreciseKeyword:
         keywords = mop.read_text().splitlines()[0]
         assert "PRECISE" in keywords
 
-    def test_scfcrt_present_with_config(
-        self, sample_xyz: Path, tmp_path: Path
-    ) -> None:
+    def test_scfcrt_present_with_config(self, sample_xyz: Path, tmp_path: Path) -> None:
         """SCFCRT= is appended when config is provided."""
         config = PM7Config()
         mop = tmp_path / "out.mop"

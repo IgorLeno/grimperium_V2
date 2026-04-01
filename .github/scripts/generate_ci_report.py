@@ -481,7 +481,9 @@ for test_result in test_results:
         details = f"{len(test_result['failures'])} failures"
     else:
         details = "All passed"
-    report += f"| Tests (Python {test_result['version']}) | {test_badge} | {details} |\n"
+    report += (
+        f"| Tests (Python {test_result['version']}) | {test_badge} | {details} |\n"
+    )
 
 report += f"| **Overall** | **{overall_status}** | - |\n"
 

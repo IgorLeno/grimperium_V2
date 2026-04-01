@@ -106,9 +106,7 @@ def test_pm7_baseline_no_csv(tmp_path: Path) -> None:
     assert "not" in output.lower() or "Error" in output or "error" in output.lower()
 
 
-def test_pm7_baseline_computation_known_values(
-    tmp_path: Path, pm7_csv: Path
-) -> None:
+def test_pm7_baseline_computation_known_values(tmp_path: Path, pm7_csv: Path) -> None:
     """Verify exact metric values with 5-molecule fixture."""
     view, buf = _create_view_with_registry(tmp_path)
     view.selected_db = MagicMock()
@@ -179,9 +177,7 @@ def test_pm7_baseline_filters_nan_rows(tmp_path: Path) -> None:
     assert "5.00" in output
 
 
-def test_pm7_baseline_interpretation_text(
-    tmp_path: Path, pm7_csv: Path
-) -> None:
+def test_pm7_baseline_interpretation_text(tmp_path: Path, pm7_csv: Path) -> None:
     """Interpretation panel contains formatted metric values."""
     view, buf = _create_view_with_registry(tmp_path)
     view.selected_db = MagicMock()

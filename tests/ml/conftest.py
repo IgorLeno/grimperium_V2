@@ -90,6 +90,15 @@ def synthetic_csv_path_mixed(tmp_path: Path) -> Path:
     return csv_file
 
 
+@pytest.fixture(scope="module")
+def _module_csv(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    """Write the synthetic CSV once per module for read-only model training tests."""
+    base = tmp_path_factory.mktemp("ml_module")
+    csv_file = base / "thermo_pm7.csv"
+    csv_file.write_text(_SYNTHETIC_CSV)
+    return csv_file
+
+
 @pytest.fixture
 def synthetic_df() -> pd.DataFrame:
     """Load the synthetic CSV as a DataFrame (bypassing CSVDataLoader).
@@ -154,12 +163,12 @@ def csv_no_ok_status(tmp_path: Path) -> Path:
     return csv_file
 
 
-@pytest.fixture
-def trained_model_fixture(synthetic_csv_path: Path) -> dict[str, Any]:
+@pytest.fixture(scope="module")
+def trained_model_fixture(_module_csv: Path) -> dict[str, Any]:
     """Train a model on synthetic data and return a save-ready bundle.
 
     Args:
-        synthetic_csv_path: Path to the synthetic CSV fixture.
+        _module_csv: Path to the module-scoped synthetic CSV fixture.
 
     Returns:
         dict with keys ``learner``, ``pipeline``, and ``metrics``
@@ -168,7 +177,7 @@ def trained_model_fixture(synthetic_csv_path: Path) -> dict[str, Any]:
     from grimperium.ml.trainer import train
 
     learner, train_metrics, test_metrics, pipeline = train(
-        synthetic_csv_path,
+        _module_csv,
         test_size=0.2,
         random_state=42,
         return_pipeline=True,

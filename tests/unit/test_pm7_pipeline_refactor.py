@@ -172,7 +172,6 @@ class TestPM7ResultSelection:
                 "smiles": ["O"],
                 "nheavy": [1],
                 "status": ["RUNNING"],
-
                 "abs_diff_%": [None],
                 "target_delta_kcalmol": [None],
                 "k_selected_pm7": [None],
@@ -332,7 +331,6 @@ class TestCSVUpdateCalculations:
                 "smiles": ["CCO"],
                 "nheavy": [2],
                 "status": ["RUNNING"],
-
                 "abs_diff_%": [None],
                 "target_delta_kcalmol": [None],
                 "k_selected_pm7": [None],
@@ -377,7 +375,9 @@ class TestCSVUpdateCalculations:
 class TestExecutionManagerIntegration:
     """Tests for execution_manager passing selected_conformer and k."""
 
-    def test_execution_manager_passes_selected_conformer_and_k(self) -> None:
+    def test_execution_manager_passes_selected_conformer_and_k(
+        self, tmp_path: Path
+    ) -> None:
         """execution_manager calls update_molecule_with_mopac_results with new args."""
         from grimperium.crest_pm7.batch.execution_manager import (
             BatchExecutionManager,
@@ -390,7 +390,7 @@ class TestExecutionManagerIntegration:
 
         detail_manager = MagicMock()
         pm7_config = MagicMock()
-        pm7_config.temp_dir = Path("/tmp")
+        pm7_config.temp_dir = tmp_path
 
         processor = MagicMock()
 
