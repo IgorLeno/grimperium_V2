@@ -20,7 +20,7 @@ Example:
 """
 
 import warnings
-from typing import Literal
+from typing import Literal, cast
 
 import pandas as pd
 
@@ -101,7 +101,7 @@ class DataFusion:
 
         """
         # Perform merge
-        merged = chemperium_df.merge(semiempirical_df, on=on, how=how)
+        merged = chemperium_df.merge(semiempirical_df, on=on, how=how)  # type: ignore[arg-type]
 
         # Validate if requested
         if validate_merge:
@@ -111,7 +111,7 @@ class DataFusion:
         # Store reference
         self.merged_data = merged
 
-        return merged
+        return cast(pd.DataFrame, merged)
 
     def compute_deltas(
         self,
@@ -231,8 +231,8 @@ class DataFusion:
 
         # Get feature columns
         feature_cols = self._default_feature_columns(df, exclude=[self.delta_column])
-        features = df[feature_cols].copy()
-        deltas = df[self.delta_column].values
+        features = cast(pd.DataFrame, df[feature_cols].copy())
+        deltas: MatrixFloat = df[self.delta_column].values
 
         return features, deltas
 

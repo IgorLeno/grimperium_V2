@@ -6,7 +6,7 @@ and the working CSV used for batch processing.
 
 import logging
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import pandas as pd
 
@@ -115,7 +115,7 @@ class DatasetManager:
         df = df[cols_order]
 
         LOG.info("Synced %d molecules from source", n_molecules)
-        return df
+        return cast(pd.DataFrame, df)
 
     def create_working_csv(
         self, n_molecules: int, settings: dict[str, Any] | None = None

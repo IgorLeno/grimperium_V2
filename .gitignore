@@ -66,9 +66,6 @@ ipython_config.py
 # pyenv
 .python-version
 
-# Poetry
-poetry.lock
-
 # Environment
 .env
 .venv
@@ -139,8 +136,3 @@ docs/plans/
 # Temporary directories for CREST/MOPAC (Phase A fixes)
 src/grimperium/crest_pm7/tmp/*/
 !src/grimperium/crest_pm7/tmp/.gitignore
-docs/superpowers/plans/2026-03-21-gate-pass-pm7-baseline.md
-.gitignore
-docs/superpowers/specs/2026-03-21-gate-pass-pm7-baseline-design.md
-.gitignore
-.gitignore

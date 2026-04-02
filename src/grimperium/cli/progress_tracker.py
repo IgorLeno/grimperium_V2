@@ -107,7 +107,7 @@ def _normalize_csv_value(
     Returns:
         Normalized string value
     """
-    if value is None or pd.isna(value):
+    if value is None or pd.isna(value):  # type: ignore[call-overload]
         return default
 
     text = str(value).strip()

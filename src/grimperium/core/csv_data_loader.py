@@ -14,7 +14,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 if TYPE_CHECKING:
     from grimperium.core.molecule import Molecule
@@ -218,7 +218,7 @@ class CSVDataLoader:
 
         # Then row-by-row validation
         for idx, row in df.iterrows():
-            error = self._validate_row(row, int(idx))
+            error = self._validate_row(row, int(idx))  # type: ignore[arg-type]
             if error:
                 raise CSVDataLoaderError(error)
 
@@ -241,17 +241,17 @@ class CSVDataLoader:
         valid_indices = []
 
         for idx, row in df.iterrows():
-            error = self._validate_row(row, int(idx))
+            error = self._validate_row(row, int(idx))  # type: ignore[arg-type]
 
             if error:
                 mol_id = row.get("mol_id", "unknown")
                 logger.warning(f"Row {idx}: {error}")
-                self.validation_report.add_error(int(idx), str(mol_id), error)
+                self.validation_report.add_error(int(idx), str(mol_id), error)  # type: ignore[arg-type]
             else:
                 valid_indices.append(idx)
 
         # Filter to valid rows
-        df_valid = df.loc[valid_indices].reset_index(drop=True)
+        df_valid = cast(pd.DataFrame, df.loc[valid_indices].reset_index(drop=True))
         skipped = len(df) - len(df_valid)
 
         logger.info(
@@ -393,7 +393,7 @@ class BatchDataManager:
         molecules = []
         for idx, row in self._df.iterrows():
             try:
-                mol = Molecule.from_csv_dict(row.to_dict())
+                mol = Molecule.from_csv_dict(cast(dict[str, Any], row.to_dict()))
                 molecules.append(mol)
             except (ValueError, KeyError) as e:
                 logger.error(f"Row {idx}: Failed to create Molecule: {e}")

@@ -25,6 +25,7 @@ Example:
 
 from collections.abc import Iterable
 from pathlib import Path
+from typing import cast
 
 import pandas as pd
 from sklearn.model_selection import train_test_split
@@ -270,7 +271,7 @@ class ChemperiumLoader:
             cp_cols = [c for c in self.CP_COLUMNS if c in df.columns]
             feature_cols.extend(cp_cols)
 
-        return df[feature_cols].copy()
+        return cast(pd.DataFrame, df[feature_cols].copy())
 
     def get_targets(
         self,

@@ -11,7 +11,7 @@ import logging
 import math
 import shutil
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import pandas as pd
 
@@ -251,7 +251,7 @@ class BatchCSVManager:
         try:
             if self.csv_path.stat().st_size == 0:
                 raise pd.errors.EmptyDataError("CSV file is 0 bytes")
-            self.df = pd.read_csv(self.csv_path, dtype=self._CSV_DTYPE)
+            self.df = pd.read_csv(self.csv_path, dtype=self._CSV_DTYPE)  # type: ignore[arg-type]
         except (pd.errors.EmptyDataError, pd.errors.ParserError) as exc:
             LOG.error("CSV unreadable (%s), checking backup...", exc)
             if backup_path.exists() and backup_path.stat().st_size > 0:
@@ -262,7 +262,7 @@ class BatchCSVManager:
                 )
                 shutil.copy2(backup_path, self.csv_path)
                 try:
-                    self.df = pd.read_csv(self.csv_path, dtype=self._CSV_DTYPE)
+                    self.df = pd.read_csv(self.csv_path, dtype=self._CSV_DTYPE)  # type: ignore[arg-type]
                 except (pd.errors.ParserError, pd.errors.EmptyDataError) as bak_exc:
                     raise CSVCorruptedError(
                         "Backup restore failed: parsed backup "
@@ -345,6 +345,8 @@ class BatchCSVManager:
         """Ensure DataFrame is loaded."""
         if self.df is None:
             self.load_csv()
+        if self.df is None:
+            raise RuntimeError("load_csv() did not populate self.df")
         return self.df
 
     def _safe_int(self, val: Any, default: int = 0) -> int:
@@ -428,7 +430,7 @@ class BatchCSVManager:
                 return None
             if pd.isna(val):
                 return None
-            return float(val)
+            return float(val)  # type: ignore[arg-type]
         except (KeyError, ValueError, TypeError) as e:
             LOG.debug(f"[{mol_id}] Could not get H298_cbs: {e}")
             return None
@@ -636,19 +638,22 @@ class BatchCSVManager:
             df["_sort_priority"] = df["status"].apply(
                 lambda x: 0 if x == MoleculeStatus.RERUN.value else 1
             )
-            return df.sort_values(["_sort_priority", "mol_id"]).drop(
-                columns=["_sort_priority"]
+            return cast(
+                pd.DataFrame,
+                df.sort_values(["_sort_priority", "mol_id"]).drop(
+                    columns=["_sort_priority"]
+                ),
             )
 
         elif strategy == BatchSortingStrategy.RANDOM:
-            return df.sample(frac=1)
+            return cast(pd.DataFrame, df.sample(frac=1))
 
         elif strategy == BatchSortingStrategy.BY_NHEAVY:
-            return df.sort_values("nheavy")
+            return cast(pd.DataFrame, df.sort_values("nheavy"))
 
         elif strategy == BatchSortingStrategy.BY_NROTBONDS:
             if "rdkit_nrotbonds" in df.columns:
-                return df.sort_values("rdkit_nrotbonds")
+                return cast(pd.DataFrame, df.sort_values("rdkit_nrotbonds"))
             else:
                 LOG.warning(
                     "Column 'rdkit_nrotbonds' not found, skipping BY_NROTBONDS sorting"
@@ -1181,4 +1186,4 @@ class BatchCSVManager:
             DataFrame filtered to batch
         """
         df = self._ensure_loaded()
-        return df[df["batch_id"] == batch_id].copy()
+        return cast(pd.DataFrame, df[df["batch_id"] == batch_id].copy())
