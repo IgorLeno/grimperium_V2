@@ -101,7 +101,7 @@ class DataFusion:
 
         """
         # Perform merge
-        merged = chemperium_df.merge(semiempirical_df, on=on, how=how)  # type: ignore[arg-type]
+        merged = chemperium_df.merge(semiempirical_df, on=on, how=how)
 
         # Validate if requested
         if validate_merge:
