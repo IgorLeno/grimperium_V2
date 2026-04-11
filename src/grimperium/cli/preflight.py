@@ -65,9 +65,10 @@ REQUIRED_BINARIES: list[dict[str, str | bool]] = [
         "version_flag": "--version",
         "install_hint": (
             "Install xTB: https://github.com/grimme-lab/xtb/releases\n"
-            "Note: Many CREST distributions bundle xTB internally."
+            "Required for semi-empirical optimizations with CREST.\n"
+            "Recommended: conda install -c conda-forge xtb"
         ),
-        "critical": False,
+        "critical": True,
     },
     {
         "name": "obabel",
@@ -446,6 +447,23 @@ class PreflightRunner:
         if failed_binaries:
             self._show_binary_hints(failed_binaries)
 
+            # Offer automatic installation via install_tools.sh
+            if _safe_confirm(
+                "Download and install missing programs automatically?",
+                default=False,
+            ):
+                install_ok = self._attempt_tools_install()
+                if install_ok:
+                    self.console.print(
+                        "[success]✓ Installation complete. Re-checking...[/success]"
+                    )
+                else:
+                    self.console.print(
+                        "[error]✗ Automatic installation failed. "
+                        "Please install the programs manually using the links above "
+                        "and restart Grimperium.[/error]"
+                    )
+
         # ── Show config hints ─────────────────────────────────────────
         config_issues = [
             r for r in self.results if r.category == "config" and not r.is_ok
@@ -473,14 +491,25 @@ class PreflightRunner:
 
         critical = [r for r in self.results if r.is_critical]
         if critical:
+            from rich.panel import Panel
+
+            from grimperium.cli.styles import COLORS
+
             self.console.print()
             names = ", ".join(r.name for r in critical)
-            self.console.print(f"[error]Critical: {names} still missing[/error]")
-            if _safe_confirm("Start anyway with limited functionality?", default=False):
-                logger.warning(
-                    "User chose to start with missing dependencies: %s", names
+            self.console.print(
+                Panel(
+                    "[bold]✗ CANNOT START — Missing required programs[/bold]\n\n"
+                    f"The following required programs were not found:\n"
+                    f"[bold]{names}[/bold]\n\n"
+                    "Please install the programs listed above and restart Grimperium.\n"
+                    "Installation instructions are shown above each missing program.",
+                    border_style=COLORS["error"],
+                    padding=(1, 2),
                 )
-                return True
+            )
+            self.console.print()
+            _safe_confirm("Press Enter to exit...", default=False)
             return False
 
         # Only non-critical issues remain (config, optional binaries)
@@ -562,6 +591,46 @@ class PreflightRunner:
                     padding=(1, 2),
                 )
             )
+
+    def _attempt_tools_install(self) -> bool:
+        """Run scripts/install_tools.sh to install missing external binaries.
+
+        Returns True if the script exited successfully, False otherwise.
+        """
+        import shutil
+
+        # Locate scripts/install_tools.sh relative to this file:
+        # preflight.py → cli/ → grimperium/ → src/ → project_root/
+        project_root = Path(__file__).parent.parent.parent.parent
+        script = project_root / "scripts" / "install_tools.sh"
+
+        if not script.is_file():
+            self.console.print(
+                "[error]install_tools.sh not found at expected path: "
+                f"{script}[/error]"
+            )
+            return False
+
+        if not shutil.which("bash"):
+            self.console.print("[error]bash not found — cannot run install script[/error]")
+            return False
+
+        self.console.print()
+        self.console.print(f"[muted]Running: bash {script}[/muted]")
+        self.console.print()
+
+        try:
+            result = subprocess.run(
+                ["bash", str(script)],
+                timeout=300,
+            )
+            return result.returncode == 0
+        except subprocess.TimeoutExpired:
+            self.console.print("[error]Installation timed out (5 min)[/error]")
+            return False
+        except subprocess.SubprocessError as e:
+            self.console.print(f"[error]Installation error: {e}[/error]")
+            return False
 
     def _save_cache(self, version: str) -> None:
         """Save successful check results to cache."""

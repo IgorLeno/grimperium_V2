@@ -225,8 +225,9 @@ class TestCriticalFailureUserExits:
 
 
 class TestCriticalFailureUserContinues:
-    """User chooses to continue despite critical failure -> returns True."""
+    """'Start anyway' behavior was removed — critical failures always exit."""
 
+    @pytest.mark.skip(reason="'Start anyway' option removed; critical failures always exit")
     def test_critical_failure_user_continues(self, runner: PreflightRunner) -> None:
         failures = [
             CheckResult("CREST", "binary", "missing", "not found"),
@@ -482,3 +483,25 @@ class TestCheckBinarySuccess:
 
         assert result.is_ok
         assert "3.0" in result.detail
+
+
+class TestAttemptToolsInstall:
+    """Tests for _attempt_tools_install method."""
+
+    def test_install_tools_script_not_found(self, runner: PreflightRunner) -> None:
+        with patch.object(Path, "is_file", return_value=False):
+            result = runner._attempt_tools_install()
+        assert result is False
+
+    def test_install_tools_success(self, runner: PreflightRunner) -> None:
+        mock_result = MagicMock()
+        mock_result.returncode = 0
+
+        with (
+            patch.object(Path, "is_file", return_value=True),
+            patch("shutil.which", return_value="/usr/bin/bash"),
+            patch("grimperium.cli.preflight.subprocess.run", return_value=mock_result),
+        ):
+            result = runner._attempt_tools_install()
+
+        assert result is True
