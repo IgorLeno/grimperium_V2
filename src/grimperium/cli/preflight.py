@@ -509,7 +509,12 @@ class PreflightRunner:
                 )
             )
             self.console.print()
-            _safe_confirm("Press Enter to exit...", default=False)
+            self.console.print("[dim]Press Enter to exit...[/dim]", end="")
+            if sys.stdin.isatty():
+                try:
+                    input()
+                except (EOFError, KeyboardInterrupt):
+                    pass
             return False
 
         # Only non-critical issues remain (config, optional binaries)
