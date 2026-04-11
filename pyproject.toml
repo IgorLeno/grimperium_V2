@@ -99,6 +99,8 @@ ignore = [
 "src/grimperium/crest_pm7/mopac_optimizer.py" = ["S603", "S607"]
 "src/grimperium/crest_pm7/preoptimization.py" = ["S603", "S607"]
 "src/grimperium/crest_pm7/validation.py" = ["S603", "S607"]
+# subprocess call for pip install in preflight + non-security hash for settings cache
+"src/grimperium/cli/preflight.py" = ["S603", "S607", "S324"]
 # non-security hash for mol_id generation
 "src/grimperium/cli/views/calc_view.py" = ["S324"]
 # pseudo-random for mock/demo data only

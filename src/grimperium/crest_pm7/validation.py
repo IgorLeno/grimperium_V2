@@ -38,7 +38,7 @@ class ValidationResult:
     warnings: list[str] = field(default_factory=list)
 
 
-def _check_executable(
+def check_executable(
     name: str, version_flag: str = "--version"
 ) -> tuple[bool, str | None]:
     """Check if an executable is available and get its version.
@@ -84,7 +84,7 @@ def validate_environment(config: PM7Config) -> ValidationResult:
     result = ValidationResult()
 
     # Check CREST
-    result.crest_available, result.crest_version = _check_executable(
+    result.crest_available, result.crest_version = check_executable(
         config.crest_executable, "--version"
     )
     if not result.crest_available:
@@ -92,7 +92,7 @@ def validate_environment(config: PM7Config) -> ValidationResult:
         result.errors.append(f"CREST executable not found: {config.crest_executable}")
 
     # Check MOPAC
-    result.mopac_available, result.mopac_version = _check_executable(
+    result.mopac_available, result.mopac_version = check_executable(
         config.mopac_executable, "-v"
     )
     if not result.mopac_available:
@@ -100,7 +100,7 @@ def validate_environment(config: PM7Config) -> ValidationResult:
         result.errors.append(f"MOPAC executable not found: {config.mopac_executable}")
 
     # Check Open Babel (required for XYZ -> SDF conversion)
-    result.obabel_available, result.obabel_version = _check_executable(
+    result.obabel_available, result.obabel_version = check_executable(
         "obabel", "--version"
     )
     if not result.obabel_available:

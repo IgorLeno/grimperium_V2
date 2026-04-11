@@ -108,14 +108,31 @@ class GrimperiumCLI:
         except KeyboardInterrupt:
             return "main"
 
-    def run(self) -> int:
+    def run(self, skip_preflight: bool = False) -> int:
         """
         Run the main application loop.
+
+        Args:
+            skip_preflight: If True, skip the environment check entirely.
 
         Returns:
             Exit code (0 for success, non-zero for errors)
         """
         self.controller.start()
+
+        # -- Preflight environment check ------------------------------------
+        if not skip_preflight:
+            from grimperium.cli.preflight import run_preflight
+
+            self.show_welcome()
+            force = "--force-preflight" in sys.argv
+            if not run_preflight(self.console, force=force):
+                self.console.print(
+                    "[muted]Exiting due to failed preflight checks.[/muted]"
+                )
+                self.controller.stop()
+                return 2
+        # ---------------------------------------------------------------------
 
         try:
             while self.controller.is_running():
@@ -170,8 +187,9 @@ def main() -> int:
         console_level="WARNING",
     )
 
+    skip_preflight = "--skip-preflight" in sys.argv
     app = GrimperiumCLI()
-    return app.run()
+    return app.run(skip_preflight=skip_preflight)
 
 
 if __name__ == "__main__":
