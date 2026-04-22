@@ -83,6 +83,17 @@ install_mopac() {
 install_xtb_crest
 install_mopac
 
+# ── Install MOPAC Qt/X11 runtime libs (Ubuntu / WSL2) ───────────────────────
+# MOPAC binaries link against these Qt/xcb libs; they are absent on minimal
+# Ubuntu installs and cause MOPAC to segfault or refuse to start.
+if command -v apt-get &>/dev/null; then
+    sudo apt-get install -y \
+        libxcb-icccm4 libxcb-image0 libxcb-keysyms1 \
+        libxcb-render-util0 libxcb-xinerama0 libxcb-xkb1 \
+        libxkbcommon-x11-0 libxcb-shape0 \
+        2>/dev/null || echo "!!! MOPAC Qt/X11 libs install failed — MOPAC may not run."
+fi
+
 echo ""
 echo "Installation complete. Installed tools:"
 command -v crest && crest --version 2>/dev/null | head -1 || echo "  crest: NOT FOUND"
