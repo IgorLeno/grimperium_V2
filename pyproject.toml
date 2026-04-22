@@ -67,8 +67,8 @@ pytest-asyncio = "^1.3.0"
 docs = ["pdoc", "sphinx", "sphinx-rtd-theme", "sphinx-autodoc-typehints"]
 cli = ["rich", "questionary"]
 server = ["fastapi", "uvicorn", "pydantic-settings"]
-worker = ["httpx"]
-distributed = ["fastapi", "uvicorn", "httpx", "pydantic-settings"]
+worker = ["httpx", "rich"]
+distributed = ["fastapi", "uvicorn", "httpx", "pydantic-settings", "rich"]
 
 [tool.poetry.scripts]
 grimperium = "grimperium.cli:main"
