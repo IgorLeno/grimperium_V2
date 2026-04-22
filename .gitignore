@@ -98,7 +98,7 @@ Thumbs.db
 data/raw/
 data/processed/
 data/molecules_pm7/conformer_details/
-models/
+/models/
 reports/charts/*.png
 outputs/
 logs/

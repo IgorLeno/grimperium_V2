@@ -1,7 +1,6 @@
 from grimperium import DictStrAny, MatrixFloat
 from grimperium.config import GrimperiumConfig
 from grimperium.core.metrics import compute_all_metrics
-from grimperium.models.delta_ensemble import DeltaLearningEnsemble
 
 
 class DeltaLearner:
@@ -43,6 +42,10 @@ class DeltaLearner:
 
         self.w_krr = w_krr
         self.w_xgb = w_xgb
+        # Deferred import breaks the circular: core/__init__ → delta_learning →
+        # grimperium.ml → ml/evaluator → core.delta_learning (mid-load).
+        from grimperium.ml.delta_ensemble import DeltaLearningEnsemble
+
         self.ensemble = DeltaLearningEnsemble(
             w_krr=w_krr, w_xgb=w_xgb, krr_params=krr_params, xgb_params=xgb_params
         )
