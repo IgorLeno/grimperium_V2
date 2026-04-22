@@ -7,11 +7,13 @@ Displays and manages molecular databases.
 from __future__ import annotations
 
 import logging
+import multiprocessing
 import threading
+import time
 from datetime import date, datetime
 from pathlib import Path
 from queue import Queue
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 import pandas as pd
@@ -22,6 +24,7 @@ from rich.table import Table
 from grimperium.cli.constants import DATA_DIR, PHASE_A_RESULTS_FILE
 from grimperium.cli.database_registry import DatabaseInfo, DatabaseRegistry
 from grimperium.cli.menu import MenuOption, show_back_menu
+from grimperium.cli.menu import confirm as menu_confirm
 from grimperium.cli.progress_tracker import (
     CSVMonitor,
     ProgressEvent,
@@ -31,6 +34,8 @@ from grimperium.cli.progress_tracker import (
 from grimperium.cli.styles import COLORS, ICONS
 from grimperium.cli.views.base_view import BaseView
 from grimperium.core.metrics import mae, r2_score
+from grimperium.crest_pm7.batch.csv_manager import BatchCSVManager
+from grimperium.crest_pm7.batch.enums import MoleculeStatus, WorkerStatus
 from grimperium.crest_pm7.database_analyzer import AnalysisReport
 
 if TYPE_CHECKING:
@@ -307,7 +312,7 @@ class DatabasesView(BaseView):
             return None
 
         if action == "calculate_run":
-            self.handle_calculate_pm7()
+            self._handle_run_calculation_menu()
             return None
 
         if action == "calculate_config":
@@ -1137,6 +1142,232 @@ class DatabasesView(BaseView):
             title=f"[bold {COLORS['batch']}]Batch Processing[/bold {COLORS['batch']}]",
             border_style=COLORS["batch"],
         )
+
+    # ── Distributed mode (Phase 4) ────────────────────────────────────────────
+
+    def _handle_run_calculation_menu(self) -> None:
+        """Route between Local Mode and Distributed Mode."""
+        options = [
+            MenuOption(label="Local Mode", value="local"),
+            MenuOption(label="Distributed Mode", value="distributed"),
+        ]
+        choice = show_back_menu(options=options, title="Run Calculation")
+        if choice == "local":
+            self.handle_calculate_pm7()
+        elif choice == "distributed":
+            self._handle_distributed_mode()
+
+    def _handle_distributed_mode(self) -> None:
+        """Orchestrate the 3-screen distributed mode flow."""
+        crest_timeout = self._prompt_positive_int(
+            "CREST timeout per molecule (minutes)?", default=30
+        )
+        if crest_timeout is None:
+            return
+        mopac_timeout = self._prompt_positive_int(
+            "MOPAC/PM7 timeout per molecule (minutes)?", default=60
+        )
+        if mopac_timeout is None:
+            return
+
+        csv_path = DATA_DIR / "thermo_pm7.csv"
+        server_port = 8000
+        server_url = f"http://localhost:{server_port}"
+
+        proc = self._start_server_in_background(csv_path, server_port)
+        try:
+            if not self._screen_connect_workers(server_url):
+                return
+            if not self._screen_assign_workload(
+                server_url, crest_timeout, mopac_timeout, csv_path
+            ):
+                return
+            self._screen_check_offline_workers(csv_path)
+        finally:
+            if proc.is_alive():
+                proc.terminate()
+
+    @staticmethod
+    def _run_server_process(csv_path_str: str, port: int) -> None:
+        """Entry point for the server subprocess."""
+        import uvicorn
+
+        from grimperium.server.app import create_app
+        from grimperium.server.config import ServerConfig
+
+        config = ServerConfig(csv_path=csv_path_str)
+        app = create_app(config)
+        uvicorn.run(app, host="0.0.0.0", port=port, log_level="warning")  # noqa: S104
+
+    def _start_server_in_background(
+        self, csv_path: Path, port: int = 8000
+    ) -> multiprocessing.Process:
+        proc = multiprocessing.Process(
+            target=DatabasesView._run_server_process,
+            args=(str(csv_path), port),
+            daemon=True,
+        )
+        proc.start()
+        return proc
+
+    def _fetch_worker_status(
+        self, server_url: str, max_wait_s: float = 5.0
+    ) -> list[dict[str, Any]]:
+        """Fetch worker list from the server, retrying until ready."""
+        import httpx
+
+        deadline = time.monotonic() + max_wait_s
+        while time.monotonic() < deadline:
+            try:
+                r = httpx.get(f"{server_url}/status", timeout=2.0)
+                if r.status_code == 200:
+                    return list(r.json().get("workers", []))
+            except Exception as exc:  # noqa: BLE001
+                logger.debug("Server not yet ready: %s", exc)
+            time.sleep(0.5)
+        return []
+
+    def _render_workers_table(self, workers: list[dict[str, Any]]) -> Table:
+        table = Table(
+            title="Connected Workers",
+            show_header=True,
+            header_style=f"bold {COLORS['databases']}",
+            border_style=COLORS["border"],
+        )
+        table.add_column("Worker ID")
+        table.add_column("Hostname")
+        table.add_column("Last Seen")
+        table.add_column("Processing")
+
+        if not workers:
+            table.add_row("[dim]No workers connected[/dim]", "", "", "")
+        else:
+            for w in workers:
+                table.add_row(
+                    str(w.get("worker_id", "")),
+                    str(w.get("hostname", "")),
+                    str(w.get("last_seen") or "-"),
+                    str(w.get("mol_id_current") or "-"),
+                )
+        return table
+
+    def _screen_connect_workers(self, server_url: str) -> bool:
+        """Screen 1: show connected workers, loop until Proceed or Cancel."""
+        self.console.print()
+        self.console.print(
+            Panel(
+                "[bold]Step 1 — Connect Workers[/bold]\nServer starting in background…",
+                border_style=COLORS["databases"],
+            )
+        )
+
+        while True:
+            workers = self._fetch_worker_status(server_url)
+            self.console.print(self._render_workers_table(workers))
+
+            options = [
+                MenuOption(label="Proceed", value="proceed"),
+                MenuOption(label="Refresh", value="refresh"),
+            ]
+            choice = show_back_menu(options=options, title="Connect Workers")
+
+            if choice == "proceed":
+                return True
+            if choice == "refresh":
+                continue
+            return False  # None / back
+
+    def _screen_assign_workload(
+        self,
+        server_url: str,
+        crest_timeout: int,
+        mopac_timeout: int,
+        csv_path: Path,
+    ) -> bool:
+        """Screen 2: assign molecules to workers and call distribute_molecules()."""
+        csv_manager = BatchCSVManager(csv_path)
+        csv_manager.load_csv()
+        counts = csv_manager.get_status_counts()
+
+        pending = counts.get(MoleculeStatus.PENDING.value, 0)
+        rerun = counts.get(MoleculeStatus.RERUN.value, 0)
+        available = pending + rerun
+
+        workers = self._fetch_worker_status(server_url, max_wait_s=2.0)
+
+        self.console.print()
+        self.console.print(
+            f"[bold]Available:[/bold] {available} molecules  "
+            f"(PENDING: {pending} | RERUN: {rerun})"
+        )
+        self.console.print()
+
+        worker_entries: list[tuple[str, str]] = [("central", "this machine")]
+        for w in workers:
+            wid = str(w.get("worker_id", ""))
+            host = str(w.get("hostname", ""))
+            if wid:
+                worker_entries.append((wid, host))
+
+        allocations: dict[str, int] = {}
+        total_assigned = 0
+
+        for worker_id, hostname in worker_entries:
+            n = self._prompt_positive_int(
+                f"  {worker_id}  ({hostname}) →",
+                default=0,
+                max_value=available if available > 0 else None,
+            )
+            if n is None:
+                return False
+            allocations[worker_id] = n
+            total_assigned += n
+            self.console.print(f"  TOTAL: {total_assigned} / {available}")
+
+        if not any(v > 0 for v in allocations.values()):
+            self.console.print("[yellow]No molecules allocated. Cancelled.[/yellow]")
+            self.wait_for_enter()
+            return False
+
+        csv_manager.distribute_molecules(
+            allocations=allocations,
+            crest_timeout_minutes=crest_timeout,
+            mopac_timeout_minutes=mopac_timeout,
+        )
+
+        n_workers = sum(1 for v in allocations.values() if v > 0)
+        self.console.print(
+            f"[green]✓ Distributed {total_assigned} molecules to {n_workers} worker(s)[/green]"
+        )
+        self.wait_for_enter()
+        return True
+
+    def _screen_check_offline_workers(self, csv_path: Path) -> None:
+        """Screen 3: if offline molecules exist, offer reassignment."""
+        csv_manager = BatchCSVManager(csv_path)
+        csv_manager.load_csv()
+        df = csv_manager.df
+
+        if df is None or "worker_status" not in df.columns:
+            return
+
+        offline_mask = (df["status"] == MoleculeStatus.ASSIGNED.value) & (
+            df["worker_status"] == WorkerStatus.OFFLINE.value
+        )
+        offline_count = int(offline_mask.sum())
+
+        if offline_count == 0:
+            return
+
+        self.console.print()
+        if menu_confirm(
+            f"⚠ {offline_count} molecules assigned to offline workers. Reassign?"
+        ):
+            n = csv_manager.reassign_offline_molecules()
+            self.console.print(
+                f"[green]✓ {n} molecules returned to pending pool[/green]"
+            )
+        self.wait_for_enter()
 
     def run(self) -> str | None:
         """Run the databases view interaction loop."""
