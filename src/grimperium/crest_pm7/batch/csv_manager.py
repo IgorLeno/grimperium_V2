@@ -10,6 +10,7 @@ This module provides BatchCSVManager for:
 import logging
 import math
 import shutil
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, cast
 
@@ -20,6 +21,7 @@ from grimperium.crest_pm7.batch.enums import (
     BatchFailurePolicy,
     BatchSortingStrategy,
     MoleculeStatus,
+    WorkerStatus,
 )
 from grimperium.crest_pm7.batch.models import Batch, BatchMolecule
 from grimperium.crest_pm7.progress import (
@@ -126,6 +128,12 @@ class BatchCSVManager:
         "assigned_mopac_timeout",
     ]
 
+    DISTRIBUTED_COLUMNS = [
+        "assigned_worker",
+        "worker_status",
+        "assigned_at",
+    ]
+
     # Result columns that are cleared when resetting a batch
     RESULT_COLUMNS = [
         "crest_status",
@@ -192,6 +200,7 @@ class BatchCSVManager:
             + self.CREST_COLUMNS
             + self.MOPAC_COLUMNS
             + self.BATCH_CONFIG_COLUMNS
+            + self.DISTRIBUTED_COLUMNS
         )
 
     _CSV_DTYPE: dict[str, type] = {
@@ -204,6 +213,10 @@ class BatchCSVManager:
         "mopac_status": str,
         # Force string type for timestamp to avoid float64 issues
         "timestamp": str,
+        # Distributed processing columns
+        "assigned_worker": str,
+        "worker_status": str,
+        "assigned_at": str,
     }
 
     def load_csv(self) -> pd.DataFrame:
@@ -1187,3 +1200,329 @@ class BatchCSVManager:
         """
         df = self._ensure_loaded()
         return cast(pd.DataFrame, df[df["batch_id"] == batch_id].copy())
+
+    def claim_single_molecule(self) -> tuple[str, str] | None:
+        """Atomically claim one PENDING/RERUN molecule for server-side dispatch.
+
+        Unlike select_batch(), does NOT raise when other molecules are RUNNING.
+        Designed for the distributed server where multiple workers process
+        different molecules concurrently.
+
+        Returns:
+            (mol_id, smiles) if a molecule was available, else None.
+        """
+        df = self._ensure_loaded()
+        pool_mask = df["status"].isin(
+            [MoleculeStatus.PENDING.value, MoleculeStatus.RERUN.value]
+        )
+        available = df[pool_mask]
+        if available.empty:
+            return None
+        row = available.iloc[0]
+        idx = int(row.name)
+        mol_id = str(row["mol_id"])
+        smiles = str(row["smiles"])
+        df.at[idx, "status"] = MoleculeStatus.RUNNING.value
+        self.save_csv()
+        LOG.debug("Claimed %s for distributed processing", mol_id)
+        return (mol_id, smiles)
+
+    # ── Distributed processing ────────────────────────────────────────────────
+
+    def _ensure_distributed_columns(self) -> None:
+        """Add distributed columns if absent — backward-compatible with old CSVs."""
+        df = self._ensure_loaded()
+        for col in self.DISTRIBUTED_COLUMNS:
+            if col not in df.columns:
+                df[col] = None
+
+    def _parse_assigned_at_age(
+        self, assigned_at_raw: Any, now: datetime
+    ) -> timedelta | None:
+        """Return elapsed time since assigned_at, or None if unparseable."""
+        if pd.isna(assigned_at_raw) or not assigned_at_raw:
+            return None
+        try:
+            ts_str = str(assigned_at_raw).strip().rstrip("Z")
+            dt = datetime.fromisoformat(ts_str)
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+            return now - dt
+        except (ValueError, TypeError) as exc:
+            LOG.debug("Cannot parse assigned_at %r: %s", assigned_at_raw, exc)
+            return None
+
+    def distribute_molecules(
+        self,
+        allocations: dict[str, int],
+        crest_timeout_minutes: int,
+        mopac_timeout_minutes: int,
+        strategy: BatchSortingStrategy = BatchSortingStrategy.RERUN_FIRST_THEN_EASY,
+    ) -> dict[str, list[str]]:
+        """Pre-allocate molecules to workers for distributed processing.
+
+        Distributed-safe: does NOT raise if other molecules are RUNNING.
+        Called once by the server to establish work distribution before
+        workers start.
+
+        Priority per worker:
+            1. Molecules already ASSIGNED to this worker (re-included in
+               their allocation — refreshes timeouts and worker_status)
+            2. RERUN molecules from the global unassigned pool
+            3. PENDING molecules from the global unassigned pool
+
+        Args:
+            allocations: {worker_id: molecule_count}. Use 0 to skip a worker.
+            crest_timeout_minutes: CREST timeout applied to all assigned molecules.
+            mopac_timeout_minutes: MOPAC timeout applied to all assigned molecules.
+            strategy: Pool selection order (default: RERUN first, then easy).
+
+        Returns:
+            {worker_id: [mol_id, ...]} — actual mol_ids assigned per worker.
+            A worker that exceeds its current assignment gets the extras from
+            the pool; a worker that already has more than requested keeps all.
+
+        Raises:
+            ValueError: If any allocation count is negative.
+        """
+        if not allocations:
+            return {}
+        for worker_id, count in allocations.items():
+            if count < 0:
+                raise ValueError(
+                    f"Allocation count must be >= 0 for worker {worker_id!r}, got {count}"
+                )
+
+        df = self._ensure_loaded()
+        self._ensure_distributed_columns()
+        now_str = datetime.now(timezone.utc).isoformat()
+
+        result: dict[str, list[str]] = {}
+
+        for worker_id, requested in allocations.items():
+            if requested == 0:
+                result[worker_id] = []
+                continue
+
+            # Molecules already ASSIGNED to this worker (re-include in allocation)
+            existing_mask = (df["assigned_worker"] == worker_id) & (
+                df["status"] == MoleculeStatus.ASSIGNED.value
+            )
+            existing_ids: list[str] = df.loc[existing_mask, "mol_id"].tolist()
+
+            # Refresh timestamps and timeouts on re-included molecules
+            for idx in df[existing_mask].index:
+                df.at[idx, "worker_status"] = WorkerStatus.ONLINE.value
+                df.at[idx, "assigned_at"] = now_str
+                df.at[idx, "assigned_crest_timeout"] = crest_timeout_minutes
+                df.at[idx, "assigned_mopac_timeout"] = mopac_timeout_minutes
+
+            remaining = requested - len(existing_ids)
+
+            new_ids: list[str] = []
+            if remaining > 0:
+                # Pool: PENDING or RERUN not yet assigned to any worker
+                pool_mask = df["status"].isin(
+                    [MoleculeStatus.PENDING.value, MoleculeStatus.RERUN.value]
+                )
+                pool_df = self._apply_sorting_strategy(df[pool_mask].copy(), strategy)
+                take = min(remaining, len(pool_df))
+                selected_df = pool_df.head(take)
+
+                for idx in selected_df.index:
+                    df.at[idx, "status"] = MoleculeStatus.ASSIGNED.value
+                    df.at[idx, "assigned_worker"] = worker_id
+                    df.at[idx, "worker_status"] = WorkerStatus.ONLINE.value
+                    df.at[idx, "assigned_at"] = now_str
+                    df.at[idx, "assigned_crest_timeout"] = crest_timeout_minutes
+                    df.at[idx, "assigned_mopac_timeout"] = mopac_timeout_minutes
+
+                new_ids = selected_df["mol_id"].tolist()
+            elif remaining < 0:
+                LOG.warning(
+                    "Worker %r already has %d ASSIGNED molecules, exceeds requested %d — "
+                    "keeping existing allocation",
+                    worker_id,
+                    len(existing_ids),
+                    requested,
+                )
+
+            result[worker_id] = existing_ids + new_ids
+
+        self.save_csv()
+        total = sum(len(v) for v in result.values())
+        LOG.info("Distributed %d molecules across %d workers", total, len(result))
+        return result
+
+    def mark_worker_offline(self, worker_id: str) -> int:
+        """Flag all active molecules for a worker as belonging to an offline worker.
+
+        Sets worker_status to "offline" on molecules with status ASSIGNED or
+        RUNNING for this worker. Does NOT change the molecule's processing
+        status — that is handled by reassign_offline_molecules() or
+        reset_stuck_assigned() depending on context.
+
+        Args:
+            worker_id: Worker identifier.
+
+        Returns:
+            Count of molecules updated.
+        """
+        df = self._ensure_loaded()
+        self._ensure_distributed_columns()
+
+        mask = (df["assigned_worker"] == worker_id) & df["status"].isin(
+            [MoleculeStatus.ASSIGNED.value, MoleculeStatus.RUNNING.value]
+        )
+        count = int(mask.sum())
+        if count == 0:
+            LOG.info("No active molecules for worker %r", worker_id)
+            return 0
+
+        for idx in df[mask].index:
+            df.at[idx, "worker_status"] = WorkerStatus.OFFLINE.value
+
+        self.save_csv()
+        LOG.warning("Marked %d molecules as offline for worker %r", count, worker_id)
+        return count
+
+    def reassign_offline_molecules(self, worker_id: str | None = None) -> int:
+        """Return offline-worker molecules to the pending pool.
+
+        Called when the user explicitly chooses to reclaim molecules from
+        offline workers (interactive prompt in the CLI).
+
+        Behavior by molecule status at time of call:
+            - ASSIGNED + offline → PENDING (no reruns increment; never started)
+            - RUNNING + offline → PENDING or SKIP (reruns incremented)
+
+        Args:
+            worker_id: Limit to one worker. If None, reclaims all offline workers.
+
+        Returns:
+            Count of reassigned molecules.
+        """
+        df = self._ensure_loaded()
+        self._ensure_distributed_columns()
+
+        offline_mask = df["worker_status"] == WorkerStatus.OFFLINE.value
+        if worker_id is not None:
+            offline_mask = offline_mask & (df["assigned_worker"] == worker_id)
+
+        count = 0
+
+        # ASSIGNED + offline → PENDING (molecule was never started; no reruns)
+        assigned_mask = offline_mask & (df["status"] == MoleculeStatus.ASSIGNED.value)
+        for idx in df[assigned_mask].index:
+            mol_id = df.at[idx, "mol_id"]
+            df.at[idx, "status"] = MoleculeStatus.PENDING.value
+            df.at[idx, "assigned_worker"] = None
+            df.at[idx, "worker_status"] = WorkerStatus.UNASSIGNED.value
+            df.at[idx, "assigned_at"] = None
+            count += 1
+            LOG.info("Reassigned ASSIGNED molecule %s → PENDING", mol_id)
+
+        # RUNNING + offline → PENDING or SKIP (molecule was interrupted; reruns++)
+        running_mask = offline_mask & (df["status"] == MoleculeStatus.RUNNING.value)
+        for idx in df[running_mask].index:
+            mol_id = df.at[idx, "mol_id"]
+            new_reruns = self._safe_int(df.at[idx, "reruns"], default=0) + 1
+            df.at[idx, "reruns"] = new_reruns
+            df.at[idx, "assigned_worker"] = None
+            df.at[idx, "worker_status"] = WorkerStatus.UNASSIGNED.value
+            df.at[idx, "assigned_at"] = None
+
+            if new_reruns >= self.max_reruns:
+                df.at[idx, "status"] = MoleculeStatus.SKIP.value
+                LOG.warning(
+                    "Reassigned RUNNING molecule %s → SKIP (reruns=%d >= max=%d)",
+                    mol_id,
+                    new_reruns,
+                    self.max_reruns,
+                )
+            else:
+                df.at[idx, "status"] = MoleculeStatus.PENDING.value
+                LOG.info(
+                    "Reassigned RUNNING molecule %s → PENDING (reruns=%d/%d)",
+                    mol_id,
+                    new_reruns,
+                    self.max_reruns,
+                )
+            count += 1
+
+        if count > 0:
+            self.save_csv()
+            LOG.info("Reassigned %d offline molecules to pending pool", count)
+
+        return count
+
+    def reset_stuck_assigned(self, threshold_hours: float = 2.0) -> tuple[int, int]:
+        """Recover or warn about stale ASSIGNED+offline molecules on server startup.
+
+        Two behaviors based on assignment age vs threshold:
+            - ASSIGNED + offline + age > threshold → auto-reset to PENDING
+              (molecule never started; no reruns increment)
+            - ASSIGNED + offline + age <= threshold → log WARNING only
+              (worker may be briefly offline and still sync results)
+            - ASSIGNED + offline + missing/invalid assigned_at → auto-reset
+              (conservative: treat unknown age as old)
+
+        Args:
+            threshold_hours: Age threshold in hours. Default 2.0. Configure
+                             via ServerConfig for your deployment.
+
+        Returns:
+            (auto_reset_count, warning_count)
+        """
+        df = self._ensure_loaded()
+        self._ensure_distributed_columns()
+
+        offline_assigned_mask = (df["status"] == MoleculeStatus.ASSIGNED.value) & (
+            df["worker_status"] == WorkerStatus.OFFLINE.value
+        )
+
+        if not offline_assigned_mask.any():
+            return (0, 0)
+
+        now = datetime.now(timezone.utc)
+        threshold = timedelta(hours=threshold_hours)
+        auto_reset_count = 0
+        warning_count = 0
+
+        for idx in df[offline_assigned_mask].index:
+            mol_id = df.at[idx, "mol_id"]
+            worker = df.at[idx, "assigned_worker"]
+            age = self._parse_assigned_at_age(df.at[idx, "assigned_at"], now)
+
+            if age is None or age > threshold:
+                df.at[idx, "status"] = MoleculeStatus.PENDING.value
+                df.at[idx, "assigned_worker"] = None
+                df.at[idx, "worker_status"] = WorkerStatus.UNASSIGNED.value
+                df.at[idx, "assigned_at"] = None
+                auto_reset_count += 1
+                LOG.warning(
+                    "Auto-reset stale ASSIGNED molecule %s (worker=%r, age=%s) → PENDING",
+                    mol_id,
+                    worker,
+                    age,
+                )
+            else:
+                warning_count += 1
+                LOG.warning(
+                    "Molecule %s is ASSIGNED to offline worker %r (age=%s < threshold %.1fh)"
+                    " — leaving unchanged; call reassign_offline_molecules() to reclaim",
+                    mol_id,
+                    worker,
+                    age,
+                    threshold_hours,
+                )
+
+        if auto_reset_count > 0:
+            self.save_csv()
+            LOG.info(
+                "reset_stuck_assigned: auto-reset=%d, warned=%d",
+                auto_reset_count,
+                warning_count,
+            )
+
+        return (auto_reset_count, warning_count)

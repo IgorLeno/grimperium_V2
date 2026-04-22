@@ -15,6 +15,7 @@ from grimperium.crest_pm7.batch.enums import (
     BatchFailurePolicy,
     BatchSortingStrategy,
     MoleculeStatus,
+    WorkerStatus,
 )
 from grimperium.crest_pm7.batch.execution_manager import (
     BatchExecutionManager,
@@ -38,6 +39,7 @@ __all__ = [
     "MoleculeStatus",
     "BatchSortingStrategy",
     "BatchFailurePolicy",
+    "WorkerStatus",
     # Models
     "Batch",
     "BatchMolecule",

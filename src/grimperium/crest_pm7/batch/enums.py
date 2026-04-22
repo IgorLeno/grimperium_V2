@@ -58,6 +58,30 @@ class MoleculeStatus(str, Enum):
     SKIP = "Skip"
     """Processing aborted - max retries exhausted."""
 
+    ASSIGNED = "Assigned"
+    """Pre-allocated to a specific worker for distributed processing.
+
+    Transition: PENDING/RERUN -> ASSIGNED (via distribute_molecules)
+                ASSIGNED -> RUNNING (worker begins processing)
+                ASSIGNED -> PENDING (re-assignment: worker offline / user-initiated)
+
+    Unlike SELECTED, ASSIGNED molecules can coexist with RUNNING molecules
+    because different workers handle them independently.
+    """
+
+
+class WorkerStatus(str, Enum):
+    """Status of the worker that holds a molecule assignment."""
+
+    ONLINE = "online"
+    """Worker is active — registered and sending heartbeats."""
+
+    OFFLINE = "offline"
+    """Worker has not sent heartbeats beyond the watchdog threshold."""
+
+    UNASSIGNED = "unassigned"
+    """Assignment was revoked (worker went offline and molecule was reassigned)."""
+
 
 class BatchSortingStrategy(str, Enum):
     """Strategy for selecting and ordering molecules in a batch.
