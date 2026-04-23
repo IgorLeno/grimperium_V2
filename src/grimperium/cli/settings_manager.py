@@ -6,7 +6,8 @@ Manages CREST, MOPAC, and xTB configuration with interactive menus.
 
 import json
 import os
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field, fields
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, ClassVar
 
@@ -91,6 +92,59 @@ class xTBSettings:
 
     preopt: bool = True
     timeout_seconds: int = 300
+
+
+@dataclass
+class CalculationProfile:
+    """Named calculation profile storing CREST and MOPAC parameters.
+
+    Profiles are saved globally in ~/.grimperium/profiles.json and can be
+    reused across projects or assigned to remote workers.
+    """
+
+    name: str = "default"
+    crest_ewin: float = 6.0
+    crest_rthr: float = 0.125
+    crest_opt: int = 2
+    crest_threads: int = 4
+    crest_timeout_minutes: int = 60
+    mopac_keywords: str = "PM7 EF GNORM=0.01"
+    mopac_timeout_minutes: int = 30
+    is_standard: bool = False
+    created_at: str = ""
+
+    def __post_init__(self) -> None:
+        if not self.created_at:
+            self.created_at = datetime.now(timezone.utc).isoformat()
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "CalculationProfile":
+        known = {f.name for f in fields(cls)}
+        return cls(**{k: v for k, v in data.items() if k in known})
+
+
+@dataclass
+class DistributedDefaults:
+    """Default parameters used by the server when workers register.
+
+    Persisted in ~/.grimperium/distributed_defaults.json.
+    """
+
+    profile_name: str = "default"
+    batch_size: int = 10
+    crest_timeout_minutes: int = 60
+    mopac_timeout_minutes: int = 30
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "DistributedDefaults":
+        known = {f.name for f in fields(cls)}
+        return cls(**{k: v for k, v in data.items() if k in known})
 
 
 # Questionary style for settings menus
@@ -931,6 +985,111 @@ class SettingsManager:
                 self.console.input("[dim]Press Enter to continue...[/dim]")
             elif choice == "toggle":
                 self.xtb.preopt = not self.xtb.preopt
+
+    # ── Global distributed config (~/.grimperium/) ─────────────────────
+
+    @staticmethod
+    def grimperium_home_dir() -> Path:
+        """Return ~/.grimperium/, creating it if necessary."""
+        try:
+            home = Path.home() / ".grimperium"
+        except RuntimeError:
+            raise RuntimeError(
+                "Cannot determine home directory ($HOME not set). "
+                "Set $HOME before running Grimperium."
+            )
+        home.mkdir(parents=True, exist_ok=True)
+        return home
+
+    @staticmethod
+    def profiles_path() -> Path:
+        """Path to ~/.grimperium/profiles.json."""
+        return SettingsManager.grimperium_home_dir() / "profiles.json"
+
+    @staticmethod
+    def distributed_defaults_path() -> Path:
+        """Path to ~/.grimperium/distributed_defaults.json."""
+        return SettingsManager.grimperium_home_dir() / "distributed_defaults.json"
+
+    @staticmethod
+    def load_profiles() -> list[CalculationProfile]:
+        """Load profiles from disk, auto-creating the default if absent.
+
+        Returns:
+            List of CalculationProfile objects; always contains at least
+            the immutable 'default' profile.
+        """
+        path = SettingsManager.profiles_path()
+        profiles: list[CalculationProfile] = []
+        if path.is_file():
+            try:
+                raw = json.loads(path.read_text(encoding="utf-8"))
+                profiles = [
+                    CalculationProfile.from_dict(p) for p in raw.get("profiles", [])
+                ]
+            except (json.JSONDecodeError, OSError, TypeError, KeyError):
+                profiles = []
+
+        if not any(p.name == "default" for p in profiles):
+            profiles.insert(0, CalculationProfile(name="default", is_standard=True))
+
+        return profiles
+
+    @staticmethod
+    def save_profiles(profiles: list[CalculationProfile]) -> bool:
+        """Persist profiles to ~/.grimperium/profiles.json.
+
+        Args:
+            profiles: List of profiles to save.
+
+        Returns:
+            True on success, False on I/O error.
+        """
+        path = SettingsManager.profiles_path()
+        try:
+            path.write_text(
+                json.dumps(
+                    {"profiles": [p.to_dict() for p in profiles]},
+                    indent=2,
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+            return True
+        except OSError:
+            return False
+
+    @staticmethod
+    def load_distributed_defaults() -> DistributedDefaults:
+        """Load distributed defaults from disk, falling back to dataclass defaults."""
+        path = SettingsManager.distributed_defaults_path()
+        if path.is_file():
+            try:
+                raw = json.loads(path.read_text(encoding="utf-8"))
+                return DistributedDefaults.from_dict(raw)
+            except (json.JSONDecodeError, OSError, TypeError):
+                pass
+        return DistributedDefaults()
+
+    @staticmethod
+    def save_distributed_defaults(defaults: DistributedDefaults) -> bool:
+        """Persist distributed defaults to ~/.grimperium/distributed_defaults.json.
+
+        Args:
+            defaults: DistributedDefaults instance to save.
+
+        Returns:
+            True on success, False on I/O error.
+        """
+        path = SettingsManager.distributed_defaults_path()
+        try:
+            path.write_text(
+                json.dumps(defaults.to_dict(), indent=2, ensure_ascii=False),
+                encoding="utf-8",
+            )
+            return True
+        except OSError:
+            return False
 
     def display_readme_updater_menu(self) -> None:
         """Launch the README updater workflow from Settings."""

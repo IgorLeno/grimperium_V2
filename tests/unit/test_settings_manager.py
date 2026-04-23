@@ -7,7 +7,9 @@ import pytest
 from rich.console import Console
 
 from grimperium.cli.settings_manager import (
+    CalculationProfile,
     CRESTSettings,
+    DistributedDefaults,
     MOPACSettings,
     SettingsManager,
     xTBSettings,
@@ -286,3 +288,167 @@ class TestSettingsManager:
         assert new_manager.crest.optlev == "vtight"
         assert new_manager.mopac.scfcrt == 1.0e-6
         assert new_manager.xtb.preopt is True
+
+
+class TestCalculationProfile:
+    """Tests for CalculationProfile dataclass."""
+
+    def test_defaults(self) -> None:
+        p = CalculationProfile()
+        assert p.name == "default"
+        assert p.crest_ewin == 6.0
+        assert p.crest_rthr == 0.125
+        assert p.crest_opt == 2
+        assert p.crest_threads == 4
+        assert p.crest_timeout_minutes == 60
+        assert p.mopac_keywords == "PM7 EF GNORM=0.01"
+        assert p.mopac_timeout_minutes == 30
+        assert p.is_standard is False
+        assert p.created_at != ""
+
+    def test_created_at_auto_set(self) -> None:
+        p = CalculationProfile()
+        assert "T" in p.created_at  # ISO datetime format
+
+    def test_to_dict_round_trip(self) -> None:
+        p = CalculationProfile(name="fast", crest_timeout_minutes=30, is_standard=True)
+        d = p.to_dict()
+        restored = CalculationProfile.from_dict(d)
+        assert restored.name == "fast"
+        assert restored.crest_timeout_minutes == 30
+        assert restored.is_standard is True
+
+    def test_from_dict_ignores_unknown_keys(self) -> None:
+        p = CalculationProfile.from_dict({"name": "x", "unknown_field": 99})
+        assert p.name == "x"
+
+    def test_custom_values_preserved(self) -> None:
+        p = CalculationProfile(
+            name="heavy",
+            crest_ewin=10.0,
+            crest_threads=8,
+            mopac_timeout_minutes=120,
+        )
+        restored = CalculationProfile.from_dict(p.to_dict())
+        assert restored.crest_ewin == 10.0
+        assert restored.crest_threads == 8
+        assert restored.mopac_timeout_minutes == 120
+
+
+class TestDistributedDefaults:
+    """Tests for DistributedDefaults dataclass."""
+
+    def test_defaults(self) -> None:
+        d = DistributedDefaults()
+        assert d.profile_name == "default"
+        assert d.batch_size == 10
+        assert d.crest_timeout_minutes == 60
+        assert d.mopac_timeout_minutes == 30
+
+    def test_to_dict_round_trip(self) -> None:
+        d = DistributedDefaults(profile_name="fast", batch_size=5)
+        restored = DistributedDefaults.from_dict(d.to_dict())
+        assert restored.profile_name == "fast"
+        assert restored.batch_size == 5
+
+    def test_from_dict_ignores_unknown_keys(self) -> None:
+        d = DistributedDefaults.from_dict({"batch_size": 20, "extra": "ignored"})
+        assert d.batch_size == 20
+
+
+class TestDistributedPersistence:
+    """Tests for profile and defaults persistence in ~/.grimperium/."""
+
+    def test_save_and_load_profiles(self, tmp_path: pytest.TempPathFactory) -> None:
+        profiles_file = tmp_path / "profiles.json"  # type: ignore[operator]
+        profiles = [
+            CalculationProfile(name="default", is_standard=True),
+            CalculationProfile(name="fast", crest_timeout_minutes=30),
+        ]
+        profiles_file.write_text(  # type: ignore[union-attr]
+            __import__("json").dumps({"profiles": [p.to_dict() for p in profiles]},
+                                    indent=2),
+            encoding="utf-8",
+        )
+        raw = __import__("json").loads(profiles_file.read_text(encoding="utf-8"))  # type: ignore[union-attr]
+        loaded = [CalculationProfile.from_dict(p) for p in raw["profiles"]]
+        assert len(loaded) == 2
+        assert loaded[0].name == "default"
+        assert loaded[1].crest_timeout_minutes == 30
+
+    def test_save_and_load_distributed_defaults(
+        self, tmp_path: pytest.TempPathFactory
+    ) -> None:
+        defaults_file = tmp_path / "distributed_defaults.json"  # type: ignore[operator]
+        d = DistributedDefaults(profile_name="fast", batch_size=5)
+        defaults_file.write_text(  # type: ignore[union-attr]
+            __import__("json").dumps(d.to_dict(), indent=2), encoding="utf-8"
+        )
+        raw = __import__("json").loads(defaults_file.read_text(encoding="utf-8"))  # type: ignore[union-attr]
+        restored = DistributedDefaults.from_dict(raw)
+        assert restored.profile_name == "fast"
+        assert restored.batch_size == 5
+
+    def test_load_profiles_auto_creates_default(
+        self, tmp_path: pytest.TempPathFactory, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(
+            SettingsManager,
+            "grimperium_home_dir",
+            staticmethod(lambda: tmp_path),  # type: ignore[arg-type]
+        )
+        profiles = SettingsManager.load_profiles()
+        assert any(p.name == "default" for p in profiles)
+
+    def test_load_profiles_default_not_duplicated(
+        self, tmp_path: pytest.TempPathFactory, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(
+            SettingsManager,
+            "grimperium_home_dir",
+            staticmethod(lambda: tmp_path),  # type: ignore[arg-type]
+        )
+        SettingsManager.save_profiles(
+            [CalculationProfile(name="default", is_standard=True)]
+        )
+        profiles = SettingsManager.load_profiles()
+        assert sum(1 for p in profiles if p.name == "default") == 1
+
+    def test_save_profiles_returns_true(
+        self, tmp_path: pytest.TempPathFactory, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(
+            SettingsManager,
+            "grimperium_home_dir",
+            staticmethod(lambda: tmp_path),  # type: ignore[arg-type]
+        )
+        result = SettingsManager.save_profiles(
+            [CalculationProfile(name="default", is_standard=True)]
+        )
+        assert result is True
+
+    def test_load_distributed_defaults_fallback(
+        self, tmp_path: pytest.TempPathFactory, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(
+            SettingsManager,
+            "grimperium_home_dir",
+            staticmethod(lambda: tmp_path),  # type: ignore[arg-type]
+        )
+        d = SettingsManager.load_distributed_defaults()
+        assert d.profile_name == "default"
+        assert d.batch_size == 10
+
+    def test_save_and_load_distributed_defaults_roundtrip(
+        self, tmp_path: pytest.TempPathFactory, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(
+            SettingsManager,
+            "grimperium_home_dir",
+            staticmethod(lambda: tmp_path),  # type: ignore[arg-type]
+        )
+        d = DistributedDefaults(profile_name="heavy", batch_size=3)
+        SettingsManager.save_distributed_defaults(d)
+        loaded = SettingsManager.load_distributed_defaults()
+        assert loaded.profile_name == "heavy"
+        assert loaded.batch_size == 3
