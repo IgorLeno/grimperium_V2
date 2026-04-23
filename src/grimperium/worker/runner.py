@@ -55,7 +55,7 @@ class WorkerConfig:
     server_url: str
     worker_id: str
     api_token: str = ""
-    heartbeat_interval_s: float = 60.0
+    heartbeat_interval_s: float = 30.0
     poll_interval_s: float = 5.0
     max_idle_polls: int = 12
     crest_timeout_minutes: int = 30
@@ -159,6 +159,7 @@ class WorkerRunner:
         Returns:
             Number of molecules successfully processed.
         """
+        self._client.register()
         processed = 0
         idle_count = 0
 

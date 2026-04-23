@@ -179,6 +179,17 @@ class TestRun:
         assert count == 0
         assert client.claim.call_count == 3
 
+    def test_run_calls_register_before_first_claim(self) -> None:
+        client = _mock_client(claim_returns=None)
+        pipeline = _mock_pipeline()
+        runner = WorkerRunner(
+            _make_config(max_idle_polls=1), pipeline=pipeline, client=client
+        )
+        runner.run()
+        client.register.assert_called_once()
+        methods = [call[0] for call in client.method_calls]
+        assert methods.index("register") < methods.index("claim")
+
     @patch("grimperium.worker.runner._pm7result_to_update", return_value={})
     def test_run_stops_via_stop_method(self, _mock_update: MagicMock) -> None:
         """stop() between run_one calls should terminate the loop."""
@@ -199,6 +210,15 @@ class TestRun:
         client.claim.side_effect = side_effect
         count = runner.run()
         assert count >= 1
+
+
+# ── WorkerConfig ─────────────────────────────────────────────────────────────
+
+
+class TestWorkerConfig:
+    def test_heartbeat_interval_default_is_30s(self) -> None:
+        cfg = WorkerConfig(server_url="http://x", worker_id="w1")
+        assert cfg.heartbeat_interval_s == 30.0
 
 
 # ── _pm7result_to_update ──────────────────────────────────────────────────────
