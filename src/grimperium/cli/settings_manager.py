@@ -997,7 +997,7 @@ class SettingsManager:
             raise RuntimeError(
                 "Cannot determine home directory ($HOME not set). "
                 "Set $HOME before running Grimperium."
-            )
+            ) from None
         home.mkdir(parents=True, exist_ok=True)
         return home
 
@@ -1096,3 +1096,226 @@ class SettingsManager:
         from grimperium.cli.readme_updater import ReadmeUpdater
 
         ReadmeUpdater(console=self.console).display_menu()
+
+    # ── Distributed Settings ──────────────────────────────────────────────────
+
+    def display_distributed_menu(self) -> None:
+        """Top-level Distributed Settings menu: Profiles and Standard Values."""
+        while True:
+            self.console.print()
+            self.console.print(
+                Panel(
+                    "[dim]Manage calculation profiles and default dispatch settings "
+                    "for distributed processing.[/dim]",
+                    title="[bold]Distributed Settings[/bold]",
+                    border_style=COLORS["settings"],
+                )
+            )
+            choices = [
+                questionary.Choice("Calculation Profiles", value="profiles"),
+                questionary.Choice("Standard Values (Defaults)", value="defaults"),
+                questionary.Separator(),
+                questionary.Choice("◀ Back", value="back"),
+            ]
+            choice = questionary.select(
+                "Select option:",
+                choices=choices,
+                style=SETTINGS_STYLE,
+                qmark="",
+                pointer="❯",
+            ).ask()
+
+            if choice is None or choice == "back":
+                return
+            if choice == "profiles":
+                self._display_profiles_menu()
+            elif choice == "defaults":
+                self._display_standard_values_menu()
+
+    def _display_profiles_menu(self) -> None:
+        """List and manage calculation profiles."""
+        while True:
+            profiles = SettingsManager.load_profiles()
+            # Ensure "default" profile always exists
+            if not any(p.name == "default" for p in profiles):
+                profiles.insert(0, CalculationProfile(name="default", is_standard=True))
+                SettingsManager.save_profiles(profiles)
+
+            self.console.print()
+            table = Table(
+                title="Calculation Profiles",
+                show_header=True,
+                header_style=f"bold {COLORS['settings']}",
+            )
+            table.add_column("Name")
+            table.add_column("CREST Timeout", justify="right")
+            table.add_column("MOPAC Timeout", justify="right")
+            table.add_column("Batch Size", justify="right")
+            table.add_column("Standard")
+            for p in profiles:
+                table.add_row(
+                    p.name,
+                    f"{p.crest_timeout_minutes}m",
+                    f"{p.mopac_timeout_minutes}m",
+                    "—",
+                    "✓" if p.is_standard else "",
+                )
+            self.console.print(table)
+
+            choices = [
+                questionary.Choice("Create new profile", value="create"),
+                questionary.Separator(),
+                questionary.Choice("◀ Back", value="back"),
+            ]
+            choice = questionary.select(
+                "Select option:",
+                choices=choices,
+                style=SETTINGS_STYLE,
+                qmark="",
+                pointer="❯",
+            ).ask()
+
+            if choice is None or choice == "back":
+                return
+            if choice == "create":
+                self._create_profile_interactive(profiles)
+
+    def _create_profile_interactive(self, profiles: list[CalculationProfile]) -> None:
+        """Interactively create a new calculation profile."""
+        name = questionary.text(
+            "Profile name (leave blank to cancel):",
+            style=SETTINGS_STYLE,
+        ).ask()
+        if not name or not name.strip():
+            return
+        name = name.strip()
+        if any(p.name == name for p in profiles):
+            self.console.print(f"[red]✗ Profile '{name}' already exists.[/red]")
+            return
+
+        crest_t_str = questionary.text(
+            "CREST timeout (minutes) [default: 60]:",
+            default="60",
+            style=SETTINGS_STYLE,
+        ).ask()
+        mopac_t_str = questionary.text(
+            "MOPAC timeout (minutes) [default: 30]:",
+            default="30",
+            style=SETTINGS_STYLE,
+        ).ask()
+
+        try:
+            crest_t = max(1, int(crest_t_str or "60"))
+            mopac_t = max(1, int(mopac_t_str or "30"))
+        except ValueError:
+            self.console.print("[red]✗ Invalid timeout value — profile not created.[/red]")
+            return
+
+        new_profile = CalculationProfile(
+            name=name,
+            crest_timeout_minutes=crest_t,
+            mopac_timeout_minutes=mopac_t,
+        )
+        profiles.append(new_profile)
+        if SettingsManager.save_profiles(profiles):
+            self.console.print(f"[green]✓ Profile '{name}' created.[/green]")
+        else:
+            self.console.print("[red]✗ Failed to save profiles.[/red]")
+
+    def _display_standard_values_menu(self) -> None:
+        """Edit DistributedDefaults interactively."""
+        defaults = SettingsManager.load_distributed_defaults()
+
+        while True:
+            self.console.print()
+            self.console.print(
+                Panel(
+                    f"  Profile:       {defaults.profile_name}\n"
+                    f"  Batch size:    {defaults.batch_size}\n"
+                    f"  CREST timeout: {defaults.crest_timeout_minutes}m\n"
+                    f"  MOPAC timeout: {defaults.mopac_timeout_minutes}m",
+                    title="[bold]Standard Values[/bold]",
+                    border_style=COLORS["settings"],
+                )
+            )
+            choices = [
+                questionary.Choice(
+                    f"Set profile (current: {defaults.profile_name})",
+                    value="profile",
+                ),
+                questionary.Choice(
+                    f"Set batch size (current: {defaults.batch_size})",
+                    value="batch",
+                ),
+                questionary.Choice(
+                    f"Set CREST timeout (current: {defaults.crest_timeout_minutes}m)",
+                    value="crest",
+                ),
+                questionary.Choice(
+                    f"Set MOPAC timeout (current: {defaults.mopac_timeout_minutes}m)",
+                    value="mopac",
+                ),
+                questionary.Separator(),
+                questionary.Choice("💾 Save & Return", value="save"),
+                questionary.Choice("◀ Cancel", value="cancel"),
+            ]
+            choice = questionary.select(
+                "Select option:",
+                choices=choices,
+                style=SETTINGS_STYLE,
+                qmark="",
+                pointer="❯",
+            ).ask()
+
+            if choice is None or choice == "cancel":
+                return
+            if choice == "save":
+                if SettingsManager.save_distributed_defaults(defaults):
+                    self.console.print("[green]✓ Standard values saved.[/green]")
+                else:
+                    self.console.print("[red]✗ Failed to save.[/red]")
+                return
+            if choice == "profile":
+                profiles = SettingsManager.load_profiles()
+                names = [p.name for p in profiles] if profiles else ["default"]
+                val = questionary.select(
+                    "Choose profile:",
+                    choices=names,
+                    style=SETTINGS_STYLE,
+                ).ask()
+                if val:
+                    defaults.profile_name = val
+            elif choice == "batch":
+                raw = questionary.text(
+                    f"Batch size [{defaults.batch_size}]:",
+                    default=str(defaults.batch_size),
+                    style=SETTINGS_STYLE,
+                ).ask()
+                try:
+                    defaults.batch_size = max(1, int(raw or str(defaults.batch_size)))
+                except ValueError:
+                    self.console.print("[red]✗ Invalid value.[/red]")
+            elif choice == "crest":
+                raw = questionary.text(
+                    f"CREST timeout in minutes [{defaults.crest_timeout_minutes}]:",
+                    default=str(defaults.crest_timeout_minutes),
+                    style=SETTINGS_STYLE,
+                ).ask()
+                try:
+                    defaults.crest_timeout_minutes = max(
+                        1, int(raw or str(defaults.crest_timeout_minutes))
+                    )
+                except ValueError:
+                    self.console.print("[red]✗ Invalid value.[/red]")
+            elif choice == "mopac":
+                raw = questionary.text(
+                    f"MOPAC timeout in minutes [{defaults.mopac_timeout_minutes}]:",
+                    default=str(defaults.mopac_timeout_minutes),
+                    style=SETTINGS_STYLE,
+                ).ask()
+                try:
+                    defaults.mopac_timeout_minutes = max(
+                        1, int(raw or str(defaults.mopac_timeout_minutes))
+                    )
+                except ValueError:
+                    self.console.print("[red]✗ Invalid value.[/red]")

@@ -106,6 +106,12 @@ class SettingsView(BaseView):
                 description="Reset all settings to default values",
             ),
             MenuOption(
+                label="Distributed Settings",
+                value="distributed",
+                icon="🌐",
+                description="Manage calculation profiles and default dispatch settings",
+            ),
+            MenuOption(
                 label="Atualizar Documentação do Projeto",
                 value="update_docs",
                 icon="📊",
@@ -147,6 +153,9 @@ class SettingsView(BaseView):
             return None
         if action == "update_docs":
             self.settings_manager.display_readme_updater_menu()
+            return None
+        if action == "distributed":
+            self.settings_manager.display_distributed_menu()
             return None
         return None
 

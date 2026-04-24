@@ -1346,8 +1346,8 @@ class DatabasesView(BaseView):
         import httpx
         try:
             httpx.post(f"{server_url}/shutdown/all", timeout=5.0)
-        except Exception:  # noqa: BLE001
-            pass
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("Shutdown request failed (server may be gone): %s", exc)
 
     def _start_local_worker(self, server_url: str) -> threading.Thread:
         client_cfg = WorkerClientConfig(server_url=server_url, worker_id="local")
@@ -1356,8 +1356,8 @@ class DatabasesView(BaseView):
         server_cfg: dict[str, Any] = {}
         try:
             server_cfg = client.register()
-        except Exception:  # noqa: BLE001
-            pass
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("Local worker register failed, using defaults: %s", exc)
 
         config = WorkerConfig(
             server_url=server_url,
@@ -1388,8 +1388,8 @@ class DatabasesView(BaseView):
                 },
                 timeout=5.0,
             )
-        except Exception:  # noqa: BLE001
-            pass
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("Configure worker %r failed: %s", worker_id, exc)
 
     def _fetch_workers_extended(self, server_url: str) -> list[dict[str, Any]]:
         import httpx
@@ -1397,8 +1397,8 @@ class DatabasesView(BaseView):
             r = httpx.get(f"{server_url}/workers/status", timeout=5.0)
             if r.status_code == 200:
                 return list(r.json())
-        except Exception:  # noqa: BLE001
-            pass
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("GET /workers/status failed: %s", exc)
         return []
 
     def _render_monitoring_table(self, workers: list[dict[str, Any]]) -> Table:
@@ -1476,8 +1476,8 @@ class DatabasesView(BaseView):
             import httpx
             try:
                 httpx.post(f"{server_url}/dispatch/start", timeout=5.0)
-            except Exception:  # noqa: BLE001
-                pass
+            except Exception as exc:  # noqa: BLE001
+                logger.debug("POST /dispatch/start failed: %s", exc)
 
             worker_infos = [
                 WorkerSessionInfo(
