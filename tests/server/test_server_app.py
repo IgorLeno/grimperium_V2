@@ -73,6 +73,16 @@ class TestRegister:
         r = await client.post("/register", json={"worker_id": "w1", "hostname": "lab-01"})
         assert r.status_code == 200
 
+    async def test_register_returns_config_payload(self, client: AsyncClient) -> None:
+        r = await client.post("/register", json={"worker_id": "w1", "hostname": "lab-01"})
+        data = r.json()
+        assert data["worker_id"] == "w1"
+        assert data["hostname"] == "lab-01"
+        assert "crest_timeout_minutes" in data
+        assert "mopac_timeout_minutes" in data
+        assert "batch_size" in data
+        assert "profile_name" in data
+
     async def test_register_missing_field_returns_422(self, client: AsyncClient) -> None:
         r = await client.post("/register", json={"worker_id": "w1"})
         assert r.status_code == 422
@@ -122,14 +132,24 @@ class TestAssign:
 class TestClaim:
     async def test_claim_returns_molecule(self, client: AsyncClient) -> None:
         await client.post("/register", json={"worker_id": "w1", "hostname": "lab-01"})
+        await client.post("/dispatch/start")
         r = await client.post("/claim", json={"worker_id": "w1"})
         assert r.status_code == 200
         data = r.json()
         assert data["mol_id"] is not None
         assert data["smiles"] is not None
 
+    async def test_claim_returns_null_when_dispatch_disabled(
+        self, client: AsyncClient
+    ) -> None:
+        await client.post("/register", json={"worker_id": "w1", "hostname": "lab-01"})
+        r = await client.post("/claim", json={"worker_id": "w1"})
+        assert r.status_code == 200
+        assert r.json()["mol_id"] is None
+
     async def test_claim_marks_running(self, client: AsyncClient) -> None:
         await client.post("/register", json={"worker_id": "w1", "hostname": "lab-01"})
+        await client.post("/dispatch/start")
         r = await client.post("/claim", json={"worker_id": "w1"})
         mol_id = r.json()["mol_id"]
         # Claim again — same mol_id should not be returned twice
@@ -139,6 +159,7 @@ class TestClaim:
 
     async def test_claim_empty_queue_returns_null(self, client: AsyncClient) -> None:
         await client.post("/register", json={"worker_id": "w1", "hostname": "lab-01"})
+        await client.post("/dispatch/start")
         # Drain all pending molecules
         for _ in range(5):
             await client.post("/claim", json={"worker_id": "w1"})
@@ -153,6 +174,7 @@ class TestClaim:
 class TestHeartbeat:
     async def test_heartbeat_updates_registry(self, client: AsyncClient) -> None:
         await client.post("/register", json={"worker_id": "w1", "hostname": "lab-01"})
+        await client.post("/dispatch/start")
         r = await client.post("/claim", json={"worker_id": "w1"})
         mol_id = r.json()["mol_id"]
         assert mol_id is not None
@@ -171,6 +193,7 @@ class TestHeartbeat:
 class TestReportSuccess:
     async def test_success_returns_200(self, client: AsyncClient) -> None:
         await client.post("/register", json={"worker_id": "w1", "hostname": "lab-01"})
+        await client.post("/dispatch/start")
         r = await client.post("/claim", json={"worker_id": "w1"})
         mol_id = r.json()["mol_id"]
         assert mol_id is not None
@@ -195,6 +218,7 @@ class TestReportSuccess:
 class TestReportFailure:
     async def test_failure_rerun_returns_200(self, client: AsyncClient) -> None:
         await client.post("/register", json={"worker_id": "w1", "hostname": "lab-01"})
+        await client.post("/dispatch/start")
         r = await client.post("/claim", json={"worker_id": "w1"})
         mol_id = r.json()["mol_id"]
         assert mol_id is not None
@@ -206,6 +230,7 @@ class TestReportFailure:
 
     async def test_failure_force_skip_returns_200(self, client: AsyncClient) -> None:
         await client.post("/register", json={"worker_id": "w1", "hostname": "lab-01"})
+        await client.post("/dispatch/start")
         r = await client.post("/claim", json={"worker_id": "w1"})
         mol_id = r.json()["mol_id"]
         assert mol_id is not None
@@ -227,6 +252,7 @@ class TestReportFailure:
 class TestSyncResults:
     async def test_sync_success_results(self, client: AsyncClient) -> None:
         await client.post("/register", json={"worker_id": "w1", "hostname": "lab-01"})
+        await client.post("/dispatch/start")
         r = await client.post("/claim", json={"worker_id": "w1"})
         mol_id = r.json()["mol_id"]
         assert mol_id is not None
@@ -322,3 +348,201 @@ class TestAuthentication:
     async def test_auth_disabled_no_token_needed(self, client: AsyncClient) -> None:
         r = await client.get("/status")
         assert r.status_code == 200
+
+
+# ── /workers ──────────────────────────────────────────────────────────────────
+
+
+class TestWorkers:
+    async def test_workers_empty_initially(self, client: AsyncClient) -> None:
+        r = await client.get("/workers")
+        assert r.status_code == 200
+        assert r.json() == []
+
+    async def test_workers_shows_registered(self, client: AsyncClient) -> None:
+        await client.post("/register", json={"worker_id": "w1", "hostname": "lab-01"})
+        r = await client.get("/workers")
+        assert r.status_code == 200
+        data = r.json()
+        assert len(data) == 1
+        assert data[0]["worker_id"] == "w1"
+        assert data[0]["hostname"] == "lab-01"
+
+    async def test_workers_status_empty_initially(self, client: AsyncClient) -> None:
+        r = await client.get("/workers/status")
+        assert r.status_code == 200
+        assert r.json() == []
+
+    async def test_workers_status_includes_metrics(self, client: AsyncClient) -> None:
+        await client.post("/register", json={"worker_id": "w1", "hostname": "lab-01"})
+        r = await client.get("/workers/status")
+        assert r.status_code == 200
+        data = r.json()
+        assert len(data) == 1
+        w = data[0]
+        assert w["worker_id"] == "w1"
+        assert w["processed"] == 0
+        assert w["successful"] == 0
+        assert w["failed"] == 0
+        assert w["skipped"] == 0
+        assert w["shutdown_requested"] is False
+        assert "registered_at" in w
+
+    async def test_workers_status_updates_after_success(
+        self, client: AsyncClient
+    ) -> None:
+        await client.post("/register", json={"worker_id": "w1", "hostname": "lab-01"})
+        await client.post("/dispatch/start")
+        r = await client.post("/claim", json={"worker_id": "w1"})
+        mol_id = r.json()["mol_id"]
+        assert mol_id is not None
+        await client.post(
+            "/report/success",
+            json={"worker_id": "w1", "mol_id": mol_id, "result_update": {}},
+        )
+        r2 = await client.get("/workers/status")
+        w = r2.json()[0]
+        assert w["processed"] == 1
+        assert w["successful"] == 1
+
+
+# ── /configure/{worker_id} ────────────────────────────────────────────────────
+
+
+class TestConfigure:
+    async def test_configure_known_worker(self, client: AsyncClient) -> None:
+        await client.post("/register", json={"worker_id": "w1", "hostname": "lab-01"})
+        r = await client.post(
+            "/configure/w1",
+            json={
+                "batch_size": 5,
+                "crest_timeout_minutes": 45,
+                "mopac_timeout_minutes": 20,
+                "profile_name": "fast",
+            },
+        )
+        assert r.status_code == 200
+        assert r.json()["status"] == "configured"
+
+    async def test_configure_unknown_worker_returns_404(
+        self, client: AsyncClient
+    ) -> None:
+        r = await client.post(
+            "/configure/ghost",
+            json={
+                "batch_size": 5,
+                "crest_timeout_minutes": 45,
+                "mopac_timeout_minutes": 20,
+                "profile_name": "fast",
+            },
+        )
+        assert r.status_code == 404
+
+    async def test_get_config_returns_defaults_when_not_set(
+        self, client: AsyncClient
+    ) -> None:
+        await client.post("/register", json={"worker_id": "w1", "hostname": "lab-01"})
+        r = await client.get("/configure/w1")
+        assert r.status_code == 200
+        data = r.json()
+        assert "batch_size" in data
+        assert "crest_timeout_minutes" in data
+
+    async def test_get_config_returns_override_after_configure(
+        self, client: AsyncClient
+    ) -> None:
+        await client.post("/register", json={"worker_id": "w1", "hostname": "lab-01"})
+        await client.post(
+            "/configure/w1",
+            json={
+                "batch_size": 3,
+                "crest_timeout_minutes": 25,
+                "mopac_timeout_minutes": 15,
+                "profile_name": "custom",
+            },
+        )
+        r = await client.get("/configure/w1")
+        assert r.status_code == 200
+        data = r.json()
+        assert data["batch_size"] == 3
+        assert data["profile_name"] == "custom"
+
+    async def test_configure_reflected_in_register_response(
+        self, client: AsyncClient
+    ) -> None:
+        await client.post("/register", json={"worker_id": "w1", "hostname": "lab-01"})
+        await client.post(
+            "/configure/w1",
+            json={
+                "batch_size": 7,
+                "crest_timeout_minutes": 90,
+                "mopac_timeout_minutes": 45,
+                "profile_name": "heavy",
+            },
+        )
+        r = await client.post("/register", json={"worker_id": "w1", "hostname": "lab-01"})
+        data = r.json()
+        assert data["batch_size"] == 7
+        assert data["profile_name"] == "heavy"
+
+
+# ── /shutdown ─────────────────────────────────────────────────────────────────
+
+
+class TestShutdown:
+    async def test_shutdown_known_worker(self, client: AsyncClient) -> None:
+        await client.post("/register", json={"worker_id": "w1", "hostname": "lab-01"})
+        r = await client.post("/shutdown/w1")
+        assert r.status_code == 200
+        data = r.json()
+        assert data["status"] == "shutdown_requested"
+        assert data["worker_id"] == "w1"
+
+    async def test_shutdown_unknown_worker_returns_404(
+        self, client: AsyncClient
+    ) -> None:
+        r = await client.post("/shutdown/ghost")
+        assert r.status_code == 404
+
+    async def test_shutdown_all(self, client: AsyncClient) -> None:
+        await client.post("/register", json={"worker_id": "w1", "hostname": "lab-01"})
+        await client.post("/register", json={"worker_id": "w2", "hostname": "lab-02"})
+        r = await client.post("/shutdown/all")
+        assert r.status_code == 200
+        data = r.json()
+        assert data["status"] == "shutdown_requested"
+        assert set(data["workers_signalled"]) == {"w1", "w2"}
+
+    async def test_shutdown_reflected_in_workers_status(
+        self, client: AsyncClient
+    ) -> None:
+        await client.post("/register", json={"worker_id": "w1", "hostname": "lab-01"})
+        await client.post("/shutdown/w1")
+        r = await client.get("/workers/status")
+        w = r.json()[0]
+        assert w["shutdown_requested"] is True
+
+
+# ── /dispatch/start ───────────────────────────────────────────────────────────
+
+
+class TestDispatch:
+    async def test_dispatch_start_returns_200(self, client: AsyncClient) -> None:
+        r = await client.post("/dispatch/start")
+        assert r.status_code == 200
+        assert r.json()["status"] == "dispatch_enabled"
+
+    async def test_claim_returns_null_before_dispatch(
+        self, client: AsyncClient
+    ) -> None:
+        await client.post("/register", json={"worker_id": "w1", "hostname": "lab-01"})
+        r = await client.post("/claim", json={"worker_id": "w1"})
+        assert r.json()["mol_id"] is None
+
+    async def test_claim_returns_molecule_after_dispatch(
+        self, client: AsyncClient
+    ) -> None:
+        await client.post("/register", json={"worker_id": "w1", "hostname": "lab-01"})
+        await client.post("/dispatch/start")
+        r = await client.post("/claim", json={"worker_id": "w1"})
+        assert r.json()["mol_id"] is not None

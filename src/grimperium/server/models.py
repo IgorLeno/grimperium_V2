@@ -73,3 +73,38 @@ class StatusResponse(BaseModel):
 class SyncResponse(BaseModel):
     accepted: int
     rejected: int
+
+
+class RegisterResponse(BaseModel):
+    worker_id: str
+    hostname: str
+    crest_timeout_minutes: int
+    mopac_timeout_minutes: int
+    batch_size: int
+    profile_name: str
+
+
+class WorkerInfoExtended(BaseModel):
+    worker_id: str
+    hostname: str
+    last_seen: str
+    registered_at: str
+    current_mol_id: str | None
+    processed: int
+    successful: int
+    failed: int
+    skipped: int
+    shutdown_requested: bool
+
+
+class ConfigurePayload(BaseModel):
+    batch_size: int = 10
+    crest_timeout_minutes: int = 60
+    mopac_timeout_minutes: int = 30
+    profile_name: str = "default"
+
+
+class ShutdownResponse(BaseModel):
+    status: str
+    worker_id: str | None = None
+    workers_signalled: list[str] | None = None
