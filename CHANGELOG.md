@@ -8,6 +8,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+
+- **Distributed Mode Refactor — full server+worker overhaul** (2026-04-23)
+  - `WorkerRegistry` (`server/worker_registry.py`): thread-safe in-memory registry
+    replacing two raw dicts; adds per-worker metrics (processed/ok/failed/skipped),
+    config overrides, and shutdown flags
+  - `RegisterResponse`: server returns full config (crest/mopac timeouts, batch_size,
+    profile_name) on POST /register so workers need no CLI timeout flags
+  - New server endpoints: `GET /workers`, `GET /workers/status`, `POST /configure/{id}`,
+    `GET /configure/{id}`, `POST /shutdown/{id}`, `POST /shutdown/all`,
+    `POST /dispatch/start` (gates /claim until Run is pressed)
+  - `MoleculeProgressDisplay` (`worker/display.py`): Rich Live single-row table
+    for workers — Mol ID | SMILES | Status | Elapsed | Result
+  - `WorkerConfig.batch_size` + `WorkerRunner.reconfigure()`: runtime reconfiguration
+    from server-pushed config without restarting the worker
+  - `CalculationProfile` + `DistributedDefaults` with persistence to
+    `~/.grimperium/profiles.json` and `~/.grimperium/distributed_defaults.json`
+  - `SessionState` + `session_store.py`: session persistence to
+    `~/.grimperium/session.json` allowing CLI to re-attach to running sessions
+  - Worker CLI: removed `--crest-timeout`/`--mopac-timeout` flags; added
+    register-once with Rich retry menu for connection failures (TTY-aware)
+  - `_handle_distributed_mode` refactored into state machine:
+    `check_port` → `check_session` → `config_menu` → `monitoring`
+  - `_start_local_worker()`: principal can join session as `worker_id="local"`
+    in a daemon thread, processing alongside remote workers
+  - **Distributed Settings** menu in Settings → Calculation Profiles + Standard Values
+
+
 - **ML quality gate** (`ml/gate.py`)
   - Evaluates trained models against MAE ≤ 3.5, R² ≥ 0.97, RMSE ≤ 5.0 kcal/mol
   - Thresholds derived from 1,537-molecule baseline (delta mean ≈ 5, std ≈ 6.45 kcal/mol)
