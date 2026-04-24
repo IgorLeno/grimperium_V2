@@ -66,7 +66,7 @@ def _session_path() -> Path:
         raise RuntimeError(
             "Cannot determine home directory ($HOME not set). "
             "Set $HOME before running Grimperium."
-        )
+        ) from None
     home.mkdir(parents=True, exist_ok=True)
     return home / "session.json"
 

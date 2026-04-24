@@ -25,7 +25,7 @@ from rich.console import Console
 from rich.panel import Panel
 
 from grimperium.utils.logging import setup_logging
-from grimperium.worker.client import ServerError, WorkerClient, WorkerClientConfig
+from grimperium.worker.client import WorkerClient, WorkerClientConfig
 from grimperium.worker.runner import WorkerConfig, WorkerRunner
 
 LOG = logging.getLogger(__name__)

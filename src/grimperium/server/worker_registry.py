@@ -6,7 +6,7 @@ on app.state and adds per-worker metrics, config overrides, and shutdown flags.
 """
 
 import threading
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any
 
