@@ -220,6 +220,63 @@ class TestWorkerConfig:
         cfg = WorkerConfig(server_url="http://x", worker_id="w1")
         assert cfg.heartbeat_interval_s == 30.0
 
+    def test_batch_size_default(self) -> None:
+        cfg = WorkerConfig(server_url="http://x", worker_id="w1")
+        assert cfg.batch_size == 10
+
+    def test_batch_size_custom(self) -> None:
+        cfg = WorkerConfig(server_url="http://x", worker_id="w1", batch_size=5)
+        assert cfg.batch_size == 5
+
+
+class TestWorkerRunnerReconfigure:
+    def test_reconfigure_empty_dict_is_noop(self) -> None:
+        cfg = _make_config(crest_timeout_minutes=30, mopac_timeout_minutes=10)
+        runner = WorkerRunner(cfg, pipeline=_mock_pipeline(), client=_mock_client())
+        runner.reconfigure({})
+        assert runner._config.crest_timeout_minutes == 30
+
+    def test_reconfigure_updates_batch_size(self) -> None:
+        cfg = _make_config()
+        runner = WorkerRunner(cfg, pipeline=_mock_pipeline(), client=_mock_client())
+        runner.reconfigure({"batch_size": 7})
+        assert runner._config.batch_size == 7
+
+    def test_reconfigure_updates_crest_timeout(self) -> None:
+        cfg = _make_config(crest_timeout_minutes=30)
+        runner = WorkerRunner(cfg, pipeline=_mock_pipeline(), client=_mock_client())
+        runner.reconfigure({"crest_timeout_minutes": 90})
+        assert runner._config.crest_timeout_minutes == 90
+
+    def test_reconfigure_updates_mopac_timeout(self) -> None:
+        cfg = _make_config(mopac_timeout_minutes=10)
+        runner = WorkerRunner(cfg, pipeline=_mock_pipeline(), client=_mock_client())
+        runner.reconfigure({"mopac_timeout_minutes": 45})
+        assert runner._config.mopac_timeout_minutes == 45
+
+    def test_reconfigure_rebuilds_pipeline_when_timeout_changes(self) -> None:
+        cfg = _make_config(crest_timeout_minutes=30)
+        old_pipeline = _mock_pipeline()
+        runner = WorkerRunner(cfg, pipeline=old_pipeline, client=_mock_client())
+        runner.reconfigure({"crest_timeout_minutes": 90})
+        # Pipeline was replaced (not the same mock object)
+        assert runner._pipeline is not old_pipeline
+
+    def test_reconfigure_no_rebuild_when_same_timeout(self) -> None:
+        cfg = _make_config(crest_timeout_minutes=30)
+        old_pipeline = _mock_pipeline()
+        runner = WorkerRunner(cfg, pipeline=old_pipeline, client=_mock_client())
+        runner.reconfigure({"crest_timeout_minutes": 30})
+        # Same value → no rebuild
+        assert runner._pipeline is old_pipeline
+
+    def test_reconfigure_no_rebuild_for_batch_size_only(self) -> None:
+        cfg = _make_config()
+        old_pipeline = _mock_pipeline()
+        runner = WorkerRunner(cfg, pipeline=old_pipeline, client=_mock_client())
+        runner.reconfigure({"batch_size": 5})
+        assert runner._pipeline is old_pipeline
+
 
 # ── _pm7result_to_update ──────────────────────────────────────────────────────
 

@@ -60,6 +60,7 @@ class WorkerConfig:
     max_idle_polls: int = 12
     crest_timeout_minutes: int = 30
     mopac_timeout_minutes: int = 10
+    batch_size: int = 10
     batch_id: str = "worker"
 
 
@@ -99,6 +100,45 @@ class WorkerRunner:
     def stop(self) -> None:
         """Signal run() to exit after the current molecule finishes."""
         self._stop_event.set()
+
+    def reconfigure(self, new_config: dict[str, Any]) -> None:
+        """Apply a config override received from the server.
+
+        Only keys present in new_config are updated. If crest_timeout_minutes or
+        mopac_timeout_minutes change, the pipeline is rebuilt with the new values.
+
+        Args:
+            new_config: Partial config dict, e.g. from GET /configure/{worker_id}.
+        """
+        if not new_config:
+            return
+
+        timeouts_changed = False
+        if "crest_timeout_minutes" in new_config:
+            val = int(new_config["crest_timeout_minutes"])
+            if val != self._config.crest_timeout_minutes:
+                self._config.crest_timeout_minutes = val
+                timeouts_changed = True
+        if "mopac_timeout_minutes" in new_config:
+            val = int(new_config["mopac_timeout_minutes"])
+            if val != self._config.mopac_timeout_minutes:
+                self._config.mopac_timeout_minutes = val
+                timeouts_changed = True
+        if "batch_size" in new_config:
+            self._config.batch_size = int(new_config["batch_size"])
+
+        if timeouts_changed:
+            self._pipeline = CRESTPM7Pipeline(
+                PM7Config(
+                    crest_timeout=float(self._config.crest_timeout_minutes) * 60.0,
+                    mopac_timeout_base=float(self._config.mopac_timeout_minutes) * 60.0,
+                )
+            )
+            LOG.info(
+                "Pipeline rebuilt with crest_timeout=%dm mopac_timeout=%dm",
+                self._config.crest_timeout_minutes,
+                self._config.mopac_timeout_minutes,
+            )
 
     def run_one(self) -> bool:
         """Claim and process one molecule.
