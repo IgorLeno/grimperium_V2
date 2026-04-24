@@ -31,16 +31,25 @@ from grimperium.cli.progress_tracker import (
     ProgressTracker,
     consume_events,
 )
+from grimperium.cli.session_store import (
+    SessionState,
+    WorkerSessionInfo,
+    delete_session,
+    load_session,
+    save_session,
+)
+from grimperium.cli.settings_manager import DistributedDefaults, SettingsManager
 from grimperium.cli.styles import COLORS, ICONS
 from grimperium.cli.views.base_view import BaseView
 from grimperium.core.metrics import mae, r2_score
 from grimperium.crest_pm7.batch.csv_manager import BatchCSVManager
 from grimperium.crest_pm7.batch.enums import MoleculeStatus, WorkerStatus
 from grimperium.crest_pm7.database_analyzer import AnalysisReport
+from grimperium.worker.client import WorkerClient, WorkerClientConfig
+from grimperium.worker.runner import WorkerConfig, WorkerRunner
 
 if TYPE_CHECKING:
     from grimperium.cli.controller import CliController
-    from grimperium.cli.settings_manager import SettingsManager
 
 logger = logging.getLogger(__name__)
 
@@ -111,6 +120,7 @@ class DatabasesView(BaseView):
         super().__init__(controller)
         self.registry = DatabaseRegistry(DATA_DIR)
         self.selected_db: DatabaseInfo | None = None
+        self._server_proc: multiprocessing.Process | None = None
 
     def get_databases(self) -> list[DatabaseInfo]:
         """Get list of databases from the registry.
@@ -1158,34 +1168,19 @@ class DatabasesView(BaseView):
             self._handle_distributed_mode()
 
     def _handle_distributed_mode(self) -> None:
-        """Orchestrate the 3-screen distributed mode flow."""
-        crest_timeout = self._prompt_positive_int(
-            "CREST timeout per molecule (minutes)?", default=30
-        )
-        if crest_timeout is None:
-            return
-        mopac_timeout = self._prompt_positive_int(
-            "MOPAC/PM7 timeout per molecule (minutes)?", default=60
-        )
-        if mopac_timeout is None:
-            return
-
-        csv_path = DATA_DIR / "thermo_pm7.csv"
-        server_port = 8000
-        server_url = f"http://localhost:{server_port}"
-
-        proc = self._start_server_in_background(csv_path, server_port)
-        try:
-            if not self._screen_connect_workers(server_url):
-                return
-            if not self._screen_assign_workload(
-                server_url, crest_timeout, mopac_timeout, csv_path
-            ):
-                return
-            self._screen_check_offline_workers(csv_path)
-        finally:
-            if proc.is_alive():
-                proc.terminate()
+        """Orchestrate distributed mode as a state machine."""
+        state: str | None = "check_port"
+        while state is not None:
+            if state == "check_port":
+                state = self._state_check_port()
+            elif state == "check_session":
+                state = self._state_check_session()
+            elif state == "config_menu":
+                state = self._state_config_menu()
+            elif state == "monitoring":
+                state = self._state_monitoring()
+            else:
+                break
 
     @staticmethod
     def _run_server_process(csv_path_str: str, port: int) -> None:
@@ -1251,97 +1246,6 @@ class DatabasesView(BaseView):
                 )
         return table
 
-    def _screen_connect_workers(self, server_url: str) -> bool:
-        """Screen 1: show connected workers, loop until Proceed or Cancel."""
-        self.console.print()
-        self.console.print(
-            Panel(
-                "[bold]Step 1 — Connect Workers[/bold]\nServer starting in background…",
-                border_style=COLORS["databases"],
-            )
-        )
-
-        while True:
-            workers = self._fetch_worker_status(server_url)
-            self.console.print(self._render_workers_table(workers))
-
-            options = [
-                MenuOption(label="Proceed", value="proceed"),
-                MenuOption(label="Refresh", value="refresh"),
-            ]
-            choice = show_back_menu(options=options, title="Connect Workers")
-
-            if choice == "proceed":
-                return True
-            if choice == "refresh":
-                continue
-            return False  # None / back
-
-    def _screen_assign_workload(
-        self,
-        server_url: str,
-        crest_timeout: int,
-        mopac_timeout: int,
-        csv_path: Path,
-    ) -> bool:
-        """Screen 2: assign molecules to workers and call distribute_molecules()."""
-        csv_manager = BatchCSVManager(csv_path)
-        csv_manager.load_csv()
-        counts = csv_manager.get_status_counts()
-
-        pending = counts.get(MoleculeStatus.PENDING.value, 0)
-        rerun = counts.get(MoleculeStatus.RERUN.value, 0)
-        available = pending + rerun
-
-        workers = self._fetch_worker_status(server_url, max_wait_s=2.0)
-
-        self.console.print()
-        self.console.print(
-            f"[bold]Available:[/bold] {available} molecules  "
-            f"(PENDING: {pending} | RERUN: {rerun})"
-        )
-        self.console.print()
-
-        worker_entries: list[tuple[str, str]] = [("central", "this machine")]
-        for w in workers:
-            wid = str(w.get("worker_id", ""))
-            host = str(w.get("hostname", ""))
-            if wid:
-                worker_entries.append((wid, host))
-
-        allocations: dict[str, int] = {}
-        total_assigned = 0
-
-        for worker_id, hostname in worker_entries:
-            n = self._prompt_positive_int(
-                f"  {worker_id}  ({hostname}) →",
-                default=0,
-                max_value=available if available > 0 else None,
-            )
-            if n is None:
-                return False
-            allocations[worker_id] = n
-            total_assigned += n
-            self.console.print(f"  TOTAL: {total_assigned} / {available}")
-
-        if not any(v > 0 for v in allocations.values()):
-            self.console.print("[yellow]No molecules allocated. Cancelled.[/yellow]")
-            self.wait_for_enter()
-            return False
-
-        csv_manager.distribute_molecules(
-            allocations=allocations,
-            crest_timeout_minutes=crest_timeout,
-            mopac_timeout_minutes=mopac_timeout,
-        )
-
-        n_workers = sum(1 for v in allocations.values() if v > 0)
-        self.console.print(
-            f"[green]✓ Distributed {total_assigned} molecules to {n_workers} worker(s)[/green]"
-        )
-        self.wait_for_enter()
-        return True
-
     def _screen_check_offline_workers(self, csv_path: Path) -> None:
         """Screen 3: if offline molecules exist, offer reassignment."""
         csv_manager = BatchCSVManager(csv_path)
@@ -1368,6 +1272,254 @@ class DatabasesView(BaseView):
                 f"[green]✓ {n} molecules returned to pending pool[/green]"
             )
         self.wait_for_enter()
+
+    # ── State machine helpers ─────────────────────────────────────────────────
+
+    @staticmethod
+    def _is_port_free(port: int = 8000) -> bool:
+        import socket as _socket
+        with _socket.socket(_socket.AF_INET, _socket.SOCK_STREAM) as s:
+            return s.connect_ex(("localhost", port)) != 0
+
+    @staticmethod
+    def _server_is_responding(server_url: str) -> bool:
+        import httpx
+        try:
+            r = httpx.get(f"{server_url}/status", timeout=2.0)
+            return r.status_code == 200
+        except Exception:  # noqa: BLE001
+            return False
+
+    def _state_check_port(self, port: int = 8000) -> str | None:
+        server_url = f"http://localhost:{port}"
+        while True:
+            if self._is_port_free(port) or self._server_is_responding(server_url):
+                return "check_session"
+            options = [
+                MenuOption("Verificar novamente", "retry"),
+                MenuOption("Encerrar", "exit"),
+            ]
+            choice = show_back_menu(
+                options=options,
+                title=f"Porta {port} ocupada por outro processo",
+            )
+            if choice != "retry":
+                return None
+
+    def _state_check_session(self) -> str | None:
+        session = load_session()
+        if session is None:
+            return "config_menu"
+
+        if not self._server_is_responding(session.server_url):
+            self.console.print(
+                "[yellow]⚠ Sessão anterior encontrada mas servidor não responde. "
+                "Iniciando nova sessão.[/yellow]"
+            )
+            delete_session()
+            return "config_menu"
+
+        options = [
+            MenuOption("Entrar na sessão (processar localmente)", "join"),
+            MenuOption("Acompanhar sessão (apenas monitorar)", "monitor"),
+            MenuOption("Iniciar nova sessão", "new"),
+            MenuOption("Encerrar sessão", "end"),
+        ]
+        choice = show_back_menu(options=options, title="Sessão ativa encontrada")
+
+        if choice == "join":
+            self._start_local_worker(session.server_url)
+            return "monitoring"
+        if choice == "monitor":
+            return "monitoring"
+        if choice == "new":
+            self._shutdown_all_workers(session.server_url)
+            delete_session()
+            return "config_menu"
+        if choice == "end":
+            self._shutdown_all_workers(session.server_url)
+            delete_session()
+            return None
+        return None
+
+    def _shutdown_all_workers(self, server_url: str) -> None:
+        import httpx
+        try:
+            httpx.post(f"{server_url}/shutdown/all", timeout=5.0)
+        except Exception:  # noqa: BLE001
+            pass
+
+    def _start_local_worker(self, server_url: str) -> threading.Thread:
+        client_cfg = WorkerClientConfig(server_url=server_url, worker_id="local")
+        client = WorkerClient(client_cfg)
+
+        server_cfg: dict[str, Any] = {}
+        try:
+            server_cfg = client.register()
+        except Exception:  # noqa: BLE001
+            pass
+
+        config = WorkerConfig(
+            server_url=server_url,
+            worker_id="local",
+            crest_timeout_minutes=int(server_cfg.get("crest_timeout_minutes", 60)),
+            mopac_timeout_minutes=int(server_cfg.get("mopac_timeout_minutes", 30)),
+            batch_size=int(server_cfg.get("batch_size", 10)),
+        )
+        runner = WorkerRunner(config=config, client=client)
+        t = threading.Thread(
+            target=runner.run,
+            daemon=True,
+            name="grimperium-local-worker",
+        )
+        t.start()
+        return t
+
+    def _configure_worker(self, server_url: str, worker_id: str, defaults: DistributedDefaults) -> None:
+        import httpx
+        try:
+            httpx.post(
+                f"{server_url}/configure/{worker_id}",
+                json={
+                    "batch_size": defaults.batch_size,
+                    "crest_timeout_minutes": defaults.crest_timeout_minutes,
+                    "mopac_timeout_minutes": defaults.mopac_timeout_minutes,
+                    "profile_name": defaults.profile_name,
+                },
+                timeout=5.0,
+            )
+        except Exception:  # noqa: BLE001
+            pass
+
+    def _fetch_workers_extended(self, server_url: str) -> list[dict[str, Any]]:
+        import httpx
+        try:
+            r = httpx.get(f"{server_url}/workers/status", timeout=5.0)
+            if r.status_code == 200:
+                return list(r.json())
+        except Exception:  # noqa: BLE001
+            pass
+        return []
+
+    def _render_monitoring_table(self, workers: list[dict[str, Any]]) -> Table:
+        table = Table(
+            title="Modo Distribuído — Monitoramento",
+            show_header=True,
+            header_style=f"bold {COLORS['databases']}",
+            border_style=COLORS["border"],
+        )
+        table.add_column("Worker ID")
+        table.add_column("Hostname")
+        table.add_column("Proc", justify="right")
+        table.add_column("OK", justify="right")
+        table.add_column("Fail", justify="right")
+        table.add_column("Skip", justify="right")
+        table.add_column("Mol Ativo")
+
+        if not workers:
+            table.add_row("[dim]Nenhum worker[/dim]", "", "", "", "", "", "")
+        else:
+            for w in workers:
+                table.add_row(
+                    str(w.get("worker_id", "")),
+                    str(w.get("hostname", "")),
+                    str(w.get("processed", 0)),
+                    str(w.get("successful", 0)),
+                    str(w.get("failed", 0)),
+                    str(w.get("skipped", 0)),
+                    str(w.get("current_mol_id") or "—"),
+                )
+        return table
+
+    def _state_config_menu(self) -> str | None:
+        csv_path = DATA_DIR / "thermo_pm7.csv"
+        server_port = 8000
+        server_url = f"http://localhost:{server_port}"
+
+        if not self._server_is_responding(server_url):
+            if self._server_proc is None or not self._server_proc.is_alive():
+                self._server_proc = self._start_server_in_background(csv_path, server_port)
+            deadline = time.monotonic() + 5.0
+            while time.monotonic() < deadline:
+                if self._server_is_responding(server_url):
+                    break
+                time.sleep(0.3)
+
+        while True:
+            workers = self._fetch_worker_status(server_url, max_wait_s=2.0)
+            self.console.print()
+            self.console.print(self._render_workers_table(workers))
+
+            options = [
+                MenuOption("Executar (iniciar processamento)", "run"),
+                MenuOption("Atualizar lista de workers", "refresh"),
+            ]
+            choice = show_back_menu(options=options, title="Modo Distribuído — Configuração")
+
+            if choice == "refresh":
+                continue
+            if choice != "run":
+                return None
+
+            if not workers:
+                self.console.print(
+                    "[yellow]⚠ Nenhum worker conectado. Aguarde conexões e atualize.[/yellow]"
+                )
+                continue
+
+            defaults = SettingsManager.load_distributed_defaults()
+            for w in workers:
+                worker_id = str(w.get("worker_id", ""))
+                if worker_id:
+                    self._configure_worker(server_url, worker_id, defaults)
+
+            import httpx
+            try:
+                httpx.post(f"{server_url}/dispatch/start", timeout=5.0)
+            except Exception:  # noqa: BLE001
+                pass
+
+            worker_infos = [
+                WorkerSessionInfo(
+                    worker_id=str(w.get("worker_id", "")),
+                    hostname=str(w.get("hostname", "")),
+                    batch_size=defaults.batch_size,
+                    profile_name=defaults.profile_name,
+                    crest_timeout_minutes=defaults.crest_timeout_minutes,
+                    mopac_timeout_minutes=defaults.mopac_timeout_minutes,
+                )
+                for w in workers
+                if w.get("worker_id")
+            ]
+            from datetime import timezone
+            session = SessionState(
+                started_at=datetime.now(timezone.utc).isoformat(),
+                server_url=server_url,
+                workers=worker_infos,
+            )
+            save_session(session)
+
+            self.console.print(
+                f"[green]✓ Processamento iniciado com {len(workers)} worker(s)[/green]"
+            )
+            return "monitoring"
+
+    def _state_monitoring(self) -> str | None:
+        session = load_session()
+        server_url = session.server_url if session else "http://localhost:8000"
+
+        while True:
+            workers = self._fetch_workers_extended(server_url)
+            self.console.print()
+            self.console.print(self._render_monitoring_table(workers))
+
+            options = [
+                MenuOption("Atualizar", "refresh"),
+                MenuOption("Sair (servidor continua rodando)", "quit"),
+            ]
+            choice = show_back_menu(options=options, title="Monitoramento")
+            if choice != "refresh":
+                return None
 
     def run(self) -> str | None:
         """Run the databases view interaction loop."""

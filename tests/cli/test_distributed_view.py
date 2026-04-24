@@ -1,4 +1,4 @@
-"""Tests for DatabasesView distributed mode — Phase 4 CLI integration."""
+"""Tests for DatabasesView distributed mode — state machine refactor."""
 
 from __future__ import annotations
 
@@ -33,6 +33,26 @@ def _worker(
         "hostname": hostname,
         "last_seen": "2026-04-22T10:00:00Z",
         "mol_id_current": mol_id_current,
+    }
+
+
+def _worker_extended(
+    worker_id: str,
+    hostname: str = "host",
+    processed: int = 0,
+    successful: int = 0,
+    failed: int = 0,
+    skipped: int = 0,
+    current_mol_id: str | None = None,
+) -> dict[str, Any]:
+    return {
+        "worker_id": worker_id,
+        "hostname": hostname,
+        "processed": processed,
+        "successful": successful,
+        "failed": failed,
+        "skipped": skipped,
+        "current_mol_id": current_mol_id,
     }
 
 
@@ -84,7 +104,6 @@ class TestHandleRunCalculationMenu:
 class TestRenderWorkersTable:
     def test_renders_empty_table(self, view: DatabasesView) -> None:
         table = view._render_workers_table([])
-        # Rich Table is returned with 4 columns
         assert len(table.columns) == 4
 
     def test_renders_workers(self, view: DatabasesView) -> None:
@@ -99,227 +118,357 @@ class TestRenderWorkersTable:
         assert table.row_count == 1
 
 
-# ── _screen_connect_workers ───────────────────────────────────────────────────
+# ── _state_check_port ─────────────────────────────────────────────────────────
 
 
-class TestScreenConnectWorkers:
-    @patch("grimperium.cli.views.databases_view.show_back_menu", return_value="proceed")
-    @patch.object(DatabasesView, "_fetch_worker_status", return_value=[])
-    def test_proceed_returns_true(
-        self,
-        _mock_fetch: MagicMock,
-        _mock_menu: MagicMock,
-        view: DatabasesView,
+class TestStateCheckPort:
+    def test_free_port_returns_check_session(self, view: DatabasesView) -> None:
+        with patch.object(DatabasesView, "_is_port_free", return_value=True):
+            assert view._state_check_port() == "check_session"
+
+    def test_busy_port_with_server_responding_returns_check_session(
+        self, view: DatabasesView
     ) -> None:
-        assert view._screen_connect_workers("http://localhost:8000") is True
-
-    @patch("grimperium.cli.views.databases_view.show_back_menu", return_value=None)
-    @patch.object(DatabasesView, "_fetch_worker_status", return_value=[])
-    def test_cancel_returns_false(
-        self,
-        _mock_fetch: MagicMock,
-        _mock_menu: MagicMock,
-        view: DatabasesView,
-    ) -> None:
-        assert view._screen_connect_workers("http://localhost:8000") is False
-
-    @patch(
-        "grimperium.cli.views.databases_view.show_back_menu",
-        side_effect=["refresh", "proceed"],
-    )
-    @patch.object(DatabasesView, "_fetch_worker_status", return_value=[])
-    def test_refresh_loops_and_proceeds(
-        self,
-        _mock_fetch: MagicMock,
-        mock_menu: MagicMock,
-        view: DatabasesView,
-    ) -> None:
-        assert view._screen_connect_workers("http://localhost:8000") is True
-        assert mock_menu.call_count == 2
-
-    @patch("grimperium.cli.views.databases_view.show_back_menu", return_value="proceed")
-    @patch.object(
-        DatabasesView,
-        "_fetch_worker_status",
-        return_value=[_worker("w1", "lab-01")],
-    )
-    def test_shows_connected_workers(
-        self,
-        _mock_fetch: MagicMock,
-        _mock_menu: MagicMock,
-        view: DatabasesView,
-    ) -> None:
-        result = view._screen_connect_workers("http://localhost:8000")
-        assert result is True
-        _mock_fetch.assert_called_once()
-
-
-# ── _screen_assign_workload ───────────────────────────────────────────────────
-
-
-class TestScreenAssignWorkload:
-    def _setup_csv_manager(
-        self,
-        pending: int = 5,
-        rerun: int = 2,
-    ) -> MagicMock:
-        mgr = MagicMock()
-        mgr.get_status_counts.return_value = {"Pending": pending, "Rerun": rerun}
-        mgr.distribute_molecules.return_value = {"central": ["m1"]}
-        return mgr
-
-    @patch.object(DatabasesView, "_fetch_worker_status", return_value=[])
-    @patch.object(DatabasesView, "_prompt_positive_int", return_value=3)
-    @patch.object(DatabasesView, "wait_for_enter")
-    def test_calls_distribute_molecules_with_correct_args(
-        self,
-        _mock_wait: MagicMock,
-        _mock_prompt: MagicMock,
-        _mock_fetch: MagicMock,
-        view: DatabasesView,
-        tmp_path: Path,
-    ) -> None:
-        csv_path = tmp_path / "test.csv"
-        csv_path.touch()
-
-        mock_mgr = self._setup_csv_manager()
-        with patch(
-            "grimperium.cli.views.databases_view.BatchCSVManager",
-            return_value=mock_mgr,
+        with (
+            patch.object(DatabasesView, "_is_port_free", return_value=False),
+            patch.object(DatabasesView, "_server_is_responding", return_value=True),
         ):
-            result = view._screen_assign_workload(
-                "http://localhost:8000",
-                crest_timeout=30,
-                mopac_timeout=60,
-                csv_path=csv_path,
-            )
+            assert view._state_check_port() == "check_session"
 
-        assert result is True
-        mock_mgr.distribute_molecules.assert_called_once()
-        call_kwargs = mock_mgr.distribute_molecules.call_args
-        assert call_kwargs.kwargs["crest_timeout_minutes"] == 30
-        assert call_kwargs.kwargs["mopac_timeout_minutes"] == 60
-
-    @patch.object(DatabasesView, "_fetch_worker_status", return_value=[_worker("w1")])
-    @patch.object(DatabasesView, "_prompt_positive_int", return_value=2)
-    @patch.object(DatabasesView, "wait_for_enter")
-    def test_includes_central_and_remote_workers(
-        self,
-        _mock_wait: MagicMock,
-        _mock_prompt: MagicMock,
-        _mock_fetch: MagicMock,
-        view: DatabasesView,
-        tmp_path: Path,
-    ) -> None:
-        csv_path = tmp_path / "test.csv"
-        csv_path.touch()
-
-        mock_mgr = self._setup_csv_manager()
-        with patch(
-            "grimperium.cli.views.databases_view.BatchCSVManager",
-            return_value=mock_mgr,
+    def test_busy_port_user_retries_then_free(self, view: DatabasesView) -> None:
+        with (
+            patch.object(DatabasesView, "_is_port_free", side_effect=[False, True]),
+            patch.object(DatabasesView, "_server_is_responding", return_value=False),
+            patch(
+                "grimperium.cli.views.databases_view.show_back_menu",
+                return_value="retry",
+            ),
         ):
-            view._screen_assign_workload(
-                "http://localhost:8000",
-                crest_timeout=30,
-                mopac_timeout=60,
-                csv_path=csv_path,
-            )
+            assert view._state_check_port() == "check_session"
 
-        allocations = mock_mgr.distribute_molecules.call_args.kwargs["allocations"]
-        assert "central" in allocations
-        assert "w1" in allocations
-
-    @patch.object(DatabasesView, "_fetch_worker_status", return_value=[])
-    @patch.object(DatabasesView, "_prompt_positive_int", return_value=None)
-    def test_cancel_on_prompt_returns_false(
-        self,
-        _mock_prompt: MagicMock,
-        _mock_fetch: MagicMock,
-        view: DatabasesView,
-        tmp_path: Path,
-    ) -> None:
-        csv_path = tmp_path / "test.csv"
-        csv_path.touch()
-
-        mock_mgr = self._setup_csv_manager()
-        with patch(
-            "grimperium.cli.views.databases_view.BatchCSVManager",
-            return_value=mock_mgr,
+    def test_busy_port_user_exits_returns_none(self, view: DatabasesView) -> None:
+        with (
+            patch.object(DatabasesView, "_is_port_free", return_value=False),
+            patch.object(DatabasesView, "_server_is_responding", return_value=False),
+            patch(
+                "grimperium.cli.views.databases_view.show_back_menu",
+                return_value=None,
+            ),
         ):
-            result = view._screen_assign_workload(
-                "http://localhost:8000",
-                crest_timeout=30,
-                mopac_timeout=60,
-                csv_path=csv_path,
-            )
+            assert view._state_check_port() is None
 
-        assert result is False
-        mock_mgr.distribute_molecules.assert_not_called()
 
-    @patch.object(DatabasesView, "_fetch_worker_status", return_value=[])
-    @patch.object(DatabasesView, "_prompt_positive_int", return_value=0)
-    @patch.object(DatabasesView, "wait_for_enter")
-    def test_all_zero_allocations_returns_false(
-        self,
-        _mock_wait: MagicMock,
-        _mock_prompt: MagicMock,
-        _mock_fetch: MagicMock,
-        view: DatabasesView,
-        tmp_path: Path,
+# ── _state_check_session ──────────────────────────────────────────────────────
+
+
+class TestStateCheckSession:
+    def test_no_session_returns_config_menu(self, view: DatabasesView) -> None:
+        with patch("grimperium.cli.views.databases_view.load_session", return_value=None):
+            assert view._state_check_session() == "config_menu"
+
+    def test_stale_session_deletes_and_returns_config_menu(
+        self, view: DatabasesView
     ) -> None:
-        csv_path = tmp_path / "test.csv"
-        csv_path.touch()
-
-        mock_mgr = self._setup_csv_manager()
-        with patch(
-            "grimperium.cli.views.databases_view.BatchCSVManager",
-            return_value=mock_mgr,
+        session = MagicMock()
+        session.server_url = "http://localhost:8000"
+        with (
+            patch("grimperium.cli.views.databases_view.load_session", return_value=session),
+            patch.object(DatabasesView, "_server_is_responding", return_value=False),
+            patch("grimperium.cli.views.databases_view.delete_session") as mock_delete,
         ):
-            result = view._screen_assign_workload(
-                "http://localhost:8000",
-                crest_timeout=30,
-                mopac_timeout=60,
-                csv_path=csv_path,
-            )
+            result = view._state_check_session()
+        assert result == "config_menu"
+        mock_delete.assert_called_once()
 
-        assert result is False
-        mock_mgr.distribute_molecules.assert_not_called()
+    def test_join_starts_local_worker_and_returns_monitoring(
+        self, view: DatabasesView
+    ) -> None:
+        session = MagicMock()
+        session.server_url = "http://localhost:8000"
+        with (
+            patch("grimperium.cli.views.databases_view.load_session", return_value=session),
+            patch.object(DatabasesView, "_server_is_responding", return_value=True),
+            patch(
+                "grimperium.cli.views.databases_view.show_back_menu",
+                return_value="join",
+            ),
+            patch.object(DatabasesView, "_start_local_worker") as mock_start,
+        ):
+            result = view._state_check_session()
+        assert result == "monitoring"
+        mock_start.assert_called_once_with("http://localhost:8000")
+
+    def test_monitor_returns_monitoring(self, view: DatabasesView) -> None:
+        session = MagicMock()
+        session.server_url = "http://localhost:8000"
+        with (
+            patch("grimperium.cli.views.databases_view.load_session", return_value=session),
+            patch.object(DatabasesView, "_server_is_responding", return_value=True),
+            patch(
+                "grimperium.cli.views.databases_view.show_back_menu",
+                return_value="monitor",
+            ),
+        ):
+            assert view._state_check_session() == "monitoring"
+
+    def test_new_shuts_down_deletes_and_returns_config_menu(
+        self, view: DatabasesView
+    ) -> None:
+        session = MagicMock()
+        session.server_url = "http://localhost:8000"
+        with (
+            patch("grimperium.cli.views.databases_view.load_session", return_value=session),
+            patch.object(DatabasesView, "_server_is_responding", return_value=True),
+            patch(
+                "grimperium.cli.views.databases_view.show_back_menu", return_value="new"
+            ),
+            patch.object(DatabasesView, "_shutdown_all_workers") as mock_shutdown,
+            patch("grimperium.cli.views.databases_view.delete_session") as mock_delete,
+        ):
+            result = view._state_check_session()
+        assert result == "config_menu"
+        mock_shutdown.assert_called_once()
+        mock_delete.assert_called_once()
+
+    def test_end_shuts_down_deletes_and_returns_none(self, view: DatabasesView) -> None:
+        session = MagicMock()
+        session.server_url = "http://localhost:8000"
+        with (
+            patch("grimperium.cli.views.databases_view.load_session", return_value=session),
+            patch.object(DatabasesView, "_server_is_responding", return_value=True),
+            patch(
+                "grimperium.cli.views.databases_view.show_back_menu", return_value="end"
+            ),
+            patch.object(DatabasesView, "_shutdown_all_workers") as mock_shutdown,
+            patch("grimperium.cli.views.databases_view.delete_session") as mock_delete,
+        ):
+            result = view._state_check_session()
+        assert result is None
+        mock_shutdown.assert_called_once()
+        mock_delete.assert_called_once()
+
+    def test_cancel_returns_none(self, view: DatabasesView) -> None:
+        session = MagicMock()
+        session.server_url = "http://localhost:8000"
+        with (
+            patch("grimperium.cli.views.databases_view.load_session", return_value=session),
+            patch.object(DatabasesView, "_server_is_responding", return_value=True),
+            patch(
+                "grimperium.cli.views.databases_view.show_back_menu", return_value=None
+            ),
+        ):
+            assert view._state_check_session() is None
+
+
+# ── _state_config_menu ────────────────────────────────────────────────────────
+
+
+class TestStateConfigMenu:
+    def test_back_returns_none(self, view: DatabasesView) -> None:
+        with (
+            patch.object(DatabasesView, "_server_is_responding", return_value=True),
+            patch.object(DatabasesView, "_fetch_worker_status", return_value=[]),
+            patch(
+                "grimperium.cli.views.databases_view.show_back_menu", return_value=None
+            ),
+        ):
+            assert view._state_config_menu() is None
+
+    def test_run_with_no_workers_warns_and_continues(self, view: DatabasesView) -> None:
+        with (
+            patch.object(DatabasesView, "_server_is_responding", return_value=True),
+            patch.object(DatabasesView, "_fetch_worker_status", return_value=[]),
+            patch(
+                "grimperium.cli.views.databases_view.show_back_menu",
+                side_effect=["run", None],
+            ),
+        ):
+            assert view._state_config_menu() is None
+
+    def test_run_with_workers_configures_dispatch_and_returns_monitoring(
+        self, view: DatabasesView
+    ) -> None:
+        workers = [_worker("w1", "lab-01")]
+        from grimperium.cli.settings_manager import DistributedDefaults
+
+        with (
+            patch.object(DatabasesView, "_server_is_responding", return_value=True),
+            patch.object(DatabasesView, "_fetch_worker_status", return_value=workers),
+            patch(
+                "grimperium.cli.views.databases_view.show_back_menu", return_value="run"
+            ),
+            patch.object(DatabasesView, "_configure_worker") as mock_cfg,
+            patch("grimperium.cli.views.databases_view.save_session"),
+            patch(
+                "grimperium.cli.views.databases_view.SettingsManager.load_distributed_defaults",
+                return_value=DistributedDefaults(),
+            ),
+            patch("httpx.post"),
+        ):
+            result = view._state_config_menu()
+
+        assert result == "monitoring"
+        mock_cfg.assert_called_once_with(
+            "http://localhost:8000", "w1", DistributedDefaults()
+        )
+
+    def test_refresh_then_back_fetches_twice(self, view: DatabasesView) -> None:
+        with (
+            patch.object(DatabasesView, "_server_is_responding", return_value=True),
+            patch.object(
+                DatabasesView, "_fetch_worker_status", return_value=[]
+            ) as mock_fetch,
+            patch(
+                "grimperium.cli.views.databases_view.show_back_menu",
+                side_effect=["refresh", None],
+            ),
+        ):
+            view._state_config_menu()
+        assert mock_fetch.call_count == 2
+
+    def test_starts_server_when_not_responding(self, view: DatabasesView) -> None:
+        with (
+            patch.object(
+                DatabasesView,
+                "_server_is_responding",
+                side_effect=[False, True, True, True],
+            ),
+            patch.object(
+                DatabasesView, "_start_server_in_background"
+            ) as mock_start,
+            patch.object(DatabasesView, "_fetch_worker_status", return_value=[]),
+            patch(
+                "grimperium.cli.views.databases_view.show_back_menu", return_value=None
+            ),
+        ):
+            view._state_config_menu()
+        mock_start.assert_called_once()
+
+
+# ── _state_monitoring ─────────────────────────────────────────────────────────
+
+
+class TestStateMonitoring:
+    def test_quit_returns_none(self, view: DatabasesView) -> None:
+        session = MagicMock()
+        session.server_url = "http://localhost:8000"
+        with (
+            patch("grimperium.cli.views.databases_view.load_session", return_value=session),
+            patch.object(DatabasesView, "_fetch_workers_extended", return_value=[]),
+            patch(
+                "grimperium.cli.views.databases_view.show_back_menu", return_value="quit"
+            ),
+        ):
+            assert view._state_monitoring() is None
+
+    def test_cancel_returns_none(self, view: DatabasesView) -> None:
+        session = MagicMock()
+        session.server_url = "http://localhost:8000"
+        with (
+            patch("grimperium.cli.views.databases_view.load_session", return_value=session),
+            patch.object(DatabasesView, "_fetch_workers_extended", return_value=[]),
+            patch(
+                "grimperium.cli.views.databases_view.show_back_menu", return_value=None
+            ),
+        ):
+            assert view._state_monitoring() is None
+
+    def test_refresh_fetches_again(self, view: DatabasesView) -> None:
+        session = MagicMock()
+        session.server_url = "http://localhost:8000"
+        with (
+            patch("grimperium.cli.views.databases_view.load_session", return_value=session),
+            patch.object(
+                DatabasesView, "_fetch_workers_extended", return_value=[]
+            ) as mock_fetch,
+            patch(
+                "grimperium.cli.views.databases_view.show_back_menu",
+                side_effect=["refresh", "quit"],
+            ),
+        ):
+            view._state_monitoring()
+        assert mock_fetch.call_count == 2
+
+    def test_no_session_falls_back_to_localhost(self, view: DatabasesView) -> None:
+        with (
+            patch("grimperium.cli.views.databases_view.load_session", return_value=None),
+            patch.object(
+                DatabasesView, "_fetch_workers_extended", return_value=[]
+            ) as mock_fetch,
+            patch(
+                "grimperium.cli.views.databases_view.show_back_menu", return_value=None
+            ),
+        ):
+            view._state_monitoring()
+        mock_fetch.assert_called_once_with("http://localhost:8000")
+
+
+# ── _render_monitoring_table ──────────────────────────────────────────────────
+
+
+class TestRenderMonitoringTable:
+    def test_empty_table_has_seven_columns(self, view: DatabasesView) -> None:
+        table = view._render_monitoring_table([])
+        assert len(table.columns) == 7
+
+    def test_workers_shown(self, view: DatabasesView) -> None:
+        workers = [_worker_extended("w1", "lab-01", processed=5, successful=4)]
+        table = view._render_monitoring_table(workers)
+        assert table.row_count == 1
+
+    def test_multiple_workers(self, view: DatabasesView) -> None:
+        workers = [_worker_extended("w1"), _worker_extended("w2")]
+        table = view._render_monitoring_table(workers)
+        assert table.row_count == 2
+
+
+# ── _start_local_worker ───────────────────────────────────────────────────────
+
+
+class TestStartLocalWorker:
+    def test_returns_daemon_thread(self, view: DatabasesView) -> None:
+        with (
+            patch("grimperium.cli.views.databases_view.WorkerClient") as mock_client_cls,
+            patch("grimperium.cli.views.databases_view.WorkerRunner") as mock_runner_cls,
+        ):
+            mock_client = MagicMock()
+            mock_client.register.return_value = {
+                "crest_timeout_minutes": 60,
+                "mopac_timeout_minutes": 30,
+                "batch_size": 10,
+            }
+            mock_client_cls.return_value = mock_client
+            mock_runner = MagicMock()
+            mock_runner_cls.return_value = mock_runner
+
+            t = view._start_local_worker("http://localhost:8000")
+
+        assert t.daemon is True
+        mock_runner.run.assert_called_once()
+
+    def test_register_failure_uses_defaults(self, view: DatabasesView) -> None:
+        with (
+            patch("grimperium.cli.views.databases_view.WorkerClient") as mock_client_cls,
+            patch("grimperium.cli.views.databases_view.WorkerRunner"),
+            patch("grimperium.cli.views.databases_view.WorkerConfig") as mock_cfg_cls,
+        ):
+            mock_client = MagicMock()
+            mock_client.register.side_effect = Exception("connection refused")
+            mock_client_cls.return_value = mock_client
+            mock_cfg_cls.return_value = MagicMock()
+
+            view._start_local_worker("http://localhost:8000")
+
+        call_kwargs = mock_cfg_cls.call_args.kwargs
+        assert call_kwargs["crest_timeout_minutes"] == 60
+        assert call_kwargs["mopac_timeout_minutes"] == 30
+        assert call_kwargs["batch_size"] == 10
 
 
 # ── _screen_check_offline_workers ─────────────────────────────────────────────
 
 
 class TestScreenCheckOfflineWorkers:
-    def _make_mgr(self, offline_count: int) -> MagicMock:
-        mgr = MagicMock()
-        mgr.df = MagicMock()
-
-        import pandas as pd
-
-        if offline_count > 0:
-            mgr.df.__getitem__ = MagicMock(
-                side_effect=lambda key: (
-                    pd.Series(["Assigned"] * offline_count)
-                    if key == "status"
-                    else pd.Series(["offline"] * offline_count)
-                )
-            )
-            # Make boolean mask work
-            mock_df = MagicMock()
-            mock_df.columns = ["status", "worker_status"]
-            mock_df.__getitem__ = MagicMock(
-                side_effect=lambda k: pd.Series(["Assigned"] * offline_count)
-            )
-            mgr.df = mock_df
-        else:
-            mock_df = MagicMock()
-            mock_df.columns = ["status", "worker_status"]
-            mgr.df = mock_df
-
-        mgr.reassign_offline_molecules.return_value = offline_count
-        return mgr
-
     @patch.object(DatabasesView, "wait_for_enter")
     def test_no_offline_molecules_no_prompt(
         self, _mock_wait: MagicMock, view: DatabasesView, tmp_path: Path
