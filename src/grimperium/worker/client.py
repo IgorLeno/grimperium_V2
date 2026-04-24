@@ -83,9 +83,29 @@ class WorkerClient:
 
     # ── Public API ────────────────────────────────────────────────────────────
 
-    def register(self, hostname: str | None = None) -> None:
+    def register(self, hostname: str | None = None) -> dict[str, Any]:
+        """Register with the server.
+
+        Returns:
+            Server response dict containing worker config (crest_timeout_minutes,
+            mopac_timeout_minutes, batch_size, profile_name).
+        """
         hn = hostname if hostname is not None else socket.gethostname()
-        self._post("/register", {"worker_id": self._config.worker_id, "hostname": hn})
+        return self._post("/register", {"worker_id": self._config.worker_id, "hostname": hn})
+
+    def get_config(self) -> dict[str, Any]:
+        """Fetch current server-side config for this worker.
+
+        Used by WorkerRunner to reconfigure before each claim().
+
+        Returns:
+            Config dict from GET /configure/{worker_id}.
+        """
+        r = self._http.get(f"/configure/{self._config.worker_id}")
+        if r.status_code == 200:
+            return dict(r.json())
+        LOG.warning("GET /configure/%s → %d", self._config.worker_id, r.status_code)
+        return {}
 
     def claim(self) -> tuple[str, str] | None:
         data = self._post("/claim", {"worker_id": self._config.worker_id})

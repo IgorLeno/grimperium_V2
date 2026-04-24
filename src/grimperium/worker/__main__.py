@@ -1,9 +1,14 @@
 """CLI entry point for the Grimperium distributed worker.
 
 Invoked as either ``python -m grimperium.worker`` or ``grimperium-worker``
-(after ``poetry install``). Parses arguments, wires them to ``WorkerConfig``
-and ``WorkerClient``, and runs ``WorkerRunner.run()`` until the queue is
-idle, ``--max-molecules`` is reached, or the user sends SIGINT.
+(after ``poetry install``).
+
+Connection behaviour (Bloco 1 of distributed-mode refactor):
+  - Calls POST /register exactly once per startup attempt with a 10-second timeout.
+  - On success: reads crest/mopac timeouts and batch_size from the server response
+    (config comes from the server, not from CLI flags).
+  - On failure: if stdin is a TTY, shows a Rich retry menu; otherwise exits with
+    code 1 immediately (background/piped mode).
 """
 
 from __future__ import annotations
@@ -14,20 +19,21 @@ import math
 import socket
 import sys
 from pathlib import Path
+from typing import Any
+
+from rich.console import Console
+from rich.panel import Panel
 
 from grimperium.utils.logging import setup_logging
-from grimperium.worker.client import WorkerClient, WorkerClientConfig
+from grimperium.worker.client import ServerError, WorkerClient, WorkerClientConfig
 from grimperium.worker.runner import WorkerConfig, WorkerRunner
 
 LOG = logging.getLogger(__name__)
+CONSOLE = Console()
 
-# Repo root is 3 levels up from this file:
-# src/grimperium/worker/__main__.py -> parents[3] == repo root.
-# Resolved directly from __file__ so the worker runs identically on the
-# primary host and on remote worker machines (e.g. ~/grimperium_V2) without
-# depending on grimperium.cli.constants.
 _REPO_ROOT = Path(__file__).resolve().parents[3]
 _POLL_INTERVAL_S = 5.0
+_REGISTER_TIMEOUT_S = 10.0
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -64,19 +70,70 @@ def build_parser() -> argparse.ArgumentParser:
         default=300,
         help="Seconds of empty-queue polling before the worker exits (default: 300).",
     )
-    parser.add_argument(
-        "--crest-timeout",
-        type=int,
-        default=3600,
-        help="Per-molecule CREST timeout in seconds (default: 3600).",
-    )
-    parser.add_argument(
-        "--mopac-timeout",
-        type=int,
-        default=1800,
-        help="Per-molecule MOPAC timeout in seconds (default: 1800).",
-    )
     return parser
+
+
+def _try_register(client: WorkerClient) -> dict[str, Any] | None:
+    """Attempt a single /register call.
+
+    Returns the server response dict on success, or None on any failure
+    (ServerError, transport error, timeout, or any other exception).
+    """
+    try:
+        return client.register()
+    except Exception:
+        return None
+
+
+def _show_retry_menu(server_url: str) -> bool:
+    """Show an interactive retry-or-exit menu. Returns True to retry.
+
+    Only called when stdin is a TTY (interactive session).
+    """
+    try:
+        import questionary
+    except ImportError:
+        CONSOLE.print("[red]questionary not installed — exiting[/red]")
+        return False
+
+    CONSOLE.print()
+    CONSOLE.print(
+        Panel(
+            f"[red]✗ Não foi possível conectar ao servidor[/red]\n"
+            f"  [dim]{server_url}[/dim]",
+            border_style="red",
+            padding=(1, 2),
+        )
+    )
+
+    choice: str | None = questionary.select(
+        "O que deseja fazer?",
+        choices=["Tentar novamente", "Encerrar"],
+        pointer="❯",
+    ).ask()
+
+    return choice == "Tentar novamente"
+
+
+def _connect_with_retry(client: WorkerClient, server_url: str) -> dict[str, Any]:
+    """Register once; on failure show interactive menu (TTY) or exit (non-TTY).
+
+    Returns the server response dict on success.
+    Calls sys.exit(1) on permanent failure.
+    """
+    while True:
+        result = _try_register(client)
+        if result is not None:
+            return result
+
+        interactive = sys.stdin.isatty()
+        if not interactive:
+            LOG.error("Cannot connect to server %s — exiting (non-interactive mode)", server_url)
+            sys.exit(1)
+
+        retry = _show_retry_menu(server_url)
+        if not retry:
+            sys.exit(0)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -89,32 +146,48 @@ def main(argv: list[str] | None = None) -> int:
         console_level="INFO",
     )
 
+    client_cfg = WorkerClientConfig(
+        server_url=args.server_url,
+        worker_id=args.worker_id,
+        api_token=args.api_token,
+    )
+    client = WorkerClient(client_cfg)
+
+    # Single register attempt; interactive retry on failure
+    server_cfg = _connect_with_retry(client, args.server_url)
+
+    # Config comes from server — not from CLI flags
+    crest_minutes = int(server_cfg.get("crest_timeout_minutes", 60))
+    mopac_minutes = int(server_cfg.get("mopac_timeout_minutes", 30))
+    batch_size = int(server_cfg.get("batch_size", 10))
+
     config = WorkerConfig(
         server_url=args.server_url,
         worker_id=args.worker_id,
         api_token=args.api_token,
         poll_interval_s=_POLL_INTERVAL_S,
         max_idle_polls=max(1, math.ceil(args.idle_stop / _POLL_INTERVAL_S)),
-        crest_timeout_minutes=max(1, args.crest_timeout // 60),
-        mopac_timeout_minutes=max(1, args.mopac_timeout // 60),
-    )
-    client = WorkerClient(
-        WorkerClientConfig(
-            server_url=args.server_url,
-            worker_id=args.worker_id,
-            api_token=args.api_token,
-        )
+        crest_timeout_minutes=crest_minutes,
+        mopac_timeout_minutes=mopac_minutes,
+        batch_size=batch_size,
     )
     runner = WorkerRunner(config=config, client=client)
 
     max_mols = args.max_molecules or None
     LOG.info(
-        "Starting worker %s against %s (max_molecules=%s, idle_stop=%ss)",
+        "Worker %s connected to %s (crest=%dm mopac=%dm batch=%d idle_stop=%ss)",
         args.worker_id,
         args.server_url,
-        max_mols,
+        crest_minutes,
+        mopac_minutes,
+        batch_size,
         args.idle_stop,
     )
+    CONSOLE.print(
+        f"[green]✓ Conectado a {args.server_url}[/green] — "
+        f"CREST {crest_minutes}m / MOPAC {mopac_minutes}m / batch {batch_size}"
+    )
+
     try:
         runner.run(max_molecules=max_mols)
         return 0
