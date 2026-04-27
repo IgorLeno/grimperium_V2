@@ -62,6 +62,8 @@ class WorkerConfig:
     mopac_timeout_minutes: int = 10
     batch_size: int = 10
     batch_id: str = "worker"
+    consecutive_failure_stop: bool = True
+    max_consecutive_failures: int = 10
 
 
 class WorkerRunner:
@@ -96,6 +98,7 @@ class WorkerRunner:
         self._client = client or WorkerClient(client_cfg)
         self._store = LocalStore()
         self._stop_event = threading.Event()
+        self._consecutive_failures: int = 0
 
     def stop(self) -> None:
         """Signal run() to exit after the current molecule finishes."""
@@ -104,11 +107,13 @@ class WorkerRunner:
     def reconfigure(self, new_config: dict[str, Any]) -> None:
         """Apply a config override received from the server.
 
-        Only keys present in new_config are updated. If crest_timeout_minutes or
-        mopac_timeout_minutes change, the pipeline is rebuilt with the new values.
+        Only keys present in new_config are updated. If crest_timeout_minutes
+        or mopac_timeout_minutes change, the pipeline is rebuilt with the new
+        values.
 
         Args:
-            new_config: Partial config dict, e.g. from GET /configure/{worker_id}.
+            new_config: Partial config dict, e.g. from
+                GET /configure/{worker_id}.
         """
         if not new_config:
             return
@@ -130,8 +135,12 @@ class WorkerRunner:
         if timeouts_changed:
             self._pipeline = CRESTPM7Pipeline(
                 PM7Config(
-                    crest_timeout=float(self._config.crest_timeout_minutes) * 60.0,
-                    mopac_timeout_base=float(self._config.mopac_timeout_minutes) * 60.0,
+                    crest_timeout=(
+                        float(self._config.crest_timeout_minutes) * 60.0
+                    ),
+                    mopac_timeout_base=(
+                        float(self._config.mopac_timeout_minutes) * 60.0
+                    ),
                 )
             )
             LOG.info(
@@ -155,7 +164,12 @@ class WorkerRunner:
         _stop_hb = threading.Event()
         hb_thread = threading.Thread(
             target=_run_heartbeat,
-            args=(mol_id, _stop_hb, self._client, self._config.heartbeat_interval_s),
+            args=(
+                mol_id,
+                _stop_hb,
+                self._client,
+                self._config.heartbeat_interval_s,
+            ),
             daemon=True,
         )
         hb_thread.start()
@@ -171,14 +185,17 @@ class WorkerRunner:
                 )
                 self._store.mark_success(mol_id, update)
                 self._client.report_success(mol_id, update)
+                self._consecutive_failures = 0
             else:
                 error = result.error_message or "pipeline failed"
                 self._store.mark_failure(mol_id, error)
                 self._client.report_failure(mol_id, error)
+                self._consecutive_failures += 1
         except Exception as exc:
             LOG.exception("Unhandled error processing %s", mol_id)
             error_str = str(exc)
             self._store.mark_failure(mol_id, error_str)
+            self._consecutive_failures += 1
             try:
                 self._client.report_failure(mol_id, error_str)
             except Exception:
@@ -194,22 +211,37 @@ class WorkerRunner:
         """Process molecules until stopped, queue exhausted, or max reached.
 
         Args:
-            max_molecules: Stop after processing this many. None means unlimited.
+            max_molecules: Stop after processing this many. None means
+                unlimited.
 
         Returns:
             Number of molecules successfully processed.
         """
         self._client.register()
         processed = 0
+        attempted = 0
         idle_count = 0
 
         while not self._stop_event.is_set():
-            if max_molecules is not None and processed >= max_molecules:
+            if max_molecules is not None and attempted >= max_molecules:
                 break
             did_work = self.run_one()
             if did_work:
-                processed += 1
+                attempted += 1
+                if self._consecutive_failures == 0:
+                    processed += 1
                 idle_count = 0
+                if (
+                    self._config.consecutive_failure_stop
+                    and self._consecutive_failures
+                    >= self._config.max_consecutive_failures
+                ):
+                    LOG.warning(
+                        "Stopping: %d consecutive failures (max=%d)",
+                        self._consecutive_failures,
+                        self._config.max_consecutive_failures,
+                    )
+                    break
             else:
                 idle_count += 1
                 if idle_count >= self._config.max_idle_polls:

@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Worker consecutive failure stop** (2026-04-26)
+  - `WorkerRunner` now tracks consecutive pipeline/reporting failures and stops
+    locally after `WorkerConfig.max_consecutive_failures` when
+    `consecutive_failure_stop` is enabled
+  - Added unit coverage for counter reset, failure increments, idle polls, limit
+    stop, disabled stop, and success-between-failures behavior
+
 - **Distributed Mode Refactor — full server+worker overhaul** (2026-04-23)
   - `WorkerRegistry` (`server/worker_registry.py`): thread-safe in-memory registry
     replacing two raw dicts; adds per-worker metrics (processed/ok/failed/skipped),

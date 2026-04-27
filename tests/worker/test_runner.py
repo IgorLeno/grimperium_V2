@@ -212,6 +212,120 @@ class TestRun:
         assert count >= 1
 
 
+# ── consecutive failure stop ────────────────────────────────────────────────
+
+
+class TestConsecutiveFailureStop:
+    @patch("grimperium.worker.runner._pm7result_to_update", return_value={})
+    def test_counter_resets_after_success(
+        self, _mock_update: MagicMock
+    ) -> None:
+        client = _mock_client(claim_returns=("m1", "CCO"))
+        fail_pipeline = _mock_pipeline(success=False, error_msg="err")
+        ok_pipeline = _mock_pipeline(success=True)
+        runner = WorkerRunner(
+            _make_config(), pipeline=fail_pipeline, client=client
+        )
+
+        runner.run_one()
+        runner.run_one()
+        runner._pipeline = ok_pipeline
+        runner.run_one()
+
+        assert runner._consecutive_failures == 0
+
+    def test_counter_increments_after_pipeline_failure(self) -> None:
+        client = _mock_client(claim_returns=("m1", "CCO"))
+        pipeline = _mock_pipeline(success=False, error_msg="err")
+        runner = WorkerRunner(_make_config(), pipeline=pipeline, client=client)
+
+        runner.run_one()
+        runner.run_one()
+        runner.run_one()
+
+        assert runner._consecutive_failures == 3
+
+    def test_counter_increments_after_exception(self) -> None:
+        client = _mock_client(claim_returns=("m1", "CCO"))
+        pipeline = MagicMock()
+        pipeline.process_molecule.side_effect = RuntimeError("MOPAC crashed")
+        runner = WorkerRunner(_make_config(), pipeline=pipeline, client=client)
+
+        runner.run_one()
+        runner.run_one()
+
+        assert runner._consecutive_failures == 2
+
+    def test_empty_queue_does_not_increment_counter(self) -> None:
+        client = MagicMock(spec=WorkerClient)
+        client.claim.return_value = None
+        pipeline = _mock_pipeline()
+        runner = WorkerRunner(
+            _make_config(max_idle_polls=5), pipeline=pipeline, client=client
+        )
+
+        runner.run()
+
+        assert runner._consecutive_failures == 0
+
+    def test_run_stops_after_max_consecutive_failures(self) -> None:
+        client = MagicMock(spec=WorkerClient)
+        client.claim.return_value = ("m1", "CCO")
+        pipeline = _mock_pipeline(success=False, error_msg="boom")
+        cfg = _make_config(
+            consecutive_failure_stop=True,
+            max_consecutive_failures=3,
+        )
+        runner = WorkerRunner(cfg, pipeline=pipeline, client=client)
+
+        count = runner.run()
+
+        assert client.claim.call_count == 3
+        assert count == 0
+
+    def test_consecutive_failure_stop_false_disables_stop(self) -> None:
+        client = MagicMock(spec=WorkerClient)
+        client.claim.return_value = ("m1", "CCO")
+        pipeline = _mock_pipeline(success=False, error_msg="boom")
+        cfg = _make_config(
+            consecutive_failure_stop=False,
+            max_consecutive_failures=3,
+        )
+        runner = WorkerRunner(cfg, pipeline=pipeline, client=client)
+
+        count = runner.run(max_molecules=20)
+
+        assert client.claim.call_count == 20
+        assert count == 0
+
+    @patch("grimperium.worker.runner._pm7result_to_update", return_value={})
+    def test_success_between_failures_resets_stop_threshold(
+        self, _mock_update: MagicMock
+    ) -> None:
+        client = MagicMock(spec=WorkerClient)
+        client.claim.return_value = ("m1", "CCO")
+        cfg = _make_config(max_consecutive_failures=3)
+        runner = WorkerRunner(cfg, pipeline=_mock_pipeline(), client=client)
+        outcomes = [False, True, False, False, False]
+
+        def process_molecule(_mol_id: str, _smiles: str) -> MagicMock:
+            success = outcomes.pop(0)
+            result = MagicMock()
+            result.mol_id = "m1"
+            result.success = success
+            result.error_message = None if success else "boom"
+            result.most_stable_hof = -42.0 if success else None
+            return result
+
+        runner._pipeline.process_molecule.side_effect = process_molecule
+
+        count = runner.run()
+
+        assert client.claim.call_count == 5
+        assert count == 1
+        assert runner._consecutive_failures == 3
+
+
 # ── WorkerConfig ─────────────────────────────────────────────────────────────
 
 
