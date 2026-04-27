@@ -406,7 +406,7 @@ class ProgressTracker:
         self.console = console
         self.batch_size = batch_size
         self._molecules: dict[str, MoleculeProgress] = {}
-        self._completed_molecules: list[tuple[str, bool]] = []
+        self._completed_molecules: list[tuple[str, bool, float]] = []
         self.batch_start_time: float = time.time()
 
         # Batch statistics
@@ -453,11 +453,15 @@ class ProgressTracker:
             mol_id: Molecule identifier
             success: Whether processing succeeded
         """
+        elapsed_minutes = 0.0
         if mol_id in self._molecules:
-            self._molecules[mol_id].completion_time = time.time()
+            completion_time = time.time()
+            progress = self._molecules[mol_id]
+            elapsed_minutes = (completion_time - progress.start_time) / 60.0
+            progress.completion_time = completion_time
             del self._molecules[mol_id]  # Auto-cleanup
 
-        self._completed_molecules.append((mol_id, success))
+        self._completed_molecules.append((mol_id, success, elapsed_minutes))
         self.total_processed += 1
         if success:
             self.successful += 1
@@ -470,11 +474,15 @@ class ProgressTracker:
         Args:
             mol_id: Molecule identifier
         """
+        elapsed_minutes = 0.0
         if mol_id in self._molecules:
-            self._molecules[mol_id].completion_time = time.time()
+            completion_time = time.time()
+            progress = self._molecules[mol_id]
+            elapsed_minutes = (completion_time - progress.start_time) / 60.0
+            progress.completion_time = completion_time
             del self._molecules[mol_id]
 
-        self._completed_molecules.append((mol_id, False))
+        self._completed_molecules.append((mol_id, False, elapsed_minutes))
         self.total_processed += 1
         self.skipped += 1
 
@@ -493,11 +501,11 @@ class ProgressTracker:
 
         return None
 
-    def get_completed_molecules(self) -> list[tuple[str, bool]]:
+    def get_completed_molecules(self) -> list[tuple[str, bool, float]]:
         """Get list of completed molecules and their status.
 
         Returns:
-            List of (mol_id, success) tuples
+            List of (mol_id, success, elapsed_minutes) tuples
         """
         return list(self._completed_molecules)
 

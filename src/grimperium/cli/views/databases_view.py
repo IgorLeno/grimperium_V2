@@ -1139,7 +1139,7 @@ class DatabasesView(BaseView):
         completed = tracker.get_completed_molecules()
         if completed:
             lines.append("[bold]Recent Completions:[/bold]")
-            for mol_id, success in completed[-5:]:
+            for mol_id, success, _elapsed_minutes in completed[-5:]:
                 icon = ICONS["success"] if success else ICONS["error"]
                 color = COLORS["success"] if success else COLORS["error"]
                 label = "Completed successfully" if success else "Failed"

@@ -798,15 +798,61 @@ class TestRecentCompletions:
     """Test recent completion history formatting."""
 
     def test_recent_completions_format(self, progress_tracker: ProgressTracker) -> None:
-        """Recent completions store mol_id and success flag."""
+        """Recent completions store mol_id, success flag, and elapsed minutes."""
         progress_tracker.mark_completed(MOCK_MOL_ID, success=True)
 
         completed = progress_tracker.get_completed_molecules()
 
         assert len(completed) == 1
-        mol_id, success = completed[0]
+        mol_id, success, elapsed_minutes = completed[0]
         assert mol_id == MOCK_MOL_ID
         assert success is True
+        assert elapsed_minutes == 0.0
+
+    def test_mark_completed_stores_elapsed_minutes(
+        self, progress_tracker: ProgressTracker, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """mark_completed() stores elapsed minutes before cleanup."""
+        progress_tracker.register_molecule("mol_001")
+        progress_tracker._molecules["mol_001"].start_time = 100.0
+        monkeypatch.setattr(
+            "grimperium.cli.progress_tracker.time.time",
+            lambda: 190.0,
+        )
+
+        progress_tracker.mark_completed("mol_001", success=True)
+
+        mol_id, success, elapsed_minutes = progress_tracker.get_completed_molecules()[0]
+        assert mol_id == "mol_001"
+        assert success is True
+        assert elapsed_minutes == 1.5
+
+    def test_mark_skipped_stores_elapsed_minutes(
+        self, progress_tracker: ProgressTracker, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """mark_skipped() stores elapsed minutes before cleanup."""
+        progress_tracker.register_molecule("mol_002")
+        progress_tracker._molecules["mol_002"].start_time = 100.0
+        monkeypatch.setattr(
+            "grimperium.cli.progress_tracker.time.time",
+            lambda: 400.0,
+        )
+
+        progress_tracker.mark_skipped("mol_002")
+
+        mol_id, success, elapsed_minutes = progress_tracker.get_completed_molecules()[0]
+        assert mol_id == "mol_002"
+        assert success is False
+        assert elapsed_minutes == 5.0
+
+    def test_mark_completed_unregistered_elapsed_zero(
+        self, progress_tracker: ProgressTracker
+    ) -> None:
+        """Unregistered molecules fall back to zero elapsed minutes."""
+        progress_tracker.mark_completed("mol_ghost", success=True)
+
+        _, _, elapsed_minutes = progress_tracker.get_completed_molecules()[0]
+        assert elapsed_minutes == 0.0
 
     def test_recent_completions_color_tags_in_display(
         self, mock_console: MagicMock
@@ -824,7 +870,37 @@ class TestRecentCompletions:
 
         content = str(panel.renderable)
         assert "Recent Completions:" in content
-        assert f"[green]✓[/green] {MOCK_MOL_ID}" in content
+        assert (
+            f"[green]✓[/green] {MOCK_MOL_ID} Completed successfully  < 1 min" in content
+        )
+
+    @pytest.mark.parametrize(
+        ("elapsed_minutes", "expected"),
+        [
+            (0.5, "< 1 min"),
+            (1.3, "in 1 minute"),
+            (25.7, "in 25 minutes"),
+        ],
+    )
+    def test_recent_completions_time_format(
+        self,
+        mock_console: MagicMock,
+        elapsed_minutes: float,
+        expected: str,
+    ) -> None:
+        """Recent completions display elapsed time in whole minutes."""
+        tracker = ProgressTracker(console=mock_console, batch_size=3)
+        tracker._completed_molecules.append((MOCK_MOL_ID, True, elapsed_minutes))
+
+        class _Controller:
+            def __init__(self, console: Console) -> None:
+                self.console = console
+
+        view = BatchView(_Controller(mock_console))
+        panel = view._render_batch_display(tracker, frame_idx=0)
+
+        content = str(panel.renderable)
+        assert expected in content
 
 
 @pytest.mark.unit

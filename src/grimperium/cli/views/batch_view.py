@@ -521,11 +521,19 @@ class BatchView(BaseView):
         completed = tracker.get_completed_molecules()
         if completed:
             lines.append("Recent Completions:")
-            for mol_id, success in completed[-5:]:
+            for mol_id, success, elapsed_minutes in completed[-5:]:
                 status = "✓" if success else "✗"
                 color = "green" if success else "red"
+                label = "Completed successfully" if success else "Failed / Rerun"
                 colored_status = f"[{color}]{status}[/{color}]"
-                lines.append(f"  {colored_status} {mol_id}")
+                mins = int(elapsed_minutes)
+                if mins < 1:
+                    time_str = "< 1 min"
+                elif mins == 1:
+                    time_str = "in 1 minute"
+                else:
+                    time_str = f"in {mins} minutes"
+                lines.append(f"  {colored_status} {mol_id} {label}  {time_str}")
 
         content = "\n".join(lines)
 
