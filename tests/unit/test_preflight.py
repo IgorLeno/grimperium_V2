@@ -57,7 +57,6 @@ _ALL_OK = [
     CheckResult("CREST", "binary", "ok", "CREST found"),
     CheckResult("MOPAC", "binary", "ok", "MOPAC found"),
     CheckResult("xTB", "binary_optional", "ok", "xTB found"),
-    CheckResult("Open Babel", "binary_optional", "ok", "obabel found"),
     CheckResult("grimperium_settings.json", "config", "ok", "found"),
 ]
 

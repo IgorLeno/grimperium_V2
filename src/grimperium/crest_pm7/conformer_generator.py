@@ -105,42 +105,12 @@ def _parse_xyz_file(xyz_path: Path) -> tuple[list[tuple[float, float, float]], i
     return coords, n_atoms
 
 
-def _convert_xyz_to_sdf_obabel(
-    xyz_file: Path,
-    sdf_file: Path,
-) -> bool:
-    """Convert XYZ to SDF using Open Babel.
-
-    Args:
-        xyz_file: Input XYZ file
-        sdf_file: Output SDF file
-
-    Returns:
-        True if conversion succeeded
-    """
-    try:
-        result = subprocess.run(
-            ["obabel", str(xyz_file), "-O", str(sdf_file), "-h"],
-            capture_output=True,
-            text=True,
-            timeout=30,
-        )
-        if result.returncode == 0 and sdf_file.exists():
-            LOG.debug(f"Converted {xyz_file} to {sdf_file} via obabel")
-            return True
-        LOG.debug(f"obabel conversion failed: {result.stderr}")
-        return False
-    except (subprocess.TimeoutExpired, FileNotFoundError) as e:
-        LOG.debug(f"obabel conversion error: {e}")
-        return False
-
-
 def _convert_xyz_to_sdf_rdkit(
     xyz_file: Path,
     sdf_file: Path,
     smiles: str,
 ) -> bool:
-    """Convert XYZ to SDF using RDKit fallback.
+    """Convert XYZ to SDF using RDKit.
 
     Requires SMILES to provide connectivity information.
 
@@ -211,25 +181,20 @@ def convert_xyz_to_sdf(
     sdf_file: Path,
     smiles: str | None = None,
 ) -> bool:
-    """Convert XYZ to SDF with Open Babel + RDKit fallback.
+    """Convert XYZ to SDF with RDKit.
 
     Args:
         xyz_file: Input XYZ file
         sdf_file: Output SDF file
-        smiles: SMILES string (required for RDKit fallback)
+        smiles: SMILES string required for RDKit connectivity
 
     Returns:
         True if conversion succeeded
     """
-    # Try Open Babel first
-    if _convert_xyz_to_sdf_obabel(xyz_file, sdf_file):
-        return True
-
-    # Fallback to RDKit (requires SMILES)
     if smiles:
         return _convert_xyz_to_sdf_rdkit(xyz_file, sdf_file, smiles)
 
-    LOG.warning("XYZ->SDF conversion failed: no obabel and no SMILES for RDKit")
+    LOG.warning("XYZ->SDF conversion failed: SMILES required for RDKit")
     return False
 
 

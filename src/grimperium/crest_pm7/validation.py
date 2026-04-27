@@ -21,8 +21,6 @@ class ValidationResult:
         crest_version: CREST version string if available
         mopac_available: Whether MOPAC executable is found
         mopac_version: MOPAC version string if available
-        obabel_available: Whether Open Babel is available
-        obabel_version: Open Babel version string if available
         errors: List of validation errors
         warnings: List of validation warnings
     """
@@ -32,8 +30,6 @@ class ValidationResult:
     crest_version: str | None = None
     mopac_available: bool = False
     mopac_version: str | None = None
-    obabel_available: bool = False
-    obabel_version: str | None = None
     errors: list[str] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
 
@@ -73,7 +69,7 @@ def check_executable(
 def validate_environment(config: PM7Config) -> ValidationResult:
     """Validate the execution environment.
 
-    Checks for required external tools: CREST, MOPAC, and Open Babel.
+    Checks for required external tools: CREST and MOPAC.
 
     Args:
         config: Pipeline configuration
@@ -99,16 +95,6 @@ def validate_environment(config: PM7Config) -> ValidationResult:
         result.valid = False
         result.errors.append(f"MOPAC executable not found: {config.mopac_executable}")
 
-    # Check Open Babel (required for XYZ -> SDF conversion)
-    result.obabel_available, result.obabel_version = check_executable(
-        "obabel", "--version"
-    )
-    if not result.obabel_available:
-        result.warnings.append(
-            "Open Babel (obabel) not found - "
-            "RDKit fallback will be used for XYZ->SDF"
-        )
-
     # Check directories
     try:
         config.temp_dir.mkdir(parents=True, exist_ok=True)
@@ -128,7 +114,7 @@ def validate_environment(config: PM7Config) -> ValidationResult:
 def validate_environment_strict(config: PM7Config) -> ValidationResult:
     """Strict environment validation requiring all tools.
 
-    Unlike validate_environment, this also requires Open Babel.
+    Requires the configured external tools and writable directories.
 
     Args:
         config: Pipeline configuration
@@ -136,14 +122,4 @@ def validate_environment_strict(config: PM7Config) -> ValidationResult:
     Returns:
         ValidationResult with status and details
     """
-    result = validate_environment(config)
-
-    if not result.obabel_available:
-        result.valid = False
-        # Remove existing Open Babel warning to avoid duplication
-        result.warnings = [
-            w for w in result.warnings if "Open Babel" not in w and "obabel" not in w
-        ]
-        result.errors.append("Open Babel (obabel) required for strict validation")
-
-    return result
+    return validate_environment(config)

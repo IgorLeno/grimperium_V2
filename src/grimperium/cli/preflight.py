@@ -70,16 +70,6 @@ REQUIRED_BINARIES: list[dict[str, str | bool]] = [
         ),
         "critical": True,
     },
-    {
-        "name": "obabel",
-        "display_name": "Open Babel",
-        "version_flag": "--version",
-        "install_hint": (
-            "Install Open Babel: https://openbabel.org/docs/Installation\n"
-            "Note: RDKit fallback is available for XYZ->SDF conversion."
-        ),
-        "critical": False,
-    },
 ]
 
 
