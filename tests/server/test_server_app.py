@@ -1,7 +1,7 @@
 """Tests for server/app.py — FastAPI endpoints via httpx.AsyncClient."""
 
+from collections.abc import AsyncGenerator
 from pathlib import Path
-from typing import Any, AsyncGenerator
 
 import pytest
 from httpx import ASGITransport, AsyncClient
@@ -70,11 +70,15 @@ async def auth_client(auth_config: ServerConfig) -> AsyncGenerator[AsyncClient, 
 
 class TestRegister:
     async def test_register_returns_200(self, client: AsyncClient) -> None:
-        r = await client.post("/register", json={"worker_id": "w1", "hostname": "lab-01"})
+        r = await client.post(
+            "/register", json={"worker_id": "w1", "hostname": "lab-01"}
+        )
         assert r.status_code == 200
 
     async def test_register_returns_config_payload(self, client: AsyncClient) -> None:
-        r = await client.post("/register", json={"worker_id": "w1", "hostname": "lab-01"})
+        r = await client.post(
+            "/register", json={"worker_id": "w1", "hostname": "lab-01"}
+        )
         data = r.json()
         assert data["worker_id"] == "w1"
         assert data["hostname"] == "lab-01"
@@ -83,13 +87,17 @@ class TestRegister:
         assert "batch_size" in data
         assert "profile_name" in data
 
-    async def test_register_missing_field_returns_422(self, client: AsyncClient) -> None:
+    async def test_register_missing_field_returns_422(
+        self, client: AsyncClient
+    ) -> None:
         r = await client.post("/register", json={"worker_id": "w1"})
         assert r.status_code == 422
 
     async def test_duplicate_register_ok(self, client: AsyncClient) -> None:
         await client.post("/register", json={"worker_id": "w1", "hostname": "lab-01"})
-        r = await client.post("/register", json={"worker_id": "w1", "hostname": "lab-01"})
+        r = await client.post(
+            "/register", json={"worker_id": "w1", "hostname": "lab-01"}
+        )
         assert r.status_code == 200
 
 
@@ -334,15 +342,11 @@ class TestAuthentication:
         assert r.status_code == 401
 
     async def test_wrong_token_rejected(self, auth_client: AsyncClient) -> None:
-        r = await auth_client.get(
-            "/status", headers={"X-Token": "wrong-token"}
-        )
+        r = await auth_client.get("/status", headers={"X-Token": "wrong-token"})
         assert r.status_code == 401
 
     async def test_correct_token_accepted(self, auth_client: AsyncClient) -> None:
-        r = await auth_client.get(
-            "/status", headers={"X-Token": "test-token"}
-        )
+        r = await auth_client.get("/status", headers={"X-Token": "test-token"})
         assert r.status_code == 200
 
     async def test_auth_disabled_no_token_needed(self, client: AsyncClient) -> None:
@@ -480,7 +484,9 @@ class TestConfigure:
                 "profile_name": "heavy",
             },
         )
-        r = await client.post("/register", json={"worker_id": "w1", "hostname": "lab-01"})
+        r = await client.post(
+            "/register", json={"worker_id": "w1", "hostname": "lab-01"}
+        )
         data = r.json()
         assert data["batch_size"] == 7
         assert data["profile_name"] == "heavy"

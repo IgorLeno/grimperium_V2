@@ -40,7 +40,9 @@ class MoleculeProgressDisplay:
     def _build_table(self) -> Table:
         elapsed = time.monotonic() - self._start_time if self._start_time else 0.0
         elapsed_str = _format_elapsed(elapsed)
-        smiles_short = (self._smiles[:27] + "...") if len(self._smiles) > 30 else self._smiles
+        smiles_short = (
+            (self._smiles[:27] + "...") if len(self._smiles) > 30 else self._smiles
+        )
 
         table = Table(show_header=True, header_style="bold", box=None, padding=(0, 1))
         table.add_column("Mol ID", min_width=10)
@@ -105,6 +107,7 @@ class MoleculeProgressDisplay:
     def render_snapshot(self) -> str:
         """Return a plain-text snapshot of the current table for testing."""
         from io import StringIO
+
         buf = StringIO()
         capture = Console(file=buf, highlight=False, markup=False)
         capture.print(self._build_table())

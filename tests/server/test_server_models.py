@@ -17,7 +17,6 @@ from grimperium.server.models import (
     WorkerInfo,
 )
 
-
 # ── RegisterRequest ───────────────────────────────────────────────────────────
 
 

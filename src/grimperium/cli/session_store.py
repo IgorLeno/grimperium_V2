@@ -48,9 +48,7 @@ class SessionState:
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "SessionState":
-        workers = [
-            WorkerSessionInfo.from_dict(w) for w in data.get("workers", [])
-        ]
+        workers = [WorkerSessionInfo.from_dict(w) for w in data.get("workers", [])]
         return cls(
             started_at=data.get("started_at", ""),
             server_url=data.get("server_url", "http://localhost:8000"),

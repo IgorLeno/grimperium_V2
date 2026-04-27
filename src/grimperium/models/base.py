@@ -19,9 +19,7 @@ Example:
 """
 
 from abc import ABC, abstractmethod
-from typing import Any, Optional
-
-import numpy as np
+from typing import Any
 
 from grimperium import MatrixFloat
 
@@ -48,15 +46,15 @@ class BaseModel(ABC):
     def __init__(self) -> None:
         """Initialize BaseModel."""
         self.is_fitted: bool = False
-        self.n_features_in_: Optional[int] = None
-        self.feature_names_in_: Optional[MatrixFloat] = None
+        self.n_features_in_: int | None = None
+        self.feature_names_in_: MatrixFloat | None = None
 
     @abstractmethod
     def fit(
         self,
         X: MatrixFloat,
         y: MatrixFloat,
-        sample_weight: Optional[MatrixFloat] = None,
+        sample_weight: MatrixFloat | None = None,
     ) -> "BaseModel":
         """
         Fit the model to training data.
@@ -97,7 +95,7 @@ class BaseModel(ABC):
         self,
         X: MatrixFloat,
         y: MatrixFloat,
-        sample_weight: Optional[MatrixFloat] = None,
+        sample_weight: MatrixFloat | None = None,
     ) -> float:
         """
         Compute R² score for predictions.

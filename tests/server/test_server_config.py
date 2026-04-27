@@ -1,17 +1,22 @@
 """Tests for server/config.py — ServerConfig via pydantic-settings."""
 
-import os
 import pytest
+from pydantic import ValidationError
+
 from grimperium.server.config import ServerConfig
 
 
 class TestServerConfigDefaults:
-    def test_required_csv_path_raises_without_env(self) -> None:
-        env = {k: v for k, v in os.environ.items() if not k.startswith("GRIMPERIUM_")}
-        with pytest.raises(Exception):
+    def test_required_csv_path_raises_without_env(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.delenv("GRIMPERIUM_CSV_PATH", raising=False)
+        with pytest.raises(ValidationError):
             ServerConfig(_env_file=None, **{"csv_path": None})  # type: ignore[arg-type]
 
-    def test_defaults_all_optional_fields(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_defaults_all_optional_fields(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         monkeypatch.setenv("GRIMPERIUM_CSV_PATH", "/tmp/test.csv")
         cfg = ServerConfig()
         assert cfg.api_token == ""
@@ -34,7 +39,9 @@ class TestServerConfigDefaults:
         cfg = ServerConfig()
         assert cfg.api_token == "secret-token-123"
 
-    def test_heartbeat_timeout_overridable(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_heartbeat_timeout_overridable(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         monkeypatch.setenv("GRIMPERIUM_CSV_PATH", "/tmp/test.csv")
         monkeypatch.setenv("GRIMPERIUM_HEARTBEAT_TIMEOUT_S", "600")
         cfg = ServerConfig()

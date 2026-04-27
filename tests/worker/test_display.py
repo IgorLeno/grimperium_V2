@@ -104,6 +104,7 @@ class TestMoleculeProgressDisplay:
         snapshot = display.render_snapshot()
         # Should contain at least MM:SS format
         import re
+
         assert re.search(r"\d{2}:\d{2}", snapshot)
 
     def test_start_stop_does_not_crash(self) -> None:
@@ -124,6 +125,7 @@ class TestMoleculeProgressDisplay:
 
     def test_new_mol_resets_timer(self) -> None:
         import time
+
         display = _headless_display()
         display.update("mol_001", "CCO", "CREST")
         t1 = display._start_time

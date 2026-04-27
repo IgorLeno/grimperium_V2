@@ -54,7 +54,8 @@ async def run_watchdog(
 ) -> None:
     """Asyncio task: periodic heartbeat check with startup recovery."""
     LOG.info(
-        "Watchdog starting — grace period %ds before first cycle", config.startup_grace_s
+        "Watchdog starting — grace period %ds before first cycle",
+        config.startup_grace_s,
     )
     await asyncio.sleep(config.startup_grace_s)
 

@@ -366,8 +366,9 @@ class TestDistributedPersistence:
             CalculationProfile(name="fast", crest_timeout_minutes=30),
         ]
         profiles_file.write_text(  # type: ignore[union-attr]
-            __import__("json").dumps({"profiles": [p.to_dict() for p in profiles]},
-                                    indent=2),
+            __import__("json").dumps(
+                {"profiles": [p.to_dict() for p in profiles]}, indent=2
+            ),
             encoding="utf-8",
         )
         raw = __import__("json").loads(profiles_file.read_text(encoding="utf-8"))  # type: ignore[union-attr]

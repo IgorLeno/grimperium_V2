@@ -1208,7 +1208,9 @@ class SettingsManager:
             crest_t = max(1, int(crest_t_str or "60"))
             mopac_t = max(1, int(mopac_t_str or "30"))
         except ValueError:
-            self.console.print("[red]✗ Invalid timeout value — profile not created.[/red]")
+            self.console.print(
+                "[red]✗ Invalid timeout value — profile not created.[/red]"
+            )
             return
 
         new_profile = CalculationProfile(

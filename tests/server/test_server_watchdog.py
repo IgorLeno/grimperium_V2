@@ -3,19 +3,17 @@
 import asyncio
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
 from grimperium.crest_pm7.batch.csv_manager import BatchCSVManager
-from grimperium.crest_pm7.batch.enums import WorkerStatus
 from grimperium.server.config import ServerConfig
 from grimperium.server.watchdog import (
     HeartbeatRegistry,
     check_offline_workers,
     make_heartbeat_registry,
 )
-
 
 # ── Fixtures ──────────────────────────────────────────────────────────────────
 
@@ -115,7 +113,9 @@ class TestCheckOfflineWorkers:
                 called_with.append(str(args[0]) if args else "no-arg")
             return 0
 
-        with patch("grimperium.server.watchdog.asyncio.to_thread", side_effect=fake_to_thread):
+        with patch(
+            "grimperium.server.watchdog.asyncio.to_thread", side_effect=fake_to_thread
+        ):
             await check_offline_workers(registry, manager, config, lock)
 
         assert "w1" in called_with

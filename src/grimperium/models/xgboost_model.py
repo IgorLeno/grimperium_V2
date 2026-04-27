@@ -1,6 +1,5 @@
-from typing import Any, Optional
+from typing import Any
 
-import numpy as np
 import xgboost as xgb
 from sklearn.preprocessing import StandardScaler
 
@@ -42,15 +41,15 @@ class XGBoostRegressor(BaseModel):
         self.random_state = random_state
 
         self.scaler = StandardScaler()  # ← Encapsulated!
-        self._model: Optional[xgb.XGBRegressor] = None
+        self._model: xgb.XGBRegressor | None = None
         self.is_fitted = False
 
     def fit(
         self,
         X: MatrixFloat,
         y: MatrixFloat,
-        sample_weight: Optional[MatrixFloat] = None,
-        eval_set: Optional[tuple[MatrixFloat, MatrixFloat]] = None,
+        sample_weight: MatrixFloat | None = None,
+        eval_set: tuple[MatrixFloat, MatrixFloat] | None = None,
         **kwargs: Any,
     ) -> "XGBoostRegressor":
         """
@@ -66,6 +65,9 @@ class XGBoostRegressor(BaseModel):
         Returns:
             self (for method chaining)
         """
+        _ = sample_weight
+        _ = kwargs
+
         # Scale features
         X_scaled = self.scaler.fit_transform(X)
 
@@ -108,7 +110,8 @@ class XGBoostRegressor(BaseModel):
         if not self.is_fitted:
             raise ValueError("Model not fitted. Call fit() first.")
 
-        assert self._model is not None, "Model should be fitted"
+        if self._model is None:
+            raise ValueError("Model not fitted. Call fit() first.")
         X_scaled = self.scaler.transform(X)
         predictions: MatrixFloat = self._model.predict(X_scaled)
         return predictions
@@ -117,12 +120,14 @@ class XGBoostRegressor(BaseModel):
         """Return feature importances from XGBoost trees."""
         if not self.is_fitted:
             raise ValueError("Model not fitted. Call fit() first.")
-        assert self._model is not None, "Model should be fitted"
+        if self._model is None:
+            raise ValueError("Model not fitted. Call fit() first.")
         importances: MatrixFloat = self._model.feature_importances_
         return importances
 
     def get_params(self, deep: bool = True) -> dict[str, Any]:
         """Get model parameters (sklearn-compatible)."""
+        _ = deep
         return {
             "n_estimators": self.n_estimators,
             "max_depth": self.max_depth,

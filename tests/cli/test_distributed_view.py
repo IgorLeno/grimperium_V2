@@ -163,7 +163,9 @@ class TestStateCheckPort:
 
 class TestStateCheckSession:
     def test_no_session_returns_config_menu(self, view: DatabasesView) -> None:
-        with patch("grimperium.cli.views.databases_view.load_session", return_value=None):
+        with patch(
+            "grimperium.cli.views.databases_view.load_session", return_value=None
+        ):
             assert view._state_check_session() == "config_menu"
 
     def test_stale_session_deletes_and_returns_config_menu(
@@ -172,7 +174,9 @@ class TestStateCheckSession:
         session = MagicMock()
         session.server_url = "http://localhost:8000"
         with (
-            patch("grimperium.cli.views.databases_view.load_session", return_value=session),
+            patch(
+                "grimperium.cli.views.databases_view.load_session", return_value=session
+            ),
             patch.object(DatabasesView, "_server_is_responding", return_value=False),
             patch("grimperium.cli.views.databases_view.delete_session") as mock_delete,
         ):
@@ -186,7 +190,9 @@ class TestStateCheckSession:
         session = MagicMock()
         session.server_url = "http://localhost:8000"
         with (
-            patch("grimperium.cli.views.databases_view.load_session", return_value=session),
+            patch(
+                "grimperium.cli.views.databases_view.load_session", return_value=session
+            ),
             patch.object(DatabasesView, "_server_is_responding", return_value=True),
             patch(
                 "grimperium.cli.views.databases_view.show_back_menu",
@@ -202,7 +208,9 @@ class TestStateCheckSession:
         session = MagicMock()
         session.server_url = "http://localhost:8000"
         with (
-            patch("grimperium.cli.views.databases_view.load_session", return_value=session),
+            patch(
+                "grimperium.cli.views.databases_view.load_session", return_value=session
+            ),
             patch.object(DatabasesView, "_server_is_responding", return_value=True),
             patch(
                 "grimperium.cli.views.databases_view.show_back_menu",
@@ -217,7 +225,9 @@ class TestStateCheckSession:
         session = MagicMock()
         session.server_url = "http://localhost:8000"
         with (
-            patch("grimperium.cli.views.databases_view.load_session", return_value=session),
+            patch(
+                "grimperium.cli.views.databases_view.load_session", return_value=session
+            ),
             patch.object(DatabasesView, "_server_is_responding", return_value=True),
             patch(
                 "grimperium.cli.views.databases_view.show_back_menu", return_value="new"
@@ -234,7 +244,9 @@ class TestStateCheckSession:
         session = MagicMock()
         session.server_url = "http://localhost:8000"
         with (
-            patch("grimperium.cli.views.databases_view.load_session", return_value=session),
+            patch(
+                "grimperium.cli.views.databases_view.load_session", return_value=session
+            ),
             patch.object(DatabasesView, "_server_is_responding", return_value=True),
             patch(
                 "grimperium.cli.views.databases_view.show_back_menu", return_value="end"
@@ -251,7 +263,9 @@ class TestStateCheckSession:
         session = MagicMock()
         session.server_url = "http://localhost:8000"
         with (
-            patch("grimperium.cli.views.databases_view.load_session", return_value=session),
+            patch(
+                "grimperium.cli.views.databases_view.load_session", return_value=session
+            ),
             patch.object(DatabasesView, "_server_is_responding", return_value=True),
             patch(
                 "grimperium.cli.views.databases_view.show_back_menu", return_value=None
@@ -333,9 +347,7 @@ class TestStateConfigMenu:
                 "_server_is_responding",
                 side_effect=[False, True, True, True],
             ),
-            patch.object(
-                DatabasesView, "_start_server_in_background"
-            ) as mock_start,
+            patch.object(DatabasesView, "_start_server_in_background") as mock_start,
             patch.object(DatabasesView, "_fetch_worker_status", return_value=[]),
             patch(
                 "grimperium.cli.views.databases_view.show_back_menu", return_value=None
@@ -353,10 +365,13 @@ class TestStateMonitoring:
         session = MagicMock()
         session.server_url = "http://localhost:8000"
         with (
-            patch("grimperium.cli.views.databases_view.load_session", return_value=session),
+            patch(
+                "grimperium.cli.views.databases_view.load_session", return_value=session
+            ),
             patch.object(DatabasesView, "_fetch_workers_extended", return_value=[]),
             patch(
-                "grimperium.cli.views.databases_view.show_back_menu", return_value="quit"
+                "grimperium.cli.views.databases_view.show_back_menu",
+                return_value="quit",
             ),
         ):
             assert view._state_monitoring() is None
@@ -365,7 +380,9 @@ class TestStateMonitoring:
         session = MagicMock()
         session.server_url = "http://localhost:8000"
         with (
-            patch("grimperium.cli.views.databases_view.load_session", return_value=session),
+            patch(
+                "grimperium.cli.views.databases_view.load_session", return_value=session
+            ),
             patch.object(DatabasesView, "_fetch_workers_extended", return_value=[]),
             patch(
                 "grimperium.cli.views.databases_view.show_back_menu", return_value=None
@@ -377,7 +394,9 @@ class TestStateMonitoring:
         session = MagicMock()
         session.server_url = "http://localhost:8000"
         with (
-            patch("grimperium.cli.views.databases_view.load_session", return_value=session),
+            patch(
+                "grimperium.cli.views.databases_view.load_session", return_value=session
+            ),
             patch.object(
                 DatabasesView, "_fetch_workers_extended", return_value=[]
             ) as mock_fetch,
@@ -391,7 +410,9 @@ class TestStateMonitoring:
 
     def test_no_session_falls_back_to_localhost(self, view: DatabasesView) -> None:
         with (
-            patch("grimperium.cli.views.databases_view.load_session", return_value=None),
+            patch(
+                "grimperium.cli.views.databases_view.load_session", return_value=None
+            ),
             patch.object(
                 DatabasesView, "_fetch_workers_extended", return_value=[]
             ) as mock_fetch,
@@ -428,8 +449,12 @@ class TestRenderMonitoringTable:
 class TestStartLocalWorker:
     def test_returns_daemon_thread(self, view: DatabasesView) -> None:
         with (
-            patch("grimperium.cli.views.databases_view.WorkerClient") as mock_client_cls,
-            patch("grimperium.cli.views.databases_view.WorkerRunner") as mock_runner_cls,
+            patch(
+                "grimperium.cli.views.databases_view.WorkerClient"
+            ) as mock_client_cls,
+            patch(
+                "grimperium.cli.views.databases_view.WorkerRunner"
+            ) as mock_runner_cls,
         ):
             mock_client = MagicMock()
             mock_client.register.return_value = {
@@ -448,7 +473,9 @@ class TestStartLocalWorker:
 
     def test_register_failure_uses_defaults(self, view: DatabasesView) -> None:
         with (
-            patch("grimperium.cli.views.databases_view.WorkerClient") as mock_client_cls,
+            patch(
+                "grimperium.cli.views.databases_view.WorkerClient"
+            ) as mock_client_cls,
             patch("grimperium.cli.views.databases_view.WorkerRunner"),
             patch("grimperium.cli.views.databases_view.WorkerConfig") as mock_cfg_cls,
         ):

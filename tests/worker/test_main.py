@@ -8,12 +8,11 @@ import pytest
 
 from grimperium.worker.__main__ import (
     _connect_with_retry,
-    _show_retry_menu,
     _try_register,
     build_parser,
     main,
 )
-from grimperium.worker.client import ServerError, WorkerClientConfig
+from grimperium.worker.client import ServerError
 from grimperium.worker.runner import WorkerConfig
 
 _SERVER_CFG: dict[str, Any] = {
@@ -41,20 +40,29 @@ class TestParser:
     def test_no_crest_timeout_flag(self) -> None:
         # Verify the removed flags are gone
         with pytest.raises(SystemExit):
-            build_parser().parse_args(["--server-url", "http://x", "--crest-timeout", "3600"])
+            build_parser().parse_args(
+                ["--server-url", "http://x", "--crest-timeout", "3600"]
+            )
 
     def test_no_mopac_timeout_flag(self) -> None:
         with pytest.raises(SystemExit):
-            build_parser().parse_args(["--server-url", "http://x", "--mopac-timeout", "1800"])
+            build_parser().parse_args(
+                ["--server-url", "http://x", "--mopac-timeout", "1800"]
+            )
 
     def test_custom_args(self) -> None:
         args = build_parser().parse_args(
             [
-                "--server-url", "http://lab:9000",
-                "--worker-id", "rig-07",
-                "--api-token", "secret",  # noqa: S106
-                "--max-molecules", "50",
-                "--idle-stop", "120",
+                "--server-url",
+                "http://lab:9000",
+                "--worker-id",
+                "rig-07",
+                "--api-token",
+                "secret",  # noqa: S106
+                "--max-molecules",
+                "50",
+                "--idle-stop",
+                "120",
             ]
         )
         assert args.server_url == "http://lab:9000"
@@ -147,7 +155,10 @@ def _patched_main(argv: list[str]) -> tuple[int, MagicMock, MagicMock, MagicMock
         patch("grimperium.worker.__main__.WorkerRunner") as runner_cls,
         patch("grimperium.worker.__main__.WorkerClient") as client_cls,
         patch("grimperium.worker.__main__.setup_logging"),
-        patch("grimperium.worker.__main__._connect_with_retry", return_value=_SERVER_CFG.copy()),
+        patch(
+            "grimperium.worker.__main__._connect_with_retry",
+            return_value=_SERVER_CFG.copy(),
+        ),
     ):
         runner_instance = MagicMock()
         runner_instance.run.return_value = 0

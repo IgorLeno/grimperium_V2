@@ -18,9 +18,8 @@ Example:
 
 """
 
-from typing import Any, Optional, Union
+from typing import Any
 
-import numpy as np
 from sklearn.kernel_ridge import KernelRidge
 from sklearn.preprocessing import StandardScaler
 
@@ -58,7 +57,7 @@ class KernelRidgeRegressor(BaseModel):
         self,
         alpha: float = 1.0,
         kernel: str = "rbf",
-        gamma: Optional[float] = None,
+        gamma: float | None = None,
         degree: int = 3,
         coef0: float = 1.0,
     ) -> None:
@@ -80,13 +79,13 @@ class KernelRidgeRegressor(BaseModel):
         self.degree = degree
         self.coef0 = coef0
         self.scaler = StandardScaler()
-        self._model: Optional[KernelRidge] = None
+        self._model: KernelRidge | None = None
 
     def fit(
         self,
         X: MatrixFloat,
         y: MatrixFloat,
-        sample_weight: Optional[MatrixFloat] = None,
+        sample_weight: MatrixFloat | None = None,
     ) -> "KernelRidgeRegressor":
         """
         Fit the KRR model.
@@ -100,6 +99,8 @@ class KernelRidgeRegressor(BaseModel):
             self for method chaining
 
         """
+        _ = sample_weight
+
         # Scale features
         X_scaled = self.scaler.fit_transform(X)
 
@@ -136,7 +137,8 @@ class KernelRidgeRegressor(BaseModel):
         # Scale features using fitted scaler
         X_scaled = self.scaler.transform(X)
 
-        assert self._model is not None, "Model should be fitted"
+        if self._model is None:
+            raise ValueError("Model not fitted. Call fit() first.")
         predictions: MatrixFloat = self._model.predict(X_scaled)
         return predictions
 
@@ -144,7 +146,7 @@ class KernelRidgeRegressor(BaseModel):
         self,
         X: MatrixFloat,
         y: MatrixFloat,
-        param_grid: Optional[DictStrAny] = None,
+        param_grid: DictStrAny | None = None,
         cv: int = 5,
         scoring: str = "neg_root_mean_squared_error",
     ) -> DictStrAny:
@@ -166,6 +168,7 @@ class KernelRidgeRegressor(BaseModel):
 
     def get_params(self, deep: bool = True) -> DictStrAny:
         """Get model parameters."""
+        _ = deep
         return {
             "alpha": self.alpha,
             "kernel": self.kernel,

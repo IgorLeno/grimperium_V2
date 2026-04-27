@@ -217,15 +217,11 @@ class TestRun:
 
 class TestConsecutiveFailureStop:
     @patch("grimperium.worker.runner._pm7result_to_update", return_value={})
-    def test_counter_resets_after_success(
-        self, _mock_update: MagicMock
-    ) -> None:
+    def test_counter_resets_after_success(self, _mock_update: MagicMock) -> None:
         client = _mock_client(claim_returns=("m1", "CCO"))
         fail_pipeline = _mock_pipeline(success=False, error_msg="err")
         ok_pipeline = _mock_pipeline(success=True)
-        runner = WorkerRunner(
-            _make_config(), pipeline=fail_pipeline, client=client
-        )
+        runner = WorkerRunner(_make_config(), pipeline=fail_pipeline, client=client)
 
         runner.run_one()
         runner.run_one()

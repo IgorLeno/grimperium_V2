@@ -151,7 +151,9 @@ def _register_routes(app: FastAPI) -> None:
         )
 
     @app.post("/assign")
-    async def assign(payload: AssignPayload, request: Request, _: AuthDep) -> dict[str, Any]:
+    async def assign(
+        payload: AssignPayload, request: Request, _: AuthDep
+    ) -> dict[str, Any]:
         registry: dict[str, tuple[str, datetime]] = request.app.state.heartbeat_registry
         registry[payload.worker_id] = (
             registry.get(payload.worker_id, ("unknown", datetime.now(timezone.utc)))[0],
@@ -165,7 +167,9 @@ def _register_routes(app: FastAPI) -> None:
         return {"status": "assigned", "count": len(payload.molecules)}
 
     @app.post("/claim", response_model=ClaimResponse)
-    async def claim(req: HeartbeatRequest, request: Request, _: AuthDep) -> ClaimResponse:
+    async def claim(
+        req: HeartbeatRequest, request: Request, _: AuthDep
+    ) -> ClaimResponse:
         csv_manager: BatchCSVManager = request.app.state.csv_manager
         lock: asyncio.Lock = request.app.state.lock
         running_molecules: dict[str, str] = request.app.state.running_molecules
@@ -218,7 +222,9 @@ def _register_routes(app: FastAPI) -> None:
                     csv_manager.mark_success, req.mol_id, req.result_update
                 )
         except KeyError as exc:
-            raise HTTPException(status_code=404, detail=f"mol_id not found: {req.mol_id}") from exc
+            raise HTTPException(
+                status_code=404, detail=f"mol_id not found: {req.mol_id}"
+            ) from exc
 
         running_molecules.pop(req.mol_id, None)
         worker_reg: WorkerRegistry = request.app.state.worker_registry
@@ -248,7 +254,9 @@ def _register_routes(app: FastAPI) -> None:
                         csv_manager.mark_rerun, req.mol_id, req.error
                     )
         except KeyError as exc:
-            raise HTTPException(status_code=404, detail=f"mol_id not found: {req.mol_id}") from exc
+            raise HTTPException(
+                status_code=404, detail=f"mol_id not found: {req.mol_id}"
+            ) from exc
 
         running_molecules.pop(req.mol_id, None)
         worker_reg: WorkerRegistry = request.app.state.worker_registry
@@ -374,7 +382,9 @@ def _register_routes(app: FastAPI) -> None:
             "profile_name": payload.profile_name,
         }
         if not worker_reg.set_config(worker_id, cfg):
-            raise HTTPException(status_code=404, detail=f"Worker {worker_id!r} not registered")
+            raise HTTPException(
+                status_code=404, detail=f"Worker {worker_id!r} not registered"
+            )
         LOG.info("Configured worker %r: %s", worker_id, cfg)
         return {"status": "configured", "worker_id": worker_id}
 
@@ -411,7 +421,9 @@ def _register_routes(app: FastAPI) -> None:
     ) -> ShutdownResponse:
         worker_reg: WorkerRegistry = request.app.state.worker_registry
         if not worker_reg.request_shutdown(worker_id):
-            raise HTTPException(status_code=404, detail=f"Worker {worker_id!r} not registered")
+            raise HTTPException(
+                status_code=404, detail=f"Worker {worker_id!r} not registered"
+            )
         LOG.info("Shutdown requested for worker %r", worker_id)
         return ShutdownResponse(status="shutdown_requested", worker_id=worker_id)
 

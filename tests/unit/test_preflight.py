@@ -226,7 +226,9 @@ class TestCriticalFailureUserExits:
 class TestCriticalFailureUserContinues:
     """'Start anyway' behavior was removed — critical failures always exit."""
 
-    @pytest.mark.skip(reason="'Start anyway' option removed; critical failures always exit")
+    @pytest.mark.skip(
+        reason="'Start anyway' option removed; critical failures always exit"
+    )
     def test_critical_failure_user_continues(self, runner: PreflightRunner) -> None:
         failures = [
             CheckResult("CREST", "binary", "missing", "not found"),

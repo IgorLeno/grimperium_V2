@@ -1278,12 +1278,14 @@ class DatabasesView(BaseView):
     @staticmethod
     def _is_port_free(port: int = 8000) -> bool:
         import socket as _socket
+
         with _socket.socket(_socket.AF_INET, _socket.SOCK_STREAM) as s:
             return s.connect_ex(("localhost", port)) != 0
 
     @staticmethod
     def _server_is_responding(server_url: str) -> bool:
         import httpx
+
         try:
             r = httpx.get(f"{server_url}/status", timeout=2.0)
             return r.status_code == 200
@@ -1344,6 +1346,7 @@ class DatabasesView(BaseView):
 
     def _shutdown_all_workers(self, server_url: str) -> None:
         import httpx
+
         try:
             httpx.post(f"{server_url}/shutdown/all", timeout=5.0)
         except Exception as exc:  # noqa: BLE001
@@ -1375,8 +1378,11 @@ class DatabasesView(BaseView):
         t.start()
         return t
 
-    def _configure_worker(self, server_url: str, worker_id: str, defaults: DistributedDefaults) -> None:
+    def _configure_worker(
+        self, server_url: str, worker_id: str, defaults: DistributedDefaults
+    ) -> None:
         import httpx
+
         try:
             httpx.post(
                 f"{server_url}/configure/{worker_id}",
@@ -1393,6 +1399,7 @@ class DatabasesView(BaseView):
 
     def _fetch_workers_extended(self, server_url: str) -> list[dict[str, Any]]:
         import httpx
+
         try:
             r = httpx.get(f"{server_url}/workers/status", timeout=5.0)
             if r.status_code == 200:
@@ -1438,7 +1445,9 @@ class DatabasesView(BaseView):
 
         if not self._server_is_responding(server_url):
             if self._server_proc is None or not self._server_proc.is_alive():
-                self._server_proc = self._start_server_in_background(csv_path, server_port)
+                self._server_proc = self._start_server_in_background(
+                    csv_path, server_port
+                )
             deadline = time.monotonic() + 5.0
             while time.monotonic() < deadline:
                 if self._server_is_responding(server_url):
@@ -1454,7 +1463,9 @@ class DatabasesView(BaseView):
                 MenuOption("Executar (iniciar processamento)", "run"),
                 MenuOption("Atualizar lista de workers", "refresh"),
             ]
-            choice = show_back_menu(options=options, title="Modo Distribuído — Configuração")
+            choice = show_back_menu(
+                options=options, title="Modo Distribuído — Configuração"
+            )
 
             if choice == "refresh":
                 continue
@@ -1474,6 +1485,7 @@ class DatabasesView(BaseView):
                     self._configure_worker(server_url, worker_id, defaults)
 
             import httpx
+
             try:
                 httpx.post(f"{server_url}/dispatch/start", timeout=5.0)
             except Exception as exc:  # noqa: BLE001
@@ -1492,6 +1504,7 @@ class DatabasesView(BaseView):
                 if w.get("worker_id")
             ]
             from datetime import timezone
+
             session = SessionState(
                 started_at=datetime.now(timezone.utc).isoformat(),
                 server_url=server_url,

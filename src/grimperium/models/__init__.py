@@ -16,9 +16,9 @@ Architecture:
 """
 
 from grimperium.models.base import BaseModel
+from grimperium.models.delta_ensemble import DeltaLearningEnsemble
 from grimperium.models.kernel_ridge import KernelRidgeRegressor
 from grimperium.models.xgboost_model import XGBoostRegressor
-from grimperium.models.delta_ensemble import DeltaLearningEnsemble
 
 __all__ = [
     "BaseModel",

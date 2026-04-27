@@ -128,7 +128,10 @@ def _connect_with_retry(client: WorkerClient, server_url: str) -> dict[str, Any]
 
         interactive = sys.stdin.isatty()
         if not interactive:
-            LOG.error("Cannot connect to server %s — exiting (non-interactive mode)", server_url)
+            LOG.error(
+                "Cannot connect to server %s — exiting (non-interactive mode)",
+                server_url,
+            )
             sys.exit(1)
 
         retry = _show_retry_menu(server_url)

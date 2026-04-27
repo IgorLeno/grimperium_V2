@@ -607,7 +607,9 @@ class PreflightRunner:
             return False
 
         if not shutil.which("bash"):
-            self.console.print("[error]bash not found — cannot run install script[/error]")
+            self.console.print(
+                "[error]bash not found — cannot run install script[/error]"
+            )
             return False
 
         self.console.print()

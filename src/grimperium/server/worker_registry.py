@@ -209,10 +209,7 @@ class WorkerRegistry:
         This property is provided for gradual migration only.
         """
         with self._lock:
-            return {
-                wid: (e.hostname, e.last_seen)
-                for wid, e in self._workers.items()
-            }
+            return {wid: (e.hostname, e.last_seen) for wid, e in self._workers.items()}
 
     @property
     def running_molecules(self) -> dict[str, str]:

@@ -91,7 +91,9 @@ class WorkerClient:
             mopac_timeout_minutes, batch_size, profile_name).
         """
         hn = hostname if hostname is not None else socket.gethostname()
-        return self._post("/register", {"worker_id": self._config.worker_id, "hostname": hn})
+        return self._post(
+            "/register", {"worker_id": self._config.worker_id, "hostname": hn}
+        )
 
     def get_config(self) -> dict[str, Any]:
         """Fetch current server-side config for this worker.
