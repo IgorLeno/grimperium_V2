@@ -70,6 +70,14 @@ def build_parser() -> argparse.ArgumentParser:
         default=300,
         help="Seconds of empty-queue polling before the worker exits (default: 300).",
     )
+    parser.add_argument(
+        "--csv-path",
+        default=None,
+        help=(
+            "Optional path to the local batch_tracking.csv mirror used for "
+            "progress UI refreshes."
+        ),
+    )
     return parser
 
 
@@ -173,6 +181,7 @@ def main(argv: list[str] | None = None) -> int:
         crest_timeout_minutes=crest_minutes,
         mopac_timeout_minutes=mopac_minutes,
         batch_size=batch_size,
+        csv_path=args.csv_path,
     )
     runner = WorkerRunner(config=config, client=client)
 

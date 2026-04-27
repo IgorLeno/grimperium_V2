@@ -36,6 +36,7 @@ class TestParser:
         assert args.api_token == ""
         assert args.max_molecules == 0
         assert args.idle_stop == 300
+        assert args.csv_path is None
 
     def test_no_crest_timeout_flag(self) -> None:
         # Verify the removed flags are gone
@@ -63,6 +64,8 @@ class TestParser:
                 "50",
                 "--idle-stop",
                 "120",
+                "--csv-path",
+                "/tmp/batch_tracking.csv",
             ]
         )
         assert args.server_url == "http://lab:9000"
@@ -70,6 +73,7 @@ class TestParser:
         assert args.api_token == "secret"  # noqa: S105
         assert args.max_molecules == 50
         assert args.idle_stop == 120
+        assert args.csv_path == "/tmp/batch_tracking.csv"
 
     def test_missing_server_url_exits_2(self) -> None:
         with pytest.raises(SystemExit) as exc:
@@ -193,6 +197,13 @@ class TestMainWiring:
         config = runner_cls.call_args.kwargs["config"]
         assert config.server_url == "http://lab:9000"
         assert config.worker_id == "rig-07"
+
+    def test_config_csv_path(self) -> None:
+        _, runner_cls, _, _ = _patched_main(
+            ["--server-url", "http://x", "--csv-path", "/tmp/batch.csv"]
+        )
+        config = runner_cls.call_args.kwargs["config"]
+        assert config.csv_path == "/tmp/batch.csv"
 
     def test_max_molecules_zero_becomes_none(self) -> None:
         _, _, _, runner_instance = _patched_main(

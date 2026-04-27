@@ -80,6 +80,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Verification: `pytest tests/cli/ -v`
 
 ### Fixed
+- **Worker CSV progress refresh** (2026-04-27)
+  - `WorkerRunner` can now write best-effort status updates to a configured
+    local `batch_tracking.csv` so the CLI progress monitor sees worker activity
+  - Added `grimperium-worker --csv-path` for workers that can access the CSV
+    mirror used by the main CLI
+  - Verification: `pytest tests/worker/test_runner.py tests/worker/test_main.py -q`
+
 - **Worker installation hardening** (2026-04-27)
   - `scripts/install_tools.sh`: MOPAC install now rejects Qt installer impostors,
     refuses non-tar packages, installs shared libraries, and persists

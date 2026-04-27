@@ -1,8 +1,12 @@
 """Tests for worker/runner.py — WorkerRunner main processing loop."""
 
+from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock, patch
 
+import pandas as pd
+
+from grimperium.crest_pm7.batch.csv_manager import BatchCSVManager
 from grimperium.worker.client import WorkerClient
 from grimperium.worker.runner import WorkerConfig, WorkerRunner
 
@@ -44,6 +48,21 @@ def _mock_pipeline(success: bool = True, error_msg: str | None = None) -> MagicM
     pipeline = MagicMock(spec=CRESTPM7Pipeline)
     pipeline.process_molecule.return_value = result
     return pipeline
+
+
+def _write_minimal_batch_csv(csv_path: Path, mol_id: str = "m1") -> None:
+    schema = BatchCSVManager(csv_path=None).get_schema()
+    row: dict[str, Any] = {column: None for column in schema}
+    row.update(
+        {
+            "mol_id": mol_id,
+            "status": "Pending",
+            "smiles": "CCO",
+            "nheavy": 3,
+            "reruns": 0,
+        }
+    )
+    pd.DataFrame([row], columns=schema).to_csv(csv_path, index=False)
 
 
 # ── run_one ───────────────────────────────────────────────────────────────────
@@ -135,6 +154,57 @@ class TestRunOne:
         runner = WorkerRunner(_make_config(), pipeline=pipeline, client=client)
         runner.run_one()
         assert len(runner._store) == 0
+
+    def test_update_csv_no_op_when_no_csv_path(self) -> None:
+        runner = WorkerRunner(
+            _make_config(csv_path=None),
+            pipeline=_mock_pipeline(),
+            client=_mock_client(),
+        )
+        runner._update_csv("m1", {"status": "Running"})
+
+    def test_update_csv_writes_to_file(self, tmp_path: Path) -> None:
+        csv_path = tmp_path / "batch.csv"
+        _write_minimal_batch_csv(csv_path)
+        runner = WorkerRunner(
+            _make_config(csv_path=str(csv_path)),
+            pipeline=_mock_pipeline(),
+            client=_mock_client(),
+        )
+
+        runner._update_csv("m1", {"status": "Running"})
+
+        df = pd.read_csv(csv_path)
+        status = df.loc[df["mol_id"] == "m1", "status"].iloc[0]
+        assert status == "Running"
+
+    @patch(
+        "grimperium.worker.runner._pm7result_to_update",
+        return_value={"H298_pm7": -42.0},
+    )
+    def test_run_one_updates_csv_running_before_pipeline(
+        self, _mock_update: MagicMock
+    ) -> None:
+        events: list[str] = []
+        client = _mock_client(claim_returns=("m1", "CCO"))
+        pipeline = _mock_pipeline(success=True)
+
+        def process_molecule(_mol_id: str, _smiles: str) -> MagicMock:
+            events.append("pipeline")
+            return pipeline.process_molecule.return_value
+
+        pipeline.process_molecule.side_effect = process_molecule
+        runner = WorkerRunner(_make_config(), pipeline=pipeline, client=client)
+
+        def update_csv(_mol_id: str, updates: dict[str, Any]) -> None:
+            if updates.get("status") == "Running":
+                events.append("csv_running")
+
+        runner._update_csv = MagicMock(side_effect=update_csv)
+
+        runner.run_one()
+
+        assert events[:2] == ["csv_running", "pipeline"]
 
 
 # ── run ───────────────────────────────────────────────────────────────────────
@@ -366,6 +436,10 @@ class TestWorkerConfig:
     def test_batch_size_custom(self) -> None:
         cfg = WorkerConfig(server_url="http://x", worker_id="w1", batch_size=5)
         assert cfg.batch_size == 5
+
+    def test_csv_path_default(self) -> None:
+        cfg = WorkerConfig(server_url="http://x", worker_id="w1")
+        assert cfg.csv_path is None
 
 
 class TestWorkerRunnerReconfigure:

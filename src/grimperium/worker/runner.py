@@ -4,10 +4,16 @@ import logging
 import threading
 import time
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 from grimperium.crest_pm7 import CRESTPM7Pipeline, PM7Config, PM7Result
 from grimperium.crest_pm7.batch.csv_manager import BatchCSVManager
+from grimperium.crest_pm7.batch.enums import MoleculeStatus
+from grimperium.crest_pm7.progress import (
+    CREST_STATUS_NOT_ATTEMPTED,
+    MOPAC_STATUS_NOT_ATTEMPTED,
+)
 from grimperium.worker.client import WorkerClient, WorkerClientConfig
 from grimperium.worker.local_store import LocalStore
 
@@ -64,6 +70,7 @@ class WorkerConfig:
     batch_id: str = "worker"
     consecutive_failure_stop: bool = True
     max_consecutive_failures: int = 10
+    csv_path: str | None = None
 
 
 class WorkerRunner:
@@ -100,6 +107,27 @@ class WorkerRunner:
         self._stop_event = threading.Event()
         self._consecutive_failures: int = 0
         self._last_run_succeeded: bool = False
+        self._csv_manager: BatchCSVManager | None = None
+        if config.csv_path:
+            self._csv_manager = BatchCSVManager(Path(config.csv_path))
+
+    def _update_csv(self, mol_id: str, updates: dict[str, Any]) -> None:
+        """Best-effort local CSV write for progress UI refreshes."""
+        if self._csv_manager is None:
+            return
+
+        try:
+            df = self._csv_manager.load_csv()
+            mask = df["mol_id"] == mol_id
+            if not mask.any():
+                raise KeyError(f"mol_id not found: {mol_id}")
+            idx = int(df[mask].index[0])
+            for column, value in updates.items():
+                if column in df.columns:
+                    df.at[idx, column] = value
+            self._csv_manager.save_csv()
+        except Exception as exc:
+            LOG.debug("CSV update skipped for %s: %s", mol_id, exc)
 
     def stop(self) -> None:
         """Signal run() to exit after the current molecule finishes."""
@@ -159,6 +187,14 @@ class WorkerRunner:
 
         mol_id, smiles = claimed
         self._store.add(mol_id, smiles)
+        self._update_csv(
+            mol_id,
+            {
+                "status": MoleculeStatus.RUNNING.value,
+                "crest_status": CREST_STATUS_NOT_ATTEMPTED,
+                "mopac_status": MOPAC_STATUS_NOT_ATTEMPTED,
+            },
+        )
 
         _stop_hb = threading.Event()
         hb_thread = threading.Thread(
@@ -182,12 +218,36 @@ class WorkerRunner:
                     float(self._config.crest_timeout_minutes),
                     float(self._config.mopac_timeout_minutes),
                 )
+                self._update_csv(
+                    mol_id,
+                    {
+                        **update,
+                        "status": MoleculeStatus.OK.value,
+                    },
+                )
                 self._store.mark_success(mol_id, update)
                 self._client.report_success(mol_id, update)
                 self._last_run_succeeded = True
                 self._consecutive_failures = 0
             else:
                 error = result.error_message or "pipeline failed"
+                failure_update: dict[str, Any] = {}
+                try:
+                    failure_update = _pm7result_to_update(
+                        result,
+                        self._config.worker_id,
+                        float(self._config.crest_timeout_minutes),
+                        float(self._config.mopac_timeout_minutes),
+                    )
+                except Exception as exc:
+                    LOG.debug("CSV result mapping skipped for %s: %s", mol_id, exc)
+                self._update_csv(
+                    mol_id,
+                    {
+                        **failure_update,
+                        "status": MoleculeStatus.RERUN.value,
+                    },
+                )
                 self._store.mark_failure(mol_id, error)
                 self._client.report_failure(mol_id, error)
                 self._last_run_succeeded = False
@@ -195,6 +255,7 @@ class WorkerRunner:
         except Exception as exc:
             LOG.exception("Unhandled error processing %s", mol_id)
             error_str = str(exc)
+            self._update_csv(mol_id, {"status": MoleculeStatus.RERUN.value})
             self._store.mark_failure(mol_id, error_str)
             self._last_run_succeeded = False
             self._consecutive_failures += 1
