@@ -136,6 +136,12 @@ else
     FAILED+=("install_tools.sh")
 fi
 
+# ── Step 7b: Configure LD_LIBRARY_PATH for current session ───────────────────
+if [ -d "$HOME/.local/lib" ]; then
+    export LD_LIBRARY_PATH="$HOME/.local/lib:${LD_LIBRARY_PATH:-}"
+    ok "LD_LIBRARY_PATH configured for current session"
+fi
+
 # ── Step 8: Verification ─────────────────────────────────────────────────────
 echo ""
 echo "[ 8/9 ] Verifying installation..."
@@ -148,11 +154,11 @@ else
     FAILED+=("crest binary")
 fi
 
-if command -v mopac &>/dev/null; then
-    ok "mopac: found"
+if command -v mopac &>/dev/null && mopac --version 2>&1 | grep -qi "^MOPAC version"; then
+    ok "mopac: $(mopac --version 2>&1 | head -1)"
     PASSED+=("mopac binary")
 else
-    fail "mopac not found in PATH"
+    fail "mopac not found or Qt installer detected in PATH"
     FAILED+=("mopac binary")
 fi
 

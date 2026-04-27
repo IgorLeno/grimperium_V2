@@ -80,6 +80,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Verification: `pytest tests/cli/ -v`
 
 ### Fixed
+- **Worker installation hardening** (2026-04-27)
+  - `scripts/install_tools.sh`: MOPAC install now rejects Qt installer impostors,
+    refuses non-tar packages, installs shared libraries, and persists
+    `LD_LIBRARY_PATH`
+  - `src/grimperium/cli/preflight.py`: MOPAC preflight now uses `--version` and
+    rejects non-MOPAC version output
+  - `scripts/setup_worker.sh`: worker setup exports `LD_LIBRARY_PATH` for the
+    current session and verifies the real MOPAC binary
+  - Verification: `pytest tests/unit/test_preflight.py -v`
+
 - **CLI: exclude CBS_SUSPECT rows from PM7 baseline** (2026-03-22)
   - `src/grimperium/cli/views/databases_view.py`: `_filter_suspect_rows()` excludes
     `cbs_quality_flag=SUSPECT` from PM7 baseline analysis

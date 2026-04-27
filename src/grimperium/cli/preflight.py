@@ -55,8 +55,11 @@ REQUIRED_BINARIES: list[dict[str, str | bool]] = [
     {
         "name": "mopac",
         "display_name": "MOPAC",
-        "version_flag": "-v",
-        "install_hint": ("Install MOPAC: https://github.com/openmopac/mopac/releases"),
+        "version_flag": "--version",
+        "install_hint": (
+            "Install MOPAC: bash scripts/install_tools.sh\n"
+            "Or manually: https://github.com/openmopac/mopac/releases"
+        ),
         "critical": True,
     },
     {
@@ -254,6 +257,24 @@ def check_binary(
     found, version = check_executable(name, version_flag)
     category = "binary" if critical else "binary_optional"
     if found:
+        if name == "mopac":
+            version_text = version or ""
+            version_lower = version_text.lower()
+            if "mopac version" not in version_lower:
+                detail = "MOPAC: invalid executable found in PATH"
+                if "ifw" in version_lower or "qt" in version_lower:
+                    detail = (
+                        "MOPAC: Qt installer found in PATH — "
+                        "real binary not installed"
+                    )
+                return CheckResult(
+                    name=display_name,
+                    category=category,
+                    status="missing",
+                    detail=detail,
+                    fix_available=False,
+                    install_hint="Run: bash scripts/install_tools.sh",
+                )
         return CheckResult(
             name=display_name,
             category=category,

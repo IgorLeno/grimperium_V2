@@ -76,28 +76,85 @@ install_xtb_crest() {
 }
 
 # ── Install MOPAC ────────────────────────────────────────────────────────────
+_mopac_is_real() {
+    command -v mopac &>/dev/null || return 1
+    mopac --version 2>&1 | grep -qi "^MOPAC version"
+}
+
 install_mopac() {
+    if _mopac_is_real; then
+        echo ">>> MOPAC already installed: $(mopac --version 2>&1 | head -1)"
+        return 0
+    fi
+
     if command -v dnf &>/dev/null; then
         sudo dnf install mopac -y || true
     fi
 
-    if ! command -v mopac &>/dev/null; then
-        MOPAC_URL=$(curl -s https://api.github.com/repos/openmopac/mopac/releases/latest \
-            | grep "browser_download_url" \
-            | grep -i "linux" \
-            | grep -v '\.sha256\|\.asc\|\.sig' \
-            | head -1 \
-            | cut -d '"' -f 4)
+    if _mopac_is_real; then
+        echo ">>> MOPAC installed via package manager: $(mopac --version 2>&1 | head -1)"
+        return 0
+    fi
 
-        if [ -z "$MOPAC_URL" ]; then
-            echo "!!! Could not resolve MOPAC URL. Install manually: https://github.com/openmopac/mopac/releases"
-        else
-            wget -q --show-progress "$MOPAC_URL" -O /tmp/mopac_pkg \
-                && tar -xf /tmp/mopac_pkg -C "$TOOLS_DIR" 2>/dev/null \
-                || cp /tmp/mopac_pkg "$TOOLS_DIR/mopac" \
-                && chmod +x "$TOOLS_DIR"/mopac* 2>/dev/null \
-                || echo "!!! MOPAC install failed — install manually."
+    if command -v mopac &>/dev/null; then
+        MOPAC_PATH=$(command -v mopac)
+        echo ">>> Removing Qt installer impostor at $MOPAC_PATH..."
+        rm -f "$MOPAC_PATH"
+    fi
+
+    MOPAC_URL=$(curl -s https://api.github.com/repos/openmopac/mopac/releases/latest \
+        | grep "browser_download_url" \
+        | grep -i "linux" \
+        | grep '\.tar\.gz' \
+        | grep -v '\.sha256\|\.asc\|\.sig' \
+        | head -1 \
+        | cut -d '"' -f 4)
+
+    if [ -z "$MOPAC_URL" ]; then
+        echo "!!! Could not resolve MOPAC URL."
+        echo "    Download manually: https://github.com/openmopac/mopac/releases"
+        return 1
+    fi
+
+    echo ">>> Downloading MOPAC from $MOPAC_URL..."
+    rm -rf /tmp/mopac_extracted
+    mkdir -p /tmp/mopac_extracted
+    wget -q --show-progress "$MOPAC_URL" -O /tmp/mopac_pkg
+
+    if ! tar -xf /tmp/mopac_pkg -C /tmp/mopac_extracted/ 2>/dev/null; then
+        echo "!!! MOPAC package is not a valid tar archive — refusing to install."
+        echo "    Download manually: https://github.com/openmopac/mopac/releases"
+        return 1
+    fi
+
+    MOPAC_BIN=$(find /tmp/mopac_extracted -name "mopac" -type f -executable | head -1)
+    if [ -z "$MOPAC_BIN" ]; then
+        echo "!!! mopac binary not found inside archive."
+        return 1
+    fi
+
+    cp "$MOPAC_BIN" "$TOOLS_DIR/mopac"
+    chmod +x "$TOOLS_DIR/mopac"
+    echo ">>> MOPAC binary installed to $TOOLS_DIR/mopac"
+
+    MOPAC_LIB_DIR=$(dirname "$MOPAC_BIN")/../lib
+    if [ -d "$MOPAC_LIB_DIR" ]; then
+        mkdir -p "$HOME/.local/lib"
+        cp "$MOPAC_LIB_DIR"/lib*.so* "$HOME/.local/lib/" 2>/dev/null
+        echo ">>> MOPAC shared libs installed to $HOME/.local/lib/"
+    fi
+
+    for rc in ~/.bashrc ~/.zshrc ~/.profile; do
+        if [ -f "$rc" ] && ! grep -q 'HOME/.local/lib' "$rc"; then
+            echo 'export LD_LIBRARY_PATH="$HOME/.local/lib:$LD_LIBRARY_PATH"' >> "$rc"
+            echo ">>> Added LD_LIBRARY_PATH to $rc"
         fi
+    done
+    export LD_LIBRARY_PATH="$HOME/.local/lib:${LD_LIBRARY_PATH:-}"
+
+    if ! _mopac_is_real; then
+        echo "!!! Installed mopac did not report a valid MOPAC version."
+        return 1
     fi
 }
 

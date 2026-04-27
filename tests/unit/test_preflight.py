@@ -485,6 +485,27 @@ class TestCheckBinarySuccess:
         assert result.is_ok
         assert "3.0" in result.detail
 
+    def test_mopac_qt_impostor_detected(self) -> None:
+        """MOPAC check rejects the Qt installer executable."""
+        with patch(
+            "grimperium.crest_pm7.validation.check_executable",
+            return_value=(True, "IFW Version: 4.6.1, built with Qt 5.15.2."),
+        ):
+            result = check_binary("mopac", "MOPAC", "--version", "hint", critical=True)
+
+        assert result.status == "missing"
+        assert "Qt installer" in result.detail
+
+    def test_mopac_real_detected(self) -> None:
+        """MOPAC check accepts the real binary version output."""
+        with patch(
+            "grimperium.crest_pm7.validation.check_executable",
+            return_value=(True, "MOPAC version 23.2.4 commit a6ff012"),
+        ):
+            result = check_binary("mopac", "MOPAC", "--version", "hint", critical=True)
+
+        assert result.status == "ok"
+
 
 class TestAttemptToolsInstall:
     """Tests for _attempt_tools_install method."""
