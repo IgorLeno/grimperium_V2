@@ -52,6 +52,27 @@ install_xtb_crest() {
         echo "!!! CREST download failed."
         echo "    Install manually: https://crest-lab.github.io/crest-docs/page/installation"
     fi
+
+    # Fallback — download xTB v6.7.0 static binary (CREST runtime dependency)
+    if ! command -v xtb &>/dev/null && [ ! -x "$TOOLS_DIR/xtb" ]; then
+        XTB_URL="https://github.com/grimme-lab/xtb/releases/download/v6.7.0/xtb-6.7.0-linux-x86_64.tar.xz"
+        echo ">>> Downloading xTB v6.7.0..."
+        mkdir -p /tmp/xtb_extracted
+        if wget -q --show-progress "$XTB_URL" -O /tmp/xtb.tar.xz; then
+            tar -xf /tmp/xtb.tar.xz -C /tmp/xtb_extracted/
+            XTB_BIN=$(find /tmp/xtb_extracted -name "xtb" -type f -executable | head -1)
+            if [ -n "$XTB_BIN" ]; then
+                cp "$XTB_BIN" "$TOOLS_DIR/xtb"
+                chmod +x "$TOOLS_DIR/xtb"
+                echo ">>> xTB installed to $TOOLS_DIR/xtb"
+            else
+                echo "!!! xTB binary not found inside archive."
+            fi
+        else
+            echo "!!! xTB download failed."
+            echo "    Install manually: https://github.com/grimme-lab/xtb/releases"
+        fi
+    fi
 }
 
 # ── Install MOPAC ────────────────────────────────────────────────────────────
@@ -96,8 +117,23 @@ fi
 
 echo ""
 echo "Installation complete. Installed tools:"
-command -v crest && crest --version 2>/dev/null | head -1 || echo "  crest: NOT FOUND"
-command -v xtb   && xtb --version   2>/dev/null | head -1 || echo "  xtb:   NOT FOUND"
-command -v mopac && mopac -v        2>/dev/null | head -1 || echo "  mopac: NOT FOUND"
+check_tool() {
+    local name="$1"
+    local path="$TOOLS_DIR/$name"
+    if [ -x "$path" ]; then
+        local ver
+        ver=$("$path" --version 2>/dev/null | head -1)
+        echo "  $name: ${ver:-installed at $path}"
+    elif command -v "$name" &>/dev/null; then
+        local ver
+        ver=$("$name" --version 2>/dev/null | head -1)
+        echo "  $name: ${ver:-on PATH}"
+    else
+        echo "  $name: NOT FOUND"
+    fi
+}
+check_tool crest
+check_tool xtb
+check_tool mopac
 echo ""
 echo "If tools are still not found, restart the terminal and run grimperium again."
