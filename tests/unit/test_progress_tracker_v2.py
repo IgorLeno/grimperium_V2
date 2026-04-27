@@ -37,7 +37,13 @@ from grimperium.cli.progress_tracker import (
     ProgressTracker,
 )
 from grimperium.cli.views.batch_view import BatchView
-from grimperium.crest_pm7.progress import STATUS_OK, STATUS_RERUN, STATUS_RUNNING
+from grimperium.crest_pm7.progress import (
+    STATUS_OK,
+    STATUS_PENDING,
+    STATUS_RERUN,
+    STATUS_RUNNING,
+    STATUS_SELECTED,
+)
 
 if TYPE_CHECKING:
     from queue import Queue as QueueType
@@ -420,10 +426,10 @@ class TestProgressTracker:
         assert "mol_001" in progress_tracker._molecules
         assert isinstance(progress_tracker._molecules["mol_001"], MoleculeProgress)
 
-    def test_get_current_molecule_id_only_running(
+    def test_get_current_molecule_id_returns_first_active(
         self, progress_tracker: ProgressTracker
     ) -> None:
-        """get_current_molecule_id returns only RUNNING molecules."""
+        """get_current_molecule_id returns first pending/selected/running molecule."""
         progress_tracker.register_molecule("mol_001")
         progress_tracker.register_molecule("mol_002")
         progress_tracker.register_molecule("mol_003")
@@ -433,6 +439,26 @@ class TestProgressTracker:
         progress_tracker._molecules["mol_003"].last_csv_state["status"] = STATUS_RUNNING
 
         assert progress_tracker.get_current_molecule_id() == "mol_003"
+
+    def test_get_current_molecule_id_returns_selected(
+        self, progress_tracker: ProgressTracker
+    ) -> None:
+        """SELECTED molecules are active before the CSV reaches RUNNING."""
+        progress_tracker.register_molecule("mol_001")
+        progress_tracker._molecules["mol_001"].last_csv_state[
+            "status"
+        ] = STATUS_SELECTED
+
+        assert progress_tracker.get_current_molecule_id() == "mol_001"
+
+    def test_get_current_molecule_id_returns_pending_by_default(
+        self, progress_tracker: ProgressTracker
+    ) -> None:
+        """Registered molecules render before the first CSV poll event."""
+        progress_tracker.register_molecule("mol_001")
+        progress_tracker._molecules["mol_001"].last_csv_state["status"] = STATUS_PENDING
+
+        assert progress_tracker.get_current_molecule_id() == "mol_001"
 
     def test_progress_bar_width_exactly_60_chars(
         self, progress_tracker: ProgressTracker
@@ -901,6 +927,23 @@ class TestRecentCompletions:
 
         content = str(panel.renderable)
         assert expected in content
+
+    def test_batch_display_shows_spinner_when_no_active_molecule(
+        self, mock_console: MagicMock
+    ) -> None:
+        """Batch display keeps animating even if no active molecule is detected."""
+        tracker = ProgressTracker(console=mock_console, batch_size=3)
+
+        class _Controller:
+            def __init__(self, console: Console) -> None:
+                self.console = console
+
+        view = BatchView(_Controller(mock_console))
+        panel = view._render_batch_display(tracker, frame_idx=0)
+
+        content = str(panel.renderable)
+        assert "Aguardando próxima molécula..." in content
+        assert ProgressTracker.SPINNER_FRAMES[0] in content
 
 
 @pytest.mark.unit

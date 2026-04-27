@@ -87,6 +87,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     mirror used by the main CLI
   - Verification: `pytest tests/worker/test_runner.py tests/worker/test_main.py -q`
 
+- **Batch progress display idle state** (2026-04-27)
+  - Progress tracking now treats `Pending` and `Selected` molecules as active
+    so the current molecule appears before the first CSV `Running` transition
+  - Batch Live display shows an animated waiting line when no active molecule is
+    detected, avoiding a visually static header-only screen
+  - Verification: `pytest tests/unit/test_progress_tracker_v2.py -q`
+
 - **Worker installation hardening** (2026-04-27)
   - `scripts/install_tools.sh`: MOPAC install now rejects Qt installer impostors,
     refuses non-tar packages, installs shared libraries, and persists

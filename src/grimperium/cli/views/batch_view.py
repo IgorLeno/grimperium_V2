@@ -516,7 +516,10 @@ class BatchView(BaseView):
         current_mol = tracker.get_current_molecule_id()
         if current_mol:
             lines.append(tracker.render_molecule_line(current_mol, frame_idx))
-            lines.append("")
+        else:
+            spinner = tracker.get_spinner_frame(frame_idx)
+            lines.append(f"{spinner} Aguardando próxima molécula...")
+        lines.append("")
 
         completed = tracker.get_completed_molecules()
         if completed:

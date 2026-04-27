@@ -70,6 +70,7 @@ _STATUS_NORMALIZATION = {
         STATUS_SKIP,
     )
 }
+_ACTIVE_STATUSES = {STATUS_PENDING, STATUS_SELECTED, STATUS_RUNNING}
 _CREST_STATUS_NORMALIZATION = {
     value.lower(): value
     for value in (
@@ -494,7 +495,7 @@ class ProgressTracker:
         """
         for mol_id, progress in self._molecules.items():
             status = progress.last_csv_state.get("status", STATUS_PENDING)
-            if status != STATUS_RUNNING:
+            if status not in _ACTIVE_STATUSES:
                 continue
 
             return mol_id
