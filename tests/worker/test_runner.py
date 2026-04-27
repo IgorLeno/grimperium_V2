@@ -324,6 +324,35 @@ class TestConsecutiveFailureStop:
         assert client.claim.call_count == 5
         assert count == 1
         assert runner._consecutive_failures == 3
+        assert runner._last_run_succeeded is False
+
+    @patch("grimperium.worker.runner._pm7result_to_update", return_value={})
+    def test_processed_counts_all_successes_after_failure(
+        self, _mock_update: MagicMock
+    ) -> None:
+        """F, S, S, S -> processed deve ser 3, nao 1."""
+        client = MagicMock(spec=WorkerClient)
+        client.claim.return_value = ("m1", "CCO")
+        cfg = _make_config(max_consecutive_failures=10)
+        runner = WorkerRunner(cfg, pipeline=_mock_pipeline(), client=client)
+        outcomes = [False, True, True, True]
+
+        def process_molecule(_mol_id: str, _smiles: str) -> MagicMock:
+            success = outcomes.pop(0)
+            result = MagicMock()
+            result.mol_id = "m1"
+            result.success = success
+            result.error_message = None if success else "boom"
+            result.most_stable_hof = -42.0 if success else None
+            return result
+
+        runner._pipeline.process_molecule.side_effect = process_molecule
+
+        count = runner.run(max_molecules=4)
+
+        assert count == 3
+        assert runner._consecutive_failures == 0
+        assert runner._last_run_succeeded is True
 
 
 # ── WorkerConfig ─────────────────────────────────────────────────────────────

@@ -99,6 +99,7 @@ class WorkerRunner:
         self._store = LocalStore()
         self._stop_event = threading.Event()
         self._consecutive_failures: int = 0
+        self._last_run_succeeded: bool = False
 
     def stop(self) -> None:
         """Signal run() to exit after the current molecule finishes."""
@@ -135,9 +136,7 @@ class WorkerRunner:
         if timeouts_changed:
             self._pipeline = CRESTPM7Pipeline(
                 PM7Config(
-                    crest_timeout=(
-                        float(self._config.crest_timeout_minutes) * 60.0
-                    ),
+                    crest_timeout=(float(self._config.crest_timeout_minutes) * 60.0),
                     mopac_timeout_base=(
                         float(self._config.mopac_timeout_minutes) * 60.0
                     ),
@@ -185,16 +184,19 @@ class WorkerRunner:
                 )
                 self._store.mark_success(mol_id, update)
                 self._client.report_success(mol_id, update)
+                self._last_run_succeeded = True
                 self._consecutive_failures = 0
             else:
                 error = result.error_message or "pipeline failed"
                 self._store.mark_failure(mol_id, error)
                 self._client.report_failure(mol_id, error)
+                self._last_run_succeeded = False
                 self._consecutive_failures += 1
         except Exception as exc:
             LOG.exception("Unhandled error processing %s", mol_id)
             error_str = str(exc)
             self._store.mark_failure(mol_id, error_str)
+            self._last_run_succeeded = False
             self._consecutive_failures += 1
             try:
                 self._client.report_failure(mol_id, error_str)
@@ -228,7 +230,7 @@ class WorkerRunner:
             did_work = self.run_one()
             if did_work:
                 attempted += 1
-                if self._consecutive_failures == 0:
+                if self._last_run_succeeded:
                     processed += 1
                 idle_count = 0
                 if (
