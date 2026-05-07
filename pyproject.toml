@@ -26,7 +26,10 @@ classifiers = [
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
     "Typing :: Typed",
 ]
-packages = [{include = "grimperium", from = "src"}]
+packages = [
+    {include = "grimperium", from = "src"},
+    {include = "grimperium_mini", from = "src"},
+]
 
 [tool.poetry.dependencies]
 python = "^3.10"
@@ -73,6 +76,7 @@ distributed = ["fastapi", "uvicorn", "httpx", "pydantic-settings", "rich"]
 [tool.poetry.scripts]
 grimperium = "grimperium.cli:main"
 grimperium-worker = "grimperium.worker.__main__:main"
+grimperium-mini = "grimperium_mini.cli:main"
 
 [tool.ruff]
 target-version = "py310"
@@ -112,6 +116,9 @@ ignore = [
 "src/grimperium/crest_pm7/mopac_optimizer.py" = ["S603", "S607"]
 "src/grimperium/crest_pm7/preoptimization.py" = ["S603", "S607"]
 "src/grimperium/crest_pm7/validation.py" = ["S603", "S607"]
+"src/grimperium_mini/crest.py" = ["S603", "S607"]
+"src/grimperium_mini/mopac.py" = ["S603", "S607"]
+"src/grimperium_mini/io.py" = ["S314"]
 # subprocess call for pip install in preflight + non-security hash for settings cache
 "src/grimperium/cli/preflight.py" = ["S603", "S607", "S324"]
 # non-security hash for mol_id generation
@@ -126,7 +133,7 @@ ignore = [
 "src/grimperium/crest_pm7/batch/detail_manager.py" = ["S108"]
 
 [tool.ruff.lint.isort]
-known-first-party = ["grimperium"]
+known-first-party = ["grimperium", "grimperium_mini"]
 
 [tool.black]
 line-length = 88
@@ -166,7 +173,7 @@ markers = [
 asyncio_mode = "auto"
 
 [tool.coverage.run]
-source = ["src/grimperium"]
+source = ["src/grimperium", "src/grimperium_mini"]
 branch = true
 omit = ["*/tests/*"]
 
