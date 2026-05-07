@@ -20,26 +20,26 @@ local document disagrees with this file, follow this file.
 ### Quality Gates (aligned with pyproject.toml)
 
 ```bash
-black src/ tests/                         # Format
-ruff check src/ tests/                    # Lint
-mypy src/ --strict                        # Type check
-pytest tests/ -v --cov=src/grimperium     # Full test suite with coverage
-pre-commit run --all-files                # All gates at once
+poetry run black src/ tests/                         # Format
+poetry run ruff check src/ tests/                    # Lint
+poetry run mypy src/ --strict                        # Type check
+poetry run pytest tests/ -v --cov=src/grimperium     # Full test suite with coverage
+poetry run pre-commit run --all-files                # All gates at once
 ```
 
 ### Running Tests
 
 ```bash
-pytest tests/ -v                          # All tests
-pytest tests/unit/ -v                     # Unit tests only
-pytest tests/ml/ -v                       # ML pipeline tests only
-pytest tests/cli/ -v                      # CLI tests only
-pytest tests/integration/ -v              # Integration tests
-pytest tests/experiments/ -v              # Hypothesis/stress tests
-pytest tests/path/test_file.py -v         # Single file
-pytest tests/path/test_file.py::test_fn -v  # Single test
-pytest -m "not slow" -v                   # Skip slow-marked tests
-pytest -m integration -v                  # Only integration-marked tests
+poetry run pytest tests/ -v                          # All tests
+poetry run pytest tests/unit/ -v                     # Unit tests only
+poetry run pytest tests/ml/ -v                       # ML pipeline tests only
+poetry run pytest tests/cli/ -v                      # CLI tests only
+poetry run pytest tests/integration/ -v              # Integration tests
+poetry run pytest tests/experiments/ -v              # Hypothesis/stress tests
+poetry run pytest tests/path/test_file.py -v         # Single file
+poetry run pytest tests/path/test_file.py::test_fn -v  # Single test
+poetry run pytest -m "not slow" -v                   # Skip slow-marked tests
+poetry run pytest -m integration -v                  # Only integration-marked tests
 ```
 
 ### Execution Rule

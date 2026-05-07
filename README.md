@@ -158,23 +158,30 @@ poetry install --with dev
 
 **4. Ative o ambiente virtual**
 ```bash
-poetry shell
+# Poetry 2.x: ative o ambiente virtual com:
+eval $(poetry env activate)    # Linux / macOS / WSL
+# No Windows PowerShell nativo (fora do WSL), use:
+# Invoke-Expression (poetry env activate)
+
+# Ou simplesmente prefixe cada comando com `poetry run` (recomendado):
+# poetry run python -m grimperium
+# poetry run pytest tests/ -v
 ```
 
-Você saberá que funcionou quando `(grimperium-...)` aparecer no início do terminal.
+Se ativar o ambiente, você saberá que funcionou quando `(grimperium-...)` aparecer no início do terminal.
 
 **5. Configure os pre-commit hooks** *(recomendado para contribuidores)*
 ```bash
-pre-commit install
+poetry run pre-commit install
 ```
 
 **6. Valide a instalação**
 ```bash
 # Deve retornar "OK"
-python -c "from grimperium import GrimperiumAPI; print('OK')"
+poetry run python -c "from grimperium import GrimperiumAPI; print('OK')"
 
 # Rode os testes
-pytest tests/ -v
+poetry run pytest tests/ -v
 ```
 
 ---
@@ -241,11 +248,18 @@ cd grimperium_V2
 poetry install
 
 # Ative o ambiente
-poetry shell
+# Poetry 2.x: ative o ambiente virtual com:
+eval $(poetry env activate)    # Linux / macOS / WSL
+# No Windows PowerShell nativo (fora do WSL), use:
+# Invoke-Expression (poetry env activate)
+
+# Ou simplesmente prefixe cada comando com `poetry run` (recomendado):
+# poetry run python -m grimperium
+# poetry run pytest tests/ -v
 
 # Valide
-python -c "from grimperium import GrimperiumAPI; print('OK')"
-pytest tests/ -v
+poetry run python -c "from grimperium import GrimperiumAPI; print('OK')"
+poetry run pytest tests/ -v
 ```
 
 #### Parte 5 — Acessar os arquivos pelo Explorer do Windows *(opcional)*
@@ -276,7 +290,7 @@ explorer.exe .
 
 ### Iniciar a CLI interativa
 ```bash
-python -m grimperium
+poetry run python -m grimperium
 ```
 
 A CLI oferece menus para:
@@ -363,25 +377,25 @@ O ensemble usa dois modelos complementares:
 
 ```bash
 # Rodar todos os testes
-pytest tests/ -v
+poetry run pytest tests/ -v
 
 # Com relatório de cobertura
-pytest tests/ --cov=src/grimperium --cov-report=html
+poetry run pytest tests/ --cov=src/grimperium --cov-report=html
 # Abrir o relatório
 open htmlcov/index.html   # macOS
 xdg-open htmlcov/index.html  # Linux
 
 # Verificar tipos (mypy)
-mypy src/ --strict
+poetry run mypy src/ --strict
 
 # Linting
-ruff check src/
+poetry run ruff check src/
 
 # Formatação
-black src/ tests/
+poetry run black src/ tests/
 
 # Rodar todos os gates de uma vez
-pre-commit run --all-files
+poetry run pre-commit run --all-files
 ```
 
 ---

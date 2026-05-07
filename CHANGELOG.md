@@ -80,6 +80,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Verification: `pytest tests/cli/ -v`
 
 ### Fixed
+- **Poetry 2.x installation instructions** (2026-05-07)
+  - Updated README and local development commands to replace removed
+    `poetry shell` usage with `poetry env activate` or `poetry run`
+  - Prefixed project Python, test, lint, format, and pre-commit commands with
+    `poetry run`
+
 - **Worker CSV progress refresh** (2026-04-27)
   - `WorkerRunner` can now write best-effort status updates to a configured
     local `batch_tracking.csv` so the CLI progress monitor sees worker activity
