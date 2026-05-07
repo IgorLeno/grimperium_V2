@@ -150,10 +150,10 @@ cd grimperium_V2
 **3. Instale as dependências com Poetry**
 ```bash
 # Cria o ambiente virtual e instala tudo automaticamente
-poetry install
+poetry install --with dev --all-extras
 
 # Para instalar também as dependências de desenvolvimento (testes, linting)
-poetry install --with dev
+poetry install --with dev --all-extras
 ```
 
 **4. Ative o ambiente virtual**
@@ -164,7 +164,7 @@ eval $(poetry env activate)    # Linux / macOS / WSL
 # Invoke-Expression (poetry env activate)
 
 # Ou simplesmente prefixe cada comando com `poetry run` (recomendado):
-# poetry run python -m grimperium
+# poetry run grimperium
 # poetry run pytest tests/ -v
 ```
 
@@ -245,7 +245,7 @@ git clone https://github.com/IgorLeno/grimperium_V2.git
 cd grimperium_V2
 
 # Instale as dependências
-poetry install
+poetry install --with dev --all-extras
 
 # Ative o ambiente
 # Poetry 2.x: ative o ambiente virtual com:
@@ -254,7 +254,7 @@ eval $(poetry env activate)    # Linux / macOS / WSL
 # Invoke-Expression (poetry env activate)
 
 # Ou simplesmente prefixe cada comando com `poetry run` (recomendado):
-# poetry run python -m grimperium
+# poetry run grimperium
 # poetry run pytest tests/ -v
 
 # Valide
@@ -290,7 +290,7 @@ explorer.exe .
 
 ### Iniciar a CLI interativa
 ```bash
-poetry run python -m grimperium
+poetry run grimperium
 ```
 
 A CLI oferece menus para:

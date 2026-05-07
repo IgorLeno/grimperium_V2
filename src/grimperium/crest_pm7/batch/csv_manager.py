@@ -203,6 +203,30 @@ class BatchCSVManager:
             + self.DISTRIBUTED_COLUMNS
         )
 
+    def create_empty_csv(self) -> pd.DataFrame:
+        """Create empty CSV with full schema on first installation.
+
+        Creates the parent directory if needed, builds a zero-row DataFrame
+        with all columns from get_schema(), and saves atomically.
+
+        Returns:
+            Empty DataFrame with full schema
+
+        Raises:
+            RuntimeError: If csv_path is None
+        """
+        if self.csv_path is None:
+            raise RuntimeError("csv_path is None - cannot create CSV")
+        self.csv_path.parent.mkdir(parents=True, exist_ok=True)
+        self.df = pd.DataFrame(columns=self.get_schema())
+        atomic_to_csv(self.csv_path, self.df)
+        LOG.info(
+            "Created empty CSV with %d columns at %s",
+            len(self.get_schema()),
+            self.csv_path,
+        )
+        return self.df
+
     _CSV_DTYPE: dict[str, type] = {
         "mol_id": str,
         "smiles": str,
@@ -226,14 +250,15 @@ class BatchCSVManager:
             1. Orphan ``.csv.tmp`` files from interrupted writes are removed.
             2. If the CSV is 0-byte or unparseable, the ``.bak`` backup is
                restored transparently.
-            3. If both CSV and backup are corrupt/missing,
+            3. If the CSV and backup are missing, an empty CSV is created with
+               the full schema.
+            4. If both CSV and backup are corrupt,
                :class:`CSVCorruptedError` is raised.
 
         Returns:
             Loaded DataFrame
 
         Raises:
-            FileNotFoundError: If CSV file doesn't exist (and no backup).
             RuntimeError: If csv_path is None.
             CSVCorruptedError: If CSV and backup are both unreadable.
         """
@@ -259,7 +284,11 @@ class BatchCSVManager:
                 LOG.error("CSV missing, restoring from backup: %s", backup_path)
                 shutil.copy2(backup_path, self.csv_path)
             else:
-                raise FileNotFoundError(f"CSV file not found: {self.csv_path}")
+                LOG.warning(
+                    "CSV not found at %s. Creating empty database with full schema.",
+                    self.csv_path,
+                )
+                return self.create_empty_csv()
 
         try:
             if self.csv_path.stat().st_size == 0:

@@ -14,6 +14,57 @@ from grimperium.crest_pm7.batch.csv_manager import BatchCSVManager
 from grimperium.crest_pm7.batch.enums import BatchSortingStrategy
 
 
+def test_load_csv_creates_file_when_missing(tmp_path: Path) -> None:
+    """load_csv() cria CSV vazio se arquivo não existe."""
+    csv_path = tmp_path / "new.csv"
+    manager = BatchCSVManager(csv_path=csv_path)
+    df = manager.load_csv()
+    assert csv_path.exists()
+    assert list(df.columns) == manager.get_schema()
+    assert len(df) == 0
+
+
+def test_load_csv_creates_parent_dirs(tmp_path: Path) -> None:
+    """load_csv() cria pasta pai se não existe."""
+    csv_path = tmp_path / "subdir" / "nested" / "new.csv"
+    manager = BatchCSVManager(csv_path=csv_path)
+    df = manager.load_csv()
+    assert csv_path.exists()
+    assert len(df) == 0
+
+
+def test_create_empty_csv_schema_complete(tmp_path: Path) -> None:
+    """create_empty_csv() produz DataFrame com schema completo."""
+    csv_path = tmp_path / "empty.csv"
+    manager = BatchCSVManager(csv_path=csv_path)
+    df = manager.create_empty_csv()
+    assert set(df.columns) == set(manager.get_schema())
+    assert len(df) == 0
+
+
+def test_create_empty_csv_raises_when_path_none() -> None:
+    """create_empty_csv() levanta RuntimeError se csv_path é None."""
+    manager = BatchCSVManager(csv_path=None)
+    with pytest.raises(RuntimeError, match="csv_path is None"):
+        manager.create_empty_csv()
+
+
+def test_load_csv_does_not_overwrite_existing(tmp_path: Path) -> None:
+    """load_csv() não chama create_empty_csv() se arquivo já existe."""
+    csv_path = tmp_path / "existing.csv"
+    # Cria CSV com 1 molécula
+    manager = BatchCSVManager(csv_path=csv_path)
+    manager.create_empty_csv()
+    row = {col: None for col in manager.get_schema()}
+    row.update({"mol_id": "m001", "smiles": "C", "nheavy": 1, "status": "PENDING"})
+    manager.df = pd.DataFrame([row])
+    manager.save_csv()
+    # Recarrega
+    manager2 = BatchCSVManager(csv_path=csv_path)
+    df2 = manager2.load_csv()
+    assert len(df2) == 1
+
+
 @pytest.fixture
 def csv_path(tmp_path: Path) -> Path:
     """Create a temporary CSV file for testing."""

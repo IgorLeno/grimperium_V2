@@ -8,6 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- feat: create empty CSV with full schema on first installation
+  (`BatchCSVManager.load_csv` now auto-creates `data/thermo_pm7.csv` instead
+  of raising `FileNotFoundError`)
 
 - **Worker consecutive failure stop** (2026-04-26)
   - `WorkerRunner` now tracks consecutive pipeline/reporting failures and stops
@@ -80,6 +83,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Verification: `pytest tests/cli/ -v`
 
 ### Fixed
+- **README installation and CLI commands** (2026-05-07)
+  - Updated Poetry install commands to use
+    `poetry install --with dev --all-extras` so optional CLI/server extras are
+    installed with the documented setup
+  - Replaced `python -m grimperium` CLI startup examples with the registered
+    `grimperium` console script
+
 - **Poetry 2.x installation instructions** (2026-05-07)
   - Updated README and local development commands to replace removed
     `poetry shell` usage with `poetry env activate` or `poetry run`
