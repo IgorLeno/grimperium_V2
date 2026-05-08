@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import shutil
 import time
+from collections.abc import Callable
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any
 
 from .config import MiniConfig
 from .crest import build_crest_command, run_crest, use_single_conformer
@@ -68,15 +70,20 @@ def run_pipeline(
     config: MiniConfig,
     limit: int | None = None,
     dry_run: bool = False,
+    on_progress: Callable[[str, Any], None] | None = None,
 ) -> tuple[list[dict[str, object]], list[dict[str, object]]]:
     """Run formation calculations and reaction post-processing."""
     tasks = load_pipeline_tasks(xlsx, methods=methods, limit=limit)
     formation_rows: list[dict[str, object]] = []
     detail_rows: list[dict[str, object]] = []
     for task in tasks:
+        if on_progress:
+            on_progress("start", {"mol_id": task.mol_id, "method": task.method})
         row, details = process_task(task, config, dry_run=dry_run)
         formation_rows.append(row)
         detail_rows.extend(_detail_to_rows(details))
+        if on_progress:
+            on_progress("done", row)
 
     formation_path = config.results_dir / "formacao_grimperium_mini.csv"
     detail_path = config.results_dir / "conformers_detail.csv"
@@ -220,9 +227,7 @@ def process_task(
             else ""
         ),
         "hf_marrero_gani_kJmol": (
-            task.hf_marrero_gani_kJmol
-            if task.hf_marrero_gani_kJmol is not None
-            else ""
+            task.hf_marrero_gani_kJmol if task.hf_marrero_gani_kJmol is not None else ""
         ),
         "ad_kJmol": _none_to_blank(absolute_deviation(hof_kj, task.hf_exp_kJmol)),
         "rd_percent": _none_to_blank(
