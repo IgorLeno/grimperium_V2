@@ -118,6 +118,7 @@ ignore = [
 "src/grimperium/crest_pm7/validation.py" = ["S603", "S607"]
 "src/grimperium_mini/crest.py" = ["S603", "S607"]
 "src/grimperium_mini/mopac.py" = ["S603", "S607"]
+"src/grimperium_mini/xtb.py" = ["S603", "S607"]
 "src/grimperium_mini/io.py" = ["S314"]
 # subprocess call for pip install in preflight + non-security hash for settings cache
 "src/grimperium/cli/preflight.py" = ["S603", "S607", "S324"]

@@ -17,6 +17,7 @@ from .models import ConformerResult, PipelineTask
 from .mopac import run_mopac
 from .rdkit_seed import generate_initial_xyz
 from .reactions import calculate_reactions, load_reaction_rows, write_reactions_csv
+from .xtb import run_xtb_preopt
 
 FORMATION_COLUMNS = [
     "mol_id",
@@ -26,6 +27,7 @@ FORMATION_COLUMNS = [
     "group",
     "method",
     "status",
+    "xtb_status",
     "crest_status",
     "mopac_status",
     "n_conformers_found",
@@ -110,6 +112,7 @@ def process_task(
     work_dir = config.work_root / _safe_name(task.mol_id) / task.method
     conformer_details: list[ConformerResult] = []
     error = ""
+    xtb_status = "not_attempted"
     crest_status = "not_attempted"
     mopac_status = "not_attempted"
     selected: ConformerResult | None = None
@@ -137,11 +140,27 @@ def process_task(
             input_xyz = generate_initial_xyz(
                 task.smiles, work_dir / "rdkit_initial.xyz", task.molecule
             )
+            if config.xtb_enabled:
+                xtb_result = run_xtb_preopt(
+                    input_xyz,
+                    work_dir / "xtb",
+                    task.mol_id,
+                    config.xtb_executable,
+                    config.timeout_xtb_s,
+                    threads=config.threads,
+                )
+                xtb_status = xtb_result.status
+                if not xtb_result.success or xtb_result.output_xyz is None:
+                    raise RuntimeError(xtb_result.error_message)
+                crest_input = xtb_result.output_xyz
+            else:
+                xtb_status = "skipped"
+                crest_input = input_xyz
             if task.run_crest:
-                crest_result = run_crest(input_xyz, work_dir / "crest", config)
+                crest_result = run_crest(crest_input, work_dir / "crest", config)
             else:
                 crest_result = use_single_conformer(
-                    input_xyz, work_dir / "crest_skipped"
+                    crest_input, work_dir / "crest_skipped"
                 )
             crest_status = crest_result.status
             n_found = crest_result.n_conformers_found
@@ -200,6 +219,7 @@ def process_task(
         "group": task.group,
         "method": task.method,
         "status": status,
+        "xtb_status": xtb_status,
         "crest_status": crest_status,
         "mopac_status": mopac_status,
         "n_conformers_found": n_found,

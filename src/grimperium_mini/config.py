@@ -38,6 +38,15 @@ class MiniConfig:
     mopac_executable: str = field(
         default_factory=lambda: os.getenv("GRIMPERIUM_MINI_MOPAC", "mopac")
     )
+    xtb_executable: str = field(
+        default_factory=lambda: os.getenv("GRIMPERIUM_MINI_XTB", "xtb")
+    )
+    xtb_enabled: bool = field(
+        default_factory=lambda: os.getenv(
+            "GRIMPERIUM_MINI_XTB_ENABLED", "true"
+        ).lower()
+        != "false"
+    )
     threads: int = field(default_factory=lambda: _env_int("GRIMPERIUM_MINI_THREADS", 4))
     crest_method: str = field(
         default_factory=lambda: os.getenv("GRIMPERIUM_MINI_CREST_METHOD", "gfn2")
@@ -62,6 +71,9 @@ class MiniConfig:
         default_factory=lambda: _env_path(
             "GRIMPERIUM_MINI_RESULTS_DIR", Path("results")
         )
+    )
+    timeout_xtb_s: int = field(
+        default_factory=lambda: _env_int("GRIMPERIUM_MINI_TIMEOUT_XTB_S", 600)
     )
     timeout_crest_s: int = field(
         default_factory=lambda: _env_int("GRIMPERIUM_MINI_TIMEOUT_CREST_S", 7200)
