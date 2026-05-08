@@ -63,7 +63,9 @@ class MiniConfig:
     mopac_keywords_extra: list[str] = field(
         default_factory=lambda: ["PRECISE", "EF", "AUX"]
     )
-    max_conformers_to_optimize: int | None = None
+    max_conformers_to_optimize: int | None = field(
+        default_factory=lambda: _env_int("GRIMPERIUM_MINI_MAX_CONFORMERS", 10) or None
+    )
     work_root: Path = field(
         default_factory=lambda: _env_path("GRIMPERIUM_MINI_WORK_ROOT", Path("runs"))
     )
