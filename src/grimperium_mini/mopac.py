@@ -107,7 +107,7 @@ def run_mopac(
         multiplicity=multiplicity,
         extra_keywords=config.mopac_keywords_extra,
     )
-    cmd = [config.mopac_executable, str(mop_file)]
+    cmd = [config.mopac_executable, str(mop_file.resolve())]
     try:
         proc = subprocess.run(
             cmd,

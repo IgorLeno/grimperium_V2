@@ -19,7 +19,7 @@ def build_crest_command(input_xyz: Path, config: MiniConfig) -> list[str]:
     }[config.crest_method]
     cmd = [
         config.crest_executable,
-        str(input_xyz),
+        str(input_xyz.resolve()),
         method_flag,
         "--v3",
         "--ewin",

@@ -76,7 +76,7 @@ distributed = ["fastapi", "uvicorn", "httpx", "pydantic-settings", "rich"]
 [tool.poetry.scripts]
 grimperium = "grimperium.cli:main"
 grimperium-worker = "grimperium.worker.__main__:main"
-grimperium-mini = "grimperium_mini.cli:main"
+grimperium-mini = "grimperium_mini.__main__:main"
 
 [tool.ruff]
 target-version = "py310"
