@@ -121,18 +121,24 @@ def process_task(
 
     if dry_run:
         work_dir.mkdir(parents=True, exist_ok=True)
-        planned_input = work_dir / "input.xyz"
-        crest_cmd = build_crest_command(planned_input, config)
+        rdkit_xyz = work_dir / "rdkit_initial.xyz"
+        xtb_xyz = (work_dir / "xtb" / f"{task.mol_id}_preopt.xyz").resolve()
+        crest_input = xtb_xyz if config.xtb_enabled else rdkit_xyz.resolve()
+        if config.xtb_enabled:
+            print(
+                "DRY-RUN XTB:",
+                config.xtb_executable,
+                str(rdkit_xyz.resolve()),
+                "--opt --gfn2 --temp 300 --T",
+                str(config.threads),
+            )
+        crest_cmd = build_crest_command(crest_input, config)
         print("DRY-RUN CREST:", " ".join(crest_cmd))
-        print(
-            "DRY-RUN MOPAC:",
-            " ".join(
-                [
-                    config.mopac_executable,
-                    str(work_dir / f"conformer_0001_{task.method}.mop"),
-                ]
-            ),
+        mop_file = (
+            work_dir / "mopac" / "conformer_0001" / f"conformer_0001_{task.method}.mop"
         )
+        print("DRY-RUN MOPAC:", config.mopac_executable, str(mop_file.resolve()))
+        xtb_status = "dry_run" if config.xtb_enabled else "skipped"
         crest_status = "dry_run"
         mopac_status = "dry_run"
     else:
