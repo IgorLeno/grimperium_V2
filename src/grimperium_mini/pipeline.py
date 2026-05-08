@@ -38,6 +38,7 @@ FORMATION_COLUMNS = [
     "hf_tcc_pm7_kJmol",
     "hf_joback_kJmol",
     "hf_constantinou_gani_kJmol",
+    "hf_marrero_gani_kJmol",
     "ad_kJmol",
     "rd_percent",
     "work_dir",
@@ -218,8 +219,15 @@ def process_task(
             if task.hf_constantinou_gani_kJmol is not None
             else ""
         ),
-        "ad_kJmol": absolute_deviation(hof_kj, task.hf_exp_kJmol) or "",
-        "rd_percent": relative_deviation_percent(hof_kj, task.hf_exp_kJmol) or "",
+        "hf_marrero_gani_kJmol": (
+            task.hf_marrero_gani_kJmol
+            if task.hf_marrero_gani_kJmol is not None
+            else ""
+        ),
+        "ad_kJmol": _none_to_blank(absolute_deviation(hof_kj, task.hf_exp_kJmol)),
+        "rd_percent": _none_to_blank(
+            relative_deviation_percent(hof_kj, task.hf_exp_kJmol)
+        ),
         "work_dir": str(work_dir),
         "error_message": error,
         "started_at": started.isoformat(),
@@ -280,3 +288,7 @@ def _backup_if_exists(path: Path) -> None:
 
 def _safe_name(value: str) -> str:
     return "".join(ch if ch.isalnum() or ch in {"-", "_"} else "_" for ch in value)
+
+
+def _none_to_blank(value: float | None) -> object:
+    return "" if value is None else value

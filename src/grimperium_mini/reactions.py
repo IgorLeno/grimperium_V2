@@ -19,7 +19,9 @@ def reaction_enthalpy(
 def load_reaction_rows(path: Path) -> list[dict[str, str]]:
     if path.suffix.lower() == ".csv":
         return read_csv_rows(path)
-    return read_xlsx_table(path, "04_reacoes", {"reaction_id", "coef_a", "coef_d"})
+    return read_xlsx_table(
+        path, "04_reacoes", {"reaction_id", "coef_a", "coef_b", "coef_c", "coef_d"}
+    )
 
 
 def calculate_reactions(
@@ -92,26 +94,23 @@ def write_reactions_csv(path: Path, rows: list[dict[str, object]]) -> None:
 def _hr_for_method(
     row: dict[str, object], hfs: dict[str, dict[str, float]], method: str
 ) -> float | None:
+    # Use a running total instead of a dict keyed by compound name so that the
+    # same compound appearing in both A and B (or C and D) is counted twice.
     try:
-        reactants = {}
-        products = {}
-        if row["A"]:
-            reactants[str(row["A"])] = (
-                _required_float(row["a"]) * hfs[str(row["A"])][method]
-            )
-        if row["B"]:
-            reactants[str(row["B"])] = (
-                _required_float(row["b"]) * hfs[str(row["B"])][method]
-            )
-        if row["C"]:
-            products[str(row["C"])] = (
-                _required_float(row["c"]) * hfs[str(row["C"])][method]
-            )
-        if row["D"]:
-            products[str(row["D"])] = (
-                _required_float(row["d"]) * hfs[str(row["D"])][method]
-            )
-        return reaction_enthalpy(reactants, products)
+        total = 0.0
+        for compound, coef in (
+            (row["C"], row["c"]),
+            (row["D"], row["d"]),
+        ):
+            if compound:
+                total += _required_float(coef) * hfs[str(compound)][method]
+        for compound, coef in (
+            (row["A"], row["a"]),
+            (row["B"], row["b"]),
+        ):
+            if compound:
+                total -= _required_float(coef) * hfs[str(compound)][method]
+        return total
     except KeyError:
         return None
 

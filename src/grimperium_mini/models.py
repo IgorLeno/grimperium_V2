@@ -24,6 +24,7 @@ class MoleculeInput:
     hf_tcc_pm7_kJmol: float | None = None
     hf_joback_kJmol: float | None = None
     hf_constantinou_gani_kJmol: float | None = None
+    hf_marrero_gani_kJmol: float | None = None
 
 
 @dataclass
@@ -44,6 +45,7 @@ class PipelineTask:
     hf_tcc_pm7_kJmol: float | None = None
     hf_joback_kJmol: float | None = None
     hf_constantinou_gani_kJmol: float | None = None
+    hf_marrero_gani_kJmol: float | None = None
 
 
 @dataclass

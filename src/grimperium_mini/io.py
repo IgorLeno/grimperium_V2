@@ -224,6 +224,9 @@ def load_pipeline_tasks(
                 hf_constantinou_gani_kJmol=_float(
                     row.get("ref_Hf_CG_kJmol") or ref.get("Hf_CG_kJmol")
                 ),
+                hf_marrero_gani_kJmol=_float(
+                    row.get("ref_Hf_MG_kJmol") or ref.get("Hf_MG_kJmol")
+                ),
             )
         )
         if limit is not None and len(tasks) >= limit:
@@ -249,7 +252,10 @@ def validate_workbook(path: Path) -> list[str]:
         tasks = workbook.table(
             "02_pipeline_grimperium_mini", {"mol_id", "smiles", "method"}
         )
-        reactions = workbook.table("04_reacoes", {"reaction_id", "coef_a", "coef_d"})
+        reactions = workbook.table(
+            "04_reacoes",
+            {"reaction_id", "coef_a", "coef_b", "coef_c", "coef_d"},
+        )
         if not molecules:
             missing.append("01_moleculas_cbthermo has no data rows")
         if not tasks:
