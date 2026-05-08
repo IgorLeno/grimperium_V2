@@ -143,3 +143,23 @@ results/
 data/grimperium_mini_pipeline_tcc.xlsx
 data/grimperium_mini_summary.xlsx
 grimperium_mini_summary.xlsx
+
+# CREST output files (generated in work directories and accidentally in root)
+confcross.xyz
+cre_members
+crest.energies
+crest.restart
+crest_*.mdrestart
+crest_best.xyz
+crest_conformers.xyz
+crest_dynamics.trj
+crest_input_copy.xyz
+crest_rotamers.xyz
+crestopt.log
+ensemble_energies.log
+gfnff_adjacency
+gfnff_topo
+wbo
+coord
+*.trj
+*.restart
