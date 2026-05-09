@@ -72,9 +72,43 @@ can be set through CLI flags or environment variables:
 
 - `GRIMPERIUM_MINI_CREST`
 - `GRIMPERIUM_MINI_MOPAC`
+- `GRIMPERIUM_MINI_XTB` — path to the xTB binary (default: `xtb`)
+- `GRIMPERIUM_MINI_XTB_ENABLED` — set to `false` to skip xTB pre-optimization
 - `GRIMPERIUM_MINI_THREADS`
 - `GRIMPERIUM_MINI_WORK_ROOT`
 - `GRIMPERIUM_MINI_RESULTS_DIR`
 
 The MOPAC method is passed explicitly for every task and must be one of `AM1`,
 `PM3`, or `PM7`.
+
+## Known Issues
+
+### Fedora xtb 6.7.1-4 optimizer crash
+
+The Fedora-packaged `xtb 6.7.1-4.fc43` has a Fortran format-string bug in
+`optimizer.f90:852` that causes `xtb --opt` to abort with `rc=2` and the
+message:
+
+```
+Fortran runtime error: Missing comma between descriptors
+(1x,""(""f7.2""%)"")
+```
+
+`grimperium-mini` detects this automatically at startup via a preflight check.
+When the check fails, xTB pre-optimization is silently disabled for that run
+and the pipeline falls back to `RDKit → CREST → MOPAC` (the same path used
+before xTB support was added). A `WARNING` message is printed citing this issue.
+
+**Permanent workarounds:**
+
+```bash
+# Option 1 — skip xTB via CLI flag
+python -m grimperium_mini run --no-xtb --xlsx ...
+
+# Option 2 — skip xTB via environment variable
+export GRIMPERIUM_MINI_XTB_ENABLED=false
+
+# Option 3 — install a working xTB (conda-forge build is unaffected)
+conda install -c conda-forge xtb=6.7.1
+export GRIMPERIUM_MINI_XTB=/path/to/conda/bin/xtb
+```

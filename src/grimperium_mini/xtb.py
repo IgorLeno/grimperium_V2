@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import subprocess
+import tempfile
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -37,6 +38,7 @@ def run_xtb_preopt(
         str(input_xyz.resolve()),
         "--opt",
         "--gfn2",
+        "--silent",
         "--temp",
         "300",
         "--T",
@@ -74,3 +76,61 @@ def run_xtb_preopt(
     except subprocess.TimeoutExpired:
         elapsed = time.perf_counter() - start
         return XTBResult("failed", None, f"xTB timed out after {timeout_s}s", elapsed)
+
+
+_H2O_XYZ = """\
+3
+water preflight
+O  0.0000  0.0000  0.0000
+H  0.9572  0.0000  0.0000
+H -0.2399  0.9267  0.0000
+"""
+
+_PREFLIGHT_TIMEOUT_S = 60
+
+
+def verify_xtb_runtime(xtb_executable: str, threads: int = 1) -> tuple[bool, str]:
+    """Test the xTB binary with a tiny molecule before the main run.
+
+    Returns (True, "") if xtb works, (False, reason) if it is broken or absent.
+    """
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        xyz = tmp / "h2o.xyz"
+        xyz.write_text(_H2O_XYZ)
+        cmd = [
+            xtb_executable,
+            str(xyz),
+            "--opt",
+            "--gfn2",
+            "--silent",
+            "--T",
+            str(threads),
+        ]
+        try:
+            proc = subprocess.run(
+                cmd,
+                cwd=tmp,
+                capture_output=True,
+                text=True,
+                timeout=_PREFLIGHT_TIMEOUT_S,
+                check=False,
+            )
+        except FileNotFoundError:
+            return False, f"xTB executable not found: {xtb_executable}"
+        except subprocess.TimeoutExpired:
+            return False, f"xTB preflight timed out after {_PREFLIGHT_TIMEOUT_S}s"
+
+        xtbopt = tmp / "xtbopt.xyz"
+        if proc.returncode == 0 and xtbopt.exists():
+            return True, ""
+
+        stderr_snippet = proc.stderr[:200].strip()
+        return (
+            False,
+            (
+                f"rc={proc.returncode}: {stderr_snippet}"
+                if stderr_snippet
+                else f"rc={proc.returncode}, xtbopt.xyz not produced"
+            ),
+        )

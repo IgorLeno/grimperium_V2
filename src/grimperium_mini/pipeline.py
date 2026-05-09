@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import shutil
 import time
 from collections.abc import Callable
@@ -17,7 +18,9 @@ from .models import ConformerResult, PipelineTask
 from .mopac import run_mopac
 from .rdkit_seed import generate_initial_xyz
 from .reactions import calculate_reactions, load_reaction_rows, write_reactions_csv
-from .xtb import run_xtb_preopt
+from .xtb import run_xtb_preopt, verify_xtb_runtime
+
+logger = logging.getLogger(__name__)
 
 FORMATION_COLUMNS = [
     "mol_id",
@@ -76,6 +79,20 @@ def run_pipeline(
 ) -> tuple[list[dict[str, object]], list[dict[str, object]]]:
     """Run formation calculations and reaction post-processing."""
     tasks = load_pipeline_tasks(xlsx, methods=methods, limit=limit)
+
+    if config.xtb_enabled and not dry_run:
+        ok, reason = verify_xtb_runtime(config.xtb_executable, threads=config.threads)
+        if not ok:
+            logger.warning(
+                "xTB pre-optimization disabled: binary check failed (%s). "
+                "If you are using the Fedora-packaged xtb 6.7.1-4 (fc43), this is a "
+                "known Fortran format-string bug in optimizer.f90:852. "
+                "Workarounds: install conda-forge xtb=6.7.1, pass --no-xtb, "
+                "or set GRIMPERIUM_MINI_XTB_ENABLED=false.",
+                reason,
+            )
+            config.xtb_enabled = False
+
     formation_rows: list[dict[str, object]] = []
     detail_rows: list[dict[str, object]] = []
     for task in tasks:
@@ -211,7 +228,10 @@ def process_task(
                     error = "No conformer with extractable heat of formation"
         except Exception as exc:
             error = str(exc)
-            crest_status = "failed" if crest_status == "not_attempted" else crest_status
+            # Only blame CREST if xTB succeeded/was skipped; if xTB is what
+            # failed, CREST never ran and its status should stay "not_attempted".
+            if crest_status == "not_attempted" and xtb_status != "failed":
+                crest_status = "failed"
 
     finished = datetime.now(timezone.utc)
     status = "dry_run" if dry_run else ("success" if selected is not None else "failed")

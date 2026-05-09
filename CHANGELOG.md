@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **grimperium_mini: xTB preflight check + honest status attribution** (2026-05-09)
+  - Added `verify_xtb_runtime` in `xtb.py`: runs `xtb --opt --gfn2 --silent` on a
+    tiny H2O molecule before the main pipeline loop. If the binary is broken (e.g.
+    Fedora xtb 6.7.1-4 fc43 hits a Fortran format-string bug in `optimizer.f90:852`),
+    `xtb_enabled` is auto-set to `False` with a `WARNING` naming the issue and
+    listing workarounds (`--no-xtb`, `GRIMPERIUM_MINI_XTB_ENABLED=false`,
+    conda-forge `xtb=6.7.1`). Previously, a broken xTB caused every molecule to
+    fail silently (1156 rows, 0 successes).
+  - Added `--silent` flag to `run_xtb_preopt` to suppress per-iteration logging
+    (suppresses the Fortran printer that triggers the bug on some builds).
+  - Fixed `crest_status` attribution in `process_task`: when xTB is the failing
+    stage, `crest_status` now stays `"not_attempted"` instead of being wrongly
+    flipped to `"failed"` (CREST never ran).
+
 ### Added
 - feat: create empty CSV with full schema on first installation
   (`BatchCSVManager.load_csv` now auto-creates `data/thermo_pm7.csv` instead

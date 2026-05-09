@@ -107,8 +107,12 @@ def _config_from_args(args: argparse.Namespace) -> MiniConfig:
         xtb_enabled=not args.no_xtb,
         threads=args.threads if args.threads is not None else _defaults.threads,
         crest_method=args.crest_method or _defaults.crest_method,
-        crest_ewin=args.crest_ewin if args.crest_ewin is not None else _defaults.crest_ewin,
-        crest_rthr=args.crest_rthr if args.crest_rthr is not None else _defaults.crest_rthr,
+        crest_ewin=(
+            args.crest_ewin if args.crest_ewin is not None else _defaults.crest_ewin
+        ),
+        crest_rthr=(
+            args.crest_rthr if args.crest_rthr is not None else _defaults.crest_rthr
+        ),
         crest_quick_mode=args.crest_quick_mode,
         max_conformers_to_optimize=args.max_conformers_to_optimize,
     )

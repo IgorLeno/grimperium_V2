@@ -18,7 +18,9 @@ DATA = Path("data/grimperium_mini_pipeline_tcc.xlsx")
 def test_callback_called_per_task() -> None:
     config = MiniConfig()
     mock_cb = MagicMock()
-    run_pipeline(DATA, methods=["AM1"], config=config, limit=2, dry_run=True, on_progress=mock_cb)
+    run_pipeline(
+        DATA, methods=["AM1"], config=config, limit=2, dry_run=True, on_progress=mock_cb
+    )
     done_calls = [c for c in mock_cb.call_args_list if c == call("done", c.args[1])]
     # at least one "done" call per task processed
     done_events = [c for c in mock_cb.call_args_list if c.args[0] == "done"]
@@ -28,7 +30,9 @@ def test_callback_called_per_task() -> None:
 @pytest.mark.skipif(not DATA.exists(), reason="xlsx fixture not available")
 def test_callback_none_no_error() -> None:
     config = MiniConfig()
-    run_pipeline(DATA, methods=["AM1"], config=config, limit=1, dry_run=True, on_progress=None)
+    run_pipeline(
+        DATA, methods=["AM1"], config=config, limit=1, dry_run=True, on_progress=None
+    )
 
 
 def test_run_pipeline_accepts_callback_parameter() -> None:
@@ -66,7 +70,10 @@ def test_callback_invoked_with_mock_tasks() -> None:
         patch("grimperium_mini.pipeline.calculate_reactions", return_value=[]),
         patch("grimperium_mini.pipeline.write_reactions_csv"),
     ):
-        mock_process.return_value = ({"mol_id": "m0", "status": "dry_run", "method": "PM7"}, [])
+        mock_process.return_value = (
+            {"mol_id": "m0", "status": "dry_run", "method": "PM7"},
+            [],
+        )
         run_pipeline(
             Path("dummy.xlsx"),
             methods=["PM7"],
