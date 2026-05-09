@@ -38,9 +38,9 @@ class MiniProgressTracker:
             expand=True,
         )
         table.add_column("mol_id", style="bold", no_wrap=True)
-        table.add_column("method", style=COLORS["primary"])
+        table.add_column("conformers", justify="right")
         table.add_column("status")
-        table.add_column("hof_kJ/mol", justify="right")
+        table.add_column("hf_PM7_kJ/mol", justify="right")
         table.add_column("tempo(s)", justify="right")
         table.add_column("crest")
         table.add_column("mopac")
@@ -54,17 +54,17 @@ class MiniProgressTracker:
             else:
                 status_style = COLORS["error"]
 
-            hof = row.get("hof_selected_kJmol", "")
+            hof = row.get("hf_pm7_kJmol", "")
             hof_str = f"{hof:.2f}" if isinstance(hof, float) else str(hof)
 
             elapsed = row.get("total_time_s", "")
             elapsed_str = (
-                f"{elapsed:.1f}" if isinstance(elapsed, float) else str(elapsed)
+                f"{elapsed:.1f}" if isinstance(elapsed, int | float) else str(elapsed)
             )
 
             table.add_row(
                 str(row.get("mol_id", "")),
-                str(row.get("method", "")),
+                str(row.get("n_conformers_founded", "")),
                 f"[{status_style}]{status}[/{status_style}]",
                 hof_str,
                 elapsed_str,

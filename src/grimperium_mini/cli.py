@@ -21,11 +21,10 @@ def build_parser() -> argparse.ArgumentParser:
 
     run = sub.add_parser("run")
     run.add_argument("--xlsx", type=Path, required=True)
-    run.add_argument("--methods", nargs="+", default=["AM1", "PM3", "PM7"])
     run.add_argument("--limit", type=int)
     run.add_argument("--dry-run", action="store_true")
-    run.add_argument("--work-root", type=Path, default=Path("runs"))
-    run.add_argument("--results-dir", type=Path, default=Path("results"))
+    run.add_argument("--work-root", type=Path, default=None)
+    run.add_argument("--results-dir", type=Path, default=None)
     run.add_argument("--crest-executable", default=None)
     run.add_argument("--mopac-executable", default=None)
     run.add_argument("--xtb-executable", default=None)
@@ -65,7 +64,6 @@ def main(argv: list[str] | None = None) -> int:
         config = _config_from_args(args)
         run_pipeline(
             args.xlsx,
-            methods=[m.upper() for m in args.methods],
             config=config,
             limit=args.limit,
             dry_run=args.dry_run,
@@ -99,8 +97,8 @@ def main(argv: list[str] | None = None) -> int:
 def _config_from_args(args: argparse.Namespace) -> MiniConfig:
     _defaults = MiniConfig()
     config = MiniConfig(
-        work_root=args.work_root,
-        results_dir=args.results_dir,
+        work_root=args.work_root if args.work_root is not None else _defaults.work_root,
+        results_dir=args.results_dir if args.results_dir is not None else _defaults.results_dir,
         crest_executable=args.crest_executable or _defaults.crest_executable,
         mopac_executable=args.mopac_executable or _defaults.mopac_executable,
         xtb_executable=args.xtb_executable or _defaults.xtb_executable,

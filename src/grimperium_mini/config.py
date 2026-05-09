@@ -65,11 +65,15 @@ class MiniConfig:
         default_factory=lambda: _env_int("GRIMPERIUM_MINI_MAX_CONFORMERS", 10) or None
     )
     work_root: Path = field(
-        default_factory=lambda: _env_path("GRIMPERIUM_MINI_WORK_ROOT", Path("runs"))
+        default_factory=lambda: _env_path(
+            "GRIMPERIUM_MINI_WORK_ROOT",
+            Path("/home/ifernandes/Projetos/grimperium/runs"),
+        )
     )
     results_dir: Path = field(
         default_factory=lambda: _env_path(
-            "GRIMPERIUM_MINI_RESULTS_DIR", Path("results")
+            "GRIMPERIUM_MINI_RESULTS_DIR",
+            Path("/home/ifernandes/Projetos/grimperium/results"),
         )
     )
     timeout_xtb_s: int = field(

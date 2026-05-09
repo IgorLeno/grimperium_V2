@@ -136,7 +136,10 @@ docs/plans/
 # Temporary directories for CREST/MOPAC (Phase A fixes)
 src/grimperium/crest_pm7/tmp/*/
 !src/grimperium/crest_pm7/tmp/.gitignore
+
+# grimperium_mini run directories
 runs/
+/home/*/grimperium/runs/
 
 # grimperium_mini work directories and outputs
 results/

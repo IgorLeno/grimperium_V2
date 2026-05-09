@@ -10,7 +10,7 @@ from rich.panel import Panel
 from rich.prompt import Prompt
 
 from .config import MiniConfig
-from .io import load_pipeline_tasks
+from .io import load_molecules
 from .pipeline import run_pipeline
 from .progress import MiniProgressTracker
 from .styles import COLORS, MINI_BANNER, MINI_SUBTITLE, MINI_VERSION, console
@@ -64,9 +64,6 @@ class MiniApp:
         xlsx_str = Prompt.ask("Caminho do xlsx", default=default_xlsx)
         xlsx = Path(xlsx_str)
 
-        methods_str = Prompt.ask("Métodos (espaço separado)", default="AM1 PM3 PM7")
-        methods = [m.upper() for m in methods_str.split()]
-
         limit_str = Prompt.ask("Limit (Enter para processar tudo)", default="")
         limit: int | None = int(limit_str) if limit_str.strip() else None
 
@@ -74,16 +71,14 @@ class MiniApp:
         dry_run = dry_str.lower() == "s"
 
         config = MiniConfig()
-        tasks = load_pipeline_tasks(xlsx, methods=methods, limit=limit)
-        total = len(tasks)
+        molecules = load_molecules(xlsx, limit=limit)
+        total = len(molecules)
 
         tracker = MiniProgressTracker(total_tasks=total)
 
         def on_progress(event: str, data: object) -> None:
             if event == "start" and isinstance(data, dict):
-                tracker.on_task_start(
-                    str(data.get("mol_id", "")), str(data.get("method", ""))
-                )
+                tracker.on_task_start(str(data.get("mol_id", "")), "")
             elif event == "done" and isinstance(data, dict):
                 tracker.on_task_done(data)
 
@@ -96,7 +91,6 @@ class MiniApp:
 
             run_pipeline(
                 xlsx,
-                methods=methods,
                 config=config,
                 limit=limit,
                 dry_run=dry_run,

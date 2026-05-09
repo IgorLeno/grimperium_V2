@@ -176,6 +176,54 @@ def load_molecule_reference(path: Path) -> dict[str, dict[str, str]]:
     return {row["mol_id"]: row for row in rows}
 
 
+def load_molecules(
+    path: Path,
+    limit: int | None = None,
+) -> list[dict[str, object]]:
+    """Load unique molecules from the workbook (one entry per molecule, no method duplication)."""
+    rows = read_xlsx_table(path, "01_moleculas_cbthermo", {"mol_id", "smiles"})
+    molecules: list[dict[str, object]] = []
+    for row in rows:
+        molecules.append(
+            {
+                "mol_id": row.get("mol_id", ""),
+                "molecule": row.get("molecule", ""),
+                "smiles": row.get("smiles", ""),
+                "hf_exp_kJmol": _float(row.get("Hf_exp_kJmol")),
+                "formula": row.get("formula", ""),
+                "group": row.get("group", ""),
+                "charge": _int(row.get("charge"), 0),
+                "multiplicity": _int(row.get("multiplicity"), 1),
+                "run_crest": _bool(row.get("run_crest"), True),
+            }
+        )
+        if limit is not None and len(molecules) >= limit:
+            break
+    return molecules
+
+
+_SUMMARY_SHEET = "grimperium_mini_summary"
+
+
+def append_summary_row(
+    path: Path, row: dict[str, object], columns: list[str]
+) -> None:
+    """Append one result row to the summary xlsx, creating the file if needed.
+
+    If the file exists but has a different schema (e.g., from a prior pipeline
+    version), it is silently overwritten starting from this row.
+    """
+    rows_so_far: list[dict[str, object]] = []
+    if path.exists():
+        try:
+            prior = read_xlsx_table(path, _SUMMARY_SHEET, set())
+            rows_so_far = [dict(r) for r in prior]
+        except KeyError:
+            pass  # existing file has a different sheet layout; start fresh
+    rows_so_far.append(row)
+    write_simple_xlsx(path, {_SUMMARY_SHEET: (columns, rows_so_far)})
+
+
 def load_pipeline_tasks(
     path: Path,
     methods: list[str] | None = None,
