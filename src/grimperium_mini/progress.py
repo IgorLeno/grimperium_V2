@@ -14,13 +14,12 @@ class MiniProgressTracker:
     def __init__(self, total_tasks: int) -> None:
         self.total_tasks = total_tasks
         self.rows: list[dict[str, object]] = []
-        self._running: dict[str, dict[str, object]] = {}
+        self._current_mol_id: str = ""
         self.success_count = 0
         self.failed_count = 0
 
     def on_task_start(self, mol_id: str, method: str) -> None:
-        key = f"{mol_id}|{method}"
-        self._running[key] = {"mol_id": mol_id, "method": method}
+        self._current_mol_id = mol_id
 
     def on_task_done(self, row: dict[str, object]) -> None:
         self.rows.append(row)
@@ -44,6 +43,19 @@ class MiniProgressTracker:
         table.add_column("tempo(s)", justify="right")
         table.add_column("crest")
         table.add_column("mopac")
+
+        if self._current_mol_id:
+            done_ids = {str(r.get("mol_id", "")) for r in self.rows}
+            if self._current_mol_id not in done_ids:
+                table.add_row(
+                    f"[{COLORS['primary']}]⟳ {self._current_mol_id}[/{COLORS['primary']}]",
+                    "...",
+                    f"[{COLORS['primary']}]calculando...[/{COLORS['primary']}]",
+                    "...",
+                    "...",
+                    "...",
+                    "...",
+                )
 
         for row in self.rows:
             status = str(row.get("status", ""))
@@ -73,7 +85,11 @@ class MiniProgressTracker:
             )
 
         done = self.success_count + self.failed_count
-        table.caption = f"{done}/{self.total_tasks} done"
+        remaining = self.total_tasks - done
+        table.caption = (
+            f"{done}/{self.total_tasks} concluídas  |  "
+            f"[{COLORS['primary']}]{remaining} restantes[/{COLORS['primary']}]"
+        )
         return table
 
     def summary(self) -> Panel:
