@@ -17,6 +17,7 @@ class MiniProgressTracker:
         self._current_mol_id: str = ""
         self.success_count = 0
         self.failed_count = 0
+        self.skipped_count = 0
 
     def on_task_start(self, mol_id: str, method: str) -> None:
         self._current_mol_id = mol_id
@@ -26,6 +27,8 @@ class MiniProgressTracker:
         status = str(row.get("status", ""))
         if status in {"success", "dry_run"}:
             self.success_count += 1
+        elif status == "skipped":
+            self.skipped_count += 1
         else:
             self.failed_count += 1
 
@@ -59,6 +62,18 @@ class MiniProgressTracker:
 
         for row in self.rows:
             status = str(row.get("status", ""))
+            if status == "skipped":
+                table.add_row(
+                    str(row.get("mol_id", "")),
+                    "—",
+                    f"[{COLORS['muted']}]✓ já calculada[/{COLORS['muted']}]",
+                    "—",
+                    "—",
+                    "—",
+                    "—",
+                )
+                continue
+
             if status == "success":
                 status_style = COLORS["success"]
             elif status == "dry_run":
@@ -93,10 +108,11 @@ class MiniProgressTracker:
         return table
 
     def summary(self) -> Panel:
-        total = self.success_count + self.failed_count
+        total = self.success_count + self.failed_count + self.skipped_count
         body = (
             f"[{COLORS['success']}]{self.success_count} ✓[/{COLORS['success']}]  "
             f"[{COLORS['error']}]{self.failed_count} ✗[/{COLORS['error']}]  "
+            f"[{COLORS['muted']}]{self.skipped_count} ↷ puladas[/{COLORS['muted']}]  "
             f"[{COLORS['muted']}]{total} total[/{COLORS['muted']}]"
         )
         return Panel(body, title="[bold]Summary[/bold]", border_style=COLORS["primary"])

@@ -12,7 +12,7 @@ from typing import Any, cast
 
 from .config import MiniConfig
 from .crest import build_crest_command, run_crest, use_single_conformer
-from .io import append_summary_row, load_molecules
+from .io import append_summary_row, load_completed_mol_ids, load_molecules
 from .models import ConformerResult, SemiempiricalMethod
 from .mopac import run_mopac
 from .rdkit_seed import generate_initial_xyz
@@ -50,6 +50,16 @@ def run_pipeline(
     tasks = load_molecules(xlsx, limit=limit)
     summary_path = config.results_dir / "grimperium_mini_summary.xlsx"
 
+    completed_ids: set[str] = set()
+    if not dry_run:
+        completed_ids = load_completed_mol_ids(summary_path)
+        if completed_ids:
+            logger.info(
+                "Resume mode: skipping %d already-successful molecules: %s",
+                len(completed_ids),
+                sorted(completed_ids),
+            )
+
     if config.xtb_enabled and not dry_run:
         ok, reason = verify_xtb_runtime(config.xtb_executable, threads=config.threads)
         if not ok:
@@ -65,6 +75,26 @@ def run_pipeline(
 
     rows: list[dict[str, object]] = []
     for mol in tasks:
+        mol_id = str(mol.get("mol_id") or "")
+
+        if mol_id in completed_ids:
+            logger.debug("Skipping %s (already success)", mol_id)
+            skipped_row: dict[str, object] = {
+                **mol,  # type: ignore[arg-type]
+                "status": "skipped",
+                "crest_status": "skipped",
+                "mopac_status": "skipped",
+                "n_conformers_founded": "",
+                "hf_am1_kJmol": "",
+                "hf_pm3_kJmol": "",
+                "hf_pm7_kJmol": "",
+                "total_time_s": 0,
+                "total_time_min": 0,
+            }
+            if on_progress:
+                on_progress("done", skipped_row)
+            continue
+
         if on_progress:
             on_progress("start", mol)
         row = process_molecule(mol, config, dry_run=dry_run)

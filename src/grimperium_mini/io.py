@@ -171,6 +171,30 @@ def read_xlsx_table(
         workbook.close()
 
 
+def load_completed_mol_ids(summary_path: Path) -> set[str]:
+    """Read the summary xlsx and return mol_ids whose status is 'success'."""
+    if not summary_path.exists():
+        return set()
+    try:
+        workbook = MiniWorkbook(summary_path)
+        try:
+            rows = workbook.table(_SUMMARY_SHEET, {"mol_id", "status"})
+        except (KeyError, ValueError):
+            if not workbook.sheet_names:
+                workbook.close()
+                return set()
+            rows = workbook.table(workbook.sheet_names[0], {"mol_id", "status"})
+        finally:
+            workbook.close()
+        return {
+            row["mol_id"]
+            for row in rows
+            if row.get("status", "").strip().lower() == "success"
+        }
+    except Exception:
+        return set()
+
+
 def load_molecule_reference(path: Path) -> dict[str, dict[str, str]]:
     rows = read_xlsx_table(path, "01_moleculas_cbthermo", {"mol_id", "smiles"})
     return {row["mol_id"]: row for row in rows}
