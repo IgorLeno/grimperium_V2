@@ -22,6 +22,7 @@ class MiniApp:
     def __init__(self) -> None:
         self.console = console
         self._running = True
+        self._config = MiniConfig()
 
     def show_welcome(self) -> None:
         self.console.clear()
@@ -43,6 +44,7 @@ class MiniApp:
                 "  [cyan]1[/cyan] · Executar pipeline\n"
                 "  [cyan]2[/cyan] · Validar dados (--xlsx)\n"
                 "  [cyan]3[/cyan] · Exportar resumo\n"
+                "  [cyan]4[/cyan] · Configurações\n"
                 "  [cyan]Q[/cyan] · Sair",
                 border_style=COLORS["border"],
                 padding=(0, 2),
@@ -51,12 +53,12 @@ class MiniApp:
         self.console.print()
         choice = Prompt.ask(
             "[bold cyan]Escolha[/bold cyan]",
-            choices=["1", "2", "3", "q", "Q"],
+            choices=["1", "2", "3", "4", "q", "Q"],
             default="Q",
         ).lower()
         if choice == "q":
             return None
-        mapping = {"1": "run", "2": "validate", "3": "export"}
+        mapping = {"1": "run", "2": "validate", "3": "export", "4": "settings"}
         return mapping.get(choice)
 
     def run_pipeline_interactive(self) -> None:
@@ -70,7 +72,7 @@ class MiniApp:
         dry_str = Prompt.ask("Dry-run?", choices=["s", "n"], default="n")
         dry_run = dry_str.lower() == "s"
 
-        config = MiniConfig()
+        config = self._config
         molecules = load_molecules(xlsx, limit=limit)
         total = len(molecules)
 
@@ -98,6 +100,81 @@ class MiniApp:
             )
 
         self.console.print(tracker.summary())
+
+    def run_settings_interactive(self) -> None:
+        """Tela de configurações: editar timeout e max conformers."""
+        self.console.print()
+        self.console.print(
+            Panel(
+                "[bold]CONFIGURAÇÕES DO CREST[/bold]",
+                border_style=COLORS["primary"],
+                padding=(0, 2),
+            )
+        )
+        self.console.print()
+
+        current_timeout_min = self._config.timeout_crest_s // 60
+        self.console.print(
+            f"  Timeout atual: [{COLORS['success']}]{current_timeout_min} minutos"
+            f"[/{COLORS['success']}]  "
+            f"([{COLORS['muted']}]{self._config.timeout_crest_s}s[/{COLORS['muted']}])"
+        )
+        timeout_str = Prompt.ask(
+            "  Novo timeout [bold](minutos)[/bold] — Enter para manter",
+            default=str(current_timeout_min),
+        )
+        try:
+            new_timeout_min = int(timeout_str.strip())
+            if new_timeout_min <= 0:
+                raise ValueError
+            self._config.timeout_crest_s = new_timeout_min * 60
+            self.console.print(
+                f"  [{COLORS['success']}]✓ Timeout definido: "
+                f"{new_timeout_min} min ({self._config.timeout_crest_s}s)"
+                f"[/{COLORS['success']}]"
+            )
+        except ValueError:
+            self.console.print(
+                f"  [{COLORS['muted']}]Valor inválido — timeout não alterado."
+                f"[/{COLORS['muted']}]"
+            )
+
+        self.console.print()
+
+        self.console.print(
+            f"  Max conformers atual: [{COLORS['success']}]"
+            f"{self._config.crest_max_structures}[/{COLORS['success']}]"
+        )
+        mstruct_str = Prompt.ask(
+            "  Novo máximo de conformers — Enter para manter",
+            default=str(self._config.crest_max_structures),
+        )
+        try:
+            new_mstruct = int(mstruct_str.strip())
+            if new_mstruct <= 0:
+                raise ValueError
+            self._config.crest_max_structures = new_mstruct
+            self.console.print(
+                f"  [{COLORS['success']}]✓ Max conformers definido: "
+                f"{new_mstruct}[/{COLORS['success']}]"
+            )
+        except ValueError:
+            self.console.print(
+                f"  [{COLORS['muted']}]Valor inválido — max conformers não alterado."
+                f"[/{COLORS['muted']}]"
+            )
+
+        self.console.print()
+        self.console.print(
+            Panel(
+                f"  Timeout:       [{COLORS['primary']}]"
+                f"{self._config.timeout_crest_s // 60} min[/{COLORS['primary']}]\n"
+                f"  Max conformers:[{COLORS['primary']}]"
+                f" {self._config.crest_max_structures}[/{COLORS['primary']}]",
+                title="[bold]Configurações ativas[/bold]",
+                border_style=COLORS["border"],
+            )
+        )
 
     def run_validate_interactive(self) -> None:
         from .io import validate_workbook
@@ -164,6 +241,9 @@ class MiniApp:
                     Prompt.ask("\nPressione Enter para continuar", default="")
                 elif selection == "export":
                     self.run_export_interactive()
+                    Prompt.ask("\nPressione Enter para continuar", default="")
+                elif selection == "settings":
+                    self.run_settings_interactive()
                     Prompt.ask("\nPressione Enter para continuar", default="")
 
         except KeyboardInterrupt:

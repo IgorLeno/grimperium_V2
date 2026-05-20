@@ -80,7 +80,12 @@ class MiniConfig:
         default_factory=lambda: _env_int("GRIMPERIUM_MINI_TIMEOUT_XTB_S", 600)
     )
     timeout_crest_s: int = field(
-        default_factory=lambda: _env_int("GRIMPERIUM_MINI_TIMEOUT_CREST_S", 82800)
+        default_factory=lambda: _env_int(
+            "GRIMPERIUM_MINI_TIMEOUT_CREST_S", 604800  # 1 semana em segundos
+        )
+    )
+    crest_max_structures: int = field(
+        default_factory=lambda: _env_int("GRIMPERIUM_MINI_CREST_MAX_STRUCTURES", 20000)
     )
     timeout_mopac_s: int = field(
         default_factory=lambda: _env_int("GRIMPERIUM_MINI_TIMEOUT_MOPAC_S", 3600)

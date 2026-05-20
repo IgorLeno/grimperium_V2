@@ -31,6 +31,8 @@ def build_crest_command(input_xyz: Path, config: MiniConfig) -> list[str]:
     ]
     if config.crest_quick_mode:
         cmd.append(f"--{config.crest_quick_mode}")
+    if config.crest_max_structures and config.crest_max_structures > 0:
+        cmd.extend(["--mstruct", str(config.crest_max_structures)])
     return cmd
 
 
@@ -73,12 +75,27 @@ def use_single_conformer(input_xyz: Path, work_dir: Path) -> CrestResult:
     return CrestResult("skipped", [target], 1, work_dir)
 
 
+def _find_ensemble(work_dir: Path) -> Path | None:
+    """Return the best available CREST output file, or None if nothing exists."""
+    for candidate in (
+        work_dir / "crest_conformers.xyz",
+        work_dir / "crest_best.xyz",
+    ):
+        if candidate.exists() and candidate.stat().st_size > 0:
+            return candidate
+    return None
+
+
 def run_crest(input_xyz: Path, work_dir: Path, config: MiniConfig) -> CrestResult:
-    """Run CREST in a molecule-specific working directory."""
+    """Run CREST; on timeout or early stop, attempt to recover partial results."""
     work_dir.mkdir(parents=True, exist_ok=True)
     input_copy = work_dir / "input.xyz"
     shutil.copy(input_xyz, input_copy)
     cmd = build_crest_command(input_copy, config)
+
+    timed_out = False
+    non_zero_exit = False
+
     try:
         proc = subprocess.run(
             cmd,
@@ -87,28 +104,33 @@ def run_crest(input_xyz: Path, work_dir: Path, config: MiniConfig) -> CrestResul
             text=True,
             timeout=config.timeout_crest_s,
         )
+        if proc.returncode != 0:
+            non_zero_exit = True
     except subprocess.TimeoutExpired:
-        return CrestResult("failed", [], 0, work_dir, "CREST timeout", cmd)
+        timed_out = True
     except OSError as exc:
         return CrestResult("failed", [], 0, work_dir, str(exc), cmd)
 
-    if proc.returncode != 0:
-        return CrestResult(
-            "failed",
-            [],
-            0,
-            work_dir,
-            f"CREST exited with {proc.returncode}: {proc.stderr[:500]}",
-            cmd,
-        )
+    ensemble = _find_ensemble(work_dir)
 
-    ensemble = work_dir / "crest_conformers.xyz"
-    if not ensemble.exists():
-        ensemble = work_dir / "crest_best.xyz"
-    if not ensemble.exists():
-        return CrestResult("failed", [], 0, work_dir, "CREST conformers not found", cmd)
+    if ensemble is None:
+        if timed_out:
+            reason = "CREST timeout — no partial results found"
+        elif non_zero_exit:
+            reason = f"CREST exited with {proc.returncode}: {proc.stderr[:500]}"
+        else:
+            reason = "CREST conformers not found"
+        return CrestResult("failed", [], 0, work_dir, reason, cmd)
 
     conformers = split_crest_conformers(ensemble, work_dir)
     if not conformers:
         return CrestResult("failed", [], 0, work_dir, "No conformers parsed", cmd)
-    return CrestResult("success", conformers, len(conformers), work_dir, command=cmd)
+
+    if timed_out:
+        status = "timeout_partial"
+    elif non_zero_exit:
+        status = "partial"
+    else:
+        status = "success"
+
+    return CrestResult(status, conformers, len(conformers), work_dir, command=cmd)

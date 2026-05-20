@@ -143,7 +143,9 @@ def process_molecule(
         return _dry_run_row(mol, start)
 
     try:
-        input_xyz = generate_initial_xyz(smiles, work_dir / "rdkit_initial.xyz", molecule)
+        input_xyz = generate_initial_xyz(
+            smiles, work_dir / "rdkit_initial.xyz", molecule
+        )
 
         if config.xtb_enabled:
             xtb_result = run_xtb_preopt(
@@ -165,8 +167,11 @@ def process_molecule(
         else:
             crest_result = use_single_conformer(crest_input_path, work_dir)
 
-        if crest_result.status not in {"success", "skipped"}:
-            return _failed_row(mol, crest_result.status, crest_result.error_message, start)
+        _CREST_RECOVERABLE = {"success", "skipped", "timeout_partial", "partial"}
+        if crest_result.status not in _CREST_RECOVERABLE:
+            return _failed_row(
+                mol, crest_result.status, crest_result.error_message, start
+            )
 
         best_conformer = crest_result.conformer_files[0]
         n_conformers = crest_result.n_conformers_found
