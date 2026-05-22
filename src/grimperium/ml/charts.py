@@ -37,11 +37,15 @@ class ChartGenerationResult:
     n_points: int
     rmse: float
     r2: float
+    abs_error_histogram: Path | None = None
+    abs_error_boxplot: Path | None = None
+    abs_error_vs_molwt: Path | None = None
 
 
 def generate_charts(
     csv_path: Path | str,
     output_dir: Path | str,
+    extra_charts: bool = False,
 ) -> ChartGenerationResult:
     """Generate all 3 analysis charts from a CSV with predictions.
 
@@ -94,7 +98,24 @@ def generate_charts(
     residuals_path = _plot_residuals(y_pred, residuals, output_dir)
 
     n_points = len(valid)
-    logger.info("Generated %d charts from %d data points", 3, n_points)
+    n_extra = 0
+    abs_error_histogram: Path | None = None
+    abs_error_boxplot: Path | None = None
+    abs_error_vs_molwt: Path | None = None
+
+    if extra_charts:
+        abs_errors = np.abs(residuals)
+        abs_error_histogram = _plot_abs_error_histogram(abs_errors, output_dir)
+        abs_error_boxplot = _plot_abs_error_boxplot(abs_errors, output_dir)
+        if "rdkit_mol_weight" in valid.columns:
+            mol_weights = valid["rdkit_mol_weight"].to_numpy(dtype=np.float64)
+            abs_error_vs_molwt = _plot_abs_error_vs_molwt(
+                abs_errors, mol_weights, output_dir
+            )
+        n_extra = 2 + (1 if abs_error_vs_molwt is not None else 0)
+
+    total = 3 + n_extra
+    logger.info("Generated %d charts from %d data points", total, n_points)
 
     return ChartGenerationResult(
         parity_plot=parity_path,
@@ -103,6 +124,9 @@ def generate_charts(
         n_points=n_points,
         rmse=rmse,
         r2=r2,
+        abs_error_histogram=abs_error_histogram,
+        abs_error_boxplot=abs_error_boxplot,
+        abs_error_vs_molwt=abs_error_vs_molwt,
     )
 
 
@@ -245,6 +269,128 @@ def _plot_residuals(
     ax.set_title("Residuals vs Predicted", fontsize=14, fontweight="bold")
 
     path = output_dir / "residuals_plot.png"
+    fig.savefig(path, bbox_inches="tight", facecolor=fig.get_facecolor())
+    plt.close(fig)
+    return path
+
+
+def _plot_abs_error_histogram(
+    abs_errors: FloatArray,
+    output_dir: Path,
+) -> Path:
+    """Histogram of absolute errors.
+
+    Args:
+        abs_errors: Array of absolute prediction errors.
+        output_dir: Output directory for the PNG.
+
+    Returns:
+        Path to the saved PNG file.
+    """
+    plt.style.use("dark_background")
+    fig, ax = plt.subplots(figsize=(9, 6), dpi=150)
+    fig.set_facecolor(_BG_COLOR)
+    ax.set_facecolor(_BG_COLOR)
+
+    ax.hist(
+        abs_errors,
+        bins=min(50, max(5, len(abs_errors))),
+        color="#00D9FF",
+        alpha=0.7,
+        edgecolor="#009AB8",
+    )
+    mean_err = float(np.mean(abs_errors))
+    ax.axvline(
+        x=mean_err,
+        color="#FFFF00",
+        linestyle="-.",
+        linewidth=1,
+        label=f"Mean = {mean_err:.3f}",
+    )
+    ax.legend()
+
+    ax.set_xlabel("|Error| (kcal/mol)", fontsize=12)
+    ax.set_ylabel("Count", fontsize=12)
+    ax.set_title("Absolute Error Distribution", fontsize=14, fontweight="bold")
+
+    path = output_dir / "abs_error_histogram.png"
+    fig.savefig(path, bbox_inches="tight", facecolor=fig.get_facecolor())
+    plt.close(fig)
+    return path
+
+
+def _plot_abs_error_boxplot(
+    abs_errors: FloatArray,
+    output_dir: Path,
+) -> Path:
+    """Boxplot of absolute errors.
+
+    Args:
+        abs_errors: Array of absolute prediction errors.
+        output_dir: Output directory for the PNG.
+
+    Returns:
+        Path to the saved PNG file.
+    """
+    plt.style.use("dark_background")
+    fig, ax = plt.subplots(figsize=(6, 7), dpi=150)
+    fig.set_facecolor(_BG_COLOR)
+    ax.set_facecolor(_BG_COLOR)
+
+    bp = ax.boxplot(
+        abs_errors,
+        patch_artist=True,
+        notch=False,
+        vert=True,
+        widths=0.5,
+    )
+    bp["boxes"][0].set_facecolor("#00D9FF")
+    bp["boxes"][0].set_alpha(0.7)
+    for element in ("whiskers", "caps", "medians"):
+        for line in bp[element]:
+            line.set_color("#FFFFFF")
+    for flier in bp["fliers"]:
+        flier.set(
+            marker="o", color="#FF6666", alpha=0.5, markersize=4
+        )
+
+    ax.set_ylabel("|Error| (kcal/mol)", fontsize=12)
+    ax.set_xticks([])
+    ax.set_title("Absolute Error Boxplot", fontsize=14, fontweight="bold")
+
+    path = output_dir / "abs_error_boxplot.png"
+    fig.savefig(path, bbox_inches="tight", facecolor=fig.get_facecolor())
+    plt.close(fig)
+    return path
+
+
+def _plot_abs_error_vs_molwt(
+    abs_errors: FloatArray,
+    mol_weights: FloatArray,
+    output_dir: Path,
+) -> Path:
+    """Scatter of absolute error vs molecular weight.
+
+    Args:
+        abs_errors: Array of absolute prediction errors.
+        mol_weights: Array of molecular weights (RDKit).
+        output_dir: Output directory for the PNG.
+
+    Returns:
+        Path to the saved PNG file.
+    """
+    plt.style.use("dark_background")
+    fig, ax = plt.subplots(figsize=(9, 6), dpi=150)
+    fig.set_facecolor(_BG_COLOR)
+    ax.set_facecolor(_BG_COLOR)
+
+    ax.scatter(mol_weights, abs_errors, c="#FF00FF", alpha=0.5, s=30, edgecolors="none")
+
+    ax.set_xlabel("Molecular Weight (g/mol)", fontsize=12)
+    ax.set_ylabel("|Error| (kcal/mol)", fontsize=12)
+    ax.set_title("|Error| vs Molecular Weight", fontsize=14, fontweight="bold")
+
+    path = output_dir / "abs_error_vs_molwt.png"
     fig.savefig(path, bbox_inches="tight", facecolor=fig.get_facecolor())
     plt.close(fig)
     return path

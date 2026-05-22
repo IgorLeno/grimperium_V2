@@ -19,7 +19,6 @@ from rich.table import Table
 from grimperium.cli.menu import MenuOption, show_back_menu
 from grimperium.cli.styles import COLORS, ICONS
 from grimperium.cli.views.base_view import BaseView
-from grimperium.core.metrics import mae, max_error, r2_score, rmse
 from grimperium.ml.gate import evaluate_gate
 from grimperium.ml.persistence import load_model_metadata, save_model
 
@@ -290,6 +289,26 @@ class ResultsView(BaseView):
                 value="charts",
                 icon=ICONS.get("results", "📊"),
             ),
+            MenuOption(
+                label="Show Outliers",
+                value="show_outliers",
+                icon="🔍",
+            ),
+            MenuOption(
+                label="Top Error Molecules",
+                value="top_errors",
+                icon="📋",
+            ),
+            MenuOption(
+                label="Generate HTML Report",
+                value="html_report",
+                icon="📄",
+            ),
+            MenuOption(
+                label="Export Outliers CSV",
+                value="export_outliers",
+                icon="💾",
+            ),
         ]
 
     def handle_action(self, action: str) -> str | None:
@@ -313,6 +332,22 @@ class ResultsView(BaseView):
             self._handle_detailed_metrics()
             return None
 
+        if action == "show_outliers":
+            self._handle_show_outliers()
+            return None
+
+        if action == "top_errors":
+            self._handle_top_errors()
+            return None
+
+        if action == "html_report":
+            self._handle_html_report()
+            return None
+
+        if action == "export_outliers":
+            self._handle_export_outliers()
+            return None
+
         return None
 
     def _get_charts_dir(self) -> Path:
@@ -324,7 +359,9 @@ class ResultsView(BaseView):
         return Path(os.environ.get("GRIMPERIUM_CHARTS_DIR", "reports/charts"))
 
     def _handle_detailed_metrics(self) -> None:
-        """Compute and display detailed statistical metrics for predictions."""
+        """Display detailed statistical metrics; delegates all computation to analyze()."""
+        from grimperium.ml.error_analysis import analyze
+
         csv_path = self._get_csv_path()
         if not csv_path.exists():
             self.show_error(f"Data file not found: {csv_path}")
@@ -345,33 +382,20 @@ class ResultsView(BaseView):
             self.wait_for_enter()
             return
 
-        y_cbs = valid["H298_cbs"].to_numpy()
-        y_pred = valid["H298_predicted"].to_numpy()
+        result = analyze(df)
+        s = result.summary
 
-        # Core metrics from metrics.py
-        mae_val = mae(y_cbs, y_pred)
-        rmse_val = rmse(y_cbs, y_pred)
-        r2_val = r2_score(y_cbs, y_pred)
-        max_err = max_error(y_cbs, y_pred)
+        mae_val = float(s["mae"])
+        rmse_val = float(s["rmse"])
+        max_err = float(s["max_error"])
+        bias = float(s["bias"])
+        r2_val = float(s["r2"])
+        pearson_r = float(s["pearson_r"])
+        pct_1 = float(s["pct_within_1"])
+        pct_2 = float(s["pct_within_2"])
+        pct_5 = float(s["pct_within_5"])
+        n = int(s["n_molecules"])
 
-        # Additional statistics
-        errors = y_pred - y_cbs
-        abs_errors = np.abs(errors)
-        bias = float(np.mean(errors))
-
-        # Pearson r (handle constant arrays gracefully)
-        if np.std(y_cbs) == 0 or np.std(y_pred) == 0:
-            pearson_r = float("nan")
-        else:
-            pearson_r = float(np.corrcoef(y_cbs, y_pred)[0, 1])
-
-        # Percentage within thresholds
-        n = len(abs_errors)
-        pct_1 = float(np.sum(abs_errors <= 1.0) / n * 100)
-        pct_2 = float(np.sum(abs_errors <= 2.0) / n * 100)
-        pct_5 = float(np.sum(abs_errors <= 5.0) / n * 100)
-
-        # Display table
         table = Table(
             title="Detailed Prediction Metrics",
             show_header=True,
@@ -422,6 +446,162 @@ class ResultsView(BaseView):
             )
         )
         self.console.print()
+        self.wait_for_enter()
+
+    def _handle_show_outliers(self) -> None:
+        """Display outlier molecules detected by analyze()."""
+        from grimperium.ml.error_analysis import analyze
+
+        csv_path = self._get_csv_path()
+        if not csv_path.exists():
+            self.show_error(f"Data file not found: {csv_path}")
+            self.wait_for_enter()
+            return
+
+        df = pd.read_csv(csv_path)
+        try:
+            result = analyze(df)
+        except ValueError as exc:
+            self.show_error(str(exc))
+            self.wait_for_enter()
+            return
+
+        outliers = result.outliers_df
+        if outliers.empty:
+            self.console.print(
+                f"\n[{COLORS['muted']}]No outliers detected.[/{COLORS['muted']}]\n"
+            )
+            self.wait_for_enter()
+            return
+
+        table = Table(
+            title=f"Outliers — {len(outliers)} molecules",
+            show_header=True,
+            header_style=f"bold {COLORS['results']}",
+            border_style=COLORS["border"],
+        )
+        table.add_column("mol_id")
+        table.add_column("smiles", max_width=40)
+        table.add_column("H298_cbs", justify="right")
+        table.add_column("H298_predicted", justify="right")
+        table.add_column("abs_error", justify="right")
+        table.add_column("severity", justify="center")
+        table.add_column("score", justify="right")
+
+        for _, row in outliers.iterrows():
+            mol_id = str(row.get("mol_id", "-"))
+            smiles = str(row.get("smiles", "-"))
+            if len(smiles) > 40:
+                smiles = smiles[:37] + "..."
+            sev = str(row.get("severity", "-"))
+            table.add_row(
+                mol_id,
+                smiles,
+                f"{float(row['H298_cbs']):.4f}",
+                f"{float(row['H298_predicted']):.4f}",
+                f"{float(row['abs_error']):.4f}",
+                sev,
+                str(int(row["outlier_score"])),
+            )
+
+        self.console.print()
+        self.console.print(table)
+        self.console.print()
+        self.wait_for_enter()
+
+    def _handle_top_errors(self) -> None:
+        """Display top-N molecules by absolute error."""
+        from grimperium.ml.error_analysis import analyze
+
+        csv_path = self._get_csv_path()
+        if not csv_path.exists():
+            self.show_error(f"Data file not found: {csv_path}")
+            self.wait_for_enter()
+            return
+
+        df = pd.read_csv(csv_path)
+        try:
+            result = analyze(df)
+        except ValueError as exc:
+            self.show_error(str(exc))
+            self.wait_for_enter()
+            return
+
+        top = result.top_n_df
+
+        table = Table(
+            title=f"Top {len(top)} Error Molecules",
+            show_header=True,
+            header_style=f"bold {COLORS['results']}",
+            border_style=COLORS["border"],
+        )
+        table.add_column("Rank", justify="right")
+        table.add_column("mol_id")
+        table.add_column("abs_error", justify="right")
+        table.add_column("signed_error", justify="right")
+        table.add_column("severity", justify="center")
+
+        for _, row in top.iterrows():
+            table.add_row(
+                str(int(row["rank"])),
+                str(row.get("mol_id", "-")),
+                f"{float(row['abs_error']):.4f}",
+                f"{float(row['signed_error']):.4f}",
+                str(row.get("severity", "-")),
+            )
+
+        self.console.print()
+        self.console.print(table)
+        self.console.print()
+        self.wait_for_enter()
+
+    def _handle_html_report(self) -> None:
+        """Generate HTML error analysis report."""
+        from grimperium.ml.error_analysis import analyze
+        from grimperium.ml.html_report import generate_html_report
+
+        csv_path = self._get_csv_path()
+        if not csv_path.exists():
+            self.show_error(f"Data file not found: {csv_path}")
+            self.wait_for_enter()
+            return
+
+        df = pd.read_csv(csv_path)
+        try:
+            result = analyze(df)
+        except ValueError as exc:
+            self.show_error(str(exc))
+            self.wait_for_enter()
+            return
+
+        output_path = self._get_charts_dir() / "error_report.html"
+        saved = generate_html_report(result, output_path)
+        self.show_success(f"HTML report saved: {saved}")
+        self.wait_for_enter()
+
+    def _handle_export_outliers(self) -> None:
+        """Export outlier molecules to CSV."""
+        from grimperium.ml.error_analysis import analyze
+
+        csv_path = self._get_csv_path()
+        if not csv_path.exists():
+            self.show_error(f"Data file not found: {csv_path}")
+            self.wait_for_enter()
+            return
+
+        df = pd.read_csv(csv_path)
+        try:
+            result = analyze(df)
+        except ValueError as exc:
+            self.show_error(str(exc))
+            self.wait_for_enter()
+            return
+
+        output_path = self._get_charts_dir() / "outliers.csv"
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        result.outliers_df.to_csv(output_path, index=False)
+        n = len(result.outliers_df)
+        self.show_success(f"Exported {n} outlier(s) to: {output_path}")
         self.wait_for_enter()
 
     def _handle_charts(self) -> None:
