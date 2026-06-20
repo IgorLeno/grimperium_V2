@@ -8,6 +8,7 @@ from pathlib import Path
 from .config import MiniConfig
 from .io import read_csv_rows, validate_workbook, write_simple_xlsx
 from .logging_utils import configure_logging
+from .multi_conformer import run_multi_conformer_pipeline
 from .pipeline import run_pipeline
 
 
@@ -42,6 +43,24 @@ def build_parser() -> argparse.ArgumentParser:
     export.add_argument("--input", type=Path, required=True)
     export.add_argument("--reactions", type=Path, required=True)
     export.add_argument("--output", type=Path, required=True)
+
+    mc = sub.add_parser(
+        "multi-conformer",
+        help="Run MOPAC on the best N CREST conformers (AM1+PM3+PM7) without re-running CREST.",
+    )
+    mc.add_argument("--xlsx", type=Path, required=True)
+    mc.add_argument("--limit", type=int, default=None)
+    mc.add_argument(
+        "--max-conformers",
+        type=int,
+        default=10,
+        help="Maximum number of conformers to optimise per molecule (default: 10).",
+    )
+    mc.add_argument("--work-root", type=Path, default=None)
+    mc.add_argument("--results-dir", type=Path, default=None)
+    mc.add_argument("--mopac-executable", default=None)
+    mc.add_argument("--threads", type=int, default=None)
+
     return parser
 
 
@@ -71,6 +90,19 @@ def main(argv: list[str] | None = None) -> int:
         print(f"Wrote results to {config.results_dir}")
         return 0
 
+    if args.command == "multi-conformer":
+        config = _multiconf_config_from_args(args)
+        run_multi_conformer_pipeline(
+            args.xlsx,
+            config=config,
+            limit=args.limit,
+            max_conformers=args.max_conformers,
+        )
+        print(
+            f"Wrote multi-conformer results to {config.results_dir / 'grimperium_mini_multiconf_summary.csv'}"
+        )
+        return 0
+
     if args.command == "export-summary":
         formation = read_csv_rows(args.input)
         reactions = read_csv_rows(args.reactions)
@@ -98,7 +130,9 @@ def _config_from_args(args: argparse.Namespace) -> MiniConfig:
     _defaults = MiniConfig()
     config = MiniConfig(
         work_root=args.work_root if args.work_root is not None else _defaults.work_root,
-        results_dir=args.results_dir if args.results_dir is not None else _defaults.results_dir,
+        results_dir=(
+            args.results_dir if args.results_dir is not None else _defaults.results_dir
+        ),
         crest_executable=args.crest_executable or _defaults.crest_executable,
         mopac_executable=args.mopac_executable or _defaults.mopac_executable,
         xtb_executable=args.xtb_executable or _defaults.xtb_executable,
@@ -115,6 +149,18 @@ def _config_from_args(args: argparse.Namespace) -> MiniConfig:
         max_conformers_to_optimize=args.max_conformers_to_optimize,
     )
     return config
+
+
+def _multiconf_config_from_args(args: argparse.Namespace) -> MiniConfig:
+    defaults = MiniConfig()
+    return MiniConfig(
+        work_root=args.work_root if args.work_root is not None else defaults.work_root,
+        results_dir=(
+            args.results_dir if args.results_dir is not None else defaults.results_dir
+        ),
+        mopac_executable=args.mopac_executable or defaults.mopac_executable,
+        threads=args.threads if args.threads is not None else defaults.threads,
+    )
 
 
 if __name__ == "__main__":  # pragma: no cover

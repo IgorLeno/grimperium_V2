@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import shutil
 import subprocess
 from pathlib import Path
@@ -87,11 +88,25 @@ def _find_ensemble(work_dir: Path) -> Path | None:
 
 
 def run_crest(input_xyz: Path, work_dir: Path, config: MiniConfig) -> CrestResult:
-    """Run CREST; on timeout or early stop, attempt to recover partial results."""
+    """Run CREST; on timeout or early stop, attempt to recover partial results.
+
+    If crest_conformers.xyz or crest_best.xyz already exists in work_dir (e.g. from
+    an interrupted previous run), CREST is skipped and the existing ensemble is used.
+    """
     work_dir.mkdir(parents=True, exist_ok=True)
+
+    existing = _find_ensemble(work_dir)
+    if existing is not None:
+        conformers = split_crest_conformers(existing, work_dir)
+        if conformers:
+            return CrestResult("success", conformers, len(conformers), work_dir)
+
     input_copy = work_dir / "input.xyz"
     shutil.copy(input_xyz, input_copy)
     cmd = build_crest_command(input_copy, config)
+    # Prevent OpenBLAS from spawning its own threads inside each xTB call,
+    # which would compete with CREST's OpenMP thread pool and degrade performance.
+    env = {**os.environ, "OPENBLAS_NUM_THREADS": "1"}
 
     timed_out = False
     non_zero_exit = False
@@ -103,6 +118,7 @@ def run_crest(input_xyz: Path, work_dir: Path, config: MiniConfig) -> CrestResul
             capture_output=True,
             text=True,
             timeout=config.timeout_crest_s,
+            env=env,
         )
         if proc.returncode != 0:
             non_zero_exit = True

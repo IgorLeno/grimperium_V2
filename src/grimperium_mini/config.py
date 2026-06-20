@@ -45,7 +45,7 @@ class MiniConfig:
         default_factory=lambda: os.getenv("GRIMPERIUM_MINI_XTB_ENABLED", "true").lower()
         != "false"
     )
-    threads: int = field(default_factory=lambda: _env_int("GRIMPERIUM_MINI_THREADS", 8))
+    threads: int = field(default_factory=lambda: _env_int("GRIMPERIUM_MINI_THREADS", 16))
     crest_method: str = field(
         default_factory=lambda: os.getenv("GRIMPERIUM_MINI_CREST_METHOD", "gfn2")
     )
@@ -67,13 +67,13 @@ class MiniConfig:
     work_root: Path = field(
         default_factory=lambda: _env_path(
             "GRIMPERIUM_MINI_WORK_ROOT",
-            Path("/home/ifernandes/Projetos/grimperium/runs"),
+            Path("/home/plasma-test/Projetos/grimperium/runs"),
         )
     )
     results_dir: Path = field(
         default_factory=lambda: _env_path(
             "GRIMPERIUM_MINI_RESULTS_DIR",
-            Path("/home/ifernandes/Projetos/grimperium/results"),
+            Path("/home/plasma-test/Projetos/grimperium/results"),
         )
     )
     timeout_xtb_s: int = field(

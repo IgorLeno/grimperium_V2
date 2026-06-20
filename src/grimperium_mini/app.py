@@ -11,6 +11,7 @@ from rich.prompt import Prompt
 
 from .config import MiniConfig
 from .io import load_molecules
+from .multi_conformer import run_multi_conformer_pipeline
 from .pipeline import run_pipeline
 from .progress import MiniProgressTracker
 from .styles import COLORS, MINI_BANNER, MINI_SUBTITLE, MINI_VERSION, console
@@ -45,6 +46,7 @@ class MiniApp:
                 "  [cyan]2[/cyan] · Validar dados (--xlsx)\n"
                 "  [cyan]3[/cyan] · Exportar resumo\n"
                 "  [cyan]4[/cyan] · Configurações\n"
+                "  [cyan]5[/cyan] · Multi-conformer mode\n"
                 "  [cyan]Q[/cyan] · Sair",
                 border_style=COLORS["border"],
                 padding=(0, 2),
@@ -53,12 +55,18 @@ class MiniApp:
         self.console.print()
         choice = Prompt.ask(
             "[bold cyan]Escolha[/bold cyan]",
-            choices=["1", "2", "3", "4", "q", "Q"],
+            choices=["1", "2", "3", "4", "5", "q", "Q"],
             default="Q",
         ).lower()
         if choice == "q":
             return None
-        mapping = {"1": "run", "2": "validate", "3": "export", "4": "settings"}
+        mapping = {
+            "1": "run",
+            "2": "validate",
+            "3": "export",
+            "4": "settings",
+            "5": "multiconf",
+        }
         return mapping.get(choice)
 
     def run_pipeline_interactive(self) -> None:
@@ -176,6 +184,68 @@ class MiniApp:
             )
         )
 
+    def run_multiconf_interactive(self) -> None:
+        """Interactive multi-conformer mode: reuses CREST files, runs MOPAC×3."""
+        self.console.print()
+        self.console.print(
+            Panel(
+                "[bold]MULTI-CONFORMER MODE[/bold]\n\n"
+                "Reutiliza os arquivos CREST já calculados e roda MOPAC\n"
+                "(AM1 + PM3 + PM7) para os N melhores conformeros.",
+                border_style=COLORS["primary"],
+                padding=(0, 2),
+            )
+        )
+        self.console.print()
+
+        default_xlsx = "data/grimperium_mini_pipeline_tcc.xlsx"
+        xlsx_str = Prompt.ask("Caminho do xlsx", default=default_xlsx)
+        xlsx = Path(xlsx_str)
+
+        limit_str = Prompt.ask("Limit (Enter para processar tudo)", default="")
+        limit: int | None = int(limit_str) if limit_str.strip() else None
+
+        max_conf_str = Prompt.ask("Máximo de conformeros por molécula", default="10")
+        try:
+            max_conformers = int(max_conf_str.strip())
+            if max_conformers <= 0:
+                raise ValueError
+        except ValueError:
+            self.console.print(
+                f"  [{COLORS['muted']}]Valor inválido — usando 10.[/{COLORS['muted']}]"
+            )
+            max_conformers = 10
+
+        config = self._config
+        molecules = load_molecules(xlsx, limit=limit)
+        total = len(molecules)
+
+        tracker = MiniProgressTracker(total_tasks=total)
+
+        self.console.print()
+        with Live(tracker.render(), refresh_per_second=4, console=self.console) as live:
+
+            def _progress(event: str, data: object) -> None:
+                if event == "start" and isinstance(data, dict):
+                    tracker.on_task_start(str(data.get("mol_id", "")), "")
+                elif event == "done" and isinstance(data, dict):
+                    tracker.on_task_done(data)
+                live.update(tracker.render())
+
+            run_multi_conformer_pipeline(
+                xlsx,
+                config=config,
+                limit=limit,
+                max_conformers=max_conformers,
+                on_progress=_progress,
+            )
+
+        self.console.print(tracker.summary())
+        output = config.results_dir / "grimperium_mini_multiconf_summary.csv"
+        self.console.print(
+            f"\n[{COLORS['success']}]✓ Resultados gravados em {output}[/{COLORS['success']}]"
+        )
+
     def run_validate_interactive(self) -> None:
         from .io import validate_workbook
 
@@ -244,6 +314,9 @@ class MiniApp:
                     Prompt.ask("\nPressione Enter para continuar", default="")
                 elif selection == "settings":
                     self.run_settings_interactive()
+                    Prompt.ask("\nPressione Enter para continuar", default="")
+                elif selection == "multiconf":
+                    self.run_multiconf_interactive()
                     Prompt.ask("\nPressione Enter para continuar", default="")
 
         except KeyboardInterrupt:

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import subprocess
 import tempfile
 import time
@@ -45,6 +46,7 @@ def run_xtb_preopt(
         str(threads),
     ]
 
+    env = {**os.environ, "OPENBLAS_NUM_THREADS": "1"}
     start = time.perf_counter()
     try:
         proc = subprocess.run(
@@ -54,6 +56,7 @@ def run_xtb_preopt(
             text=True,
             timeout=timeout_s,
             check=False,
+            env=env,
         )
         elapsed = time.perf_counter() - start
 
@@ -107,6 +110,7 @@ def verify_xtb_runtime(xtb_executable: str, threads: int = 1) -> tuple[bool, str
             "--T",
             str(threads),
         ]
+        env = {**os.environ, "OPENBLAS_NUM_THREADS": "1"}
         try:
             proc = subprocess.run(
                 cmd,
@@ -115,6 +119,7 @@ def verify_xtb_runtime(xtb_executable: str, threads: int = 1) -> tuple[bool, str
                 text=True,
                 timeout=_PREFLIGHT_TIMEOUT_S,
                 check=False,
+                env=env,
             )
         except FileNotFoundError:
             return False, f"xTB executable not found: {xtb_executable}"

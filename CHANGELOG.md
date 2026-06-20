@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **grimperium_mini: multi-conformer mode** (2026-06-08)
+  - `src/grimperium_mini/multi_conformer.py`: new isolated module that reuses
+    existing CREST conformer files (`conformer_NNNN.xyz`) without re-running
+    CREST. Runs MOPAC (AM1 + PM3 + PM7) on the best N conformers (default 10,
+    sorted by CREST energy ascending).
+  - Output is a wide CSV (`grimperium_mini_multiconf_summary.csv`, 1 row per
+    molecule) with columns `hof_{M}_conf{N:02d}_kJmol`,
+    `absdev_{M}_conf{N:02d}_kJmol`, `best_conf_index_{M}`, `best_hof_{M}_kJmol`
+    for each method M ∈ {AM1, PM3, PM7}.
+  - `best_conf_index_{M}` is the 1-based index of the conformer whose HoF is
+    closest to the experimental value (`hf_exp_kJmol`); blank when experimental
+    data is absent.
+  - MOPAC runs land in `mopac_multi/` to avoid overwriting single-conformer
+    results in `mopac/`.
+  - `src/grimperium_mini/cli.py`: new `multi-conformer` subcommand with
+    `--xlsx`, `--limit`, `--max-conformers`, `--work-root`, `--results-dir`,
+    `--mopac-executable`, `--threads`.
+  - `src/grimperium_mini/app.py`: option **5 · Multi-conformer mode** added to
+    the interactive TUI menu.
+  - `tests/grimperium_mini/test_multi_conformer.py`: 21 unit tests covering
+    conformer selection, column layout, HoF/deviation computation, best-index
+    selection, edge cases (no conformers, no experimental data, MOPAC failures).
+  - Verification: `python3 -m pytest tests/grimperium_mini/ -v` → 53 passed.
+
 ### Fixed
 - **grimperium_mini: xTB preflight check + honest status attribution** (2026-05-09)
   - Added `verify_xtb_runtime` in `xtb.py`: runs `xtb --opt --gfn2 --silent` on a

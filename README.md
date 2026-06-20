@@ -18,23 +18,14 @@
 
 | Métrica | Valor | O que significa |
 |---|---|---|
-| Moléculas calculadas (status OK) | 2,222 | Base de dados em crescimento ativo para treinar a correção ML |
-| Correlação PM7 vs CBS-QB3 (R²) | 0.9858 | PM7 captura 98.6% da variação real |
-| Erro absoluto mediano (P50) | 4.95 kcal/mol | Erro típico que o modelo ML precisará corrigir |
-| Erro no percentil 90 (P90) | 11.65 kcal/mol | Pior caso frequente |
-| Erro absoluto médio (MARE) | 5.90 kcal/mol | Média geral dos erros |
-| Viés médio (bias) | -4.59 kcal/mol | PM7 subestima sistematicamente |
+| Moléculas calculadas (status OK) | 8,232 | Base de dados em crescimento ativo para treinar a correção ML |
+| Correlação PM7 vs CBS-QB3 (R²) | 0.7343 | PM7 captura 73.4% da variação real |
+| Erro absoluto mediano (P50) | 6.35 kcal/mol | Erro típico que o modelo ML precisará corrigir |
+| Erro no percentil 90 (P90) | 12.72 kcal/mol | Pior caso frequente |
+| Erro absoluto médio (MARE) | 7.29 kcal/mol | Média geral dos erros |
+| Viés médio (bias) | -6.45 kcal/mol | PM7 subestima sistematicamente |
 
-### Modelo ML Treinado
-
-| Métrica | Valor | O que significa |
-|---|---|---|
-| R² do modelo | 0.9970 | Quanto da variação do CBS-QB3 é explicada após a correção ML |
-| MAE do modelo | 2.50 kcal/mol | Erro médio absoluto após aplicar a correção delta |
-| RMSE do modelo | 3.54 kcal/mol | Penaliza erros grandes e resume a robustez global |
-| Gate pass | ✅ Sim | Modelo aprovado nos critérios de qualidade |
-| Moléculas de treino | 1,760 | Tamanho efetivo do conjunto usado no último treinamento |
-| Data do treino | 2026-03-30 18:29 UTC | Momento em que o bundle atual foi gerado |
+> Nenhum modelo ML treinado ainda. Execute 'Treinar Modelo' na CLI.
 ---
 
 ## O que é este projeto?
