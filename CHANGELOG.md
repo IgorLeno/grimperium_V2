@@ -33,6 +33,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Verification: `python3 -m pytest tests/grimperium_mini/ -v` → 53 passed.
 
 ### Fixed
+- **ML delta ensemble import cycle** (2026-06-21)
+  - `src/grimperium/ml/delta_ensemble.py`: stopped importing type aliases from
+    the package root so the module no longer re-enters `grimperium.__init__`
+    while the package is initializing.
+  - `tests/unit/test_delta_ensemble_imports.py`: added a regression test for
+    the package-root import invariant.
+  - Verification: focused import check, focused pytest, ruff, and per-file mypy
+    passed; full pytest and full mypy remain blocked by unrelated existing
+    failures/hangs noted during verification.
+
 - **grimperium_mini: xTB preflight check + honest status attribution** (2026-05-09)
   - Added `verify_xtb_runtime` in `xtb.py`: runs `xtb --opt --gfn2 --silent` on a
     tiny H2O molecule before the main pipeline loop. If the binary is broken (e.g.

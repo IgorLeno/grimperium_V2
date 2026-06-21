@@ -3,10 +3,13 @@ from __future__ import annotations
 from typing import Any
 
 import numpy as np
+from numpy.typing import NDArray
 
-from grimperium import DictStrAny, MatrixFloat
 from grimperium.models.kernel_ridge import KernelRidgeRegressor
 from grimperium.models.xgboost_model import XGBoostRegressor
+
+DictStrAny = dict[str, Any]
+MatrixFloat = NDArray[np.floating[Any]]
 
 
 class DeltaLearningEnsemble:
