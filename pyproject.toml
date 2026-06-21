@@ -28,7 +28,6 @@ classifiers = [
 ]
 packages = [
     {include = "grimperium", from = "src"},
-    {include = "grimperium_mini", from = "src"},
 ]
 
 [tool.poetry.dependencies]
@@ -65,6 +64,7 @@ uvicorn = {version = "^0.34.0", extras = ["standard"]}
 httpx = "^0.28.0"
 pydantic-settings = "^2.0"
 pytest-asyncio = "^1.3.0"
+grimperium-mini = {path = "packages/grimperium-mini", develop = true}
 
 [tool.poetry.extras]
 docs = ["pdoc", "sphinx", "sphinx-rtd-theme", "sphinx-autodoc-typehints"]
@@ -76,7 +76,6 @@ distributed = ["fastapi", "uvicorn", "httpx", "pydantic-settings", "rich"]
 [tool.poetry.scripts]
 grimperium = "grimperium.cli:main"
 grimperium-worker = "grimperium.worker.__main__:main"
-grimperium-mini = "grimperium_mini.__main__:main"
 
 [tool.ruff]
 target-version = "py310"
@@ -116,10 +115,6 @@ ignore = [
 "src/grimperium/crest_pm7/mopac_optimizer.py" = ["S603", "S607"]
 "src/grimperium/crest_pm7/preoptimization.py" = ["S603", "S607"]
 "src/grimperium/crest_pm7/validation.py" = ["S603", "S607"]
-"src/grimperium_mini/crest.py" = ["S603", "S607"]
-"src/grimperium_mini/mopac.py" = ["S603", "S607"]
-"src/grimperium_mini/xtb.py" = ["S603", "S607"]
-"src/grimperium_mini/io.py" = ["S314"]
 # subprocess call for pip install in preflight + non-security hash for settings cache
 "src/grimperium/cli/preflight.py" = ["S603", "S607", "S324"]
 # non-security hash for mol_id generation
@@ -134,7 +129,7 @@ ignore = [
 "src/grimperium/crest_pm7/batch/detail_manager.py" = ["S108"]
 
 [tool.ruff.lint.isort]
-known-first-party = ["grimperium", "grimperium_mini"]
+known-first-party = ["grimperium"]
 
 [tool.black]
 line-length = 88
@@ -174,7 +169,7 @@ markers = [
 asyncio_mode = "auto"
 
 [tool.coverage.run]
-source = ["src/grimperium", "src/grimperium_mini"]
+source = ["src/grimperium"]
 branch = true
 omit = ["*/tests/*"]
 

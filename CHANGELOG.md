@@ -7,6 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **grimperium_mini: split into an independent monorepo package** (2026-06-21)
+  - Moved `src/grimperium_mini/` → `packages/grimperium-mini/src/grimperium_mini/`
+    and `tests/grimperium_mini/` → `packages/grimperium-mini/tests/`, with a
+    new standalone `packages/grimperium-mini/pyproject.toml` declaring only
+    `rich` + `rdkit` (vs. inheriting the full `grimperium` ML dependency tree).
+  - Moved `docs/grimperium_mini.md` → `packages/grimperium-mini/README.md` and
+    the bundled TCC dataset/results (`data/grimperium_mini_pipeline_tcc.xlsx`,
+    `results/grimperium_mini_summary.xlsx`,
+    `results/grimperium_mini_multiconf_summary.csv`) into the new package.
+  - Removed stale `.bak`/`.bak2`/`.bak3`/`Zone.Identifier` artifacts that had
+    accumulated next to the dataset.
+  - `packages/grimperium-mini/src/grimperium_mini/config.py`: replaced
+    machine-specific absolute defaults for `work_root`/`results_dir` with
+    relative paths (`runs`, `results`); env var overrides unchanged.
+  - `packages/grimperium-mini/src/grimperium_mini/app.py`: `default_xlsx`
+    prompts now resolve the bundled dataset relative to the package
+    (`DEFAULT_XLSX_PATH`) instead of a `data/...` path relative to CWD.
+  - Root `pyproject.toml`: removed `grimperium_mini` from `packages`,
+    `[tool.poetry.scripts]`, coverage `source`, isort `known-first-party`, and
+    per-file ruff ignores; added it back as an editable path dev-dependency
+    (`packages/grimperium-mini`) so `poetry install` from the repo root still
+    wires it in for the unified dev workflow.
+  - Verification: `cd packages/grimperium-mini && poetry install && poetry run pytest tests/ -v`;
+    `poetry install` (root) + `poetry run pytest tests/ -v` for the main suite.
+
 ### Added
 - **grimperium_mini: multi-conformer mode** (2026-06-08)
   - `src/grimperium_mini/multi_conformer.py`: new isolated module that reuses
