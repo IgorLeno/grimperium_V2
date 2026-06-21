@@ -34,7 +34,7 @@ black = "^24.0.0"
 grimperium-mini = "grimperium_mini.__main__:main"
 
 [tool.ruff]
-target-version = "py310"
+target-version = "py311"
 line-length = 88
 
 [tool.ruff.lint]
@@ -74,7 +74,7 @@ known-first-party = ["grimperium_mini"]
 
 [tool.black]
 line-length = 88
-target-version = ["py310", "py311", "py312"]
+target-version = ["py311", "py312"]
 include = '\.pyi?$'
 
 [tool.mypy]
