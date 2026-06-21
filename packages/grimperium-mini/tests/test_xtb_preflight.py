@@ -20,8 +20,8 @@ DATA = Path("data/grimperium_mini_pipeline_tcc.xlsx")
 
 
 def test_verify_xtb_runtime_success(monkeypatch: pytest.MonkeyPatch) -> None:
-    def _ok(cmd: object, *, cwd: object, capture_output: object, text: object, timeout: object, check: object) -> MagicMock:
-        (Path(str(cwd)) / "xtbopt.xyz").write_text("1\ntest\nO 0 0 0\n")
+    def _ok(cmd: object, **kwargs: object) -> MagicMock:
+        (Path(str(kwargs["cwd"])) / "xtbopt.xyz").write_text("1\ntest\nO 0 0 0\n")
         result = MagicMock()
         result.returncode = 0
         result.stderr = ""
@@ -34,7 +34,7 @@ def test_verify_xtb_runtime_success(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_verify_xtb_runtime_rc_nonzero(monkeypatch: pytest.MonkeyPatch) -> None:
-    def _fail(cmd: object, *, cwd: object, capture_output: object, text: object, timeout: object, check: object) -> MagicMock:
+    def _fail(cmd: object, **kwargs: object) -> MagicMock:
         result = MagicMock()
         result.returncode = 2
         result.stderr = "Fortran runtime error: Missing comma between descriptors"
@@ -49,7 +49,7 @@ def test_verify_xtb_runtime_rc_nonzero(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_verify_xtb_runtime_missing_output(monkeypatch: pytest.MonkeyPatch) -> None:
     """rc=0 but xtbopt.xyz not produced → failure."""
 
-    def _no_output(cmd: object, *, cwd: object, capture_output: object, text: object, timeout: object, check: object) -> MagicMock:
+    def _no_output(cmd: object, **kwargs: object) -> MagicMock:
         result = MagicMock()
         result.returncode = 0
         result.stderr = ""
@@ -139,7 +139,7 @@ def test_process_molecule_xtb_failure_crest_not_attempted(
 ) -> None:
     """When xTB fails, crest_status reflects xTB failure and MOPAC is not_attempted."""
 
-    def _xtb_fail(cmd: object, *, cwd: object, capture_output: object, text: object, timeout: object, check: object) -> MagicMock:
+    def _xtb_fail(cmd: object, **kwargs: object) -> MagicMock:
         result = MagicMock()
         result.returncode = 2
         result.stderr = "Fortran runtime error"
