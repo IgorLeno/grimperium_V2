@@ -1288,7 +1288,7 @@ class DatabasesView(BaseView):
 
         try:
             r = httpx.get(f"{server_url}/status", timeout=2.0)
-            return r.status_code == 200
+            return bool(r.status_code == 200)
         except Exception:  # noqa: BLE001
             return False
 

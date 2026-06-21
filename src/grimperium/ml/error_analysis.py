@@ -7,7 +7,7 @@ and read from AnalysisResult — none recalculate statistics independently.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, cast
 
 import numpy as np
 import pandas as pd
@@ -155,7 +155,7 @@ def _severity_label(abs_error: float) -> str:
 
 
 def _compute_scored(df: pd.DataFrame) -> pd.DataFrame:
-    scored = df.copy()
+    scored: pd.DataFrame = cast(pd.DataFrame, df.copy())
 
     scored["signed_error"] = scored["H298_predicted"] - scored["H298_cbs"]
     scored["abs_error"] = scored["signed_error"].abs()
@@ -179,7 +179,7 @@ def _compute_scored(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def _detect_outliers(df: pd.DataFrame, config: ErrorAnalysisConfig) -> pd.DataFrame:
-    scored = df.copy()
+    scored: pd.DataFrame = cast(pd.DataFrame, df.copy())
     abs_series = scored["abs_error"]
 
     q1 = float(abs_series.quantile(0.25))

@@ -235,7 +235,7 @@ def _build_chart_links(output_path: Path) -> str:
     return "<h2>Charts</h2>\n" f'<div class="chart-links">{links}</div>'
 
 
-def _row_cells(row: pd.Series[object], cols: list[str]) -> str:
+def _row_cells(row: pd.Series[Any], cols: list[str]) -> str:
     cells = ""
     for c in cols:
         if c not in row.index:
