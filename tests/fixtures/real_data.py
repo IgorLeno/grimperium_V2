@@ -20,6 +20,11 @@ from sklearn.model_selection import train_test_split
 _DATASET_PATH = (
     Path(__file__).parent.parent.parent / "data" / "thermo_cbs_chon.csv"
 )  # Primary CHON dataset
+_PM7_DATASET_PATH = Path(__file__).parent.parent.parent / "data" / "thermo_pm7.csv"
+
+HAS_REAL_DATASET: bool = _DATASET_PATH.exists()
+HAS_PM7_DATASET: bool = _PM7_DATASET_PATH.exists()
+HAS_REQUIRED_DATASETS: bool = HAS_REAL_DATASET and HAS_PM7_DATASET
 
 
 def load_real_subset(

@@ -8,10 +8,18 @@ Tests cover:
     - Dataset statistics
 """
 
+import pytest
+
 from tests.fixtures.real_data import (
+    HAS_REAL_DATASET,
     get_dataset_stats,
     load_real_subset,
     load_real_train_test_split,
+)
+
+pytestmark = pytest.mark.skipif(
+    not HAS_REAL_DATASET,
+    reason="Real dataset not available (data/thermo_cbs_chon.csv)",
 )
 
 

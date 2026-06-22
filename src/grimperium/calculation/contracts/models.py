@@ -40,9 +40,10 @@ class CalculationArtifact:
     conformer_index: int | None
 
     def __post_init__(self) -> None:
-        if PurePosixPath(self.relative_path).is_absolute() or PureWindowsPath(
-            self.relative_path
-        ).is_absolute():
+        if (
+            PurePosixPath(self.relative_path).is_absolute()
+            or PureWindowsPath(self.relative_path).is_absolute()
+        ):
             raise ValueError("CalculationArtifact.relative_path must not be absolute")
 
 

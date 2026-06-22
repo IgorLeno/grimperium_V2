@@ -1239,14 +1239,14 @@ files = [
 name = "markdown-it-py"
 version = "4.0.0"
 description = "Python port of markdown-it. Markdown parsing, done right!"
-optional = true
+optional = false
 python-versions = ">=3.10"
 groups = ["main", "dev"]
 files = [
     {file = "markdown_it_py-4.0.0-py3-none-any.whl", hash = "sha256:87327c59b172c5011896038353a81343b6754500a08cd7a4973bb48c6d578147"},
     {file = "markdown_it_py-4.0.0.tar.gz", hash = "sha256:cb0a2b4aa34f932c007117b194e945bd74e0ec24133ceb5bac59009cda1cb9f3"},
 ]
-markers = {main = "extra == \"cli\" or extra == \"worker\" or extra == \"distributed\"", dev = "python_version >= \"3.11\""}
+markers = {main = "extra == \"cli\" or extra == \"worker\" or extra == \"distributed\""}
 
 [package.dependencies]
 mdurl = ">=0.1,<1.0"
@@ -1443,14 +1443,14 @@ dev = ["meson-python (>=0.13.1,<0.17.0)", "pybind11 (>=2.13.2,!=2.13.3)", "setup
 name = "mdurl"
 version = "0.1.2"
 description = "Markdown URL utilities"
-optional = true
+optional = false
 python-versions = ">=3.7"
 groups = ["main", "dev"]
 files = [
     {file = "mdurl-0.1.2-py3-none-any.whl", hash = "sha256:84008a41e51615a49fc9966191ff91509e3c40b939176e643fd50a5c2196b8f8"},
     {file = "mdurl-0.1.2.tar.gz", hash = "sha256:bb413d29f5eea38f31dd4754dd7377d4465116fb207585f97bf925588687c1ba"},
 ]
-markers = {main = "extra == \"cli\" or extra == \"worker\" or extra == \"distributed\"", dev = "python_version >= \"3.11\""}
+markers = {main = "extra == \"cli\" or extra == \"worker\" or extra == \"distributed\""}
 
 [[package]]
 name = "mypy"
@@ -2556,14 +2556,14 @@ use-chardet-on-py3 = ["chardet (>=3.0.2,<6)"]
 name = "rich"
 version = "14.2.0"
 description = "Render rich text, tables, progress bars, syntax highlighting, markdown and more to the terminal"
-optional = true
+optional = false
 python-versions = ">=3.8.0"
 groups = ["main", "dev"]
 files = [
     {file = "rich-14.2.0-py3-none-any.whl", hash = "sha256:76bc51fe2e57d2b1be1f96c524b890b816e334ab4c1e45888799bfaab0021edd"},
     {file = "rich-14.2.0.tar.gz", hash = "sha256:73ff50c7c0c1c77c8243079283f4edb376f0f6442433aecb8ce7e6d0b92d1fe4"},
 ]
-markers = {main = "extra == \"cli\" or extra == \"worker\" or extra == \"distributed\"", dev = "python_version >= \"3.11\""}
+markers = {main = "extra == \"cli\" or extra == \"worker\" or extra == \"distributed\""}
 
 [package.dependencies]
 markdown-it-py = ">=2.2.0"
@@ -3598,4 +3598,4 @@ worker = ["httpx", "questionary", "rich"]
 [metadata]
 lock-version = "2.1"
 python-versions = "^3.10"
-content-hash = "78b74b3a985806bb28bdd033ca2fc8f70333397d03da3011dfcc3dec2516637f"
+content-hash = "12a4b73ded3280a14fb6c6956bf87c1ddaa0f34b6712cbf75f1fbe79aa9bc36f"
