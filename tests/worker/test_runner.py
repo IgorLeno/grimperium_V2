@@ -52,7 +52,7 @@ def _mock_pipeline(success: bool = True, error_msg: str | None = None) -> MagicM
 
 def _write_minimal_batch_csv(csv_path: Path, mol_id: str = "m1") -> None:
     schema = BatchCSVManager(csv_path=None).get_schema()
-    row: dict[str, Any] = {column: None for column in schema}
+    row: dict[str, Any] = dict.fromkeys(schema)
     row.update(
         {
             "mol_id": mol_id,

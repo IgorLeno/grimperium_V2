@@ -645,6 +645,19 @@ files = [
 ]
 
 [[package]]
+name = "et-xmlfile"
+version = "2.0.0"
+description = "An implementation of lxml.xmlfile for the standard library"
+optional = true
+python-versions = ">=3.8"
+groups = ["main"]
+markers = "extra == \"output\""
+files = [
+    {file = "et_xmlfile-2.0.0-py3-none-any.whl", hash = "sha256:7a91720bc756843502c3b7504c77b8fe44217c85c537d85037f0f536151b2caa"},
+    {file = "et_xmlfile-2.0.0.tar.gz", hash = "sha256:dab3f4764309081ce75662649be815c4c9081e88f0837825f90fd28317d4da54"},
+]
+
+[[package]]
 name = "exceptiongroup"
 version = "1.3.1"
 description = "Backport of PEP 654 (exception groups)"
@@ -790,12 +803,14 @@ name = "grimperium-mini"
 version = "0.2.0"
 description = "Distilled CREST + MOPAC pipeline for biodiesel TCC calculations"
 optional = false
-python-versions = "^3.10"
+python-versions = "^3.11"
 groups = ["dev"]
+markers = "python_version >= \"3.11\""
 files = []
 develop = true
 
 [package.dependencies]
+numpy = ">=2.3.2"
 rdkit = ">=2023.9.0"
 rich = ">=13.0"
 
@@ -1224,14 +1239,14 @@ files = [
 name = "markdown-it-py"
 version = "4.0.0"
 description = "Python port of markdown-it. Markdown parsing, done right!"
-optional = false
+optional = true
 python-versions = ">=3.10"
 groups = ["main", "dev"]
 files = [
     {file = "markdown_it_py-4.0.0-py3-none-any.whl", hash = "sha256:87327c59b172c5011896038353a81343b6754500a08cd7a4973bb48c6d578147"},
     {file = "markdown_it_py-4.0.0.tar.gz", hash = "sha256:cb0a2b4aa34f932c007117b194e945bd74e0ec24133ceb5bac59009cda1cb9f3"},
 ]
-markers = {main = "extra == \"cli\" or extra == \"worker\" or extra == \"distributed\""}
+markers = {main = "extra == \"cli\" or extra == \"worker\" or extra == \"distributed\"", dev = "python_version >= \"3.11\""}
 
 [package.dependencies]
 mdurl = ">=0.1,<1.0"
@@ -1428,14 +1443,14 @@ dev = ["meson-python (>=0.13.1,<0.17.0)", "pybind11 (>=2.13.2,!=2.13.3)", "setup
 name = "mdurl"
 version = "0.1.2"
 description = "Markdown URL utilities"
-optional = false
+optional = true
 python-versions = ">=3.7"
 groups = ["main", "dev"]
 files = [
     {file = "mdurl-0.1.2-py3-none-any.whl", hash = "sha256:84008a41e51615a49fc9966191ff91509e3c40b939176e643fd50a5c2196b8f8"},
     {file = "mdurl-0.1.2.tar.gz", hash = "sha256:bb413d29f5eea38f31dd4754dd7377d4465116fb207585f97bf925588687c1ba"},
 ]
-markers = {main = "extra == \"cli\" or extra == \"worker\" or extra == \"distributed\""}
+markers = {main = "extra == \"cli\" or extra == \"worker\" or extra == \"distributed\"", dev = "python_version >= \"3.11\""}
 
 [[package]]
 name = "mypy"
@@ -1529,7 +1544,7 @@ version = "2.0.2"
 description = "Fundamental package for array computing in Python"
 optional = false
 python-versions = ">=3.9"
-groups = ["main", "dev"]
+groups = ["main"]
 markers = "python_version == \"3.10\""
 files = [
     {file = "numpy-2.0.2-cp310-cp310-macosx_10_9_x86_64.whl", hash = "sha256:51129a29dbe56f9ca83438b706e2e69a39892b5eda6cedcb6b0c9fdc9b0d3ece"},
@@ -1674,6 +1689,22 @@ files = [
     {file = "nvidia_nccl_cu12-2.28.9-py3-none-manylinux_2_18_aarch64.whl", hash = "sha256:50a36e01c4a090b9f9c47d92cec54964de6b9fcb3362d0e19b8ffc6323c21b60"},
     {file = "nvidia_nccl_cu12-2.28.9-py3-none-manylinux_2_18_x86_64.whl", hash = "sha256:485776daa8447da5da39681af455aa3b2c2586ddcf4af8772495e7c532c7e5ab"},
 ]
+
+[[package]]
+name = "openpyxl"
+version = "3.1.5"
+description = "A Python library to read/write Excel 2010 xlsx/xlsm files"
+optional = true
+python-versions = ">=3.8"
+groups = ["main"]
+markers = "extra == \"output\""
+files = [
+    {file = "openpyxl-3.1.5-py2.py3-none-any.whl", hash = "sha256:5282c12b107bffeef825f4617dc029afaf41d0ea60823bbb665ef3079dc79de2"},
+    {file = "openpyxl-3.1.5.tar.gz", hash = "sha256:cf0e3cf56142039133628b5acffe8ef0c12bc902d2aadd3e0fe5878dc08d1050"},
+]
+
+[package.dependencies]
+et-xmlfile = "*"
 
 [[package]]
 name = "packaging"
@@ -1920,6 +1951,7 @@ files = [
     {file = "pillow-12.1.0-pp311-pypy311_pp73-win_amd64.whl", hash = "sha256:75af0b4c229ac519b155028fa1be632d812a519abba9b46b20e50c6caa184f19"},
     {file = "pillow-12.1.0.tar.gz", hash = "sha256:5c5ae0a06e9ea030ab786b0251b32c7e4ce10e58d983c0d5c56029455180b5b9"},
 ]
+markers = {dev = "python_version >= \"3.11\""}
 
 [package.extras]
 docs = ["furo", "olefile", "sphinx (>=8.2)", "sphinx-autobuild", "sphinx-copybutton", "sphinx-inline-tabs", "sphinxext-opengraph"]
@@ -1985,14 +2017,14 @@ virtualenv = ">=20.10.0"
 name = "prompt-toolkit"
 version = "3.0.52"
 description = "Library for building powerful interactive command lines in Python"
-optional = true
+optional = false
 python-versions = ">=3.8"
-groups = ["main"]
-markers = "extra == \"cli\" or extra == \"worker\""
+groups = ["main", "dev"]
 files = [
     {file = "prompt_toolkit-3.0.52-py3-none-any.whl", hash = "sha256:9aac639a3bbd33284347de5ad8d68ecc044b91a762dc39b7c21095fcd6a19955"},
     {file = "prompt_toolkit-3.0.52.tar.gz", hash = "sha256:28cde192929c8e7321de85de1ddbe736f1375148b02f2e17edd840042b1be855"},
 ]
+markers = {main = "extra == \"cli\" or extra == \"worker\""}
 
 [package.dependencies]
 wcwidth = "*"
@@ -2445,14 +2477,14 @@ markers = {main = "extra == \"server\" or extra == \"distributed\""}
 name = "questionary"
 version = "2.1.1"
 description = "Python library to build pretty command line user prompts ⭐️"
-optional = true
+optional = false
 python-versions = ">=3.9"
-groups = ["main"]
-markers = "extra == \"cli\" or extra == \"worker\""
+groups = ["main", "dev"]
 files = [
     {file = "questionary-2.1.1-py3-none-any.whl", hash = "sha256:a51af13f345f1cdea62347589fbb6df3b290306ab8930713bfae4d475a7d4a59"},
     {file = "questionary-2.1.1.tar.gz", hash = "sha256:3d7e980292bb0107abaa79c68dd3eee3c561b83a0f89ae482860b181c8bd412d"},
 ]
+markers = {main = "extra == \"cli\" or extra == \"worker\""}
 
 [package.dependencies]
 prompt_toolkit = ">=2.0,<4.0"
@@ -2491,6 +2523,7 @@ files = [
     {file = "rdkit-2025.9.3-cp314-cp314-manylinux_2_28_x86_64.whl", hash = "sha256:6aae71e6a3407b9b099496999634692e538c5936b5a3a8e034d44c5f2bcd9108"},
     {file = "rdkit-2025.9.3-cp314-cp314-win_amd64.whl", hash = "sha256:f47da0c0e138aaf0a0f0a8f1e2ecf35c0483fd037e1fe620af0d2cff6e5f778a"},
 ]
+markers = {dev = "python_version >= \"3.11\""}
 
 [package.dependencies]
 numpy = "*"
@@ -2523,14 +2556,14 @@ use-chardet-on-py3 = ["chardet (>=3.0.2,<6)"]
 name = "rich"
 version = "14.2.0"
 description = "Render rich text, tables, progress bars, syntax highlighting, markdown and more to the terminal"
-optional = false
+optional = true
 python-versions = ">=3.8.0"
 groups = ["main", "dev"]
 files = [
     {file = "rich-14.2.0-py3-none-any.whl", hash = "sha256:76bc51fe2e57d2b1be1f96c524b890b816e334ab4c1e45888799bfaab0021edd"},
     {file = "rich-14.2.0.tar.gz", hash = "sha256:73ff50c7c0c1c77c8243079283f4edb376f0f6442433aecb8ce7e6d0b92d1fe4"},
 ]
-markers = {main = "extra == \"cli\" or extra == \"worker\" or extra == \"distributed\""}
+markers = {main = "extra == \"cli\" or extra == \"worker\" or extra == \"distributed\"", dev = "python_version >= \"3.11\""}
 
 [package.dependencies]
 markdown-it-py = ">=2.2.0"
@@ -3445,14 +3478,14 @@ anyio = ">=3.0.0"
 name = "wcwidth"
 version = "0.2.14"
 description = "Measures the displayed width of unicode strings in a terminal"
-optional = true
+optional = false
 python-versions = ">=3.6"
-groups = ["main"]
-markers = "extra == \"cli\" or extra == \"worker\""
+groups = ["main", "dev"]
 files = [
     {file = "wcwidth-0.2.14-py2.py3-none-any.whl", hash = "sha256:a7bb560c8aee30f9957e5f9895805edd20602f2d7f720186dfd906e82b4982e1"},
     {file = "wcwidth-0.2.14.tar.gz", hash = "sha256:4d478375d31bc5395a3c55c40ccdf3354688364cd61c4f6adacaa9215d0b3605"},
 ]
+markers = {main = "extra == \"cli\" or extra == \"worker\""}
 
 [[package]]
 name = "websockets"
@@ -3558,10 +3591,11 @@ scikit-learn = ["scikit-learn"]
 cli = ["questionary", "rich"]
 distributed = ["fastapi", "httpx", "pydantic-settings", "rich", "uvicorn"]
 docs = ["pdoc", "sphinx", "sphinx-autodoc-typehints", "sphinx-rtd-theme"]
+output = ["openpyxl"]
 server = ["fastapi", "pydantic-settings", "uvicorn"]
 worker = ["httpx", "questionary", "rich"]
 
 [metadata]
 lock-version = "2.1"
 python-versions = "^3.10"
-content-hash = "b011d40eb0d173fd5d67028420e9146296932e0cc17f920ad7b145d93d929663"
+content-hash = "78b74b3a985806bb28bdd033ca2fc8f70333397d03da3011dfcc3dec2516637f"

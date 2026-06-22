@@ -293,7 +293,7 @@ class BatchCSVManager:
         try:
             if self.csv_path.stat().st_size == 0:
                 raise pd.errors.EmptyDataError("CSV file is 0 bytes")
-            self.df = pd.read_csv(self.csv_path, dtype=self._CSV_DTYPE)
+            self.df = pd.read_csv(self.csv_path, dtype=cast(Any, self._CSV_DTYPE))
         except (pd.errors.EmptyDataError, pd.errors.ParserError) as exc:
             LOG.error("CSV unreadable (%s), checking backup...", exc)
             if backup_path.exists() and backup_path.stat().st_size > 0:
@@ -304,7 +304,9 @@ class BatchCSVManager:
                 )
                 shutil.copy2(backup_path, self.csv_path)
                 try:
-                    self.df = pd.read_csv(self.csv_path, dtype=self._CSV_DTYPE)
+                    self.df = pd.read_csv(
+                        self.csv_path, dtype=cast(Any, self._CSV_DTYPE)
+                    )
                 except (pd.errors.ParserError, pd.errors.EmptyDataError) as bak_exc:
                     raise CSVCorruptedError(
                         "Backup restore failed: parsed backup "
@@ -472,7 +474,7 @@ class BatchCSVManager:
                 return None
             if pd.isna(val):
                 return None
-            return float(val)
+            return float(cast(Any, val))
         except (KeyError, ValueError, TypeError) as e:
             LOG.debug(f"[{mol_id}] Could not get H298_cbs: {e}")
             return None

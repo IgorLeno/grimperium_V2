@@ -80,7 +80,7 @@ class DataFusion:
         chemperium_df: pd.DataFrame,
         semiempirical_df: pd.DataFrame,
         on: str = "smiles",
-        how: str = "inner",
+        how: Literal["inner", "left", "right", "outer"] = "inner",
         validate_merge: bool = True,
     ) -> pd.DataFrame:
         """
@@ -232,7 +232,7 @@ class DataFusion:
         # Get feature columns
         feature_cols = self._default_feature_columns(df, exclude=[self.delta_column])
         features = cast(pd.DataFrame, df[feature_cols].copy())
-        deltas: MatrixFloat = df[self.delta_column].values
+        deltas = cast(MatrixFloat, df[self.delta_column].to_numpy())
 
         return features, deltas
 

@@ -55,7 +55,7 @@ def test_load_csv_does_not_overwrite_existing(tmp_path: Path) -> None:
     # Cria CSV com 1 molécula
     manager = BatchCSVManager(csv_path=csv_path)
     manager.create_empty_csv()
-    row = {col: None for col in manager.get_schema()}
+    row = dict.fromkeys(manager.get_schema())
     row.update({"mol_id": "m001", "smiles": "C", "nheavy": 1, "status": "PENDING"})
     manager.df = pd.DataFrame([row])
     manager.save_csv()

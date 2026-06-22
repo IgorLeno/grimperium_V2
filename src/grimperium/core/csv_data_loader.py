@@ -218,7 +218,7 @@ class CSVDataLoader:
 
         # Then row-by-row validation
         for idx, row in df.iterrows():
-            error = self._validate_row(row, int(idx))
+            error = self._validate_row(row, int(cast(Any, idx)))
             if error:
                 raise CSVDataLoaderError(error)
 
@@ -241,12 +241,14 @@ class CSVDataLoader:
         valid_indices = []
 
         for idx, row in df.iterrows():
-            error = self._validate_row(row, int(idx))
+            error = self._validate_row(row, int(cast(Any, idx)))
 
             if error:
                 mol_id = row.get("mol_id", "unknown")
                 logger.warning(f"Row {idx}: {error}")
-                self.validation_report.add_error(int(idx), str(mol_id), error)
+                self.validation_report.add_error(
+                    int(cast(Any, idx)), str(mol_id), error
+                )
             else:
                 valid_indices.append(idx)
 

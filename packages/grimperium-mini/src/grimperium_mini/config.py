@@ -45,7 +45,9 @@ class MiniConfig:
         default_factory=lambda: os.getenv("GRIMPERIUM_MINI_XTB_ENABLED", "true").lower()
         != "false"
     )
-    threads: int = field(default_factory=lambda: _env_int("GRIMPERIUM_MINI_THREADS", 16))
+    threads: int = field(
+        default_factory=lambda: _env_int("GRIMPERIUM_MINI_THREADS", 16)
+    )
     crest_method: str = field(
         default_factory=lambda: os.getenv("GRIMPERIUM_MINI_CREST_METHOD", "gfn2")
     )

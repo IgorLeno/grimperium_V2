@@ -350,9 +350,7 @@ def _plot_abs_error_boxplot(
         for line in bp[element]:
             line.set_color("#FFFFFF")
     for flier in bp["fliers"]:
-        flier.set(
-            marker="o", color="#FF6666", alpha=0.5, markersize=4
-        )
+        flier.set(marker="o", color="#FF6666", alpha=0.5, markersize=4)
 
     ax.set_ylabel("|Error| (kcal/mol)", fontsize=12)
     ax.set_xticks([])

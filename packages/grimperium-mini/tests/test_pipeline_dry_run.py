@@ -29,7 +29,9 @@ def test_select_lowest_hof() -> None:
 
 
 @pytest.mark.skipif(not DATA.exists(), reason="xlsx fixture not available")
-def test_dry_run_does_not_call_external_subprocess(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_dry_run_does_not_call_external_subprocess(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     def fail(*args: object, **kwargs: object) -> None:
         raise AssertionError("subprocess should not be called in dry-run")
 

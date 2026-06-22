@@ -142,9 +142,7 @@ def _hamiltonian_status(conformer: ConformerData) -> OverallStatus:
 
 
 def _molecular_descriptors(result: PM7Result) -> MolecularDescriptors | None:
-    values: dict[str, float | None] = {
-        target: None for target in _RDKIT_DESCRIPTOR_MAP.values()
-    }
+    values: dict[str, float | None] = dict.fromkeys(_RDKIT_DESCRIPTOR_MAP.values())
     for legacy_key, target_key in _RDKIT_DESCRIPTOR_MAP.items():
         raw_value = result.rdkit_descriptors.get(legacy_key)
         values[target_key] = None if raw_value is None else float(raw_value)

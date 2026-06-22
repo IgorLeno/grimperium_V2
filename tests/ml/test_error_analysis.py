@@ -98,9 +98,7 @@ def test_relative_error_pct_near_zero_ref_is_finite() -> None:
         (50.0, "extreme"),
     ],
 )
-def test_severity_exact_boundaries(
-    abs_error: float, expected_severity: str
-) -> None:
+def test_severity_exact_boundaries(abs_error: float, expected_severity: str) -> None:
     """Exact boundary values map to the correct severity label."""
     df = _make_df([0.0], [abs_error])
     result = analyze(df)

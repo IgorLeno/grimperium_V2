@@ -65,7 +65,8 @@ uvicorn = {version = "^0.34.0", extras = ["standard"]}
 httpx = "^0.28.0"
 pydantic-settings = "^2.0"
 pytest-asyncio = "^1.3.0"
-grimperium-mini = {path = "packages/grimperium-mini", develop = true}
+questionary = ">=2.0.0"
+grimperium-mini = {path = "packages/grimperium-mini", develop = true, python = ">=3.11"}
 
 [tool.poetry.extras]
 docs = ["pdoc", "sphinx", "sphinx-rtd-theme", "sphinx-autodoc-typehints"]

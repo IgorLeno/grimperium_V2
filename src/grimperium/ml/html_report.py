@@ -164,17 +164,13 @@ def _build_top_errors_table(top_n_df: pd.DataFrame) -> str:
         rows += f'<tr class="{css}">{cells}</tr>\n'
 
     return (
-        "<h2>Top 20 Largest Errors</h2>\n"
-        f"<table><tr>{header}</tr>\n{rows}</table>"
+        "<h2>Top 20 Largest Errors</h2>\n" f"<table><tr>{header}</tr>\n{rows}</table>"
     )
 
 
 def _build_outliers_table(outliers_df: pd.DataFrame) -> str:
     if outliers_df.empty:
-        return (
-            "<h2>All Outliers</h2>\n"
-            '<p class="no-data">No outliers detected.</p>'
-        )
+        return "<h2>All Outliers</h2>\n" '<p class="no-data">No outliers detected.</p>'
 
     priority = [
         "mol_id",
@@ -212,10 +208,7 @@ def _build_warnings_section(warnings: list[str]) -> str:
     if not warnings:
         return "<h2>Warnings</h2>\n" '<p class="no-data">No warnings.</p>'
     items = "".join(f"<li>{html_lib.escape(w)}</li>\n" for w in warnings)
-    return (
-        "<h2>Warnings</h2>\n"
-        f'<div class="warn-box"><ul>\n{items}</ul></div>'
-    )
+    return "<h2>Warnings</h2>\n" f'<div class="warn-box"><ul>\n{items}</ul></div>'
 
 
 def _build_chart_links(output_path: Path) -> str:
