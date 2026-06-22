@@ -227,7 +227,7 @@ class BatchCSVManager:
         )
         return self.df
 
-    _CSV_DTYPE: dict[str, type] = {
+    _CSV_DTYPE: dict[str, type[Any]] = {
         "mol_id": str,
         "smiles": str,
         "status": str,
@@ -472,7 +472,7 @@ class BatchCSVManager:
                 return None
             if pd.isna(val):
                 return None
-            return float(val)
+            return float(cast(Any, val))
         except (KeyError, ValueError, TypeError) as e:
             LOG.debug(f"[{mol_id}] Could not get H298_cbs: {e}")
             return None

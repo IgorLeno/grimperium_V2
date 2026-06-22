@@ -29,7 +29,7 @@ from dataclasses import dataclass, field
 from enum import IntEnum
 from pathlib import Path
 from queue import Empty
-from typing import TYPE_CHECKING, ClassVar
+from typing import TYPE_CHECKING, Any, ClassVar, cast
 
 import pandas as pd
 from rich.console import Console
@@ -108,7 +108,7 @@ def _normalize_csv_value(
     Returns:
         Normalized string value
     """
-    if value is None or pd.isna(value):
+    if value is None or bool(pd.isna(cast(Any, value))):
         return default
 
     text = str(value).strip()

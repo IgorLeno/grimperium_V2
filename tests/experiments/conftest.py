@@ -41,6 +41,8 @@ This mock is deterministic (seed=42) for reproducibility.
 import numpy as np
 import pytest
 
+from tests.fixtures.real_data import HAS_REAL_DATASET
+
 
 def create_realistic_mock_pm7(
     y_cbs: np.ndarray,
@@ -170,6 +172,9 @@ def real_data_1k_filtered() -> tuple[np.ndarray, np.ndarray, np.ndarray]:
         ...     X, y_cbs, y_pm7 = real_data_1k_filtered
         ...     # Train/test split will have similar distributions
     """
+    if not HAS_REAL_DATASET:
+        pytest.skip("Real dataset not available (data/thermo_cbs_chon.csv)")
+
     from grimperium.data.loader import ChemperiumLoader
 
     # Load all data (filtered dataset - Phase A onwards)
@@ -256,6 +261,9 @@ def real_data_1k_extreme() -> tuple[np.ndarray, np.ndarray, np.ndarray]:
 
     References: ChemperiumLoader, load_thermo_cbs_chon
     """
+    if not HAS_REAL_DATASET:
+        pytest.skip("Real dataset not available (data/thermo_cbs_chon.csv)")
+
     from grimperium.data.loader import ChemperiumLoader
 
     # Load CHON dataset (29,568 molecules)

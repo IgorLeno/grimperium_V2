@@ -119,9 +119,7 @@ def analyze(
 
     outliers_df = scored[scored["outlier_score"] > 0].copy()
 
-    top_n_df = (
-        scored.nlargest(config.top_n, "abs_error").reset_index(drop=True).copy()
-    )
+    top_n_df = scored.nlargest(config.top_n, "abs_error").reset_index(drop=True).copy()
     top_n_df.insert(0, "rank", range(1, len(top_n_df) + 1))
 
     return AnalysisResult(
@@ -229,9 +227,7 @@ def _build_warnings(original: pd.DataFrame, valid: pd.DataFrame) -> list[str]:
     if "cbs_quality_flag" in valid.columns:
         n_bad_flag = int((valid["cbs_quality_flag"] != "OK").sum())
         if n_bad_flag > 0:
-            warnings.append(
-                f"{n_bad_flag} molecule(s) with cbs_quality_flag != 'OK'."
-            )
+            warnings.append(f"{n_bad_flag} molecule(s) with cbs_quality_flag != 'OK'.")
 
     if len(valid) > 1:
         abs_errs = (valid["H298_predicted"] - valid["H298_cbs"]).abs()
@@ -248,13 +244,9 @@ def _build_warnings(original: pd.DataFrame, valid: pd.DataFrame) -> list[str]:
     if len(valid) > 0:
         cbs_abs = valid["H298_cbs"].abs()
         safe_cbs = cbs_abs.where(cbs_abs > 1e-10, other=1e-10)
-        rel_err = (
-            (valid["H298_predicted"] - valid["H298_cbs"]).abs() / safe_cbs * 100.0
-        )
+        rel_err = (valid["H298_predicted"] - valid["H298_cbs"]).abs() / safe_cbs * 100.0
         n_absurd = int((rel_err > 500.0).sum())
         if n_absurd > 0:
-            warnings.append(
-                f"{n_absurd} molecule(s) with relative_error_pct > 500%."
-            )
+            warnings.append(f"{n_absurd} molecule(s) with relative_error_pct > 500%.")
 
     return warnings

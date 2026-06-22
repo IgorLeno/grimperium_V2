@@ -19,7 +19,7 @@ class MiniProgressTracker:
         self.failed_count = 0
         self.skipped_count = 0
 
-    def on_task_start(self, mol_id: str, method: str) -> None:
+    def on_task_start(self, mol_id: str, _method: str) -> None:
         self._current_mol_id = mol_id
 
     def on_task_done(self, row: dict[str, object]) -> None:

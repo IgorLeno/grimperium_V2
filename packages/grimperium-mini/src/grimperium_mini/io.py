@@ -229,9 +229,7 @@ def load_molecules(
 _SUMMARY_SHEET = "grimperium_mini_summary"
 
 
-def append_summary_row(
-    path: Path, row: dict[str, object], columns: list[str]
-) -> None:
+def append_summary_row(path: Path, row: dict[str, object], columns: list[str]) -> None:
     """Append one result row to the summary xlsx, creating the file if needed.
 
     If the file exists but has a different schema (e.g., from a prior pipeline

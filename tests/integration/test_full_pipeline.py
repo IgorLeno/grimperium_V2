@@ -12,11 +12,17 @@ This test validates the complete flow:
 
 import numpy as np
 import pandas as pd
+import pytest
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.metrics import mean_absolute_error, r2_score
 
 from grimperium.data import ChemperiumLoader, DataFusion
-from tests.fixtures.real_data import load_real_subset
+from tests.fixtures.real_data import HAS_REAL_DATASET, load_real_subset
+
+pytestmark = pytest.mark.skipif(
+    not HAS_REAL_DATASET,
+    reason="Real dataset not available (data/thermo_cbs_chon.csv)",
+)
 
 
 def _create_synthetic_pm7(df: pd.DataFrame, random_state: int = 42) -> pd.DataFrame:

@@ -115,7 +115,9 @@ def test_run_pipeline_disables_xtb_on_preflight_failure(
         "grimperium_mini.pipeline.process_molecule",
         lambda mol, config, dry_run=False: _DRY_ROW,
     )
-    monkeypatch.setattr("grimperium_mini.pipeline.append_summary_row", lambda *a, **kw: None)
+    monkeypatch.setattr(
+        "grimperium_mini.pipeline.append_summary_row", lambda *a, **kw: None
+    )
 
     config = MiniConfig(
         work_root=tmp_path / "runs",

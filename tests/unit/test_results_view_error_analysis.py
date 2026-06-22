@@ -223,7 +223,11 @@ def test_handle_html_report_calls_generate_with_correct_path(
 
     fake_result = MagicMock()
     fake_result.summary = {
-        "mae": 1.0, "rmse": 1.0, "r2": 0.99, "n_molecules": 3, "n_outliers": 0,
+        "mae": 1.0,
+        "rmse": 1.0,
+        "r2": 0.99,
+        "n_molecules": 3,
+        "n_outliers": 0,
     }
 
     with (

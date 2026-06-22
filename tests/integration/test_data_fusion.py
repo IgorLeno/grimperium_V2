@@ -11,8 +11,14 @@ Tests:
 
 import numpy as np
 import pandas as pd
+import pytest
 
-from tests.fixtures.real_data import load_real_subset
+from tests.fixtures.real_data import HAS_REAL_DATASET, load_real_subset
+
+pytestmark = pytest.mark.skipif(
+    not HAS_REAL_DATASET,
+    reason="Real dataset not available (data/thermo_cbs_chon.csv)",
+)
 
 
 def _create_synthetic_pm7(df: "pd.DataFrame", random_state: int = 42) -> "pd.DataFrame":

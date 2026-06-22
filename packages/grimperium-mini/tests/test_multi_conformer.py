@@ -379,6 +379,7 @@ def test_pipeline_resume_skips_successful(
 ) -> None:
     """Molecules with status=success in an existing CSV must not be reprocessed."""
     import csv as _csv
+
     import grimperium_mini.multi_conformer as mc
 
     config = _make_config(tmp_path)
@@ -390,7 +391,7 @@ def test_pipeline_resume_skips_successful(
     with output_path.open("w", newline="", encoding="utf-8") as f:
         writer = _csv.DictWriter(f, fieldnames=cols)
         writer.writeheader()
-        existing: dict[str, object] = {c: "" for c in cols}
+        existing: dict[str, object] = dict.fromkeys(cols, "")
         existing["mol_id"] = "mol_a"
         existing["status"] = "success"
         existing["mopac_status"] = "success"
@@ -421,7 +422,7 @@ def test_pipeline_resume_skips_successful(
         mol: dict[str, object], cfg: object, **kw: object
     ) -> dict[str, object]:
         processed.append(str(mol["mol_id"]))
-        blank: dict[str, object] = {c: "" for c in cols}
+        blank: dict[str, object] = dict.fromkeys(cols, "")
         blank.update(
             {
                 "mol_id": mol["mol_id"],
@@ -454,6 +455,7 @@ def test_pipeline_resume_progress_events_for_skipped(
 ) -> None:
     """Skipped molecules emit a 'done' event (no 'start') with status=skipped."""
     import csv as _csv
+
     import grimperium_mini.multi_conformer as mc
 
     config = _make_config(tmp_path)
@@ -464,13 +466,24 @@ def test_pipeline_resume_progress_events_for_skipped(
     with output_path.open("w", newline="", encoding="utf-8") as f:
         writer = _csv.DictWriter(f, fieldnames=cols)
         writer.writeheader()
-        row: dict[str, object] = {c: "" for c in cols}
+        row: dict[str, object] = dict.fromkeys(cols, "")
         row["mol_id"] = "mol_a"
         row["status"] = "success"
         writer.writerow(row)
 
     monkeypatch.setattr(
-        mc, "load_molecules", lambda *a, **kw: [{"mol_id": "mol_a", "molecule": "", "smiles": "", "charge": 0, "multiplicity": 1, "hf_exp_kJmol": None}]
+        mc,
+        "load_molecules",
+        lambda *a, **kw: [
+            {
+                "mol_id": "mol_a",
+                "molecule": "",
+                "smiles": "",
+                "charge": 0,
+                "multiplicity": 1,
+                "hf_exp_kJmol": None,
+            }
+        ],
     )
     monkeypatch.setattr(mc, "process_molecule_multi", lambda *a, **kw: {})
 
