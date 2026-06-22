@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from copy import deepcopy
 from datetime import datetime
 from typing import Any
 
@@ -39,6 +40,20 @@ def _int_or_none(value: Any) -> int | None:
     return None if value is None else int(value)
 
 
+def _bool_from_value(value: Any) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        normalized = value.strip().casefold()
+        if normalized in {"true", "1", "yes"}:
+            return True
+        if normalized in {"false", "0", "no"}:
+            return False
+        msg = f"Cannot convert string to bool: {value!r}"
+        raise ValueError(msg)
+    return bool(value)
+
+
 def _stage_execution_to_dict(record: StageExecutionRecord) -> dict[str, Any]:
     return {
         "stage_id": record.stage_id,
@@ -50,8 +65,8 @@ def _stage_execution_to_dict(record: StageExecutionRecord) -> dict[str, Any]:
         "completed_at": _datetime_to_str(record.completed_at),
         "execution_time_s": record.execution_time_s,
         "program_version": record.program_version,
-        "settings": record.settings,
-        "artifact_ids": record.artifact_ids,
+        "settings": deepcopy(record.settings),
+        "artifact_ids": list(record.artifact_ids),
         "error_message": record.error_message,
     }
 
@@ -62,7 +77,7 @@ def _stage_execution_from_dict(data: dict[str, Any]) -> StageExecutionRecord:
         program=str(data["program"]),
         role=str(data["role"]),
         status=StageExecutionStatus(data["status"]),
-        requested=bool(data["requested"]),
+        requested=_bool_from_value(data["requested"]),
         started_at=_datetime_from_str(data["started_at"]),
         completed_at=_datetime_from_str(data["completed_at"]),
         execution_time_s=_float_or_none(data["execution_time_s"]),
@@ -146,9 +161,9 @@ def _hamiltonian_to_dict(result: HamiltonianResult) -> dict[str, Any]:
         "hamiltonian": result.hamiltonian,
         "status": result.status.value,
         "energy_hof": result.energy_hof.to_dict() if result.energy_hof else None,
-        "electronic_descriptors": result.electronic_descriptors,
+        "electronic_descriptors": dict(result.electronic_descriptors),
         "conformer_index": result.conformer_index,
-        "artifact_ids": result.artifact_ids,
+        "artifact_ids": list(result.artifact_ids),
         "error_message": result.error_message,
     }
 

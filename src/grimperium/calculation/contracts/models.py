@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime
+from pathlib import PurePosixPath, PureWindowsPath
 from typing import Any
 
 from .enums import ArtifactType, OverallStatus, PropertyRole, StageExecutionStatus
@@ -39,7 +40,9 @@ class CalculationArtifact:
     conformer_index: int | None
 
     def __post_init__(self) -> None:
-        if self.relative_path.startswith("/"):
+        if PurePosixPath(self.relative_path).is_absolute() or PureWindowsPath(
+            self.relative_path
+        ).is_absolute():
             raise ValueError("CalculationArtifact.relative_path must not be absolute")
 
 

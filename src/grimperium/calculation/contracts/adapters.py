@@ -99,10 +99,12 @@ def _relative_path(path: Path) -> str:
     return path.as_posix().lstrip("/")
 
 
+def _resolved_conformer_index(conformer: ConformerData) -> int:
+    return conformer.crest_rank if conformer.crest_rank is not None else conformer.index
+
+
 def _artifact_id(prefix: str, conformer: ConformerData) -> str:
-    conformer_key = (
-        conformer.crest_rank if conformer.crest_rank is not None else conformer.index
-    )
+    conformer_key = _resolved_conformer_index(conformer)
     return f"{prefix}-{conformer.mol_id}-{conformer_key}"
 
 
@@ -121,7 +123,7 @@ def _artifact_from_path(
         artifact_type=artifact_type,
         relative_path=_relative_path(path),
         hamiltonian=hamiltonian,
-        conformer_index=conformer.crest_rank,
+        conformer_index=_resolved_conformer_index(conformer),
     )
 
 
@@ -202,7 +204,7 @@ def _conformer_result(
         else None
     )
     return ConformerResult(
-        conformer_index=conformer.crest_rank or conformer.index,
+        conformer_index=_resolved_conformer_index(conformer),
         crest_energy_hartree=None,
         hamiltonian_results=[
             HamiltonianResult(
@@ -210,7 +212,7 @@ def _conformer_result(
                 status=_hamiltonian_status(conformer),
                 energy_hof=energy,
                 electronic_descriptors=_electronic_descriptors(conformer),
-                conformer_index=conformer.crest_rank,
+                conformer_index=_resolved_conformer_index(conformer),
                 artifact_ids=artifact_ids,
                 error_message=conformer.mopac_error_message,
             )
@@ -272,7 +274,11 @@ def pm7result_to_canonical(result: PM7Result) -> MoleculeCalculationResult:
                 value=Quantity(value=selected.energy_hof, unit="kcal/mol"),
                 value_kcal_mol=selected.energy_hof,
                 value_kj_mol=None,
-                conformer_source_id=result.k_selected_pm7 or selected.crest_rank,
+                conformer_source_id=(
+                    result.k_selected_pm7
+                    if result.k_selected_pm7 is not None
+                    else selected.crest_rank
+                ),
                 uncertainty=None,
                 model_path=None,
             )
