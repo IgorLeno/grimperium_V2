@@ -10,7 +10,12 @@ from pathlib import Path
 import pytest
 
 from grimperium.crest_pm7.config import PM7Config
-from grimperium.crest_pm7.mopac_optimizer import _create_mopac_input, run_mopac
+from grimperium.crest_pm7.mopac_optimizer import (
+    MOPACResult,
+    _create_mopac_input,
+    optimize_conformer,
+    run_mopac,
+)
 
 
 @pytest.fixture()
@@ -120,10 +125,13 @@ class TestParameterizedMopacInput:
 
         def fake_run(
             cmd: list[str],
+            *,
             cwd: Path,
             capture_output: bool,
             text: bool,
             timeout: float,
+            env: object = None,
+            **kwargs: object,
         ) -> subprocess.CompletedProcess[str]:
             mop_file = Path(cmd[1])
             mop_file.with_suffix(".out").write_text(
@@ -153,4 +161,60 @@ class TestParameterizedMopacInput:
         assert keywords[0] == "PM3"
         assert "CHARGE=-1" in keywords
         assert "TRIPLET" in keywords
+        assert "AUX" not in keywords
+
+    def test_optimize_conformer_propagates_hamiltonian(
+        self, sample_xyz: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """optimize_conformer deve repassar hamiltonian/charge/multiplicity."""
+        config = PM7Config(temp_dir=tmp_path, mopac_executable="mopac")
+        captured: dict[str, object] = {}
+
+        def fake_run_mopac(**kwargs: object) -> MOPACResult:
+            captured.update(kwargs)
+            return MOPACResult()
+
+        monkeypatch.setattr(
+            "grimperium.crest_pm7.mopac_optimizer.run_mopac",
+            fake_run_mopac,
+        )
+
+        optimize_conformer(
+            mol_id="mol",
+            xyz_file=sample_xyz,
+            config=config,
+            timeout=10.0,
+            hamiltonian="AM1",
+            charge=1,
+            multiplicity=2,
+        )
+
+        assert captured["hamiltonian"] == "AM1"
+        assert captured["charge"] == 1
+        assert captured["multiplicity"] == 2
+
+    def test_invalid_multiplicity_raises_value_error(
+        self, sample_xyz: Path, tmp_path: Path
+    ) -> None:
+        """Multiplicidade fora do mapa deve levantar ValueError imediatamente."""
+        mop = tmp_path / "out.mop"
+        with pytest.raises(ValueError, match="Unsupported multiplicity"):
+            _create_mopac_input(sample_xyz, mop, multiplicity=7)
+
+    def test_invalid_hamiltonian_raises_value_error(
+        self, sample_xyz: Path, tmp_path: Path
+    ) -> None:
+        """Hamiltoniano fora do conjunto suportado deve levantar ValueError."""
+        mop = tmp_path / "out.mop"
+        with pytest.raises(ValueError, match="Unsupported Hamiltonian"):
+            _create_mopac_input(sample_xyz, mop, hamiltonian="MNDO")
+
+    def test_default_hamiltonian_is_pm7(
+        self, sample_xyz: Path, tmp_path: Path
+    ) -> None:
+        """Sem hamiltonian explícito, o primeiro token deve ser PM7."""
+        mop = tmp_path / "out.mop"
+        assert _create_mopac_input(sample_xyz, mop)
+        keywords = mop.read_text().splitlines()[0].split()
+        assert keywords[0] == "PM7"
         assert "AUX" not in keywords
