@@ -8,6 +8,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Changed
+- **MOPAC executor parameterization for calculation methods** (2026-06-22)
+  - `src/grimperium/crest_pm7/mopac_optimizer.py`: `_create_mopac_input`,
+    `run_mopac`, and `optimize_conformer` now accept `hamiltonian`,
+    `extra_keywords`, `charge`, and `multiplicity`, while preserving `PM7` as
+    the default Hamiltonian.
+  - MOPAC input generation keeps `PRECISE` forced and keeps `AUX` out of the
+    default keyword set; callers may only add extra keywords explicitly.
+  - Added focused unit coverage for AM1/PM3 keyword generation and for
+    `run_mopac` propagating charge/multiplicity into the generated `.mop`.
+  - Verification: focused MOPAC pytest, ruff, Black check, and `git diff --check`
+    passed; focused mypy was blocked before checking the edited file by a
+    `rdkit-stubs` syntax error in the Python 3.14 environment.
+
 - **grimperium_mini: split into an independent monorepo package** (2026-06-21)
   - Moved `src/grimperium_mini/` → `packages/grimperium-mini/src/grimperium_mini/`
     and `tests/grimperium_mini/` → `packages/grimperium-mini/tests/`, with a

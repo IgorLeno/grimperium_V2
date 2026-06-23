@@ -4,12 +4,13 @@ Tests PRECISE keyword enforcement and .mop file creation.
 """
 
 import logging
+import subprocess
 from pathlib import Path
 
 import pytest
 
 from grimperium.crest_pm7.config import PM7Config
-from grimperium.crest_pm7.mopac_optimizer import _create_mopac_input
+from grimperium.crest_pm7.mopac_optimizer import _create_mopac_input, run_mopac
 
 
 @pytest.fixture()
@@ -83,3 +84,73 @@ class TestPreciseKeyword:
         assert _create_mopac_input(sample_xyz, mop, config=config)
         keywords = mop.read_text().splitlines()[0]
         assert "SCFCRT=" in keywords
+
+
+class TestParameterizedMopacInput:
+    """Tests for Hamiltonian and charge-state keyword generation."""
+
+    def test_custom_hamiltonian_replaces_pm7_without_aux_by_default(
+        self, sample_xyz: Path, tmp_path: Path
+    ) -> None:
+        """A caller can request AM1 without inheriting the Mini AUX default."""
+        mop = tmp_path / "out.mop"
+
+        assert _create_mopac_input(
+            sample_xyz,
+            mop,
+            config=None,
+            hamiltonian="AM1",
+            extra_keywords=["GNORM=0.01"],
+        )
+
+        keywords = mop.read_text().splitlines()[0].split()
+        assert keywords[0] == "AM1"
+        assert "PM7" not in keywords
+        assert "EF" in keywords
+        assert "PRECISE" in keywords
+        assert "GNORM=0.01" in keywords
+        assert "AUX" not in keywords
+
+    def test_run_mopac_passes_hamiltonian_charge_and_multiplicity_to_input(
+        self, sample_xyz: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """run_mopac propagates calculation parameters into the generated .mop."""
+        config = PM7Config(temp_dir=tmp_path, mopac_executable="mopac")
+        work_dir = tmp_path / "mopac-run"
+
+        def fake_run(
+            cmd: list[str],
+            cwd: Path,
+            capture_output: bool,
+            text: bool,
+            timeout: float,
+        ) -> subprocess.CompletedProcess[str]:
+            mop_file = Path(cmd[1])
+            mop_file.with_suffix(".out").write_text(
+                "FINAL HEAT OF FORMATION = -10.0 KCAL/MOL\n",
+                encoding="utf-8",
+            )
+            return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
+
+        monkeypatch.setattr(
+            "grimperium.crest_pm7.mopac_optimizer.subprocess.run",
+            fake_run,
+        )
+
+        result = run_mopac(
+            mol_id="mol",
+            xyz_file=sample_xyz,
+            config=config,
+            timeout=10.0,
+            work_dir=work_dir,
+            hamiltonian="PM3",
+            charge=-1,
+            multiplicity=3,
+        )
+
+        assert result.hof == -10.0
+        keywords = (work_dir / "mol_conf000.mop").read_text().splitlines()[0].split()
+        assert keywords[0] == "PM3"
+        assert "CHARGE=-1" in keywords
+        assert "TRIPLET" in keywords
+        assert "AUX" not in keywords

@@ -1,4 +1,4 @@
-"""MOPAC PM7 optimization wrapper.
+"""MOPAC semiempirical optimization wrapper.
 
 Handles MOPAC execution and robust output parsing.
 """
@@ -23,11 +23,12 @@ _MULTIPLICITY_KEYWORDS = {
     5: "QUINTET",
     6: "SEXTET",
 }
+_SUPPORTED_HAMILTONIANS = frozenset({"AM1", "PM3", "PM7"})
 
 
 @dataclass
 class MOPACResult:
-    """Result of MOPAC PM7 optimization.
+    """Result of MOPAC semiempirical optimization.
 
     Attributes:
         status: Execution status
@@ -54,6 +55,8 @@ def _create_mopac_input(
     xyz_file: Path,
     output_mop: Path,
     config: PM7Config | None = None,
+    hamiltonian: str = "PM7",
+    extra_keywords: list[str] | None = None,
     charge: int = 0,
     multiplicity: int = 1,
 ) -> bool:
@@ -63,6 +66,8 @@ def _create_mopac_input(
         xyz_file: Input XYZ file
         output_mop: Output .mop file
         config: Pipeline configuration (optional)
+        hamiltonian: MOPAC Hamiltonian keyword (AM1, PM3, or PM7)
+        extra_keywords: Explicit extra MOPAC keywords appended after defaults
         charge: Molecular charge
         multiplicity: Spin multiplicity (1=singlet, 2=doublet, etc.)
 
@@ -80,14 +85,20 @@ def _create_mopac_input(
         comment = lines[1].strip() if len(lines) > 1 else ""
 
         # Build MOPAC keywords
-        keywords = ["PM7", "EF"]
+        normalized_hamiltonian = hamiltonian.upper()
+        if normalized_hamiltonian not in _SUPPORTED_HAMILTONIANS:
+            raise ValueError(
+                f"Unsupported Hamiltonian {hamiltonian!r}. "
+                f"Supported values: {', '.join(sorted(_SUPPORTED_HAMILTONIANS))}"
+            )
+        keywords = [normalized_hamiltonian, "EF"]
 
-        # PRECISE is always forced ON for production-quality PM7 calculations.
+        # PRECISE is always forced ON for production-quality MOPAC calculations.
         # Warn if config explicitly requested False (it will be overridden).
         if config is not None and not config.mopac_precise_scf:
             LOG.warning(
                 "config.mopac_precise_scf=False is overridden; "
-                "PRECISE is always enabled for production PM7 runs"
+                "PRECISE is always enabled for production MOPAC runs"
             )
         keywords.append("PRECISE")
         if config is not None:
@@ -102,6 +113,8 @@ def _create_mopac_input(
                     f"Supported values: 1 (singlet), {', '.join(f'{k} ({v.lower()})' for k, v in sorted(_MULTIPLICITY_KEYWORDS.items()))}"
                 )
             keywords.append(_MULTIPLICITY_KEYWORDS[multiplicity])
+        if extra_keywords is not None:
+            keywords.extend(extra_keywords)
 
         with open(output_mop, "w", encoding="utf-8") as f:
             f.write(" ".join(keywords) + "\n")
@@ -174,8 +187,12 @@ def run_mopac(
     nheavy: int | None = None,
     work_dir: Path | None = None,
     conf_index: int = 0,
+    hamiltonian: str = "PM7",
+    extra_keywords: list[str] | None = None,
+    charge: int = 0,
+    multiplicity: int = 1,
 ) -> MOPACResult:
-    """Run MOPAC PM7 optimization on a conformer.
+    """Run MOPAC optimization on a conformer.
 
     Args:
         mol_id: Molecule identifier
@@ -185,6 +202,10 @@ def run_mopac(
         nheavy: Number of heavy atoms (for HOF validation)
         work_dir: Working directory (default: config.temp_dir/mol_id)
         conf_index: Conformer index
+        hamiltonian: MOPAC Hamiltonian keyword (AM1, PM3, or PM7)
+        extra_keywords: Explicit extra MOPAC keywords appended after defaults
+        charge: Molecular charge
+        multiplicity: Spin multiplicity (1=singlet, 2=doublet, etc.)
 
     Returns:
         MOPACResult with status and extracted energy
@@ -201,7 +222,15 @@ def run_mopac(
     mop_file = work_dir / f"{mol_id}_conf{conf_index:03d}.mop"
     out_file = work_dir / f"{mol_id}_conf{conf_index:03d}.out"
 
-    if not _create_mopac_input(xyz_file, mop_file, config=config):
+    if not _create_mopac_input(
+        xyz_file,
+        mop_file,
+        config=config,
+        hamiltonian=hamiltonian,
+        extra_keywords=extra_keywords,
+        charge=charge,
+        multiplicity=multiplicity,
+    ):
         result.status = MOPACStatus.NOT_ATTEMPTED
         result.error_message = "Failed to create MOPAC input file"
         return result
@@ -350,6 +379,10 @@ def optimize_conformer(
     timeout: float,
     nheavy: int | None = None,
     conf_index: int = 0,
+    hamiltonian: str = "PM7",
+    extra_keywords: list[str] | None = None,
+    charge: int = 0,
+    multiplicity: int = 1,
 ) -> MOPACResult:
     """Wrapper for run_mopac.
 
@@ -363,6 +396,10 @@ def optimize_conformer(
         timeout: Timeout in seconds
         nheavy: Number of heavy atoms
         conf_index: Conformer index
+        hamiltonian: MOPAC Hamiltonian keyword (AM1, PM3, or PM7)
+        extra_keywords: Explicit extra MOPAC keywords appended after defaults
+        charge: Molecular charge
+        multiplicity: Spin multiplicity
 
     Returns:
         MOPACResult
@@ -374,4 +411,8 @@ def optimize_conformer(
         timeout=timeout,
         nheavy=nheavy,
         conf_index=conf_index,
+        hamiltonian=hamiltonian,
+        extra_keywords=extra_keywords,
+        charge=charge,
+        multiplicity=multiplicity,
     )
