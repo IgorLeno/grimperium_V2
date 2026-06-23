@@ -47,6 +47,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     `poetry install` (root) + `poetry run pytest tests/ -v` for the main suite.
 
 ### Added
+- **Semiempirical Method A runner** (2026-06-23)
+  - `src/grimperium/calculation/runners/semiempirical_runner.py`: added an
+    additive `SemiempiricalFormationEnthalpyRunner` that orchestrates initial
+    geometry generation, optional xTB pre-optimization, CREST conformer search,
+    and AM1/PM3/PM7 MOPAC calculations into the canonical
+    `MoleculeCalculationResult` contract.
+  - Method A uses the lowest-CREST-energy conformer only, runs AM1/PM3/PM7 on
+    the same XYZ geometry, propagates charge/multiplicity to MOPAC, records
+    stage executions, and preserves successful estimates when one Hamiltonian
+    fails.
+  - Added focused unit coverage with injected stage fakes, including a
+    regression test for the default xTB adapter argument order.
+  - Verification: focused runner pytest, ruff, Black check, supplemental
+    runner mypy with `--follow-imports=skip`, and `git diff --check` passed;
+    standard focused mypy remains blocked before checking the runner by the
+    Python 3.14 `rdkit-stubs` syntax error reached through eager package
+    imports.
+
 - **grimperium_mini: multi-conformer mode** (2026-06-08)
   - `src/grimperium_mini/multi_conformer.py`: new isolated module that reuses
     existing CREST conformer files (`conformer_NNNN.xyz`) without re-running
