@@ -209,9 +209,7 @@ class TestParameterizedMopacInput:
         with pytest.raises(ValueError, match="Unsupported Hamiltonian"):
             _create_mopac_input(sample_xyz, mop, hamiltonian="MNDO")
 
-    def test_default_hamiltonian_is_pm7(
-        self, sample_xyz: Path, tmp_path: Path
-    ) -> None:
+    def test_default_hamiltonian_is_pm7(self, sample_xyz: Path, tmp_path: Path) -> None:
         """Sem hamiltonian explícito, o primeiro token deve ser PM7."""
         mop = tmp_path / "out.mop"
         assert _create_mopac_input(sample_xyz, mop)
