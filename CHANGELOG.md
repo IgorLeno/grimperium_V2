@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **rdkit-stubs mypy syntax blocker on Python 3.14** (2026-06-23)
+  - Added `scripts/patch_rdkit_stubs.py` to fix invalid `GetProp` overload
+    signatures in bundled `rdkit-stubs/Chem/rdchem.pyi` (RDKit 2026.3.3;
+    upstream issue rdkit/rdkit#9335).
+  - Pre-commit `mypy` hook now runs the patch script before type-checking so
+    `poetry run mypy src/grimperium --strict` is not aborted by third-party
+    stub syntax errors.
+  - Verification: patch script idempotency, focused unit tests, and
+    `poetry run mypy src/grimperium/calculation/runners --strict`.
+
 ### Changed
 - **MOPAC executor parameterization for calculation methods** (2026-06-22)
   - `src/grimperium/crest_pm7/mopac_optimizer.py`: `_create_mopac_input`,

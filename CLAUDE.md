@@ -22,9 +22,10 @@ local document disagrees with this file, follow this file.
 ```bash
 poetry run black src/ tests/                         # Format
 poetry run ruff check src/ tests/                    # Lint
+poetry run python scripts/patch_rdkit_stubs.py       # Fix bundled rdkit-stubs (Python 3.14+)
 poetry run mypy src/ --strict                        # Type check
 poetry run pytest tests/ -v --cov=src/grimperium     # Full test suite with coverage
-poetry run pre-commit run --all-files                # All gates at once
+poetry run pre-commit run --all-files                # All gates at once (mypy runs patch automatically)
 ```
 
 ### Running Tests
