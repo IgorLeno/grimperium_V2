@@ -119,6 +119,8 @@ def _stage_record(
     settings: dict[str, Any],
     artifact_ids: list[str] | None = None,
     error_message: str | None = None,
+    started_at: datetime | None = None,
+    completed_at: datetime | None = None,
 ) -> StageExecutionRecord:
     return StageExecutionRecord(
         stage_id=stage_id,
@@ -126,8 +128,8 @@ def _stage_record(
         role=role,
         status=status,
         requested=requested,
-        started_at=None,
-        completed_at=None,
+        started_at=started_at,
+        completed_at=completed_at,
         execution_time_s=execution_time_s,
         program_version=None,
         settings=settings,
@@ -212,9 +214,11 @@ class SemiempiricalFormationEnthalpyRunner:
 
         crest_input_xyz = initial_xyz
         if self.xtb_enabled:
+            xtb_started_at = datetime.now(timezone.utc)
             xtb_result = self.xtb_preoptimizer(
                 initial_xyz, run_dir / "xtb", molecule_id
             )
+            xtb_completed_at = datetime.now(timezone.utc)
             xtb_status = (
                 StageExecutionStatus.SUCCESS
                 if xtb_result.success and xtb_result.output_xyz is not None
@@ -230,6 +234,8 @@ class SemiempiricalFormationEnthalpyRunner:
                     execution_time_s=xtb_result.time_seconds,
                     settings={"enabled": True},
                     error_message=xtb_result.error_message or None,
+                    started_at=xtb_started_at,
+                    completed_at=xtb_completed_at,
                 )
             )
             if xtb_status is StageExecutionStatus.SUCCESS and xtb_result.output_xyz:
@@ -299,6 +305,7 @@ class SemiempiricalFormationEnthalpyRunner:
         hamiltonian_results: list[HamiltonianResult] = []
         estimates: list[PropertyEstimate] = []
         for hamiltonian in HAMILTONIANS:
+            mopac_started_at = datetime.now(timezone.utc)
             mopac_result = self.mopac_runner(
                 mol_id=molecule_id,
                 xyz_file=selected_xyz,
@@ -309,6 +316,7 @@ class SemiempiricalFormationEnthalpyRunner:
                 charge=charge,
                 multiplicity=multiplicity,
             )
+            mopac_completed_at = datetime.now(timezone.utc)
             artifact_ids = self._artifacts_for_mopac_result(
                 artifacts,
                 mopac_result,
@@ -351,6 +359,8 @@ class SemiempiricalFormationEnthalpyRunner:
                     settings={"hamiltonian": hamiltonian},
                     artifact_ids=artifact_ids,
                     error_message=mopac_result.error_message,
+                    started_at=mopac_started_at,
+                    completed_at=mopac_completed_at,
                 )
             )
             if energy is not None and overall is OverallStatus.SUCCESS:
