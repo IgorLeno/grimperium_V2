@@ -1,0 +1,25 @@
+method_id: pm7_delta_learning
+version: 0.1.0
+display_name: PM7 + Delta Learning
+property_id: standard_enthalpy_of_formation
+property_name: Standard enthalpy of formation
+conformer_selection:
+  strategy: lowest_pm7_hof_within_crest_subset
+  settings:
+    crest_subset_size: 3
+model_requirement:
+  model_required: true
+  model_binding: session_selected
+compatibility:
+  property: standard_enthalpy_of_formation
+  baseline_program: mopac
+  baseline_hamiltonian: PM7
+  feature_schema: grimperium_dhf_v1
+xtb:
+  optional: true
+  enabled_by_default: false
+output:
+  units:
+    - kcal/mol
+    - kJ/mol
+    - both

@@ -58,6 +58,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     `poetry install` (root) + `poetry run pytest tests/ -v` for the main suite.
 
 ### Added
+- **Calculation Methods registry for standard enthalpy methods** (2026-06-23)
+  - `src/grimperium/calculation/methods/`: added a static registry that loads
+    package-resource YAML definitions for calculation methods without acting as
+    a model registry or invoking calculation code.
+  - Added Method A (`semiempirical_am1_pm3_pm7`) and Method B
+    (`pm7_delta_learning`) definitions for standard enthalpy of formation,
+    including conformer policy, model requirements, xTB defaults, and output
+    unit options.
+  - Added the `grimperium_dhf_v1` feature schema catalog with the ordered
+    `ml/features.py:FEATURE_COLUMNS` contract and stable hash validation for
+    future model compatibility checks.
+  - Verification: focused method registry and feature schema tests, ruff, Black
+    check, mypy, and `git diff --check`.
+
 - **Semiempirical Method A runner** (2026-06-23)
   - `src/grimperium/calculation/runners/semiempirical_runner.py`: added an
     additive `SemiempiricalFormationEnthalpyRunner` that orchestrates initial

@@ -1,0 +1,25 @@
+method_id: semiempirical_am1_pm3_pm7
+version: 0.1.0
+display_name: Semiempirical AM1/PM3/PM7
+property_id: standard_enthalpy_of_formation
+property_name: Standard enthalpy of formation
+conformer_selection:
+  strategy: lowest_crest_energy
+  settings:
+    max_selected: 1
+model_requirement:
+  model_required: false
+  model_binding:
+compatibility:
+  property: standard_enthalpy_of_formation
+  baseline_program: mopac
+  baseline_hamiltonian:
+  feature_schema:
+xtb:
+  optional: true
+  enabled_by_default: true
+output:
+  units:
+    - kcal/mol
+    - kJ/mol
+    - both
