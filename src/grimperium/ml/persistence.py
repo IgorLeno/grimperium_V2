@@ -16,6 +16,8 @@ from grimperium.ml.features import FeaturePipeline
 logger = logging.getLogger(__name__)
 
 MODEL_VERSION = "1.0.0"
+DEFAULT_MODEL_PROPERTY_ID = "standard_enthalpy_of_formation"
+DEFAULT_MODEL_BASELINE_HAMILTONIAN = "PM7"
 
 # The saved bundle has this structure:
 # {
@@ -51,12 +53,30 @@ def save_model(bundle: dict[str, Any], path: Path | str) -> None:
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
 
+    from grimperium.calculation.methods.feature_schema import (
+        FEATURE_SCHEMA_HASH,
+        FEATURE_SCHEMA_ID,
+        get_feature_schema,
+    )
+
+    schema = get_feature_schema(FEATURE_SCHEMA_ID)
     payload: dict[str, Any] = {
         "learner": bundle["learner"],
         "pipeline": bundle["pipeline"],
         "metrics": bundle["metrics"],
         "version": MODEL_VERSION,
         "trained_at": datetime.now(timezone.utc).isoformat(),
+        "property_id": bundle.get("property_id", DEFAULT_MODEL_PROPERTY_ID),
+        "baseline_hamiltonian": bundle.get(
+            "baseline_hamiltonian",
+            DEFAULT_MODEL_BASELINE_HAMILTONIAN,
+        ),
+        "feature_schema_id": bundle.get("feature_schema_id", FEATURE_SCHEMA_ID),
+        "feature_schema_hash": bundle.get(
+            "feature_schema_hash",
+            FEATURE_SCHEMA_HASH,
+        ),
+        "feature_columns": bundle.get("feature_columns", list(schema.columns)),
     }
     joblib.dump(payload, path)
     logger.info("Model saved to %s (version %s)", path, MODEL_VERSION)
@@ -146,4 +166,9 @@ def load_model_metadata(path: Path | str) -> DictStrAny:
         "n_test": test_m.get("n_samples"),
         "n_total": test_m.get("n_total"),
         "test_size": test_m.get("test_size"),
+        "property_id": bundle.get("property_id"),
+        "baseline_hamiltonian": bundle.get("baseline_hamiltonian"),
+        "feature_schema_id": bundle.get("feature_schema_id"),
+        "feature_schema_hash": bundle.get("feature_schema_hash"),
+        "feature_columns": bundle.get("feature_columns"),
     }

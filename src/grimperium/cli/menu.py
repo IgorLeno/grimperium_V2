@@ -219,7 +219,7 @@ def show_main_menu(
     """
     options = [
         MenuOption(
-            label="CALC",
+            label="CALCULATE",
             value="calc",
             icon=ICONS["calc"],
             description="Predict molecular properties",

@@ -10,11 +10,8 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
-import pandas as pd
-
-from grimperium.core.descriptors import extract_all_rdkit_descriptors
+from grimperium.cli.calculation_features import build_pm7_delta_feature_frame
 from grimperium.crest_pm7.config import PM7Config
-from grimperium.crest_pm7.mopac_descriptors import extract_mopac_descriptors
 from grimperium.crest_pm7.pipeline import CRESTPM7Pipeline
 from grimperium.ml.persistence import load_model, load_model_metadata
 
@@ -99,47 +96,7 @@ def run_single_molecule_prediction(
         progress_callback("🔧 Extracting molecular features...")
 
     try:
-        # RDKit descriptors (15 features)
-        rdkit_descs = extract_all_rdkit_descriptors(smiles)
-
-        # Structural features from PM7Result
-        nheavy = pm7_result.nheavy or 0
-        multiplicity = 1  # Default
-        charge = 0  # Default
-
-        # CREST stats
-        crest_conformers_generated = pm7_result.crest_conformers_generated
-        num_conformers_selected = pm7_result.num_conformers_selected or 0
-        crest_time_s = pm7_result.crest_time or 0.0
-
-        # MOPAC electronic descriptors (9 features)
-        # From the most stable conformer's output
-        selected_conformer = pm7_result.get_selected_conformer()
-        if selected_conformer is None or selected_conformer.mopac_output_file is None:
-            raise CalcPipelineError("No successful MOPAC output found")
-
-        mopac_descs = extract_mopac_descriptors(selected_conformer.mopac_output_file)
-
-        # Build feature dictionary (must match FeaturePipeline expectations)
-        features_dict: dict[str, float | int] = {
-            # Structural
-            "nheavy": nheavy,
-            "multiplicity": multiplicity,
-            "charge": charge,
-            # RDKit (15)
-            **rdkit_descs,
-            # CREST
-            "crest_conformers_generated": crest_conformers_generated,
-            "num_conformers_selected": num_conformers_selected,
-            "crest_time_s": crest_time_s,
-            # MOPAC electronic (9)
-            **mopac_descs,
-            # Baseline
-            "H298_pm7": h298_pm7,
-        }
-
-        # Build DataFrame (1 row, 30 columns)
-        df = pd.DataFrame([features_dict])
+        df = build_pm7_delta_feature_frame(smiles, pm7_result)
 
         # Transform features
         X = feature_pipeline.transform(df)
@@ -173,7 +130,7 @@ def run_single_molecule_prediction(
         h298_pm7=h298_pm7,
         delta_correction=delta_correction,
         h298_corrected=h298_corrected,
-        n_conformers=crest_conformers_generated,
+        n_conformers=pm7_result.crest_conformers_generated,
         execution_time=total_time,
         model_version=model_version,
     )

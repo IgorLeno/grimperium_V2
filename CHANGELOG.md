@@ -58,6 +58,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     `poetry install` (root) + `poetry run pytest tests/ -v` for the main suite.
 
 ### Added
+- **Main CLI calculation-method integration** (2026-06-24)
+  - `src/grimperium/cli/views/calc_view.py`: Calculate now lists declarative
+    standard-enthalpy methods, routes Method A to the canonical
+    `SemiempiricalFormationEnthalpyRunner`, and preserves the existing PM7+Delta
+    pipeline as Method B.
+  - `src/grimperium/cli/model_compatibility.py`: added Method B model
+    compatibility checks for property, PM7 baseline, feature schema ID/hash, and
+    ordered feature columns, with a legacy-bundle fallback that inspects the
+    loaded `FeaturePipeline`.
+  - `src/grimperium/cli/calculation_features.py`: extracted PM7+Delta feature
+    frame assembly from the CLI pipeline so model-backed stages reuse the
+    `grimperium_dhf_v1` column order.
+  - `src/grimperium/ml/persistence.py`: newly saved model bundles now carry the
+    compatibility metadata required by Method B validation.
+  - Main menu display label changed from `CALC` to `CALCULATE`; route value
+    remains `calc`.
+
 - **Calculation Methods registry for standard enthalpy methods** (2026-06-23)
   - `src/grimperium/calculation/methods/`: added a static registry that loads
     package-resource YAML definitions for calculation methods without acting as

@@ -13,12 +13,24 @@ from rdkit import Chem
 from rich.panel import Panel
 from rich.table import Table
 
+from grimperium.calculation.contracts.models import MoleculeCalculationResult
+from grimperium.calculation.methods import (
+    CalculationMethodDefinition,
+    get_calculation_method,
+    list_calculation_methods,
+)
+from grimperium.calculation.runners import SemiempiricalFormationEnthalpyRunner
 from grimperium.cli.calc_pipeline import (
     CalcPipelineError,
+    CalcPipelineResult,
     run_single_molecule_prediction,
 )
-from grimperium.cli.menu import MenuOption, show_back_menu, text_input
+from grimperium.cli.menu import MenuOption, show_back_menu, show_menu, text_input
 from grimperium.cli.mock_data import PredictionResult
+from grimperium.cli.model_compatibility import (
+    ModelCompatibilityError,
+    validate_model_for_method,
+)
 from grimperium.cli.styles import COLORS, ICONS
 from grimperium.cli.views.base_view import BaseView
 from grimperium.crest_pm7.config import PM7Config
@@ -41,6 +53,7 @@ class CalcView(BaseView):
         """Initialize the calc view."""
         super().__init__(controller)
         self.last_result: PredictionResult | None = None
+        self.last_calculation_result: MoleculeCalculationResult | None = None
         self.history: list[PredictionResult] = []
 
     def render(self) -> None:
@@ -154,6 +167,39 @@ using the Delta-Learning model.
         self.console.print(table)
         self.console.print()
 
+    def render_available_methods(self) -> None:
+        """Render available standard enthalpy calculation methods."""
+        methods = list_calculation_methods("standard_enthalpy_of_formation")
+        table = Table(
+            title="Calculation Methods",
+            show_header=True,
+            header_style=f"bold {COLORS['calc']}",
+            border_style=COLORS["border"],
+        )
+        table.add_column("Method ID", style="bold")
+        table.add_column("Name")
+        table.add_column("Model")
+        table.add_column("Conformer Strategy")
+        table.add_column("xTB")
+
+        for method in methods:
+            model = "Required" if method.model_requirement.model_required else "No"
+            xtb = (
+                "Default"
+                if method.xtb.optional and method.xtb.enabled_by_default
+                else "Disabled"
+            )
+            table.add_row(
+                method.method_id,
+                method.display_name,
+                model,
+                method.conformer_selection.strategy,
+                xtb,
+            )
+
+        self.console.print(table)
+        self.console.print()
+
     def validate_smiles(self, smiles: str) -> bool | str:
         """
         Validate SMILES string using RDKit.
@@ -259,6 +305,234 @@ using the Delta-Learning model.
 
         return None
 
+    def _select_method(self) -> CalculationMethodDefinition | None:
+        """Prompt for a standard enthalpy calculation method."""
+        methods = list_calculation_methods("standard_enthalpy_of_formation")
+        selected = show_menu(
+            [
+                MenuOption(
+                    label=method.display_name,
+                    value=method.method_id,
+                    icon=ICONS["calc"],
+                )
+                for method in methods
+            ],
+            title="Calculation Method",
+        )
+        if selected is None:
+            return None
+        return get_calculation_method(
+            selected,
+            property_id="standard_enthalpy_of_formation",
+        )
+
+    def _resolve_required_model(
+        self,
+        method: CalculationMethodDefinition,
+    ) -> Path | None:
+        """Resolve and validate the live-session model required by a method."""
+        if not method.model_requirement.model_required:
+            return None
+
+        model_path = self.controller.current_model_path
+        if model_path is None:
+            self.show_error(
+                "Select a compatible model in Models before running this method."
+            )
+            return None
+        if not model_path.exists():
+            self.show_error(f"Selected model file no longer exists: {model_path}")
+            return None
+
+        try:
+            validate_model_for_method(model_path, method)
+        except ModelCompatibilityError as exc:
+            self.show_error(f"Selected model is not compatible: {exc}")
+            return None
+
+        return model_path
+
+    def _pm7_config_from_settings(self) -> PM7Config:
+        config = PM7Config()
+        self.controller.settings_manager.apply_to_pm7_config(config)
+        return config
+
+    def render_method_a_result(
+        self,
+        result: MoleculeCalculationResult,
+        *,
+        units: str = "both",
+    ) -> None:
+        """Render a compact Method A canonical result summary."""
+        table = Table(
+            show_header=True,
+            header_style=f"bold {COLORS['calc']}",
+            border_style=COLORS["calc"],
+        )
+        table.add_column("Hamiltonian")
+        if units in ("kcal/mol", "both"):
+            table.add_column("H298", justify="right")
+        if units in ("kJ/mol", "both"):
+            table.add_column("H298 (kJ/mol)", justify="right")
+
+        for estimate in result.estimates:
+            if estimate.value_kcal_mol is None:
+                continue
+            kj_value = (
+                estimate.value_kj_mol
+                if estimate.value_kj_mol is not None
+                else estimate.value_kcal_mol * KCAL_TO_KJ
+            )
+            row = [estimate.hamiltonian or "-"]
+            if units in ("kcal/mol", "both"):
+                row.append(f"{estimate.value_kcal_mol:.2f} kcal/mol")
+            if units in ("kJ/mol", "both"):
+                row.append(f"{kj_value:.2f} kJ/mol")
+            table.add_row(*row)
+
+        self.console.print(
+            Panel(
+                table,
+                title=f"[bold {COLORS['calc']}]{ICONS['success']} Calculation Result[/bold {COLORS['calc']}]",
+                border_style=COLORS["success"],
+                padding=(1, 1),
+            )
+        )
+        self.console.print()
+
+    def _run_method_a(
+        self,
+        smiles: str,
+        method: CalculationMethodDefinition,
+        units: str = "both",
+    ) -> bool:
+        mol_id = "calc_" + hashlib.sha1(smiles.encode()).hexdigest()[:6]
+        runner = SemiempiricalFormationEnthalpyRunner(
+            config=self._pm7_config_from_settings(),
+            xtb_enabled=method.xtb.enabled_by_default,
+        )
+        try:
+            result = runner.calculate_single_smiles(
+                smiles,
+                molecule_id=mol_id,
+                name=mol_id,
+            )
+        except Exception as exc:
+            self.show_error(f"Calculation failed: {exc}")
+            return True
+
+        self.last_calculation_result = result
+        self.console.print(
+            f"[green]✓ Calculation complete for SMILES: {smiles}[/green]"
+        )
+        self.render_method_a_result(result, units=units)
+        return True
+
+    def _prediction_result_from_pipeline(
+        self,
+        smiles: str,
+        pipeline_result: CalcPipelineResult,
+    ) -> PredictionResult:
+        return PredictionResult(
+            smiles=smiles,
+            h298_pm7=pipeline_result.h298_pm7,
+            delta_correction=pipeline_result.delta_correction,
+            h298_corrected=pipeline_result.h298_corrected,
+            model_name=self.controller.current_model,
+            model_version=pipeline_result.model_version,
+            execution_time=pipeline_result.execution_time,
+            n_conformers=pipeline_result.n_conformers,
+        )
+
+    def _run_method_b(
+        self,
+        smiles: str,
+        method: CalculationMethodDefinition,
+    ) -> bool:
+        model_path = self._resolve_required_model(method)
+        if model_path is None:
+            return True
+
+        def progress_update(msg: str) -> None:
+            self.console.print(msg)
+
+        mol_id = "calc_" + hashlib.sha1(smiles.encode()).hexdigest()[:6]
+        try:
+            pipeline_result = run_single_molecule_prediction(
+                smiles,
+                mol_id,
+                model_path,
+                self._pm7_config_from_settings(),
+                progress_update,
+            )
+        except CalcPipelineError as exc:
+            self.show_error(str(exc))
+            return True
+        except Exception as exc:
+            self.show_error(f"Unexpected error: {exc}")
+            return True
+
+        result = self._prediction_result_from_pipeline(smiles, pipeline_result)
+        self.last_result = result
+        self.history.append(result)
+        self.console.print(
+            f"[green]✓ Calculation complete for SMILES: {smiles}[/green]"
+        )
+        self.render_result(result)
+        return True
+
+    def _select_units(self) -> str:
+        selected = show_menu(
+            [
+                MenuOption(label="Both", value="both"),
+                MenuOption(label="kcal/mol", value="kcal/mol"),
+                MenuOption(label="kJ/mol", value="kJ/mol"),
+            ],
+            title="Display Units",
+        )
+        return selected or "both"
+
+    def render_review_panel(
+        self,
+        *,
+        method: CalculationMethodDefinition,
+        smiles: str,
+        units: str,
+    ) -> None:
+        model_status = (
+            str(self.controller.current_model_path)
+            if method.model_requirement.model_required
+            and self.controller.current_model_path is not None
+            else "Not required"
+        )
+        if (
+            method.model_requirement.model_required
+            and self.controller.current_model_path is None
+        ):
+            model_status = "Required but not selected"
+        xtb_status = (
+            "enabled by default"
+            if method.xtb.optional and method.xtb.enabled_by_default
+            else "not enabled by default"
+        )
+        table = Table(show_header=False, border_style=COLORS["calc"])
+        table.add_column("Field", style="bold")
+        table.add_column("Value")
+        table.add_row("Property", method.property_name)
+        table.add_row("Method", method.display_name)
+        table.add_row("SMILES", smiles)
+        table.add_row("Model", model_status)
+        table.add_row("xTB", xtb_status)
+        table.add_row("Units", units)
+        self.console.print(
+            Panel(
+                table,
+                title=f"[bold {COLORS['calc']}]Review Calculation[/bold {COLORS['calc']}]",
+                border_style=COLORS["calc"],
+                padding=(1, 1),
+            )
+        )
+
     def do_prediction(self) -> bool:
         """
         Perform a prediction interaction using the real pipeline.
@@ -267,6 +541,10 @@ using the Delta-Learning model.
             True to continue, False to go back
         """
         self.render()
+
+        method = self._select_method()
+        if method is None:
+            return True
 
         # Get SMILES input
         smiles = text_input(
@@ -281,59 +559,14 @@ using the Delta-Learning model.
         if not smiles:
             return True
 
-        # Check for model availability
-        model_path = self._resolve_model_path()
-        if model_path is None:
-            self.show_error(
-                "No trained model found. Train a model first in the Models menu "
-                "or set GRIMPERIUM_MODEL_PATH environment variable."
-            )
-            return False
-
-        # Prepare pipeline
+        units = self._select_units()
+        self.render_review_panel(method=method, smiles=smiles, units=units)
         self.console.print()
         self.console.print()
 
-        mol_id = "calc_" + hashlib.sha1(smiles.encode()).hexdigest()[:6]
-        config = PM7Config()
-        self.controller.settings_manager.apply_to_pm7_config(config)
-
-        # Run pipeline
-        def progress_update(msg: str) -> None:
-            self.console.print(msg)
-
-        try:
-            pipeline_result = run_single_molecule_prediction(
-                smiles, mol_id, model_path, config, progress_update
-            )
-        except CalcPipelineError as e:
-            self.show_error(str(e))
-            return True
-        except Exception as e:
-            self.show_error(f"Unexpected error: {str(e)}")
-            return True
-
-        # Build PredictionResult from pipeline result
-        result = PredictionResult(
-            smiles=smiles,
-            h298_pm7=pipeline_result.h298_pm7,
-            delta_correction=pipeline_result.delta_correction,
-            h298_corrected=pipeline_result.h298_corrected,
-            model_name=self.controller.current_model,
-            model_version=pipeline_result.model_version,
-            execution_time=pipeline_result.execution_time,
-            n_conformers=pipeline_result.n_conformers,
-        )
-
-        self.last_result = result
-        self.history.append(result)
-
-        self.console.print(
-            f"[green]✓ Calculation complete for SMILES: {smiles}[/green]"
-        )
-        self.render_result(result)
-
-        return True
+        if method.method_id == "semiempirical_am1_pm3_pm7":
+            return self._run_method_a(smiles, method, units=units)
+        return self._run_method_b(smiles, method)
 
     def get_menu_options(self) -> list[MenuOption]:
         """Return menu options for the calc view."""
@@ -356,6 +589,11 @@ using the Delta-Learning model.
 
         options.extend(
             [
+                MenuOption(
+                    label="Calculation Methods",
+                    value="methods",
+                    icon=ICONS["settings"],
+                ),
                 MenuOption(
                     label="Batch Processing",
                     value="batch",
@@ -388,6 +626,13 @@ using the Delta-Learning model.
             self.clear_screen()
             self.show_header()
             self.render_history()
+            self.wait_for_enter()
+            return None
+
+        if action == "methods":
+            self.clear_screen()
+            self.show_header()
+            self.render_available_methods()
             self.wait_for_enter()
             return None
 
