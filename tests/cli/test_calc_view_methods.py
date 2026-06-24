@@ -20,6 +20,7 @@ from grimperium.calculation.contracts.models import (
 from grimperium.calculation.contracts.quantity import Quantity
 from grimperium.calculation.methods import get_calculation_method
 from grimperium.cli.calc_pipeline import CalcPipelineResult
+from grimperium.cli.mock_data import PredictionResult
 from grimperium.cli.views.calc_view import CalcView
 
 
@@ -87,7 +88,7 @@ def _method_a_result() -> MoleculeCalculationResult:
             grimperium_version=None,
         ),
         overall_status=OverallStatus.SUCCESS,
-        conformers=[],
+        conformers=[MagicMock(), MagicMock()],
         molecular_descriptors=None,
         estimates=[
             PropertyEstimate(
@@ -103,10 +104,28 @@ def _method_a_result() -> MoleculeCalculationResult:
                 conformer_source_id=0,
                 uncertainty=None,
                 model_path=None,
-            )
+            ),
+            PropertyEstimate(
+                estimate_id="pm7-final",
+                property_id="standard_enthalpy_of_formation",
+                role=PropertyRole.FINAL,
+                method_id="semiempirical_am1_pm3_pm7",
+                method_version="0.1.0",
+                hamiltonian="PM7",
+                value=Quantity(value=-62.0, unit="kcal/mol"),
+                value_kcal_mol=-62.0,
+                value_kj_mol=-259.408,
+                conformer_source_id=0,
+                uncertainty=None,
+                model_path=None,
+            ),
         ],
         artifacts=[],
-        stage_executions=[],
+        stage_executions=[
+            MagicMock(execution_time_s=1.5),
+            MagicMock(execution_time_s=None),
+            MagicMock(execution_time_s=2.5),
+        ],
     )
 
 
@@ -141,6 +160,15 @@ def test_method_a_runs_without_session_model(
     assert calls["xtb_enabled"] is True
     assert calls["smiles"] == "CCO"
     assert view.last_calculation_result is not None
+    assert view.last_result is not None
+    assert view.last_result.smiles == "CCO"
+    assert view.last_result.h298_pm7 == -62.0
+    assert view.last_result.delta_correction == 0.0
+    assert view.last_result.h298_corrected == -62.0
+    assert view.last_result.model_name == "Method A"
+    assert view.last_result.model_version == method.version
+    assert view.last_result.execution_time == 4.0
+    assert view.last_result.n_conformers == 2
 
 
 def test_method_b_validates_selected_model_and_uses_existing_pipeline(
@@ -204,3 +232,38 @@ def test_method_a_result_can_render_both_units_without_mutating_canonical_value(
     assert "-60.00 kcal/mol" in output
     assert "-251.04 kJ/mol" in output
     assert result.estimates[0].value.unit == "kcal/mol"
+
+
+def test_run_header_displays_method_a_last_result(
+    monkeypatch: pytest.MonkeyPatch,
+    controller: MagicMock,
+) -> None:
+    view = CalcView(controller)
+    view.last_result = PredictionResult(
+        smiles="CCO",
+        h298_pm7=-62.0,
+        delta_correction=0.0,
+        h298_corrected=-62.0,
+        model_name="Method A",
+        model_version="0.1.0",
+        execution_time=4.0,
+        n_conformers=2,
+    )
+    calls = {"count": 0}
+
+    def fake_show_back_menu(*args: object, **kwargs: object) -> str:
+        calls["count"] += 1
+        return "back"
+
+    monkeypatch.setattr(
+        "grimperium.cli.views.calc_view.show_back_menu", fake_show_back_menu
+    )
+
+    next_view = view.run()
+
+    output = controller.console.file.getvalue()
+    assert next_view == "main"
+    assert calls["count"] == 1
+    assert "Last prediction: CCO" in output
+    assert "H298=-62.00 kcal/mol" in output
+    assert "-259.41 kJ/mol" in output

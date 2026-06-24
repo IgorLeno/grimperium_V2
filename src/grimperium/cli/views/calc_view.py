@@ -13,7 +13,11 @@ from rdkit import Chem
 from rich.panel import Panel
 from rich.table import Table
 
-from grimperium.calculation.contracts.models import MoleculeCalculationResult
+from grimperium.calculation.contracts.enums import PropertyRole
+from grimperium.calculation.contracts.models import (
+    MoleculeCalculationResult,
+    PropertyEstimate,
+)
 from grimperium.calculation.methods import (
     CalculationMethodDefinition,
     get_calculation_method,
@@ -422,11 +426,54 @@ using the Delta-Learning model.
             return True
 
         self.last_calculation_result = result
+        self.last_result = self._method_a_prediction_summary(result, method)
         self.console.print(
             f"[green]✓ Calculation complete for SMILES: {smiles}[/green]"
         )
         self.render_method_a_result(result, units=units)
         return True
+
+    def _method_a_prediction_summary(
+        self,
+        result: MoleculeCalculationResult,
+        method: CalculationMethodDefinition,
+    ) -> PredictionResult:
+        estimate = self._select_method_a_display_estimate(result)
+        value_kcal = (
+            estimate.value_kcal_mol
+            if estimate.value_kcal_mol is not None
+            else estimate.value.to_kcal_mol()
+        )
+        execution_time = sum(
+            stage.execution_time_s or 0.0 for stage in result.stage_executions
+        )
+        return PredictionResult(
+            smiles=result.molecule.smiles,
+            h298_pm7=value_kcal,
+            delta_correction=0.0,
+            h298_corrected=value_kcal,
+            model_name="Method A",
+            model_version=method.version,
+            execution_time=execution_time,
+            n_conformers=len(result.conformers),
+        )
+
+    @staticmethod
+    def _select_method_a_display_estimate(
+        result: MoleculeCalculationResult,
+    ) -> PropertyEstimate:
+        final_estimates = [
+            estimate
+            for estimate in result.estimates
+            if estimate.role is PropertyRole.FINAL
+        ]
+        for hamiltonian in ("PM7", "PM3", "AM1"):
+            for estimate in final_estimates:
+                if estimate.hamiltonian == hamiltonian:
+                    return estimate
+        if final_estimates:
+            return final_estimates[0]
+        raise ValueError("Method A result has no final property estimate")
 
     def _prediction_result_from_pipeline(
         self,
