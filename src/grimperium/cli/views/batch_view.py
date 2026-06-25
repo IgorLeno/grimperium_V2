@@ -308,6 +308,7 @@ class BatchView(BaseView):
             BatchCSVManager,
             BatchExecutionManager,
             BatchSortingStrategy,
+            BatchStateManager,
             ConformerDetailManager,
             FixedTimeoutProcessor,
         )
@@ -325,6 +326,10 @@ class BatchView(BaseView):
 
         detail_manager = ConformerDetailManager(self.detail_dir)
         pm7_config = PM7Config()
+        state_manager = BatchStateManager(
+            self.csv_path.parent / "batch_state.csv",
+            pm7_config,
+        )
         settings_manager: SettingsManager | None = getattr(
             self.controller, "settings_manager", None
         )
@@ -345,6 +350,7 @@ class BatchView(BaseView):
 
         exec_manager = BatchExecutionManager(
             csv_manager=csv_manager,
+            state_manager=state_manager,
             detail_manager=detail_manager,
             pm7_config=pm7_config,
             processor_adapter=processor,

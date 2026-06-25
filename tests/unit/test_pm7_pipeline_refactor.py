@@ -417,6 +417,7 @@ class TestExecutionManagerIntegration:
 
         mgr = BatchExecutionManager(
             csv_manager=csv_manager,
+            state_manager=MagicMock(),
             detail_manager=detail_manager,
             pm7_config=pm7_config,
             processor_adapter=processor,

@@ -7,11 +7,13 @@ This module provides BatchExecutionManager for:
 - Generating BatchResult with statistics
 """
 
+import json
 import logging
 import time
 from collections.abc import Callable
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any
 
 from grimperium.crest_pm7.batch.artifact_manager import ArtifactManager
 from grimperium.crest_pm7.batch.csv_manager import BatchCSVManager
@@ -19,6 +21,7 @@ from grimperium.crest_pm7.batch.detail_manager import ConformerDetailManager
 from grimperium.crest_pm7.batch.enums import BatchFailurePolicy, MoleculeStatus
 from grimperium.crest_pm7.batch.models import Batch, BatchResult
 from grimperium.crest_pm7.batch.processor_adapter import FixedTimeoutProcessor
+from grimperium.crest_pm7.batch.state_manager import BatchStateManager
 from grimperium.crest_pm7.config import PM7Config
 from grimperium.crest_pm7.csv_enhancements import (
     BatchSettingsCapture,
@@ -29,7 +32,12 @@ from grimperium.crest_pm7.logging_enhancements import (
     suppress_pandas_warnings,
 )
 from grimperium.crest_pm7.molecule_processor import ConformerData
-from grimperium.crest_pm7.progress import BatchProgressStage
+from grimperium.crest_pm7.progress import (
+    CREST_STATUS_PREOPT,
+    CREST_STATUS_SEARCH,
+    MOPAC_STATUS_RUNNING,
+    BatchProgressStage,
+)
 
 LOG = logging.getLogger("grimperium.crest_pm7.batch.execution_manager")
 
@@ -38,7 +46,8 @@ class BatchExecutionManager:
     """Orchestrates batch execution of CREST PM7 pipeline.
 
     Coordinates:
-    - BatchCSVManager: Status tracking in CSV
+    - BatchStateManager: Operational state tracking
+    - BatchCSVManager: Scientific legacy CSV writes
     - ConformerDetailManager: Per-molecule JSON files
     - FixedTimeoutProcessor: Molecule processing with fixed timeouts
 
@@ -47,7 +56,8 @@ class BatchExecutionManager:
     - ALL_OR_NOTHING: If any fail, reset entire batch to PENDING
 
     Attributes:
-        csv_manager: Manager for CSV status tracking
+        csv_manager: Manager for scientific CSV writes
+        state_manager: Manager for operational state tracking
         detail_manager: Manager for JSON detail files
         pm7_config: PM7 configuration
         processor_adapter: Fixed timeout processor
@@ -56,6 +66,7 @@ class BatchExecutionManager:
     def __init__(
         self,
         csv_manager: BatchCSVManager,
+        state_manager: BatchStateManager,
         detail_manager: ConformerDetailManager,
         pm7_config: PM7Config,
         processor_adapter: FixedTimeoutProcessor | None = None,
@@ -64,13 +75,15 @@ class BatchExecutionManager:
         """Initialize batch execution manager.
 
         Args:
-            csv_manager: Manager for CSV tracking
+            csv_manager: Manager for scientific CSV writes
+            state_manager: Manager for operational state tracking
             detail_manager: Manager for JSON detail files
             pm7_config: PM7 configuration
             processor_adapter: Optional processor adapter (created if None)
             artifact_manager: Optional artifact manager for debug/audit files
         """
         self.csv_manager = csv_manager
+        self.state_manager = state_manager
         self.detail_manager = detail_manager
         self.pm7_config = pm7_config
         self.processor_adapter = processor_adapter or FixedTimeoutProcessor(pm7_config)
@@ -160,6 +173,10 @@ class BatchExecutionManager:
                     mopac_timeout=batch.mopac_timeout_minutes,
                     result=result,
                     hof_values=hof_values,
+                    method_id=batch.method_id,
+                    method_version=batch.method_version,
+                    method_snapshot=batch.method_snapshot,
+                    batch_failure_policy=batch.failure_policy.value,
                 )
             except Exception as e:
                 LOG.error(
@@ -198,7 +215,7 @@ class BatchExecutionManager:
             LOG.warning(
                 f"ALL_OR_NOTHING: Resetting batch {batch.batch_id} due to failures"
             )
-            reset_count = self.csv_manager.reset_batch(batch.batch_id)
+            reset_count = self.state_manager.reset_all_or_nothing(batch.batch_id)
             LOG.info(f"Reset {reset_count} molecules from batch {batch.batch_id}")
 
         LOG.info(
@@ -221,6 +238,10 @@ class BatchExecutionManager:
         mopac_timeout: float,
         result: BatchResult,
         hof_values: list[tuple[str, float]],
+        method_id: str = "pm7_delta_learning",
+        method_version: str = "1.0.0",
+        method_snapshot: dict[str, Any] | None = None,
+        batch_failure_policy: str = "",
     ) -> None:
         """Process a single molecule within batch context.
 
@@ -235,6 +256,10 @@ class BatchExecutionManager:
             mopac_timeout: MOPAC timeout (minutes)
             result: BatchResult to update
             hof_values: List to append HOF values
+            method_id: Calculation method registry identifier
+            method_version: Calculation method version
+            method_snapshot: Validated method definition snapshot
+            batch_failure_policy: Failure policy value recorded in state
         """
         LOG.info(f"Processing {mol_id} ({batch_order}/{result.total_count})")
 
@@ -258,18 +283,46 @@ class BatchExecutionManager:
         # log_mopac_start(logger, mol_id, num_conformers=X)
         # log_mopac_done(logger, mol_id, best_conformer_idx=X, best_delta_energy=Y, time_seconds=Z)
 
-        # Mark as running
-        self.csv_manager.mark_running(mol_id)
+        state_fields = {
+            "smiles": smiles,
+            "batch_id": batch_id,
+            "batch_order": batch_order,
+            "batch_failure_policy": batch_failure_policy,
+            "assigned_crest_timeout": crest_timeout,
+            "assigned_mopac_timeout": mopac_timeout,
+            "method_id": method_id,
+            "method_version": method_version,
+            "method_definition_snapshot": self._serialize_method_snapshot(
+                method_snapshot or {}
+            ),
+        }
+        self.state_manager.update_molecule_status(
+            mol_id,
+            MoleculeStatus.RUNNING.value,
+            extra_fields=state_fields,
+        )
 
         def progress_callback(stage: BatchProgressStage) -> None:
-            """Update CSV progress stage for current molecule."""
+            """Update operational progress stage for current molecule."""
             try:
                 if stage == BatchProgressStage.XTB_PREOPT:
-                    self.csv_manager.mark_crest_preopt(mol_id)
+                    self.state_manager.update_molecule_status(
+                        mol_id,
+                        MoleculeStatus.RUNNING.value,
+                        extra_fields={"crest_status": CREST_STATUS_PREOPT},
+                    )
                 elif stage == BatchProgressStage.CREST_SEARCH:
-                    self.csv_manager.mark_crest_search(mol_id)
+                    self.state_manager.update_molecule_status(
+                        mol_id,
+                        MoleculeStatus.RUNNING.value,
+                        extra_fields={"crest_status": CREST_STATUS_SEARCH},
+                    )
                 elif stage == BatchProgressStage.MOPAC_CALC:
-                    self.csv_manager.mark_mopac_running(mol_id)
+                    self.state_manager.update_molecule_status(
+                        mol_id,
+                        MoleculeStatus.RUNNING.value,
+                        extra_fields={"mopac_status": MOPAC_STATUS_RUNNING},
+                    )
             except Exception as exc:
                 logger.warning(
                     f"[{mol_id}] Failed to update progress stage {stage.value}: {exc}"
@@ -281,16 +334,6 @@ class BatchExecutionManager:
                 mol_id=mol_id,
                 smiles=smiles,
                 progress_callback=progress_callback,
-            )
-
-            # Create CSV update dict
-            csv_update = self.csv_manager.pm7result_to_csv_update(
-                mol_id=mol_id,
-                result=pm7_result,
-                batch_id=batch_id,
-                batch_order=batch_order,
-                crest_timeout_used=crest_timeout,
-                mopac_timeout_used=mopac_timeout,
             )
 
             # Save detail file
@@ -331,6 +374,18 @@ class BatchExecutionManager:
 
             # Update status based on success
             if pm7_result.success:
+                csv_update = self.csv_manager.pm7result_to_csv_update(
+                    mol_id=mol_id,
+                    result=pm7_result,
+                    batch_id=batch_id,
+                    batch_order=batch_order,
+                    crest_timeout_used=crest_timeout,
+                    mopac_timeout_used=mopac_timeout,
+                )
+                self.state_manager.update_molecule_status(
+                    mol_id,
+                    MoleculeStatus.OK.value,
+                )
                 self.csv_manager.mark_success(mol_id, csv_update)
                 result.success_count += 1
 
@@ -375,12 +430,9 @@ class BatchExecutionManager:
                     f"grade={pm7_result.quality_grade.value})"
                 )
             else:
-                # Mark for rerun (or skip if max retries)
+                # Record retry state, or terminal skip when attempts are exhausted.
                 error_msg = pm7_result.error_message or "Unknown error"
-                self.csv_manager.mark_rerun(mol_id, error_msg, csv_update)
-
-                # Check if it became SKIP using public method
-                new_status = self.csv_manager.get_status(mol_id)
+                new_status = self.state_manager.record_rerun_or_skip(mol_id, error_msg)
 
                 if new_status == MoleculeStatus.SKIP.value:
                     result.skip_count += 1
@@ -391,27 +443,25 @@ class BatchExecutionManager:
                 LOG.warning(f"{mol_id}: {new_status} - {error_msg}")
 
         except Exception as e:
-            # Unexpected error - mark for rerun
+            # Unexpected error - record retry state.
             error_msg = f"Processing exception: {str(e)}"
             LOG.error(f"{mol_id}: {error_msg}", exc_info=True)
 
-            self.csv_manager.mark_rerun(mol_id, error_msg)
+            new_status = self.state_manager.record_rerun_or_skip(mol_id, error_msg)
 
-            # Check final status to update correct counter
-            new_status = self.csv_manager.get_status(mol_id)
             if new_status == MoleculeStatus.SKIP.value:
                 result.skip_count += 1
             else:
                 result.rerun_count += 1
                 result.rerun_mol_ids.append(mol_id)
 
-    def get_status_summary(self) -> dict[str, int]:
-        """Get current status counts from CSV.
+    def status_summary(self) -> dict[str, int]:
+        """Return current operational status counts.
 
         Returns:
             Dict mapping status to count
         """
-        return self.csv_manager.get_status_counts()
+        return self.state_manager.status_counts()
 
     def get_pending_count(self) -> int:
         """Get count of molecules still pending.
@@ -419,7 +469,7 @@ class BatchExecutionManager:
         Returns:
             Number of PENDING + RERUN molecules
         """
-        counts = self.get_status_summary()
+        counts = self.status_summary()
         return counts.get(MoleculeStatus.PENDING.value, 0) + counts.get(
             MoleculeStatus.RERUN.value, 0
         )
@@ -432,9 +482,14 @@ class BatchExecutionManager:
         """
         return self.get_pending_count() == 0
 
+    def _serialize_method_snapshot(self, method_snapshot: dict[str, Any]) -> str:
+        """Serialize method metadata for the operational state CSV."""
+        return json.dumps(method_snapshot, sort_keys=True)
+
 
 def create_execution_manager(
     csv_path: Path,
+    state_csv_path: Path | None,
     detail_dir: Path,
     pm7_config: PM7Config,
     crest_timeout_minutes: float = 30.0,
@@ -446,7 +501,8 @@ def create_execution_manager(
     """Factory function to create BatchExecutionManager with defaults.
 
     Args:
-        csv_path: Path to CSV tracking file
+        csv_path: Path to legacy scientific CSV file
+        state_csv_path: Path to split operational state CSV
         detail_dir: Directory for JSON detail files
         pm7_config: PM7 configuration
         crest_timeout_minutes: Default CREST timeout
@@ -459,6 +515,8 @@ def create_execution_manager(
         Configured BatchExecutionManager
     """
     csv_manager = BatchCSVManager(csv_path)
+    resolved_state_csv_path = state_csv_path or csv_path.parent / "batch_state.csv"
+    state_manager = BatchStateManager(resolved_state_csv_path, pm7_config)
     detail_manager = ConformerDetailManager(detail_dir)
     processor = FixedTimeoutProcessor(
         config=pm7_config,
@@ -477,6 +535,7 @@ def create_execution_manager(
 
     return BatchExecutionManager(
         csv_manager=csv_manager,
+        state_manager=state_manager,
         detail_manager=detail_manager,
         pm7_config=pm7_config,
         processor_adapter=processor,

@@ -11,9 +11,20 @@ from typing import Any, cast
 import pandas as pd
 
 from grimperium.core.csv_utils import atomic_to_csv
-from grimperium.crest_pm7.batch.enums import MoleculeStatus, WorkerStatus
+from grimperium.crest_pm7.batch.enums import (
+    BatchFailurePolicy,
+    MoleculeStatus,
+    WorkerStatus,
+)
 from grimperium.crest_pm7.batch.output_contracts import BATCH_STATE_COLUMNS
 from grimperium.crest_pm7.config import PM7Config
+from grimperium.crest_pm7.progress import (
+    CREST_STATUS_NOT_ATTEMPTED,
+    CREST_STATUS_PREOPT,
+    CREST_STATUS_SEARCH,
+    MOPAC_STATUS_NOT_ATTEMPTED,
+    MOPAC_STATUS_RUNNING,
+)
 
 LOG = logging.getLogger("grimperium.crest_pm7.batch.state_manager")
 
@@ -44,15 +55,24 @@ class BatchStateManager:
         "method_definition_snapshot": str,
     }
 
-    def __init__(self, state_csv_path: Path, config: PM7Config) -> None:
+    DEFAULT_MAX_RERUNS: int = 3
+
+    def __init__(
+        self,
+        state_csv_path: Path,
+        config: PM7Config,
+        max_reruns: int = DEFAULT_MAX_RERUNS,
+    ) -> None:
         """Initialize the state manager for one ``batch_state.csv`` path.
 
         Args:
             state_csv_path: Path to the split operational state CSV.
             config: PM7 runtime configuration retained for future PR6 callers.
+            max_reruns: Maximum retry attempts before a molecule becomes Skip.
         """
         self.state_csv_path = Path(state_csv_path)
         self.config = config
+        self.max_reruns = max_reruns
         self.df: pd.DataFrame | None = None
         self._claim_lock = threading.Lock()
 
@@ -206,7 +226,7 @@ class BatchStateManager:
             extra_fields: Additional ``batch_state.csv`` fields to update.
         """
         df = self._ensure_loaded()
-        idx = self._find_molecule_index(df, name)
+        idx = self._ensure_molecule_index(df, name, extra_fields or {})
         df.at[idx, "status"] = self._normalize_status(status)
         if worker_id is not None:
             df.at[idx, "assigned_worker"] = worker_id
@@ -215,6 +235,136 @@ class BatchStateManager:
                 raise ValueError(f"Unknown batch_state.csv column: {column}")
             df.at[idx, column] = value
         self._save_csv()
+
+    def mark_running(
+        self, mol_id: str, extra_fields: dict[str, Any] | None = None
+    ) -> None:
+        """Mark a molecule as running in ``batch_state.csv``."""
+        fields: dict[str, Any] = {
+            "crest_status": CREST_STATUS_NOT_ATTEMPTED,
+            "mopac_status": MOPAC_STATUS_NOT_ATTEMPTED,
+        }
+        fields.update(extra_fields or {})
+        self.update_molecule_status(
+            mol_id,
+            MoleculeStatus.RUNNING.value,
+            extra_fields=fields,
+        )
+
+    def mark_crest_preopt(self, mol_id: str) -> None:
+        """Record that a molecule entered xTB pre-optimization."""
+        self._update_operational_fields(
+            mol_id,
+            {"crest_status": CREST_STATUS_PREOPT},
+        )
+
+    def mark_crest_search(self, mol_id: str) -> None:
+        """Record that a molecule entered CREST conformer search."""
+        self._update_operational_fields(
+            mol_id,
+            {"crest_status": CREST_STATUS_SEARCH},
+        )
+
+    def mark_mopac_running(self, mol_id: str) -> None:
+        """Record that a molecule entered the MOPAC calculation stage."""
+        self._update_operational_fields(
+            mol_id,
+            {"mopac_status": MOPAC_STATUS_RUNNING},
+        )
+
+    def mark_success(self, mol_id: str) -> None:
+        """Mark a molecule as successfully completed in operational state."""
+        self.update_molecule_status(mol_id, MoleculeStatus.OK.value)
+
+    def mark_rerun(self, mol_id: str, error_message: str) -> str:
+        """Mark a failed molecule for retry or permanent skip.
+
+        Args:
+            mol_id: Molecule identifier.
+            error_message: Failure message retained in logs.
+
+        Returns:
+            Final molecule status after retry accounting.
+        """
+        return self.record_rerun_or_skip(mol_id, error_message)
+
+    def record_rerun_or_skip(self, mol_id: str, error_message: str) -> str:
+        """Record failure and return either Rerun or Skip status."""
+        df = self._ensure_loaded()
+        idx = self._ensure_molecule_index(df, mol_id, {})
+        reruns = self._safe_int(df.at[idx, "reruns"]) + 1
+        df.at[idx, "reruns"] = reruns
+        if reruns >= self.max_reruns:
+            new_status = MoleculeStatus.SKIP.value
+        else:
+            new_status = MoleculeStatus.RERUN.value
+        df.at[idx, "status"] = new_status
+        self._save_csv()
+        LOG.warning("%s marked %s after failure: %s", mol_id, new_status, error_message)
+        return new_status
+
+    def get_status(self, mol_id: str) -> str:
+        """Return the current operational status for one molecule."""
+        df = self._ensure_loaded()
+        idx = self._find_molecule_index(df, mol_id)
+        return str(df.at[idx, "status"])
+
+    def get_status_counts(self) -> dict[str, int]:
+        """Return counts by operational status."""
+        df = self._ensure_loaded()
+        counts = df["status"].value_counts().to_dict()
+        return {str(status): int(count) for status, count in counts.items()}
+
+    def status_counts(self) -> dict[str, int]:
+        """Return counts by operational status without legacy method naming."""
+        return self.get_status_counts()
+
+    def reset_batch(self, batch_id: str) -> int:
+        """Reset all molecules in an all-or-nothing batch to pending state."""
+        return self.reset_all_or_nothing(batch_id)
+
+    def reset_all_or_nothing(self, batch_id: str) -> int:
+        """Reset an all-or-nothing batch in ``batch_state.csv``.
+
+        Args:
+            batch_id: Batch identifier to reset.
+
+        Returns:
+            Number of rows reset to Pending.
+        """
+        df = self._ensure_loaded()
+        mask = df["batch_id"] == batch_id
+        batch_rows = df[mask]
+        if batch_rows.empty:
+            LOG.warning("No molecules found for batch %s", batch_id)
+            return 0
+
+        policy = str(batch_rows["batch_failure_policy"].iloc[0])
+        if policy and policy != BatchFailurePolicy.ALL_OR_NOTHING.value:
+            LOG.warning("Batch %s has policy %s; reset skipped", batch_id, policy)
+            return 0
+
+        reset_count = 0
+        for idx in batch_rows.index:
+            row_idx = cast(int, idx)
+            df.at[row_idx, "status"] = MoleculeStatus.PENDING.value
+            df.at[row_idx, "batch_id"] = ""
+            df.at[row_idx, "batch_order"] = ""
+            df.at[row_idx, "timestamp"] = ""
+            df.at[row_idx, "total_time"] = ""
+            df.at[row_idx, "crest_status"] = CREST_STATUS_NOT_ATTEMPTED
+            df.at[row_idx, "xtb_status"] = ""
+            df.at[row_idx, "mopac_status"] = MOPAC_STATUS_NOT_ATTEMPTED
+            df.at[row_idx, "assigned_crest_timeout"] = ""
+            df.at[row_idx, "assigned_mopac_timeout"] = ""
+            df.at[row_idx, "assigned_worker"] = ""
+            df.at[row_idx, "worker_status"] = WorkerStatus.UNASSIGNED.value
+            df.at[row_idx, "assigned_at"] = ""
+            reset_count += 1
+
+        self._save_csv()
+        LOG.info("Reset %d molecules from batch %s", reset_count, batch_id)
+        return reset_count
 
     def _ensure_loaded(self) -> pd.DataFrame:
         """Load ``batch_state.csv`` and normalize it to the PR6A schema."""
@@ -269,6 +419,39 @@ class BatchStateManager:
             raise KeyError(f"Molecule not found in batch state: {name}")
         return int(matches[0])
 
+    def _ensure_molecule_index(
+        self, df: pd.DataFrame, name: str, initial_fields: dict[str, Any]
+    ) -> int:
+        """Return a molecule index, creating a row when execution first sees it."""
+        matches = df.index[df["mol_id"] == name].tolist()
+        if matches:
+            return int(matches[0])
+
+        row = dict.fromkeys(BATCH_STATE_COLUMNS, "")
+        row["mol_id"] = name
+        row["worker_status"] = WorkerStatus.UNASSIGNED.value
+        row.update(
+            {
+                column: value
+                for column, value in initial_fields.items()
+                if column in BATCH_STATE_COLUMNS
+            }
+        )
+        df.loc[len(df)] = row
+        return int(df.index[-1])
+
+    def _update_operational_fields(
+        self, mol_id: str, field_updates: dict[str, Any]
+    ) -> None:
+        """Update non-scientific operational fields for one molecule."""
+        df = self._ensure_loaded()
+        idx = self._ensure_molecule_index(df, mol_id, {})
+        for column, value in field_updates.items():
+            if column not in BATCH_STATE_COLUMNS:
+                raise ValueError(f"Unknown batch_state.csv column: {column}")
+            df.at[idx, column] = value
+        self._save_csv()
+
     def _parse_assignment_age(
         self, assigned_at_raw: Any, now: datetime
     ) -> timedelta | None:
@@ -290,3 +473,12 @@ class BatchStateManager:
         status_text = str(status).strip()
         status_map = {item.value.lower(): item.value for item in MoleculeStatus}
         return status_map.get(status_text.lower(), status_text)
+
+    def _safe_int(self, value: Any) -> int:
+        """Convert a CSV value to integer, treating blanks as zero."""
+        if pd.isna(value) or value == "":
+            return 0
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            return 0

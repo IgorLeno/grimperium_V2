@@ -19,6 +19,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     `poetry run mypy src/grimperium/calculation/runners --strict`.
 
 ### Changed
+- **PR6C execution manager state split** (2026-06-25)
+  - `BatchExecutionManager` now receives both `BatchStateManager` for
+    operational state and `BatchCSVManager` for legacy scientific CSV writes.
+  - Operational lifecycle updates, retry/skip decisions, status summaries, and
+    all-or-nothing reset handling now write through `batch_state.csv`.
+  - Legacy scientific writes remain on `BatchCSVManager`, including PM7 result
+    conversion, success row updates, reference HOF reads, and MOPAC descriptor
+    enrichment.
+  - `Batch` now carries method ID, version, and snapshot metadata that is
+    written to operational state when a molecule starts.
+  - Verification: PR6C pytest, adjacent batch/PM7 tests, safety grep, focused
+    strict mypy, ruff, and Black passed; full non-server pytest remains blocked
+    by known legacy schema mismatch after 329 passes, while server tests are
+    blocked in this Python 3.14 environment by an unrelated `asyncio.to_thread`
+    hang.
+
 - **MOPAC executor parameterization for calculation methods** (2026-06-22)
   - `src/grimperium/crest_pm7/mopac_optimizer.py`: `_create_mopac_input`,
     `run_mopac`, and `optimize_conformer` now accept `hamiltonian`,

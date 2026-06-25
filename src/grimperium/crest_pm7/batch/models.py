@@ -9,6 +9,7 @@ This module defines data models for:
 
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any
 
 from pydantic import BaseModel, Field, computed_field, field_serializer
 
@@ -143,6 +144,18 @@ class Batch(BaseModel):
     failure_policy: BatchFailurePolicy = Field(
         default=BatchFailurePolicy.PARTIAL_OK,
         description="How to handle failures in this batch",
+    )
+    method_id: str = Field(
+        default="pm7_delta_learning",
+        description="Calculation method registry identifier used for the batch",
+    )
+    method_version: str = Field(
+        default="1.0.0",
+        description="Calculation method version used for the batch",
+    )
+    method_snapshot: dict[str, Any] = Field(
+        default_factory=dict,
+        description="Validated calculation method definition snapshot",
     )
 
     @computed_field  # type: ignore[prop-decorator]

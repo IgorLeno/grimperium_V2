@@ -934,6 +934,7 @@ class DatabasesView(BaseView):
             BatchCSVManager,
             BatchExecutionManager,
             BatchSortingStrategy,
+            BatchStateManager,
             ConformerDetailManager,
             FixedTimeoutProcessor,
         )
@@ -961,6 +962,9 @@ class DatabasesView(BaseView):
             if settings_manager is not None:
                 settings_manager.apply_to_pm7_config(pm7_config)
             csv_manager = BatchCSVManager(csv_path)
+            state_manager = BatchStateManager(
+                csv_path.parent / "batch_state.csv", pm7_config
+            )
             csv_manager.load_csv()
 
             detail_dir.mkdir(parents=True, exist_ok=True)
@@ -980,6 +984,7 @@ class DatabasesView(BaseView):
 
             exec_manager = BatchExecutionManager(
                 csv_manager=csv_manager,
+                state_manager=state_manager,
                 detail_manager=detail_manager,
                 pm7_config=pm7_config,
                 processor_adapter=processor,
