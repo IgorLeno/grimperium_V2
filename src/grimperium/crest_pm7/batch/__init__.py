@@ -29,6 +29,15 @@ from grimperium.crest_pm7.batch.models import (
     ConformerDetail,
     MoleculeDetail,
 )
+from grimperium.crest_pm7.batch.output_contracts import (
+    BATCH_STATE_COLUMNS,
+    CALCULATION_RESULTS_CSV_FILENAME,
+    CALCULATION_RESULTS_XLSX_FILENAME,
+    SCIENTIFIC_RESULT_COLUMNS,
+    BatchOutputLayout,
+    BatchResultWriteReport,
+    write_batch_calculation_results,
+)
 from grimperium.crest_pm7.batch.processor_adapter import (
     FixedTimeoutPredictor,
     FixedTimeoutProcessor,
@@ -48,6 +57,8 @@ __all__ = [
     "ConformerDetail",
     "MoleculeDetail",
     "ArtifactPaths",
+    "BatchOutputLayout",
+    "BatchResultWriteReport",
     # Managers
     "BatchCSVManager",
     "ConformerDetailManager",
@@ -58,4 +69,10 @@ __all__ = [
     "FixedTimeoutProcessor",
     # Factory
     "create_execution_manager",
+    # PR6 split-output contracts
+    "BATCH_STATE_COLUMNS",
+    "SCIENTIFIC_RESULT_COLUMNS",
+    "CALCULATION_RESULTS_CSV_FILENAME",
+    "CALCULATION_RESULTS_XLSX_FILENAME",
+    "write_batch_calculation_results",
 ]

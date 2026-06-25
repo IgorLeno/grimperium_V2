@@ -58,6 +58,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     `poetry install` (root) + `poetry run pytest tests/ -v` for the main suite.
 
 ### Added
+- **PR6A batch state/result split contracts** (2026-06-24)
+  - `src/grimperium/crest_pm7/batch/output_contracts.py`: added the additive
+    split-output layout for `batch_state.csv`, `calculation_results.csv`, and
+    `calculation_results.xlsx`.
+  - Added a new operational batch-state schema that carries method
+    ID/version/snapshot fields while keeping scientific result columns out of
+    `batch_state.csv`.
+  - Added a batch result writer that reuses the canonical PR1 CSV/XLSX writers
+    for scientific `MoleculeCalculationResult` output without migrating the
+    legacy `BatchCSVManager` execution flow yet.
+  - Verification: focused batch-output pytest, `tests/calculation` pytest,
+    ruff, direct Black check, focused mypy, and `git diff --check` passed.
+
 - **Main CLI calculation-method integration** (2026-06-24)
   - `src/grimperium/cli/views/calc_view.py`: Calculate now lists declarative
     standard-enthalpy methods, routes Method A to the canonical
