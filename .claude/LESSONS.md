@@ -11,3 +11,7 @@ Rule: tests for unit conversion must derive expected values from the shared conv
 [2026-06-25] Context: adding PR6C execution-manager tests for method metadata written to batch operational state
 Mistake: asserting the whole `extra_fields` dict made the test reject valid operational row context that was written alongside the required method metadata.
 Rule: tests for state-manager row updates must assert required fields and invariants, not exact whole-row payloads, unless the complete row contract is the behavior under test.
+
+[2026-06-25] Context: reconciling PR6D legacy `thermo_pm7.csv` schema after PR6C moved operational state to `BatchStateManager`
+Mistake: keeping worker assignment columns in `BatchCSVManager` let the legacy CSV grow past the 61-column scientific contract.
+Rule: after migrating a responsibility to a split manager, remove the old schema columns and writer APIs from the legacy owner, and add boundary tests that assert the moved fields exist only in the new owner.

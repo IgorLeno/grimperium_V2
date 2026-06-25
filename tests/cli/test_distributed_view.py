@@ -502,13 +502,14 @@ class TestScreenCheckOfflineWorkers:
     ) -> None:
         csv_path = tmp_path / "test.csv"
         csv_path.touch()
+        (tmp_path / "batch_state.csv").touch()
 
         mock_mgr = MagicMock()
         mock_mgr.reassign_offline_molecules.return_value = 0
 
         import pandas as pd
 
-        mock_mgr.df = pd.DataFrame(
+        mock_mgr._ensure_loaded.return_value = pd.DataFrame(
             {
                 "status": ["OK", "Pending"],
                 "worker_status": ["unassigned", "unassigned"],
@@ -517,7 +518,7 @@ class TestScreenCheckOfflineWorkers:
 
         with (
             patch(
-                "grimperium.cli.views.databases_view.BatchCSVManager",
+                "grimperium.cli.views.databases_view.BatchStateManager",
                 return_value=mock_mgr,
             ),
             patch("grimperium.cli.views.databases_view.menu_confirm") as mock_confirm,
@@ -532,21 +533,22 @@ class TestScreenCheckOfflineWorkers:
     ) -> None:
         csv_path = tmp_path / "test.csv"
         csv_path.touch()
+        (tmp_path / "batch_state.csv").touch()
 
         import pandas as pd
 
         mock_mgr = MagicMock()
-        mock_mgr.df = pd.DataFrame(
+        mock_mgr._ensure_loaded.return_value = pd.DataFrame(
             {
                 "status": ["Assigned", "Assigned"],
                 "worker_status": ["offline", "offline"],
             }
         )
-        mock_mgr.reassign_offline_molecules.return_value = 2
+        mock_mgr.reassign_offline_molecules.return_value = ["mol-001", "mol-002"]
 
         with (
             patch(
-                "grimperium.cli.views.databases_view.BatchCSVManager",
+                "grimperium.cli.views.databases_view.BatchStateManager",
                 return_value=mock_mgr,
             ),
             patch(
@@ -554,7 +556,10 @@ class TestScreenCheckOfflineWorkers:
             ),
         ):
             view._screen_check_offline_workers(csv_path)
-            mock_mgr.reassign_offline_molecules.assert_called_once()
+            mock_mgr.reassign_offline_molecules.assert_called_once_with(
+                active_worker_ids=[],
+                timeout_minutes=0,
+            )
 
     @patch.object(DatabasesView, "wait_for_enter")
     def test_offline_molecules_no_skips_reassign(
@@ -562,11 +567,12 @@ class TestScreenCheckOfflineWorkers:
     ) -> None:
         csv_path = tmp_path / "test.csv"
         csv_path.touch()
+        (tmp_path / "batch_state.csv").touch()
 
         import pandas as pd
 
         mock_mgr = MagicMock()
-        mock_mgr.df = pd.DataFrame(
+        mock_mgr._ensure_loaded.return_value = pd.DataFrame(
             {
                 "status": ["Assigned"],
                 "worker_status": ["offline"],
@@ -576,7 +582,7 @@ class TestScreenCheckOfflineWorkers:
 
         with (
             patch(
-                "grimperium.cli.views.databases_view.BatchCSVManager",
+                "grimperium.cli.views.databases_view.BatchStateManager",
                 return_value=mock_mgr,
             ),
             patch(
@@ -591,14 +597,15 @@ class TestScreenCheckOfflineWorkers:
     ) -> None:
         csv_path = tmp_path / "test.csv"
         csv_path.touch()
+        (tmp_path / "batch_state.csv").touch()
 
         import pandas as pd
 
         mock_mgr = MagicMock()
-        mock_mgr.df = pd.DataFrame({"status": ["OK"]})
+        mock_mgr._ensure_loaded.return_value = pd.DataFrame({"status": ["OK"]})
 
         with patch(
-            "grimperium.cli.views.databases_view.BatchCSVManager",
+            "grimperium.cli.views.databases_view.BatchStateManager",
             return_value=mock_mgr,
         ):
             view._screen_check_offline_workers(csv_path)

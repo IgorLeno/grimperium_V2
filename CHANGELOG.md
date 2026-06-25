@@ -8,6 +8,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- **PR6D legacy batch CSV schema reconciliation** (2026-06-25)
+  - Fixed the `expected 61 columns, actual 64` regression by removing
+    `assigned_worker`, `worker_status`, and `assigned_at` from the legacy
+    `BatchCSVManager` / `thermo_pm7.csv` contract.
+  - Kept those operational state fields in `batch_state.csv` through
+    `BatchStateManager`, and redirected the CLI offline-worker screen away from
+    the legacy CSV manager.
+  - Verification: PR6D pytest, existing CSV schema pytest, adjacent
+    CSV-manager/CLI distributed tests, safety grep, focused strict mypy, ruff,
+    and focused atomic-save regression passed. The non-server suite advanced
+    past the PR6D schema tests but still has unrelated failures in legacy
+    calc-view and MOPAC optimizer tests.
+
 - **rdkit-stubs mypy syntax blocker on Python 3.14** (2026-06-23)
   - Added `scripts/patch_rdkit_stubs.py` to fix invalid `GetProp` overload
     signatures in bundled `rdkit-stubs/Chem/rdchem.pyi` (RDKit 2026.3.3;

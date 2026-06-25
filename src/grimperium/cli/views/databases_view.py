@@ -42,8 +42,9 @@ from grimperium.cli.settings_manager import DistributedDefaults, SettingsManager
 from grimperium.cli.styles import COLORS, ICONS
 from grimperium.cli.views.base_view import BaseView
 from grimperium.core.metrics import mae, r2_score
-from grimperium.crest_pm7.batch.csv_manager import BatchCSVManager
 from grimperium.crest_pm7.batch.enums import MoleculeStatus, WorkerStatus
+from grimperium.crest_pm7.batch.state_manager import BatchStateManager
+from grimperium.crest_pm7.config import PM7Config
 from grimperium.crest_pm7.database_analyzer import AnalysisReport
 from grimperium.worker.client import WorkerClient, WorkerClientConfig
 from grimperium.worker.runner import WorkerConfig, WorkerRunner
@@ -1253,9 +1254,12 @@ class DatabasesView(BaseView):
 
     def _screen_check_offline_workers(self, csv_path: Path) -> None:
         """Screen 3: if offline molecules exist, offer reassignment."""
-        csv_manager = BatchCSVManager(csv_path)
-        csv_manager.load_csv()
-        df = csv_manager.df
+        state_csv_path = csv_path.parent / "batch_state.csv"
+        if not state_csv_path.exists():
+            return
+
+        state_manager = BatchStateManager(state_csv_path, PM7Config())
+        df = state_manager._ensure_loaded()
 
         if df is None or "worker_status" not in df.columns:
             return
@@ -1272,9 +1276,12 @@ class DatabasesView(BaseView):
         if menu_confirm(
             f"⚠ {offline_count} molecules assigned to offline workers. Reassign?"
         ):
-            n = csv_manager.reassign_offline_molecules()
+            reassigned = state_manager.reassign_offline_molecules(
+                active_worker_ids=[],
+                timeout_minutes=0,
+            )
             self.console.print(
-                f"[green]✓ {n} molecules returned to pending pool[/green]"
+                f"[green]✓ {len(reassigned)} molecules returned to pending pool[/green]"
             )
         self.wait_for_enter()
 
