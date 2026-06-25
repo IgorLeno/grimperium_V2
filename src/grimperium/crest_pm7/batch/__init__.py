@@ -42,6 +42,7 @@ from grimperium.crest_pm7.batch.processor_adapter import (
     FixedTimeoutPredictor,
     FixedTimeoutProcessor,
 )
+from grimperium.crest_pm7.batch.state_manager import BatchStateManager
 
 __all__ = [
     # Enums
@@ -61,6 +62,7 @@ __all__ = [
     "BatchResultWriteReport",
     # Managers
     "BatchCSVManager",
+    "BatchStateManager",
     "ConformerDetailManager",
     "BatchExecutionManager",
     "ArtifactManager",
