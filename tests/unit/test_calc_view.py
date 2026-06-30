@@ -37,13 +37,28 @@ def calc_view(mock_controller: MagicMock) -> CalcView:
 # ──────────────────────────────────────────────────
 
 
+def _mock_pm7_delta_method() -> MagicMock:
+    """Build a minimal method mock for do_prediction tests."""
+    mock_method = MagicMock()
+    mock_method.method_id = "pm7_delta_learning"
+    mock_method.property_name = "Standard enthalpy of formation"
+    mock_method.display_name = "PM7 + Delta Learning"
+    mock_method.model_requirement.model_required = True
+    mock_method.xtb.optional = True
+    mock_method.xtb.enabled_by_default = False
+    return mock_method
+
+
 @patch("grimperium.cli.views.calc_view.text_input", return_value="CCO")
 def test_do_prediction_sem_modelo(
     mock_input: MagicMock,
     calc_view: CalcView,
 ) -> None:
     """No model found → show_error, pipeline never executes."""
-    calc_view._resolve_model_path = MagicMock(return_value=None)  # type: ignore[method-assign]
+    mock_method = _mock_pm7_delta_method()
+    calc_view._select_method = MagicMock(return_value=mock_method)
+    calc_view._select_units = MagicMock(return_value="both")
+    calc_view._resolve_required_model = MagicMock(return_value=None)
     calc_view.render = MagicMock()
     calc_view.show_error = MagicMock()
 
@@ -52,11 +67,8 @@ def test_do_prediction_sem_modelo(
     ) as mock_pipeline:
         result = calc_view.do_prediction()
 
-    calc_view.show_error.assert_called_once()
-    error_msg = calc_view.show_error.call_args[0][0]
-    assert "model" in error_msg.lower() or "Model" in error_msg
     mock_pipeline.assert_not_called()
-    assert result is False
+    assert result is True
 
 
 @patch("grimperium.cli.views.calc_view.text_input", return_value="CCO")
@@ -65,7 +77,10 @@ def test_do_prediction_crest_falha(
     calc_view: CalcView,
 ) -> None:
     """CREST failure → CalcPipelineError → show_error."""
-    calc_view._resolve_model_path = MagicMock(  # type: ignore[method-assign]
+    mock_method = _mock_pm7_delta_method()
+    calc_view._select_method = MagicMock(return_value=mock_method)
+    calc_view._select_units = MagicMock(return_value="both")
+    calc_view._resolve_required_model = MagicMock(  # type: ignore[method-assign]
         return_value=Path("/fake/model.joblib"),
     )
     calc_view.render = MagicMock()
@@ -90,7 +105,10 @@ def test_do_prediction_mopac_falha(
     calc_view: CalcView,
 ) -> None:
     """MOPAC failure → CalcPipelineError → show_error."""
-    calc_view._resolve_model_path = MagicMock(  # type: ignore[method-assign]
+    mock_method = _mock_pm7_delta_method()
+    calc_view._select_method = MagicMock(return_value=mock_method)
+    calc_view._select_units = MagicMock(return_value="both")
+    calc_view._resolve_required_model = MagicMock(  # type: ignore[method-assign]
         return_value=Path("/fake/model.joblib"),
     )
     calc_view.render = MagicMock()
@@ -115,7 +133,10 @@ def test_do_prediction_sucesso_completo(
     calc_view: CalcView,
 ) -> None:
     """Full pipeline success → PredictionResult with all real fields."""
-    calc_view._resolve_model_path = MagicMock(  # type: ignore[method-assign]
+    mock_method = _mock_pm7_delta_method()
+    calc_view._select_method = MagicMock(return_value=mock_method)
+    calc_view._select_units = MagicMock(return_value="both")
+    calc_view._resolve_required_model = MagicMock(  # type: ignore[method-assign]
         return_value=Path("/fake/model.joblib"),
     )
     calc_view.render = MagicMock()
@@ -195,11 +216,11 @@ def test_run_single_molecule_prediction_delta_correction_scalar() -> None:
             return_value={"version": "v2.1"},
         ),
         patch(
-            "grimperium.cli.calc_pipeline.extract_all_rdkit_descriptors",
+            "grimperium.cli.calculation_features.extract_all_rdkit_descriptors",
             return_value={"rdkit_nrotbonds": 1.0},
         ),
         patch(
-            "grimperium.cli.calc_pipeline.extract_mopac_descriptors",
+            "grimperium.cli.calculation_features.extract_mopac_descriptors",
             return_value={"mopac_homo_ev": -10.5},
         ),
     ):

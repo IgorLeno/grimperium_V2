@@ -77,6 +77,18 @@ def _create_mopac_input(
     Raises:
         ValueError: If multiplicity is not supported
     """
+    normalized_hamiltonian = hamiltonian.upper()
+    if normalized_hamiltonian not in _SUPPORTED_HAMILTONIANS:
+        raise ValueError(
+            f"Unsupported Hamiltonian {hamiltonian!r}. "
+            f"Supported values: {', '.join(sorted(_SUPPORTED_HAMILTONIANS))}"
+        )
+    if multiplicity != 1 and multiplicity not in _MULTIPLICITY_KEYWORDS:
+        raise ValueError(
+            f"Unsupported multiplicity {multiplicity}. "
+            f"Supported values: 1 (singlet), {', '.join(f'{k} ({v.lower()})' for k, v in sorted(_MULTIPLICITY_KEYWORDS.items()))}"
+        )
+
     try:
         with open(xyz_file, encoding="utf-8") as f:
             lines = f.readlines()
@@ -85,12 +97,6 @@ def _create_mopac_input(
         comment = lines[1].strip() if len(lines) > 1 else ""
 
         # Build MOPAC keywords
-        normalized_hamiltonian = hamiltonian.upper()
-        if normalized_hamiltonian not in _SUPPORTED_HAMILTONIANS:
-            raise ValueError(
-                f"Unsupported Hamiltonian {hamiltonian!r}. "
-                f"Supported values: {', '.join(sorted(_SUPPORTED_HAMILTONIANS))}"
-            )
         keywords = [normalized_hamiltonian, "EF"]
 
         # PRECISE is always forced ON for production-quality MOPAC calculations.
@@ -107,11 +113,6 @@ def _create_mopac_input(
             keywords.append(f"CHARGE={charge}")
 
         if multiplicity != 1:
-            if multiplicity not in _MULTIPLICITY_KEYWORDS:
-                raise ValueError(
-                    f"Unsupported multiplicity {multiplicity}. "
-                    f"Supported values: 1 (singlet), {', '.join(f'{k} ({v.lower()})' for k, v in sorted(_MULTIPLICITY_KEYWORDS.items()))}"
-                )
             keywords.append(_MULTIPLICITY_KEYWORDS[multiplicity])
         if extra_keywords is not None:
             keywords.extend(extra_keywords)
