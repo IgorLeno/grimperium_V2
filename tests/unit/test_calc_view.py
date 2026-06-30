@@ -67,6 +67,8 @@ def test_do_prediction_sem_modelo(
     ) as mock_pipeline:
         result = calc_view.do_prediction()
 
+    # show_error é chamado dentro de _resolve_required_model (mockado),
+    # portanto não propagado aqui. Pipeline não executa — suficiente.
     mock_pipeline.assert_not_called()
     assert result is True
 
