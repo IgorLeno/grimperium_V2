@@ -58,7 +58,6 @@ def test_do_prediction_sem_modelo(
     mock_method = _mock_pm7_delta_method()
     calc_view._select_method = MagicMock(return_value=mock_method)
     calc_view._select_units = MagicMock(return_value="both")
-    calc_view._resolve_required_model = MagicMock(return_value=None)
     calc_view.render = MagicMock()
     calc_view.show_error = MagicMock()
 
@@ -67,8 +66,9 @@ def test_do_prediction_sem_modelo(
     ) as mock_pipeline:
         result = calc_view.do_prediction()
 
-    # show_error é chamado dentro de _resolve_required_model (mockado),
-    # portanto não propagado aqui. Pipeline não executa — suficiente.
+    calc_view.show_error.assert_called_once()
+    error_msg = calc_view.show_error.call_args[0][0]
+    assert "model" in error_msg.lower() or "Model" in error_msg
     mock_pipeline.assert_not_called()
     assert result is True
 
