@@ -17,6 +17,14 @@ def make_heartbeat_registry() -> HeartbeatRegistry:
     return {}
 
 
+def _mark_worker_offline(worker_id: str, csv_manager: BatchCSVManager) -> int:
+    """Mark a worker offline when the CSV backend exposes the hook."""
+    mark_offline = getattr(csv_manager, "mark_worker_offline", None)
+    if mark_offline is not None:
+        mark_offline(worker_id)
+    return 0
+
+
 async def check_offline_workers(
     registry: HeartbeatRegistry,
     csv_manager: BatchCSVManager,
@@ -40,7 +48,7 @@ async def check_offline_workers(
             worker_id,
         )
         async with lock:
-            await asyncio.to_thread(csv_manager.mark_worker_offline, worker_id)
+            await asyncio.to_thread(_mark_worker_offline, worker_id, csv_manager)
         del registry[worker_id]
 
     return stale

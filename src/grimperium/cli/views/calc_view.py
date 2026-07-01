@@ -180,7 +180,7 @@ using the Delta-Learning model.
             header_style=f"bold {COLORS['calc']}",
             border_style=COLORS["border"],
         )
-        table.add_column("Method ID", style="bold")
+        table.add_column("Method ID", style="bold", min_width=30, no_wrap=True)
         table.add_column("Name")
         table.add_column("Model")
         table.add_column("Conformer Strategy")
