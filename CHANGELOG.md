@@ -32,6 +32,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     `poetry run mypy src/grimperium/calculation/runners --strict`.
 
 ### Changed
+- **PR7 Results analysis-only boundary** (2026-07-02)
+  - Disabled `Run New Analysis` and `Predict Batch` in `ResultsView`, keeping
+    legacy handler entrypoints as redirects to Models instead of training or
+    predicting from Results.
+  - `ResultsView` now resolves the selected model and active CSV from
+    `CliController` session state, with clear fallbacks when either is missing.
+  - Added CLI coverage for the analysis-only boundary and session path
+    resolution, while preserving existing pure analysis actions.
+
 - **PR6C execution manager state split** (2026-06-25)
   - `BatchExecutionManager` now receives both `BatchStateManager` for
     operational state and `BatchCSVManager` for legacy scientific CSV writes.

@@ -6,7 +6,6 @@ Displays performance analytics and divergence analysis using real model data.
 
 from __future__ import annotations
 
-import logging
 import os
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -19,13 +18,10 @@ from rich.table import Table
 from grimperium.cli.menu import MenuOption, show_back_menu
 from grimperium.cli.styles import COLORS, ICONS
 from grimperium.cli.views.base_view import BaseView
-from grimperium.ml.gate import evaluate_gate
-from grimperium.ml.persistence import load_model_metadata, save_model
+from grimperium.ml.persistence import load_model_metadata
 
 if TYPE_CHECKING:
     from grimperium import DictStrAny
-
-logger = logging.getLogger(__name__)
 
 # Static thresholds for divergence severity (no env dependency)
 _DIVERGENCE_THRESHOLDS = [
@@ -44,28 +40,58 @@ class ResultsView(BaseView):
     icon = ICONS["results"]
     color = COLORS["results"]
 
-    def _get_model_path(self) -> Path:
-        """Resolve model path from env var (read fresh on each call).
+    def _get_model_path(self) -> Path | None:
+        """Resolve model path from the live controller session.
 
         Returns:
-            Path: The resolved model file path.
+            The selected model path, or None when no model is selected.
         """
-        return Path(
-            os.environ.get("GRIMPERIUM_MODEL_PATH", "models/delta_learner_v1.joblib")
-        )
+        model_path = getattr(self.controller, "current_model_path", None)
+        if model_path is None:
+            self.console.print(
+                f"[{COLORS['warning']}][Model not selected — some metrics "
+                f"may be unavailable][/{COLORS['warning']}]"
+            )
+            return None
+        return Path(model_path)
 
     def _get_csv_path(self) -> Path:
-        """Resolve CSV path from env var (read fresh on each call).
+        """Resolve CSV path from the live controller session.
 
-        Returns:
-            Path: The resolved CSV data file path.
+        Falls back to the canonical legacy CSV path when no session CSV is
+        selected. Results never reads GRIMPERIUM_DATA_PATH.
         """
-        return Path(os.environ.get("GRIMPERIUM_DATA_PATH", "data/thermo_pm7.csv"))
+        csv_path = getattr(self.controller, "current_csv_path", None)
+        if csv_path is None:
+            fallback = Path("data/thermo_pm7.csv")
+            self.console.print(
+                f"[{COLORS['warning']}]Using default data file: {fallback}"
+                f"[/{COLORS['warning']}]"
+            )
+            return fallback
+        return Path(csv_path)
+
+    def _show_analysis_only_message(self, message: str) -> None:
+        """Show a boundary message for actions now owned by Models."""
+        self.console.print()
+        self.console.print(
+            Panel(
+                f"[{COLORS['warning']}]{message}[/{COLORS['warning']}]",
+                title=f"[bold {COLORS['warning']}]Analysis Only[/bold {COLORS['warning']}]",
+                border_style=COLORS["warning"],
+                padding=(1, 2),
+            )
+        )
+        self.console.print()
+        self.wait_for_enter()
 
     def _load_real_model_row(self) -> dict[str, Any] | None:
         """Load model metadata for display. Returns None if not available."""
+        model_path = self._get_model_path()
+        if model_path is None:
+            return None
         try:
-            return load_model_metadata(self._get_model_path())
+            return load_model_metadata(model_path)
         except (FileNotFoundError, KeyError, Exception):
             return None
 
@@ -172,7 +198,7 @@ class ResultsView(BaseView):
             self.console.print(
                 Panel(
                     f"[{COLORS['muted']}]No predictions available. "
-                    f"Run 'Predict Batch' from this menu to generate predictions."
+                    f"Use Models > Predict Batch before returning here for analysis."
                     f"[/{COLORS['muted']}]",
                     title=f"[bold {COLORS['results']}]Divergence Analysis"
                     f"[/bold {COLORS['results']}]",
@@ -273,11 +299,15 @@ class ResultsView(BaseView):
                 label="Run New Analysis",
                 value="run_analysis",
                 icon=ICONS.get("models", "\U0001f916"),
+                disabled=True,
+                disabled_reason="Use Models view",
             ),
             MenuOption(
                 label="Predict Batch",
                 value="predict_batch",
                 icon=ICONS.get("calc", "\u26a1"),
+                disabled=True,
+                disabled_reason="Use Models view",
             ),
             MenuOption(
                 label="Detailed Metrics",
@@ -655,267 +685,19 @@ class ResultsView(BaseView):
         self.wait_for_enter()
 
     def _handle_predict_batch(self) -> None:
-        """Run batch prediction and display results."""
-        from grimperium.ml.predictor import predict_batch
-
-        model_path = self._get_model_path()
-        csv_path = self._get_csv_path()
-
-        self.console.print()
-        self.console.print(
-            f"[bold {COLORS['results']}]Running batch prediction..."
-            f"[/bold {COLORS['results']}]"
+        """Redirect batch prediction to Models; Results is analysis-only."""
+        self._show_analysis_only_message(
+            "Batch prediction is handled in Models > Predict Batch.\n"
+            "Results is for analysis only."
         )
-        self.console.print()
-
-        try:
-            _df, stats = predict_batch(csv_path, model_path, return_stats=True)
-
-            result_text = f"""
-[bold]Batch Prediction Complete![/bold]
-
-[bold]Summary:[/bold]
-  Molecules predicted:  {stats['n_predicted']}
-  Mean delta correction: {stats['mean_delta']:.4f} kcal/mol
-  Std delta correction:  {stats['std_delta']:.4f} kcal/mol
-  Min predicted H298:    {stats['min_predicted']:.4f} kcal/mol
-  Max predicted H298:    {stats['max_predicted']:.4f} kcal/mol
-
-Results written to: {csv_path}
-"""
-
-            self.console.print(
-                Panel(
-                    result_text,
-                    title=f"[bold {COLORS['success']}]Prediction Results"
-                    f"[/bold {COLORS['success']}]",
-                    border_style=COLORS["success"],
-                    padding=(1, 2),
-                )
-            )
-            self.show_success("Batch prediction complete!")
-        except FileNotFoundError as e:
-            self.show_error(str(e))
-        except Exception as e:
-            self.show_error(f"Prediction failed: {e}")
-
-        self.wait_for_enter()
 
     def _handle_run_analysis(self) -> None:
-        """Run complete analysis: retrain model, predict batch, regenerate charts."""
-        from grimperium.ml.charts import generate_charts
-        from grimperium.ml.predictor import predict_batch
-        from grimperium.ml.trainer import train
-
-        model_path = self._get_model_path()
-        csv_path = self._get_csv_path()
-        charts_dir = self._get_charts_dir()
-
-        # Capture "before" metrics if model exists
-        old_metrics: dict[str, Any] | None = None
-        if model_path.exists():
-            try:
-                old_meta = load_model_metadata(model_path)
-                old_metrics = old_meta.get("metrics", {}).get("test", {})
-            except Exception as exc:
-                logger.debug("Could not load previous model metrics: %s", exc)
-                old_metrics = None
-
-        # Count eligible molecules
-        if not csv_path.exists():
-            self.show_error(f"Data file not found: {csv_path}")
-            self.wait_for_enter()
-            return
-
-        try:
-            df_check = pd.read_csv(csv_path)
-            n_eligible = int(
-                (
-                    (df_check["status"] == "OK")
-                    & (df_check["cbs_quality_flag"] == "OK")
-                ).sum()
-            )
-        except Exception as exc:
-            logger.debug("Could not count eligible molecules: %s", exc)
-            n_eligible = 0
-
-        # Confirmation prompt
-        self.console.print()
-        self.console.print(
-            f"[bold {COLORS['results']}]Run New Analysis"
-            f"[/bold {COLORS['results']}]\n"
-            f"  Data: {csv_path} ({n_eligible:,} eligible molecules)\n"
-            f"  Model: {model_path}\n\n"
-            f"  This will:\n"
-            f"    1. Retrain the model with current data\n"
-            f"    2. Run batch predictions for all eligible molecules\n"
-            f"    3. Regenerate visualization charts\n"
+        """Redirect model training and prediction to Models."""
+        self._show_analysis_only_message(
+            "Training and prediction are handled in Models.\n"
+            "Use Models > Train Model and Models > Predict Batch first,\n"
+            "then return here for analysis."
         )
-        confirm = self.console.input("Type 'yes' to confirm: ").strip().lower()
-        if confirm not in ("yes", "y"):
-            self.console.print(
-                f"[{COLORS['muted']}]Analysis cancelled.[/{COLORS['muted']}]"
-            )
-            return
-
-        # --- Step 1: Retrain ---
-        self.console.print()
-        self.console.print(
-            f"[bold {COLORS['results']}]Step 1/3: Retraining model..."
-            f"[/bold {COLORS['results']}] (this may take a minute)"
-        )
-
-        try:
-            result = train(csv_path, return_pipeline=True, random_state=42)
-            if not isinstance(result, tuple) or len(result) != 4:
-                msg = (
-                    f"train(return_pipeline=True) returned "
-                    f"{type(result).__name__} with "
-                    f"{len(result) if isinstance(result, tuple) else 'N/A'} "
-                    f"elements; expected a 4-tuple"
-                )
-                raise TypeError(msg)
-            learner, train_m, test_m, pipeline = result
-            test_m["gate_pass"] = evaluate_gate(test_m)
-
-            bundle: dict[str, Any] = {
-                "learner": learner,
-                "pipeline": pipeline,
-                "metrics": {"train": train_m, "test": test_m},
-            }
-            save_model(bundle, model_path)
-            self.console.print(
-                f"  [{COLORS['success']}]{ICONS['success']} Model retrained"
-                f" and saved[/{COLORS['success']}]"
-            )
-        except Exception as e:
-            self.show_error(f"Training failed: {e}")
-            self.wait_for_enter()
-            return
-
-        # --- Step 2: Predict Batch ---
-        self.console.print(
-            f"[bold {COLORS['results']}]Step 2/3: Running batch predictions..."
-            f"[/bold {COLORS['results']}]"
-        )
-
-        try:
-            _df, pred_stats = predict_batch(csv_path, model_path, return_stats=True)
-            self.console.print(
-                f"  [{COLORS['success']}]{ICONS['success']} "
-                f"{pred_stats['n_predicted']:,} molecules predicted"
-                f"[/{COLORS['success']}]"
-            )
-        except Exception as e:
-            self.show_error(f"Batch prediction failed: {e}")
-            self.wait_for_enter()
-            return
-
-        # --- Step 3: Generate Charts ---
-        self.console.print(
-            f"[bold {COLORS['results']}]Step 3/3: Generating charts..."
-            f"[/bold {COLORS['results']}]"
-        )
-
-        chart_result = None
-        try:
-            chart_result = generate_charts(csv_path, charts_dir)
-            self.console.print(
-                f"  [{COLORS['success']}]{ICONS['success']} Charts saved"
-                f" to {charts_dir}[/{COLORS['success']}]"
-            )
-        except Exception as e:
-            self.console.print(
-                f"  [{COLORS['warning']}]{ICONS['warning']} "
-                f"Chart generation failed: {e}[/{COLORS['warning']}]"
-            )
-
-        # --- Display Results ---
-        self.console.print()
-
-        # Before/after comparison table
-        if old_metrics is not None:
-            comp = Table(
-                title="Before vs After Analysis",
-                show_header=True,
-                header_style=f"bold {COLORS['results']}",
-                border_style=COLORS["border"],
-            )
-            comp.add_column("Metric")
-            comp.add_column("Before", justify="right")
-            comp.add_column("After", justify="right")
-            comp.add_column("Delta", justify="right")
-            comp.add_column("")
-
-            def _delta_row(
-                label: str,
-                before: Any,
-                after: Any,
-                *,
-                lower_is_better: bool = True,
-            ) -> None:
-                b = float(before) if before is not None else 0.0
-                a = float(after) if after is not None else 0.0
-                delta = a - b
-                improved = (delta < 0) if lower_is_better else (delta > 0)
-                icon = ICONS["success"] if improved else ICONS["error"]
-                comp.add_row(label, f"{b:.4f}", f"{a:.4f}", f"{delta:+.4f}", icon)
-
-            _delta_row("MAE (kcal/mol)", old_metrics.get("mae"), test_m.get("mae"))
-            _delta_row("RMSE (kcal/mol)", old_metrics.get("rmse"), test_m.get("rmse"))
-            _delta_row(
-                "R\u00b2",
-                old_metrics.get("r2"),
-                test_m.get("r2"),
-                lower_is_better=False,
-            )
-            _delta_row(
-                "Max Error (kcal/mol)",
-                old_metrics.get("max_error"),
-                test_m.get("max_error"),
-            )
-
-            self.console.print(comp)
-            self.console.print()
-
-        # Summary panel
-        gate_pass = test_m.get("gate_pass", False)
-        gate_icon = ICONS["success"] if gate_pass else ICONS["error"]
-
-        mae_val = float(test_m.get("mae", 0))
-        r2_val = float(test_m.get("r2", 0))
-
-        summary = (
-            f"[bold]Analysis Complete![/bold]\n\n"
-            f"[bold]Model:[/bold]\n"
-            f"  MAE:         {mae_val:.3f} kcal/mol\n"
-            f"  R\u00b2:          {r2_val:.4f}\n"
-            f"  Gate Pass:   {gate_icon}"
-            f" {'Yes' if gate_pass else 'No'}\n\n"
-            f"[bold]Predictions:[/bold]\n"
-            f"  Molecules:   {pred_stats['n_predicted']:,}\n"
-            f"  Mean delta:  {pred_stats['mean_delta']:.4f} kcal/mol"
-        )
-
-        if chart_result is not None:
-            summary += (
-                f"\n\n[bold]Charts:[/bold]\n"
-                f"  Parity plot:      {chart_result.parity_plot}\n"
-                f"  Delta histogram:  {chart_result.delta_histogram}\n"
-                f"  Residuals plot:   {chart_result.residuals_plot}"
-            )
-
-        self.console.print(
-            Panel(
-                summary,
-                title=f"[bold {COLORS['success']}]New Analysis Results"
-                f"[/bold {COLORS['success']}]",
-                border_style=COLORS["success"],
-                padding=(1, 2),
-            )
-        )
-        self.show_success("Full analysis pipeline complete!")
-        self.wait_for_enter()
 
     def run(self) -> str | None:
         """Run the results view interaction loop."""

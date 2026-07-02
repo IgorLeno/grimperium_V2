@@ -36,6 +36,7 @@ class CliController:
         self.current_view: str = "main"
         self.current_model: str = DEFAULT_MODEL
         self.current_model_path: Path | None = None
+        self.current_csv_path: Path | None = None
         self.status: str = "Ready"
         self.console = Console(theme=CLI_THEME)
         self.settings_manager = SettingsManager(console=self.console)
@@ -136,6 +137,15 @@ class CliController:
         """
         self.current_model = model_name
         self.current_model_path = model_path
+
+    def set_csv(self, csv_path: Path | None) -> None:
+        """
+        Set the current active CSV path for analysis.
+
+        Args:
+            csv_path: Optional path to the active CSV file
+        """
+        self.current_csv_path = csv_path
 
     def set_status(self, status: str) -> None:
         """
