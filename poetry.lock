@@ -799,26 +799,6 @@ unicode = ["unicodedata2 (>=17.0.0) ; python_version <= \"3.14\""]
 woff = ["brotli (>=1.0.1) ; platform_python_implementation == \"CPython\"", "brotlicffi (>=0.8.0) ; platform_python_implementation != \"CPython\"", "zopfli (>=0.1.4)"]
 
 [[package]]
-name = "grimperium-mini"
-version = "0.2.0"
-description = "Distilled CREST + MOPAC pipeline for biodiesel TCC calculations"
-optional = false
-python-versions = "^3.11"
-groups = ["dev"]
-markers = "python_version >= \"3.11\""
-files = []
-develop = true
-
-[package.dependencies]
-numpy = ">=2.3.2"
-rdkit = ">=2023.9.0"
-rich = ">=13.0"
-
-[package.source]
-type = "directory"
-url = "packages/grimperium-mini"
-
-[[package]]
 name = "h11"
 version = "0.16.0"
 description = "A pure-Python, bring-your-own-I/O implementation of HTTP/1.1"
@@ -1600,7 +1580,7 @@ version = "2.4.0"
 description = "Fundamental package for array computing in Python"
 optional = false
 python-versions = ">=3.11"
-groups = ["main", "dev"]
+groups = ["main"]
 markers = "python_version >= \"3.11\""
 files = [
     {file = "numpy-2.4.0-cp311-cp311-macosx_10_9_x86_64.whl", hash = "sha256:316b2f2584682318539f0bcaca5a496ce9ca78c88066579ebd11fd06f8e4741e"},
@@ -1857,7 +1837,7 @@ version = "12.1.0"
 description = "Python Imaging Library (fork)"
 optional = false
 python-versions = ">=3.10"
-groups = ["main", "dev"]
+groups = ["main"]
 files = [
     {file = "pillow-12.1.0-cp310-cp310-macosx_10_10_x86_64.whl", hash = "sha256:fb125d860738a09d363a88daa0f59c4533529a90e564785e20fe875b200b6dbd"},
     {file = "pillow-12.1.0-cp310-cp310-macosx_11_0_arm64.whl", hash = "sha256:cad302dc10fac357d3467a74a9561c90609768a6f73a1923b0fd851b6486f8b0"},
@@ -1951,7 +1931,6 @@ files = [
     {file = "pillow-12.1.0-pp311-pypy311_pp73-win_amd64.whl", hash = "sha256:75af0b4c229ac519b155028fa1be632d812a519abba9b46b20e50c6caa184f19"},
     {file = "pillow-12.1.0.tar.gz", hash = "sha256:5c5ae0a06e9ea030ab786b0251b32c7e4ce10e58d983c0d5c56029455180b5b9"},
 ]
-markers = {dev = "python_version >= \"3.11\""}
 
 [package.extras]
 docs = ["furo", "olefile", "sphinx (>=8.2)", "sphinx-autobuild", "sphinx-copybutton", "sphinx-inline-tabs", "sphinxext-opengraph"]
@@ -2495,7 +2474,7 @@ version = "2025.9.3"
 description = "A collection of chemoinformatics and machine-learning software written in C++ and Python"
 optional = false
 python-versions = "*"
-groups = ["main", "dev"]
+groups = ["main"]
 files = [
     {file = "rdkit-2025.9.3-cp310-cp310-macosx_10_15_x86_64.whl", hash = "sha256:41a648dfa63d43420918272520d5b49b288f251a1e1a987af81f1a9eacecf94e"},
     {file = "rdkit-2025.9.3-cp310-cp310-macosx_11_0_arm64.whl", hash = "sha256:0288cfda4c284f97b0c9afafa14e5035bfc7ee3bd8f8e4b1565d1036b7d615e3"},
@@ -2523,7 +2502,6 @@ files = [
     {file = "rdkit-2025.9.3-cp314-cp314-manylinux_2_28_x86_64.whl", hash = "sha256:6aae71e6a3407b9b099496999634692e538c5936b5a3a8e034d44c5f2bcd9108"},
     {file = "rdkit-2025.9.3-cp314-cp314-win_amd64.whl", hash = "sha256:f47da0c0e138aaf0a0f0a8f1e2ecf35c0483fd037e1fe620af0d2cff6e5f778a"},
 ]
-markers = {dev = "python_version >= \"3.11\""}
 
 [package.dependencies]
 numpy = "*"
@@ -3598,4 +3576,4 @@ worker = ["httpx", "questionary", "rich"]
 [metadata]
 lock-version = "2.1"
 python-versions = "^3.10"
-content-hash = "12a4b73ded3280a14fb6c6956bf87c1ddaa0f34b6712cbf75f1fbe79aa9bc36f"
+content-hash = "325efd927b41bf540e3cf396e7c8abb1528ad695626e3fede6ead99cb780865f"

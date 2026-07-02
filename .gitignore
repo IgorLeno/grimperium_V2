@@ -137,15 +137,12 @@ docs/plans/
 src/grimperium/crest_pm7/tmp/*/
 !src/grimperium/crest_pm7/tmp/.gitignore
 
-# grimperium_mini run directories
+# Local run directories
 runs/
 /home/*/grimperium/runs/
 
-# grimperium_mini work directories and outputs
+# Generated result outputs
 results/
-data/grimperium_mini_pipeline_tcc.xlsx
-data/grimperium_mini_summary.xlsx
-grimperium_mini_summary.xlsx
 
 # CREST output files (generated in work directories and accidentally in root)
 confcross.xyz

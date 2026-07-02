@@ -29,9 +29,9 @@ repos:
     hooks:
       - id: mypy
         name: mypy
-        entry: bash -c 'python scripts/patch_rdkit_stubs.py && mypy src/ packages/grimperium-mini/src/ --strict'
+        entry: bash -c 'python scripts/patch_rdkit_stubs.py && mypy src/ --strict'
         language: system
-        files: ^(src|packages)/
+        files: ^src/
         pass_filenames: false
 
 ci:
