@@ -15,10 +15,10 @@ from pathlib import Path
 # Add src to path for local development
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "src"))
 
-from grimperium.crest_pm7 import (
-    TOLERANCE_ABSOLUTE,
-    QualityGrade,
-)
+from grimperium.crest_pm7 import QualityGrade
+
+# Default tolerance (mirrors TOLERANCE_ABSOLUTE from tests/regression/baseline_evaluation.py)
+_DEFAULT_TOLERANCE: float = 2.5  # kcal/mol
 
 
 def main() -> int:
@@ -33,8 +33,8 @@ def main() -> int:
     parser.add_argument(
         "--tolerance",
         type=float,
-        default=TOLERANCE_ABSOLUTE,
-        help=f"HOF tolerance in kcal/mol (default: {TOLERANCE_ABSOLUTE})",
+        default=_DEFAULT_TOLERANCE,
+        help=f"HOF tolerance in kcal/mol (default: {_DEFAULT_TOLERANCE})",
     )
     args = parser.parse_args()
 
@@ -108,11 +108,14 @@ def main() -> int:
 
         if hof_actual is None:
             issues.append("hof_not_extracted")
-        elif hof_min is not None and hof_max is not None:
-            if not (hof_min <= hof_actual <= hof_max):
-                issues.append(
-                    f"hof_out_of_range: {hof_actual:.2f} not in [{hof_min:.2f}, {hof_max:.2f}]"
-                )
+        elif (
+            hof_min is not None
+            and hof_max is not None
+            and not (hof_min <= hof_actual <= hof_max)
+        ):
+            issues.append(
+                f"hof_out_of_range: {hof_actual:.2f} not in [{hof_min:.2f}, {hof_max:.2f}]"
+            )
 
         # Type-safe validation using QualityGrade enum
         if grade not in acceptable_grades:

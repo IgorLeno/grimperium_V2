@@ -14,7 +14,7 @@ from grimperium import DictStrAny
 from .config import MOPACStatus, PM7Config
 from .logging_utils import log_molecule_complete, log_molecule_start, setup_logging
 from .molecule_processor import MoleculeProcessor, PM7Result
-from .result_evaluator import PhaseAEvaluation, ResultEvaluator
+from .result_evaluator import ResultEvaluator
 from .threshold_monitor import Alert, ThresholdMonitor
 from .timeout_predictor import TimeoutPredictor
 from .validation import validate_environment
@@ -92,17 +92,6 @@ class CRESTPM7Pipeline:
         self.results = []
         self._paused = False
         LOG.info(f"Pipeline setup complete for phase {self._get_phase_value()}")
-
-    def load_baseline(self, baseline_path: Path) -> bool:
-        """Load baseline expectations for evaluation.
-
-        Args:
-            baseline_path: Path to baseline JSON file
-
-        Returns:
-            True if loaded successfully
-        """
-        return self.evaluator.load_baseline(baseline_path)
 
     def register_alert_callback(self, callback: Callable[[Alert], None]) -> None:
         """Register a callback for quality alerts.
@@ -200,14 +189,6 @@ class CRESTPM7Pipeline:
 
             result = self.process_molecule(mol_id, smiles)
             yield result
-
-    def evaluate_phase_a(self) -> PhaseAEvaluation:
-        """Evaluate Phase A results.
-
-        Returns:
-            PhaseAEvaluation
-        """
-        return self.evaluator.evaluate_phase_a(self.results)
 
     def save_results(self, output_path: Path) -> bool:
         """Save all results to JSON file.

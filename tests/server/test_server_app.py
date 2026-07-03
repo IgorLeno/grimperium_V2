@@ -3,9 +3,11 @@
 from collections.abc import AsyncGenerator
 from pathlib import Path
 
+import pandas as pd
 import pytest
 from httpx import ASGITransport, AsyncClient
 
+from grimperium.crest_pm7.batch.output_contracts import BATCH_STATE_COLUMNS
 from grimperium.server.app import create_app
 from grimperium.server.config import ServerConfig
 
@@ -138,6 +140,18 @@ class TestAssign:
 
 
 class TestClaim:
+    def test_create_app_seeds_existing_empty_batch_state_csv(
+        self, csv_path: Path, server_config: ServerConfig
+    ) -> None:
+        state_path = csv_path.parent / "batch_state.csv"
+        state_path.write_text(",".join(BATCH_STATE_COLUMNS) + "\n", encoding="utf-8")
+
+        create_app(server_config)
+
+        rows = pd.read_csv(state_path, keep_default_na=False)
+        assert list(rows["mol_id"]) == ["mol_001", "mol_002", "mol_003"]
+        assert list(rows["smiles"]) == ["CCO", "CCCO", "CCC"]
+
     async def test_claim_returns_molecule(self, client: AsyncClient) -> None:
         await client.post("/register", json={"worker_id": "w1", "hostname": "lab-01"})
         await client.post("/dispatch/start")

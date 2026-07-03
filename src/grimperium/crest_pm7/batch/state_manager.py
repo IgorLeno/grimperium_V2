@@ -76,29 +76,33 @@ class BatchStateManager:
         self.df: pd.DataFrame | None = None
         self._claim_lock = threading.Lock()
 
-    def claim_single_molecule(self, worker_id: str) -> str | None:
-        """Atomically mark one pending molecule as assigned to a worker.
+    def claim_single_molecule(self, worker_id: str) -> tuple[str, str] | None:
+        """Atomically mark one pending or rerun molecule as assigned to a worker.
 
         Args:
             worker_id: Identifier of the worker claiming the molecule.
 
         Returns:
-            The claimed molecule ``mol_id`` or ``None`` if no pending molecule
-            is available.
+            ``(mol_id, smiles)`` if a molecule was available, else ``None``.
         """
         with self._claim_lock:
             df = self._ensure_loaded()
-            pending = df[df["status"] == MoleculeStatus.PENDING.value]
-            if pending.empty:
+            claimable = df[
+                df["status"].isin(
+                    [MoleculeStatus.PENDING.value, MoleculeStatus.RERUN.value]
+                )
+            ]
+            if claimable.empty:
                 return None
 
-            row = pending.iloc[0]
+            row = claimable.iloc[0]
             idx = row.name
             mol_id = str(row["mol_id"])
+            smiles = str(row["smiles"])
             self._assign_index(cast(int, idx), worker_id)
             self._save_csv()
             LOG.debug("Assigned %s to worker %s", mol_id, worker_id)
-            return mol_id
+            return (mol_id, smiles)
 
     def distribute_molecules(
         self, molecule_names: list[str], worker_ids: list[str]
@@ -198,6 +202,105 @@ class BatchStateManager:
         if reset:
             self._save_csv()
         return reset
+
+    def reset_stuck_running(self) -> int:
+        """Reset molecules stuck in RUNNING state back to PENDING.
+
+        Used during startup recovery to reclaim molecules from interrupted
+        processing runs in ``batch_state.csv``.
+
+        Returns:
+            Number of molecules reset to Pending.
+        """
+        df = self._ensure_loaded()
+        running_mask = df["status"] == MoleculeStatus.RUNNING.value
+        running_rows = df[running_mask]
+        if running_rows.empty:
+            return 0
+
+        for idx in running_rows.index:
+            self._clear_assignment(cast(int, idx))
+
+        self._save_csv()
+        count = len(running_rows)
+        LOG.info("Startup recovery: reset %d RUNNING molecule(s) to Pending", count)
+        return count
+
+    def mark_worker_offline(self, worker_id: str) -> int:
+        """Return assigned or running molecules from an offline worker to PENDING.
+
+        Called by the watchdog when a worker's heartbeat expires.
+
+        Args:
+            worker_id: Worker identifier whose molecules should be reclaimed.
+
+        Returns:
+            Number of molecules returned to Pending.
+        """
+        df = self._ensure_loaded()
+        worker_mask = df["assigned_worker"] == worker_id
+        active_mask = df["status"].isin(
+            [MoleculeStatus.ASSIGNED.value, MoleculeStatus.RUNNING.value]
+        )
+        rows_to_reset = df[worker_mask & active_mask]
+        if rows_to_reset.empty:
+            return 0
+
+        for idx in rows_to_reset.index:
+            self._clear_assignment(cast(int, idx))
+
+        self._save_csv()
+        count = len(rows_to_reset)
+        LOG.warning(
+            "Worker %r offline: reset %d molecule(s) to Pending", worker_id, count
+        )
+        return count
+
+    def seed_from_mol_list(self, molecules: list[dict[str, Any]]) -> int:
+        """Populate ``batch_state.csv`` with molecules when the file is empty.
+
+        Only seeds when the state file does not exist or contains no rows, so
+        an existing batch is never silently overwritten.
+
+        Args:
+            molecules: Sequence of dicts with at least ``"mol_id"`` and
+                ``"smiles"`` keys.  Additional keys matching
+                ``BATCH_STATE_COLUMNS`` are also written.
+
+        Returns:
+            Number of molecules seeded (0 when file already had data).
+        """
+        if self.state_csv_path.exists():
+            df_check = pd.read_csv(
+                self.state_csv_path,
+                dtype=self._CSV_DTYPE,
+                keep_default_na=False,
+            )
+            if not df_check.empty:
+                LOG.info(
+                    "batch_state.csv already has %d row(s); skipping seed",
+                    len(df_check),
+                )
+                return 0
+
+        rows: list[dict[str, Any]] = []
+        for mol in molecules:
+            row: dict[str, Any] = dict.fromkeys(BATCH_STATE_COLUMNS, "")
+            row["mol_id"] = mol.get("mol_id", "")
+            row["smiles"] = mol.get("smiles", "")
+            row["status"] = mol.get("status", MoleculeStatus.PENDING.value)
+            row["worker_status"] = WorkerStatus.UNASSIGNED.value
+            row["reruns"] = str(mol.get("reruns", 0))
+            for col in BATCH_STATE_COLUMNS:
+                if col not in row and col in mol:
+                    row[col] = mol[col]
+            rows.append(row)
+
+        self.df = pd.DataFrame(rows, columns=BATCH_STATE_COLUMNS)
+        self.state_csv_path.parent.mkdir(parents=True, exist_ok=True)
+        atomic_to_csv(self.state_csv_path, self.df)
+        LOG.info("Seeded batch_state.csv with %d molecule(s)", len(rows))
+        return len(rows)
 
     def get_pending_molecules(self) -> list[str]:
         """Return molecule identifiers with pending status."""

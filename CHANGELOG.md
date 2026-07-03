@@ -8,6 +8,64 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- **PR6 server runtime bug — distributed primitives wired to BatchStateManager** (2026-07-03)
+  - `BatchCSVManager.reset_stuck_assigned`, `claim_single_molecule`, and
+    `mark_worker_offline` were removed in PR6/PR6D but `server/app.py` and
+    `server/watchdog.py` still called them, causing `AttributeError` on every
+    server startup and a silent no-op for offline-worker marking.
+  - Extended `BatchStateManager` with `reset_stuck_running()`,
+    `mark_worker_offline(worker_id)`, and `seed_from_mol_list(molecules)`;
+    updated `claim_single_molecule` to return `(mol_id, smiles)` and to
+    consider RERUN molecules.
+  - `create_app` now constructs a `BatchStateManager`, seeds `batch_state.csv`
+    from PENDING+RERUN rows of the scientific CSV on first startup, and stores
+    it in `app.state`.  `/claim`, `/report/success`, and `/report/failure`
+    route operational writes through `state_manager` and scientific writes
+    through `csv_manager`.
+  - Watchdog startup recovery and offline-worker marking now use
+    `state_manager`, removing all dead `getattr(csv_manager, ...)` calls.
+  - Regression tests added to `tests/server/test_server_watchdog.py` and
+    `tests/test_batch_state_manager.py`.
+
+### Changed
+- **PR5 CalcView: inline model selection when no session model is active** (2026-07-03)
+  - `CalcView._resolve_required_model` no longer dead-ends with an error when
+    Method B is invoked without a session model.  Instead it offers an inline
+    "Select Model" menu using a new module-level `discover_available_models()`
+    helper extracted from `ModelsView`.
+  - If no trained models exist, or the user cancels, the view shows the
+    appropriate message and returns `None` (preserves graceful cancellation).
+  - The selected model is activated in the session via `controller.set_model()`
+    and the calculation proceeds without restarting the flow.
+  - CLI tests extended with three new cases: no models found, user selects a
+    model, user cancels selection.
+
+- **PR7a result_evaluator split — operational core vs. regression tests** (2026-07-03)
+  - Removed reference-comparison logic (`load_baseline`, `TOLERANCE_ABSOLUTE`,
+    `hof_expected/hof_min/hof_max`, `baseline_pass_rate`, criteria thresholds)
+    from `src/grimperium/crest_pm7/result_evaluator.py`.  The file now contains
+    only operational checks: success, HOF presence, and grade acceptability.
+  - Moved the reference-comparison logic to
+    `tests/regression/baseline_evaluation.py` as `BaselineEvaluator`
+    (previously `ResultEvaluator` with baseline plumbing).
+  - Added 12 regression tests in `tests/regression/test_baseline_evaluation.py`
+    covering `load_baseline`, `evaluate_molecule`, `evaluate_phase_a`, and
+    `to_dict`.
+  - Removed dead-code passthroughs `load_baseline` and `evaluate_phase_a` from
+    `CRESTPM7Pipeline` (no production callers existed).
+  - `TOLERANCE_ABSOLUTE` removed from the `crest_pm7` public API; defined
+    locally in `tests/regression/baseline_evaluation.py` (2.5 kcal/mol) and as
+    `_DEFAULT_TOLERANCE` in `scripts/utils/baseline_validator.py`.
+
+- **PR7b Package Boundary Review recorded** (2026-07-03)
+  - Created `docs/plans/pr7-package-boundary-review.md` with a full dependency
+    matrix, analysis of both location options (`packages/grimperium-results/`
+    vs. `src/grimperium/results/`), and a recorded decision: adopt
+    `src/grimperium/results/` when extraction is warranted, deferring the
+    actual move to a dedicated task.
+  - Closes the DoD item "Package Boundary Review registrado" from
+    `docs/plans/a-estrutura-atual-confirma-smooth-prism.md`.
+
 - **PR6D legacy batch CSV schema reconciliation** (2026-06-25)
   - Fixed the `expected 61 columns, actual 64` regression by removing
     `assigned_worker`, `worker_status`, and `assigned_at` from the legacy

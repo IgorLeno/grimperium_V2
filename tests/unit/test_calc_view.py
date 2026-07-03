@@ -54,16 +54,27 @@ def test_do_prediction_sem_modelo(
     mock_input: MagicMock,
     calc_view: CalcView,
 ) -> None:
-    """No model found → show_error, pipeline never executes."""
+    """No model on disk → inline selection offers error, pipeline never executes.
+
+    When no session model is set and no .joblib files exist,
+    _select_model_inline shows 'No trained models found' via show_error
+    and returns None so the pipeline is never reached.
+    """
     mock_method = _mock_pm7_delta_method()
     calc_view._select_method = MagicMock(return_value=mock_method)
     calc_view._select_units = MagicMock(return_value="both")
     calc_view.render = MagicMock()
     calc_view.show_error = MagicMock()
 
-    with patch(
-        "grimperium.cli.views.calc_view.run_single_molecule_prediction"
-    ) as mock_pipeline:
+    with (
+        patch(
+            "grimperium.cli.views.calc_view.discover_available_models",
+            return_value=[],
+        ),
+        patch(
+            "grimperium.cli.views.calc_view.run_single_molecule_prediction"
+        ) as mock_pipeline,
+    ):
         result = calc_view.do_prediction()
 
     calc_view.show_error.assert_called_once()

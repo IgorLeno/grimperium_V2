@@ -34,7 +34,6 @@ from .config import (
 from .molecule_processor import ConformerData, MoleculeProcessor, PM7Result
 from .pipeline import CRESTPM7Pipeline
 from .result_evaluator import (
-    TOLERANCE_ABSOLUTE,
     MoleculeEvaluation,
     PhaseAEvaluation,
     ResultEvaluator,
@@ -72,8 +71,6 @@ __all__ = [
     "TimeoutPredictor",
     # Functions
     "validate_environment",
-    # Constants
-    "TOLERANCE_ABSOLUTE",
 ]
 
 __version__ = "0.3.2"

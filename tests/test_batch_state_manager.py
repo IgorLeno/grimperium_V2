@@ -47,17 +47,21 @@ def _utc_minutes_ago(minutes: int) -> str:
 
 def test_claim_single_molecule_assigns_first_pending_molecule(tmp_path: Path) -> None:
     state_path = tmp_path / "batch_state.csv"
+    _row_with_smiles = {**_row("mol-001"), "smiles": "CCO"}
     _write_state_csv(
         state_path,
         [
-            _row("mol-001"),
+            _row_with_smiles,
             _row("mol-002"),
         ],
     )
 
-    claimed = _manager(state_path).claim_single_molecule("worker-a")
+    result = _manager(state_path).claim_single_molecule("worker-a")
 
-    assert claimed == "mol-001"
+    assert result is not None
+    mol_id, smiles = result
+    assert mol_id == "mol-001"
+    assert smiles == "CCO"
     rows = _read_state_csv(state_path)
     first = rows.loc[rows["mol_id"] == "mol-001"].iloc[0]
     second = rows.loc[rows["mol_id"] == "mol-002"].iloc[0]
@@ -66,6 +70,22 @@ def test_claim_single_molecule_assigns_first_pending_molecule(tmp_path: Path) ->
     assert first["worker_status"] == WorkerStatus.ONLINE.value
     assert first["assigned_at"]
     assert second["status"] == MoleculeStatus.PENDING.value
+
+
+def test_claim_single_molecule_also_claims_rerun_molecules(tmp_path: Path) -> None:
+    state_path = tmp_path / "batch_state.csv"
+    _write_state_csv(
+        state_path,
+        [_row("mol-001", MoleculeStatus.RERUN.value)],
+    )
+
+    result = _manager(state_path).claim_single_molecule("worker-a")
+
+    assert result is not None
+    mol_id, _ = result
+    assert mol_id == "mol-001"
+    rows = _read_state_csv(state_path)
+    assert rows.iloc[0]["status"] == MoleculeStatus.ASSIGNED.value
 
 
 def test_claim_single_molecule_returns_none_without_pending_molecules(
@@ -192,9 +212,11 @@ def test_state_manager_uses_batch_state_csv_not_thermo_pm7(tmp_path: Path) -> No
     _write_state_csv(legacy_path, [_row("legacy-mol")])
     before_legacy = legacy_path.read_text(encoding="utf-8")
 
-    claimed = _manager(state_path).claim_single_molecule("worker-a")
+    result = _manager(state_path).claim_single_molecule("worker-a")
 
-    assert claimed == "state-mol"
+    assert result is not None
+    mol_id, _ = result
+    assert mol_id == "state-mol"
     assert legacy_path.read_text(encoding="utf-8") == before_legacy
     assert "state-mol" in state_path.read_text(encoding="utf-8")
 
@@ -239,7 +261,7 @@ def test_concurrent_claim_allows_only_one_worker_per_pending_molecule(
     state_path = tmp_path / "batch_state.csv"
     _write_state_csv(state_path, [_row("mol-001")])
     manager = _manager(state_path)
-    results: list[str | None] = []
+    results: list[tuple[str, str] | None] = []
 
     def claim(worker_id: str) -> None:
         results.append(manager.claim_single_molecule(worker_id))
@@ -247,7 +269,12 @@ def test_concurrent_claim_allows_only_one_worker_per_pending_molecule(
     threads = [Thread(target=claim, args=(worker_id,)) for worker_id in ["a", "b"]]
     _run_threads(threads)
 
-    assert sorted(results, key=lambda value: value or "") == [None, "mol-001"]
+    # Exactly one worker gets the molecule; the other gets None.
+    assert results.count(None) == 1
+    claimed = [r for r in results if r is not None]
+    assert len(claimed) == 1
+    mol_id, _ = claimed[0]
+    assert mol_id == "mol-001"
     row = _read_state_csv(state_path).iloc[0]
     assert row["status"] == MoleculeStatus.ASSIGNED.value
     assert row["assigned_worker"] in {"a", "b"}
@@ -258,3 +285,132 @@ def _run_threads(threads: list[Thread]) -> None:
         thread.start()
     for thread in threads:
         thread.join()
+
+
+# ── reset_stuck_running ───────────────────────────────────────────────────────
+
+
+def test_reset_stuck_running_resets_running_molecules_to_pending(
+    tmp_path: Path,
+) -> None:
+    state_path = tmp_path / "batch_state.csv"
+    running = _row("mol-001", MoleculeStatus.RUNNING.value)
+    running.update(
+        {"assigned_worker": "worker-a", "worker_status": WorkerStatus.ONLINE.value}
+    )
+    pending = _row("mol-002", MoleculeStatus.PENDING.value)
+    ok_mol = _row("mol-003", MoleculeStatus.OK.value)
+    _write_state_csv(state_path, [running, pending, ok_mol])
+
+    count = _manager(state_path).reset_stuck_running()
+
+    assert count == 1
+    rows = _read_state_csv(state_path).set_index("mol_id")
+    assert rows.loc["mol-001", "status"] == MoleculeStatus.PENDING.value
+    assert rows.loc["mol-001", "assigned_worker"] == ""
+    assert rows.loc["mol-001", "worker_status"] == WorkerStatus.UNASSIGNED.value
+    assert rows.loc["mol-002", "status"] == MoleculeStatus.PENDING.value
+    assert rows.loc["mol-003", "status"] == MoleculeStatus.OK.value
+
+
+def test_reset_stuck_running_returns_zero_when_no_running_molecules(
+    tmp_path: Path,
+) -> None:
+    state_path = tmp_path / "batch_state.csv"
+    _write_state_csv(
+        state_path, [_row("mol-001"), _row("mol-002", MoleculeStatus.OK.value)]
+    )
+
+    assert _manager(state_path).reset_stuck_running() == 0
+
+
+# ── mark_worker_offline ───────────────────────────────────────────────────────
+
+
+def test_mark_worker_offline_reclaims_assigned_and_running_molecules(
+    tmp_path: Path,
+) -> None:
+    state_path = tmp_path / "batch_state.csv"
+    assigned = _row("mol-001", MoleculeStatus.ASSIGNED.value)
+    assigned.update(
+        {"assigned_worker": "worker-x", "worker_status": WorkerStatus.ONLINE.value}
+    )
+    running = _row("mol-002", MoleculeStatus.RUNNING.value)
+    running.update(
+        {"assigned_worker": "worker-x", "worker_status": WorkerStatus.ONLINE.value}
+    )
+    other = _row("mol-003", MoleculeStatus.ASSIGNED.value)
+    other.update(
+        {"assigned_worker": "worker-y", "worker_status": WorkerStatus.ONLINE.value}
+    )
+    _write_state_csv(state_path, [assigned, running, other])
+
+    count = _manager(state_path).mark_worker_offline("worker-x")
+
+    assert count == 2
+    rows = _read_state_csv(state_path).set_index("mol_id")
+    assert rows.loc["mol-001", "status"] == MoleculeStatus.PENDING.value
+    assert rows.loc["mol-001", "assigned_worker"] == ""
+    assert rows.loc["mol-001", "worker_status"] == WorkerStatus.UNASSIGNED.value
+    assert rows.loc["mol-002", "status"] == MoleculeStatus.PENDING.value
+    assert rows.loc["mol-003", "status"] == MoleculeStatus.ASSIGNED.value  # untouched
+
+
+def test_mark_worker_offline_returns_zero_for_unknown_worker(tmp_path: Path) -> None:
+    state_path = tmp_path / "batch_state.csv"
+    _write_state_csv(state_path, [_row("mol-001")])
+
+    assert _manager(state_path).mark_worker_offline("nonexistent-worker") == 0
+
+
+# ── seed_from_mol_list ────────────────────────────────────────────────────────
+
+
+def test_seed_from_mol_list_creates_batch_state_csv(tmp_path: Path) -> None:
+    state_path = tmp_path / "batch_state.csv"
+
+    seeded = BatchStateManager(state_path, PM7Config()).seed_from_mol_list(
+        [
+            {"mol_id": "m1", "smiles": "C"},
+            {"mol_id": "m2", "smiles": "CC"},
+        ]
+    )
+
+    assert seeded == 2
+    assert state_path.exists()
+    rows = _read_state_csv(state_path)
+    assert list(rows["mol_id"]) == ["m1", "m2"]
+    assert list(rows["smiles"]) == ["C", "CC"]
+    assert all(rows["status"] == MoleculeStatus.PENDING.value)
+
+
+def test_seed_from_mol_list_skips_nonempty_file(tmp_path: Path) -> None:
+    state_path = tmp_path / "batch_state.csv"
+    _write_state_csv(state_path, [_row("existing-mol")])
+
+    seeded = BatchStateManager(state_path, PM7Config()).seed_from_mol_list(
+        [{"mol_id": "new-mol", "smiles": "CCC"}]
+    )
+
+    assert seeded == 0
+    rows = _read_state_csv(state_path)
+    assert list(rows["mol_id"]) == ["existing-mol"]
+
+
+def test_seed_from_mol_list_preserves_rerun_status(tmp_path: Path) -> None:
+    state_path = tmp_path / "batch_state.csv"
+
+    BatchStateManager(state_path, PM7Config()).seed_from_mol_list(
+        [
+            {
+                "mol_id": "m1",
+                "smiles": "C",
+                "status": MoleculeStatus.RERUN.value,
+                "reruns": "2",
+            }
+        ]
+    )
+
+    rows = _read_state_csv(state_path)
+    assert rows.iloc[0]["status"] == MoleculeStatus.RERUN.value
+    assert int(rows.iloc[0]["reruns"]) == 2

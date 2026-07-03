@@ -15,3 +15,7 @@ Rule: tests for state-manager row updates must assert required fields and invari
 [2026-06-25] Context: reconciling PR6D legacy `thermo_pm7.csv` schema after PR6C moved operational state to `BatchStateManager`
 Mistake: keeping worker assignment columns in `BatchCSVManager` let the legacy CSV grow past the 61-column scientific contract.
 Rule: after migrating a responsibility to a split manager, remove the old schema columns and writer APIs from the legacy owner, and add boundary tests that assert the moved fields exist only in the new owner.
+
+[2026-07-03] Context: adding watchdog startup-recovery regression tests on Python 3.14
+Mistake: testing the watchdog by sleeping briefly and cancelling the infinite task made the test nondeterministic and hit the known `asyncio.to_thread` hang in this checkout.
+Rule: tests for watchdog startup recovery must call a one-shot recovery helper and patch `asyncio.to_thread` to run synchronously; do not rely on sleep-plus-cancel timing for infinite async loops.

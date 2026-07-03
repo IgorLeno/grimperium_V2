@@ -19,6 +19,9 @@ from fastapi import Depends, FastAPI, Header, HTTPException, Request
 
 from grimperium.cli.settings_manager import DistributedDefaults, SettingsManager
 from grimperium.crest_pm7.batch.csv_manager import BatchCSVManager
+from grimperium.crest_pm7.batch.enums import MoleculeStatus
+from grimperium.crest_pm7.batch.state_manager import BatchStateManager
+from grimperium.crest_pm7.config import PM7Config
 from grimperium.server.config import ServerConfig
 from grimperium.server.models import (
     AssignPayload,
@@ -45,6 +48,7 @@ LOG = logging.getLogger(__name__)
 
 # Populated during lifespan startup; accessed via request.app.state
 _STATE_CSV_MANAGER = "csv_manager"
+_STATE_STATE_MANAGER = "state_manager"
 _STATE_LOCK = "lock"
 _STATE_HEARTBEAT_REGISTRY = "heartbeat_registry"
 _STATE_RUNNING_MOLECULES = "running_molecules"
@@ -66,6 +70,7 @@ async def _lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
             app.state.heartbeat_registry,
             cfg,
             app.state.lock,
+            app.state.state_manager,
         )
     )
     try:
@@ -106,6 +111,27 @@ def create_app(config: ServerConfig) -> FastAPI:
     csv_manager = BatchCSVManager(Path(config.csv_path), max_reruns=config.max_reruns)
     csv_manager.load_csv()
     app.state.csv_manager = csv_manager
+
+    # Build operational state manager and seed batch_state.csv when absent.
+    # The scientific CSV (thermo_pm7.csv) is the source of truth for pending
+    # molecules; the operational CSV (batch_state.csv) tracks assignment state
+    # that no longer lives in the scientific schema.
+    state_csv_path = Path(config.csv_path).parent / "batch_state.csv"
+    state_manager = BatchStateManager(state_csv_path, PM7Config())
+    # Seed from PENDING and RERUN rows in the scientific CSV so the server can
+    # claim molecules via batch_state.csv from first startup.  The state manager
+    # skips non-empty files, preserving existing operational state.
+    claimable_statuses = {MoleculeStatus.PENDING.value, MoleculeStatus.RERUN.value}
+    if csv_manager.df is not None:
+        seed_rows = csv_manager.df[csv_manager.df["status"].isin(claimable_statuses)][
+            ["mol_id", "smiles", "status", "reruns"]
+        ].to_dict("records")
+    else:
+        seed_rows = []
+    seeded = state_manager.seed_from_mol_list(seed_rows)
+    LOG.info("Seeded batch_state.csv with %d molecule(s) from scientific CSV", seeded)
+    app.state.state_manager = state_manager
+
     app.state.lock = asyncio.Lock()
     app.state.heartbeat_registry = make_heartbeat_registry()
     app.state.running_molecules = {}  # dict[str, str]: mol_id -> worker_id
@@ -170,7 +196,7 @@ def _register_routes(app: FastAPI) -> None:
     async def claim(
         req: HeartbeatRequest, request: Request, _: AuthDep
     ) -> ClaimResponse:
-        csv_manager: BatchCSVManager = request.app.state.csv_manager
+        sm: BatchStateManager = request.app.state.state_manager
         lock: asyncio.Lock = request.app.state.lock
         running_molecules: dict[str, str] = request.app.state.running_molecules
         worker_reg: WorkerRegistry = request.app.state.worker_registry
@@ -179,7 +205,7 @@ def _register_routes(app: FastAPI) -> None:
             return ClaimResponse(mol_id=None, smiles=None)
 
         async with lock:
-            result = await asyncio.to_thread(csv_manager.claim_single_molecule)
+            result = await asyncio.to_thread(sm.claim_single_molecule, req.worker_id)
 
         if result is None:
             return ClaimResponse(mol_id=None, smiles=None)
@@ -210,6 +236,7 @@ def _register_routes(app: FastAPI) -> None:
         req: ReportSuccessRequest, request: Request, _: AuthDep
     ) -> dict[str, str]:
         csv_manager: BatchCSVManager = request.app.state.csv_manager
+        sm: BatchStateManager = request.app.state.state_manager
         lock: asyncio.Lock = request.app.state.lock
         running_molecules: dict[str, str] = request.app.state.running_molecules
 
@@ -221,6 +248,8 @@ def _register_routes(app: FastAPI) -> None:
                 await asyncio.to_thread(
                     csv_manager.mark_success, req.mol_id, req.result_update
                 )
+                # Mirror operational success in batch_state.csv.
+                await asyncio.to_thread(sm.mark_success, req.mol_id)
         except KeyError as exc:
             raise HTTPException(
                 status_code=404, detail=f"mol_id not found: {req.mol_id}"
@@ -237,6 +266,7 @@ def _register_routes(app: FastAPI) -> None:
         req: ReportFailureRequest, request: Request, _: AuthDep
     ) -> dict[str, str]:
         csv_manager: BatchCSVManager = request.app.state.csv_manager
+        sm: BatchStateManager = request.app.state.state_manager
         lock: asyncio.Lock = request.app.state.lock
         running_molecules: dict[str, str] = request.app.state.running_molecules
 
@@ -249,10 +279,16 @@ def _register_routes(app: FastAPI) -> None:
                     await asyncio.to_thread(
                         csv_manager.mark_skip, req.mol_id, req.error
                     )
+                    # Mirror skip in operational state.
+                    await asyncio.to_thread(
+                        sm.update_molecule_status, req.mol_id, MoleculeStatus.SKIP.value
+                    )
                 else:
                     await asyncio.to_thread(
                         csv_manager.mark_rerun, req.mol_id, req.error
                     )
+                    # Mirror rerun/skip decision in operational state.
+                    await asyncio.to_thread(sm.mark_rerun, req.mol_id, req.error)
         except KeyError as exc:
             raise HTTPException(
                 status_code=404, detail=f"mol_id not found: {req.mol_id}"

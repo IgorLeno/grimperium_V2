@@ -29,6 +29,49 @@ logger = logging.getLogger(__name__)
 _MODEL_ALGORITHM = "KRR + XGBoost Ensemble"
 
 
+def discover_available_models(
+    models_dir: Path | None = None,
+    active_model_path: Path | None = None,
+) -> list[dict[str, Any]]:
+    """Return metadata dicts for all valid ``.joblib`` models in *models_dir*.
+
+    Args:
+        models_dir: Directory to scan; defaults to ``models/`` relative to CWD.
+        active_model_path: Resolved path of the currently active model,
+            used to populate the ``is_active`` flag.
+
+    Returns:
+        List of dicts with keys: ``path``, ``display_name``, ``algorithm``,
+        ``mae``, ``r2``, ``trained_at``, ``version``, ``is_active``.
+        Returns an empty list when the directory does not exist.
+    """
+    search_dir = models_dir or Path("models/")
+    if not search_dir.is_dir():
+        return []
+    results: list[dict[str, Any]] = []
+    for p in sorted(search_dir.glob("*.joblib")):
+        p = p.resolve()
+        try:
+            meta = load_model_metadata(p)
+        except Exception:
+            logger.warning("Skipping corrupted or unreadable model: %s", p)
+            continue
+        test_metrics = meta.get("metrics", {}).get("test", {})
+        results.append(
+            {
+                "path": p,
+                "display_name": p.stem.replace("_", " ").title(),
+                "algorithm": _MODEL_ALGORITHM,
+                "mae": test_metrics.get("mae"),
+                "r2": test_metrics.get("r2"),
+                "trained_at": meta.get("trained_at", "unknown"),
+                "version": meta.get("version", "unknown"),
+                "is_active": p == active_model_path,
+            }
+        )
+    return results
+
+
 def _safe_metric(value: Any, default: float = 0.0) -> float:
     """Return *value* if numeric, otherwise *default*."""
     return default if value is None else float(value)
@@ -78,31 +121,9 @@ class ModelsView(BaseView):
 
     def _discover_models(self) -> list[dict[str, Any]]:
         """Discover all .joblib model files in the models/ directory."""
-        models_dir = Path("models/")
-        if not models_dir.is_dir():
-            return []
-        results = []
-        for p in sorted(models_dir.glob("*.joblib")):
-            p = p.resolve()
-            try:
-                meta = load_model_metadata(p)
-            except Exception:
-                logger.warning("Skipping corrupted or unreadable model: %s", p)
-                continue
-            test_metrics = meta.get("metrics", {}).get("test", {})
-            results.append(
-                {
-                    "path": p,
-                    "display_name": p.stem.replace("_", " ").title(),
-                    "algorithm": _MODEL_ALGORITHM,
-                    "mae": test_metrics.get("mae"),
-                    "r2": test_metrics.get("r2"),
-                    "trained_at": meta.get("trained_at", "unknown"),
-                    "version": meta.get("version", "unknown"),
-                    "is_active": p == self.controller.current_model_path,
-                }
-            )
-        return results
+        return discover_available_models(
+            active_model_path=self.controller.current_model_path,
+        )
 
     def render(self) -> None:
         """Render the models overview."""

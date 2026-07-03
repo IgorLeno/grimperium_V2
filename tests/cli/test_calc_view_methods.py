@@ -56,9 +56,22 @@ def test_calculation_methods_action_is_available(controller: MagicMock) -> None:
     assert any(option.value == "methods" for option in options)
 
 
-def test_resolve_required_model_blocks_method_b_without_session_model(
+def test_resolve_required_model_offers_selection_when_no_session_model(
     controller: MagicMock,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """When no model is in session and no models exist on disk, return None.
+
+    The new behavior offers inline selection first; when the models/ dir is
+    empty it shows 'No trained models found' and returns None.
+    The old dead-end error ("Select a compatible model in Models...") is
+    replaced by inline selection.
+    """
+    # Simulate empty models directory so show_menu is never called.
+    monkeypatch.setattr(
+        "grimperium.cli.views.calc_view.discover_available_models",
+        lambda **_kw: [],
+    )
     view = CalcView(controller)
     method = get_calculation_method(
         "pm7_delta_learning",
@@ -69,7 +82,90 @@ def test_resolve_required_model_blocks_method_b_without_session_model(
 
     output = controller.console.file.getvalue()
     assert model_path is None
-    assert "Select a compatible model" in output
+    # No models available → error explaining why selection failed.
+    assert "No trained models found" in output
+
+
+def test_resolve_required_model_inline_selection_activates_chosen_model(
+    controller: MagicMock,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """_select_model_inline sets the session model when the user picks one."""
+    import joblib
+
+    from grimperium.cli.views.models_view import discover_available_models
+
+    # Create a minimal fake model file so discover_available_models finds it.
+    models_dir = tmp_path / "models"
+    models_dir.mkdir()
+    fake_model = models_dir / "test_model.joblib"
+    joblib.dump(
+        {
+            "metrics": {"test": {"mae": 1.0, "r2": 0.99}},
+            "trained_at": "2026-01-01",
+            "version": "1.0.0",
+        },
+        fake_model,
+    )
+
+    # Patch discover_available_models and show_menu to simulate user selection.
+    discovered = discover_available_models(models_dir=models_dir)
+    monkeypatch.setattr(
+        "grimperium.cli.views.calc_view.discover_available_models",
+        lambda **_kw: discovered,
+    )
+    monkeypatch.setattr(
+        "grimperium.cli.views.calc_view.show_menu",
+        lambda options, **_kw: str(fake_model.resolve()),
+    )
+
+    method = get_calculation_method(
+        "pm7_delta_learning",
+        property_id="standard_enthalpy_of_formation",
+    )
+
+    # validate_model_for_method will also fail on the fake bundle, so patch it.
+    monkeypatch.setattr(
+        "grimperium.cli.views.calc_view.validate_model_for_method",
+        lambda path, method: None,
+    )
+
+    view = CalcView(controller)
+    model_path = view._resolve_required_model(method)
+
+    assert model_path == fake_model.resolve()
+    # set_model must have been called to activate the session model.
+    controller.set_model.assert_called_once()
+
+
+def test_resolve_required_model_returns_none_when_user_cancels_selection(
+    controller: MagicMock,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """User cancels the inline model selection → returns None, no crash."""
+
+    # Patch to non-empty list so the menu is shown, then simulate cancel.
+    monkeypatch.setattr(
+        "grimperium.cli.views.calc_view.discover_available_models",
+        lambda **_kw: [
+            {"path": Path("m.joblib"), "display_name": "M", "algorithm": ""}
+        ],
+    )
+    monkeypatch.setattr(
+        "grimperium.cli.views.calc_view.show_menu",
+        lambda options, **_kw: None,  # user pressed Ctrl-C / back
+    )
+
+    method = get_calculation_method(
+        "pm7_delta_learning",
+        property_id="standard_enthalpy_of_formation",
+    )
+    view = CalcView(controller)
+
+    result = view._resolve_required_model(method)
+
+    assert result is None
 
 
 def _method_a_result() -> MoleculeCalculationResult:

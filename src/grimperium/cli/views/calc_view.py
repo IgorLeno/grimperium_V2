@@ -37,6 +37,7 @@ from grimperium.cli.model_compatibility import (
 )
 from grimperium.cli.styles import COLORS, ICONS
 from grimperium.cli.views.base_view import BaseView
+from grimperium.cli.views.models_view import discover_available_models
 from grimperium.crest_pm7.config import PM7Config
 
 if TYPE_CHECKING:
@@ -334,19 +335,24 @@ using the Delta-Learning model.
         self,
         method: CalculationMethodDefinition,
     ) -> Path | None:
-        """Resolve and validate the live-session model required by a method."""
+        """Resolve and validate the live-session model required by a method.
+
+        When no model is active in the session, the user is offered an inline
+        model selection instead of receiving a dead-end error.  The selection
+        is stored in the session via ``controller.set_model`` but is not
+        persisted to disk (Spec 5 scope).
+        """
         if not method.model_requirement.model_required:
             return None
 
         model_path = self.controller.current_model_path
-        if model_path is None:
-            self.show_error(
-                "Select a compatible model in Models before running this method."
-            )
-            return None
-        if not model_path.exists():
-            self.show_error(f"Selected model file no longer exists: {model_path}")
-            return None
+        if model_path is None or not model_path.exists():
+            if model_path is not None:
+                self.show_error(f"Selected model file no longer exists: {model_path}")
+            model_path = self._select_model_inline()
+            if model_path is None:
+                # User cancelled or no models available.
+                return None
 
         try:
             validate_model_for_method(model_path, method)
@@ -354,6 +360,49 @@ using the Delta-Learning model.
             self.show_error(f"Selected model is not compatible: {exc}")
             return None
 
+        return model_path
+
+    def _select_model_inline(self) -> Path | None:
+        """Offer an inline model-selection menu and activate the chosen model.
+
+        Returns the resolved ``Path`` of the selected model, or ``None`` when
+        the user cancels or no trained models are found.
+        """
+        models = discover_available_models(
+            active_model_path=self.controller.current_model_path
+        )
+
+        if not models:
+            self.show_error(
+                "No trained models found in models/. "
+                "Train a model in the Models view first."
+            )
+            return None
+
+        self.console.print(
+            f"\n[{COLORS['warning']}]No model is selected for this session. "
+            f"Choose one to continue:[/{COLORS['warning']}]"
+        )
+        selected_id = show_menu(
+            [
+                MenuOption(
+                    label=m["display_name"],
+                    value=str(m["path"]),
+                    icon=ICONS.get("models", "🤖"),
+                )
+                for m in models
+            ],
+            title="Select Model",
+        )
+        if selected_id is None:
+            return None
+
+        model_path = Path(selected_id)
+        display_name = model_path.stem.replace("_", " ").title()
+        self.controller.set_model(display_name, model_path=model_path)
+        self.console.print(
+            f"[{COLORS['success']}]✓ Model selected: {display_name}[/{COLORS['success']}]"
+        )
         return model_path
 
     def _pm7_config_from_settings(self) -> PM7Config:
