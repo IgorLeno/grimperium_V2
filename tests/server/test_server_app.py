@@ -7,6 +7,7 @@ import pandas as pd
 import pytest
 from httpx import ASGITransport, AsyncClient
 
+from grimperium.crest_pm7.batch.enums import MoleculeStatus
 from grimperium.crest_pm7.batch.output_contracts import BATCH_STATE_COLUMNS
 from grimperium.server.app import create_app
 from grimperium.server.config import ServerConfig
@@ -140,7 +141,7 @@ class TestAssign:
 
 
 class TestClaim:
-    def test_create_app_seeds_existing_empty_batch_state_csv(
+    def test_create_app_reconciles_all_molecules_into_batch_state_csv(
         self, csv_path: Path, server_config: ServerConfig
     ) -> None:
         state_path = csv_path.parent / "batch_state.csv"
@@ -148,9 +149,13 @@ class TestClaim:
 
         create_app(server_config)
 
-        rows = pd.read_csv(state_path, keep_default_na=False)
-        assert list(rows["mol_id"]) == ["mol_001", "mol_002", "mol_003"]
-        assert list(rows["smiles"]) == ["CCO", "CCCO", "CCC"]
+        rows = pd.read_csv(state_path, keep_default_na=False).set_index("mol_id")
+        # Reconciliation copies ALL molecules (not just Pending/Rerun) so status
+        # counts stay complete; legacy status is preserved on first creation.
+        assert list(rows.index) == ["mol_001", "mol_002", "mol_003", "mol_004"]
+        assert rows.loc["mol_001", "status"] == MoleculeStatus.PENDING.value
+        assert rows.loc["mol_003", "status"] == MoleculeStatus.RERUN.value
+        assert rows.loc["mol_004", "status"] == MoleculeStatus.OK.value
 
     async def test_claim_returns_molecule(self, client: AsyncClient) -> None:
         await client.post("/register", json={"worker_id": "w1", "hostname": "lab-01"})
@@ -566,3 +571,145 @@ class TestDispatch:
         await client.post("/dispatch/start")
         r = await client.post("/claim", json={"worker_id": "w1"})
         assert r.json()["mol_id"] is not None
+
+
+# ── Operational-state authority + dual-write consistency ──────────────────────
+
+
+def _read_csv(path: Path) -> pd.DataFrame:
+    return pd.read_csv(path, keep_default_na=False).set_index("mol_id")
+
+
+def _make_config(csv_path: Path, *, max_reruns: int = 3) -> ServerConfig:
+    return ServerConfig(
+        csv_path=str(csv_path),
+        api_token="",
+        startup_grace_s=0,
+        watchdog_interval_s=999,
+        max_reruns=max_reruns,
+    )
+
+
+async def _client_for(app: object) -> AsyncClient:
+    return AsyncClient(transport=ASGITransport(app=app), base_url="http://test")
+
+
+class TestOperationalStateAuthority:
+    async def _claim_one(self, c: AsyncClient) -> str:
+        await c.post("/register", json={"worker_id": "w1", "hostname": "lab-01"})
+        await c.post("/dispatch/start")
+        r = await c.post("/claim", json={"worker_id": "w1"})
+        mol_id = r.json()["mol_id"]
+        assert mol_id is not None
+        return str(mol_id)
+
+    async def test_status_counts_come_from_operational_state(
+        self, csv_path: Path
+    ) -> None:
+        app = create_app(_make_config(csv_path))
+        async with await _client_for(app) as c:
+            mol_id = await self._claim_one(c)
+            counts = (await c.get("/status")).json()["counts"]
+
+        # Claim moved the molecule to Assigned in batch_state.csv; /status must
+        # reflect that even though the scientific CSV still shows it Pending.
+        assert counts.get("Assigned", 0) >= 1
+        sci = _read_csv(csv_path)
+        assert sci.loc[mol_id, "status"] == MoleculeStatus.PENDING.value
+        assert "Assigned" not in set(sci["status"])
+
+    async def test_failure_mirrors_single_rerun_in_both_files(
+        self, csv_path: Path
+    ) -> None:
+        app = create_app(_make_config(csv_path))
+        state_path = csv_path.parent / "batch_state.csv"
+        async with await _client_for(app) as c:
+            mol_id = await self._claim_one(c)
+            rep = await c.post(
+                "/report/failure",
+                json={"worker_id": "w1", "mol_id": mol_id, "error": "boom"},
+            )
+            assert rep.status_code == 200
+
+        state = _read_csv(state_path)
+        sci = _read_csv(csv_path)
+        assert state.loc[mol_id, "status"] == MoleculeStatus.RERUN.value
+        assert sci.loc[mol_id, "status"] == MoleculeStatus.RERUN.value
+        # Single decision: reruns incremented exactly once, identical both sides.
+        assert int(state.loc[mol_id, "reruns"]) == 1
+        assert int(sci.loc[mol_id, "reruns"]) == 1
+
+    async def test_failure_at_limit_mirrors_skip_in_both_files(
+        self, csv_path: Path
+    ) -> None:
+        app = create_app(_make_config(csv_path, max_reruns=1))
+        state_path = csv_path.parent / "batch_state.csv"
+        async with await _client_for(app) as c:
+            mol_id = await self._claim_one(c)
+            await c.post(
+                "/report/failure",
+                json={"worker_id": "w1", "mol_id": mol_id, "error": "boom"},
+            )
+
+        state = _read_csv(state_path)
+        sci = _read_csv(csv_path)
+        assert state.loc[mol_id, "status"] == MoleculeStatus.SKIP.value
+        assert sci.loc[mol_id, "status"] == MoleculeStatus.SKIP.value
+
+    async def test_success_updates_both_files_and_clears_running(
+        self, csv_path: Path
+    ) -> None:
+        app = create_app(_make_config(csv_path))
+        state_path = csv_path.parent / "batch_state.csv"
+        async with await _client_for(app) as c:
+            mol_id = await self._claim_one(c)
+            await c.post(
+                "/report/success",
+                json={"worker_id": "w1", "mol_id": mol_id, "result_update": {}},
+            )
+            # Accepted molecule is no longer running.
+            assert mol_id not in app.state.running_molecules  # type: ignore[attr-defined]
+
+        assert _read_csv(state_path).loc[mol_id, "status"] == MoleculeStatus.OK.value
+        assert _read_csv(csv_path).loc[mol_id, "status"] == MoleculeStatus.OK.value
+
+    async def test_sync_second_persistence_failure_rolls_back_and_rejects(
+        self, csv_path: Path
+    ) -> None:
+        app = create_app(_make_config(csv_path))
+        state_path = csv_path.parent / "batch_state.csv"
+
+        # Force the operational (second) persistence to fail, exercising the
+        # compensating rollback of the scientific-CSV write.
+        def _boom(mol_id: str) -> None:
+            raise RuntimeError("state write failed")
+
+        app.state.state_manager.mark_success = _boom  # type: ignore[attr-defined]
+
+        async with await _client_for(app) as c:
+            mol_id = await self._claim_one(c)
+            resp = await c.post(
+                "/sync_results",
+                json={
+                    "worker_id": "w1",
+                    "results": [
+                        {
+                            "mol_id": mol_id,
+                            "success": True,
+                            "result_update": {},
+                            "error": None,
+                            "completed_at": "2026-04-21T10:00:00Z",
+                        }
+                    ],
+                },
+            )
+
+        data = resp.json()
+        assert data["accepted"] == 0
+        assert data["rejected"] == 1
+        # Scientific CSV write was rolled back — molecule is not falsely OK.
+        assert _read_csv(csv_path).loc[mol_id, "status"] != MoleculeStatus.OK.value
+        # Operational state untouched (still Assigned from the claim).
+        assert (
+            _read_csv(state_path).loc[mol_id, "status"] == MoleculeStatus.ASSIGNED.value
+        )

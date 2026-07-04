@@ -294,7 +294,7 @@ def compute_molecular_descriptors(smiles: str) -> dict[str, Any]:
         # Check for heteroatoms (N, O, S, P, etc.)
         hetero_atoms = {"N", "O", "S", "P", "F", "Cl", "Br", "I"}
         has_hetero: bool = any(
-            atom.GetSymbol() in hetero_atoms for atom in mol.GetAtoms()  # type: ignore[no-untyped-call]
+            atom.GetSymbol() in hetero_atoms for atom in mol.GetAtoms()
         )
         result["has_heteroatoms"] = has_hetero
 
@@ -694,7 +694,7 @@ class MoleculeProcessor:
             with open(xyz_path, "w", encoding="utf-8") as f:
                 f.write(f"{mol.GetNumAtoms()}\n")
                 f.write(f"{mol_id} generated from SMILES\n")
-                for atom in mol.GetAtoms():  # type: ignore[no-untyped-call]
+                for atom in mol.GetAtoms():
                     pos = conf.GetAtomPosition(atom.GetIdx())
                     f.write(f"{atom.GetSymbol()} {pos.x:.6f} {pos.y:.6f} {pos.z:.6f}\n")
 

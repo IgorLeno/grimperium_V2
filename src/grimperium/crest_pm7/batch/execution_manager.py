@@ -13,13 +13,21 @@ import time
 from collections.abc import Callable
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
+from grimperium.calculation.contracts.adapters import PM7Result as AdapterPM7Result
+from grimperium.calculation.contracts.adapters import pm7result_to_canonical
+from grimperium.calculation.contracts.models import MoleculeCalculationResult
 from grimperium.crest_pm7.batch.artifact_manager import ArtifactManager
 from grimperium.crest_pm7.batch.csv_manager import BatchCSVManager
 from grimperium.crest_pm7.batch.detail_manager import ConformerDetailManager
 from grimperium.crest_pm7.batch.enums import BatchFailurePolicy, MoleculeStatus
 from grimperium.crest_pm7.batch.models import Batch, BatchResult
+from grimperium.crest_pm7.batch.output_contracts import (
+    BatchOutputLayout,
+    BatchResultWriteReport,
+    write_batch_calculation_results,
+)
 from grimperium.crest_pm7.batch.processor_adapter import FixedTimeoutProcessor
 from grimperium.crest_pm7.batch.state_manager import BatchStateManager
 from grimperium.crest_pm7.config import PM7Config
@@ -40,6 +48,8 @@ from grimperium.crest_pm7.progress import (
 )
 
 LOG = logging.getLogger("grimperium.crest_pm7.batch.execution_manager")
+
+ResultWriter = Callable[..., BatchResultWriteReport]
 
 
 class BatchExecutionManager:
@@ -71,6 +81,9 @@ class BatchExecutionManager:
         pm7_config: PM7Config,
         processor_adapter: FixedTimeoutProcessor | None = None,
         artifact_manager: ArtifactManager | None = None,
+        output_layout: BatchOutputLayout | None = None,
+        result_writer: ResultWriter = write_batch_calculation_results,
+        write_xlsx: bool = True,
     ) -> None:
         """Initialize batch execution manager.
 
@@ -81,6 +94,10 @@ class BatchExecutionManager:
             pm7_config: PM7 configuration
             processor_adapter: Optional processor adapter (created if None)
             artifact_manager: Optional artifact manager for debug/audit files
+            output_layout: Optional layout enabling canonical result files
+                (``calculation_results.csv``/``.xlsx``). ``None`` disables them.
+            result_writer: Injectable writer for canonical batch results.
+            write_xlsx: Whether to also emit the XLSX canonical result file.
         """
         self.csv_manager = csv_manager
         self.state_manager = state_manager
@@ -88,6 +105,10 @@ class BatchExecutionManager:
         self.pm7_config = pm7_config
         self.processor_adapter = processor_adapter or FixedTimeoutProcessor(pm7_config)
         self.artifact_manager = artifact_manager
+        self._output_layout = output_layout
+        self._result_writer = result_writer
+        self._write_xlsx = write_xlsx
+        self._canonical_results: list[MoleculeCalculationResult] = []
 
         LOG.info("BatchExecutionManager initialized")
 
@@ -155,6 +176,9 @@ class BatchExecutionManager:
         hof_values: list[tuple[str, float]] = []  # (mol_id, hof)
         start_time = time.time()
 
+        # Reset the canonical scientific accumulator for this batch run.
+        self._canonical_results = []
+
         # Process each molecule
         for i, mol in enumerate(batch.molecules, start=1):
             if progress_callback:
@@ -192,6 +216,11 @@ class BatchExecutionManager:
                     progress_callback(mol.mol_id, i, batch.size)
                 except Exception as e:
                     LOG.warning(f"Progress callback error (post): {e}")
+
+        # Persist canonical scientific results (partial successes included) before
+        # any later finalization step can fail. batch_state.csv stays purely
+        # operational; the canonical files hold only scientific data.
+        self._persist_canonical_results()
 
         # Finalize timing
         result.total_time = time.time() - start_time
@@ -389,6 +418,15 @@ class BatchExecutionManager:
                 self.csv_manager.mark_success(mol_id, csv_update)
                 result.success_count += 1
 
+                # Accumulate the canonical scientific result when canonical output
+                # is enabled. The batch executes the PM7-only pipeline, so only a
+                # BASELINE PM7 estimate is produced here — no delta
+                # CORRECTION/FINAL is invented.
+                if self._output_layout is not None:
+                    self._canonical_results.append(
+                        pm7result_to_canonical(cast(AdapterPM7Result, pm7_result))
+                    )
+
                 # Enhance CSV with delta calculations and batch settings
                 # h298_cbs comes from CSV original data (reference_hof), NOT csv_update
                 h298_cbs = self.csv_manager.get_reference_hof(mol_id)
@@ -482,6 +520,38 @@ class BatchExecutionManager:
         """
         return self.get_pending_count() == 0
 
+    def _persist_canonical_results(self) -> None:
+        """Write accumulated canonical results to calculation_results.csv/.xlsx.
+
+        No-op when no output layout was configured. The CSV is written before the
+        XLSX, so an XLSX failure never destroys a valid CSV. Output failures are
+        logged clearly rather than raised, so a failed export cannot discard the
+        already-persisted scientific/operational state.
+        """
+        if self._output_layout is None:
+            return
+
+        layout = self._output_layout
+        layout.output_dir.mkdir(parents=True, exist_ok=True)
+        try:
+            report = self._result_writer(
+                self._canonical_results,
+                layout,
+                include_xlsx=self._write_xlsx,
+            )
+            LOG.info(
+                "Canonical batch results written: %d result(s) -> %s",
+                report.result_count,
+                report.csv_path,
+            )
+        except Exception as exc:
+            LOG.error(
+                "Failed to write canonical batch results to %s: %s",
+                layout.output_dir,
+                exc,
+                exc_info=True,
+            )
+
     def _serialize_method_snapshot(self, method_snapshot: dict[str, Any]) -> str:
         """Serialize method metadata for the operational state CSV."""
         return json.dumps(method_snapshot, sort_keys=True)
@@ -497,6 +567,8 @@ def create_execution_manager(
     artifact_dir: Path | None = None,
     preserve_artifacts_on_success: bool = True,
     preserve_artifacts_on_failure: bool = True,
+    output_dir: Path | None = None,
+    write_xlsx: bool = True,
 ) -> BatchExecutionManager:
     """Factory function to create BatchExecutionManager with defaults.
 
@@ -510,6 +582,8 @@ def create_execution_manager(
         artifact_dir: Directory for debug/audit artifacts (None to disable)
         preserve_artifacts_on_success: Save artifacts for successful molecules
         preserve_artifacts_on_failure: Save artifacts for failed molecules
+        output_dir: Directory for canonical result files (None to disable)
+        write_xlsx: Also emit the XLSX canonical result file
 
     Returns:
         Configured BatchExecutionManager
@@ -533,6 +607,8 @@ def create_execution_manager(
             preserve_on_failure=preserve_artifacts_on_failure,
         )
 
+    output_layout = BatchOutputLayout(output_dir) if output_dir is not None else None
+
     return BatchExecutionManager(
         csv_manager=csv_manager,
         state_manager=state_manager,
@@ -540,4 +616,6 @@ def create_execution_manager(
         pm7_config=pm7_config,
         processor_adapter=processor,
         artifact_manager=artifact_manager,
+        output_layout=output_layout,
+        write_xlsx=write_xlsx,
     )

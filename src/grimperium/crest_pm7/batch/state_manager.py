@@ -283,24 +283,55 @@ class BatchStateManager:
                 )
                 return 0
 
-        rows: list[dict[str, Any]] = []
-        for mol in molecules:
-            row: dict[str, Any] = dict.fromkeys(BATCH_STATE_COLUMNS, "")
-            row["mol_id"] = mol.get("mol_id", "")
-            row["smiles"] = mol.get("smiles", "")
-            row["status"] = mol.get("status", MoleculeStatus.PENDING.value)
-            row["worker_status"] = WorkerStatus.UNASSIGNED.value
-            row["reruns"] = str(mol.get("reruns", 0))
-            for col in BATCH_STATE_COLUMNS:
-                if col not in row and col in mol:
-                    row[col] = mol[col]
-            rows.append(row)
+        rows = [self._build_state_row(mol) for mol in molecules]
 
         self.df = pd.DataFrame(rows, columns=BATCH_STATE_COLUMNS)
         self.state_csv_path.parent.mkdir(parents=True, exist_ok=True)
         atomic_to_csv(self.state_csv_path, self.df)
         LOG.info("Seeded batch_state.csv with %d molecule(s)", len(rows))
         return len(rows)
+
+    def reconcile_molecules(self, molecules: list[dict[str, Any]]) -> int:
+        """Add missing molecules to ``batch_state.csv`` without touching state.
+
+        Unlike :meth:`seed_from_mol_list`, this works whether or not the file
+        already has rows. It is the operational-state entry point for bootstrap
+        and recovery: it creates the file when absent, appends every molecule
+        whose ``mol_id`` is not yet present, and for already-present molecules
+        only fills a missing (empty) SMILES identity. Existing operational state
+        — ``status``, worker assignment, timestamps, ``reruns`` and method
+        metadata — is never modified, so ``Running``/``Assigned``/``OK``/
+        ``Rerun``/``Skip`` rows are preserved. The operation is idempotent and
+        persists atomically.
+
+        Args:
+            molecules: Sequence of dicts with at least ``"mol_id"``. Keys that
+                match ``BATCH_STATE_COLUMNS`` are used when creating new rows.
+
+        Returns:
+            Number of molecules newly added.
+        """
+        df = self._ensure_loaded()
+        existing_ids = {str(value) for value in df["mol_id"]}
+        added = 0
+        changed = False
+        for mol in molecules:
+            mol_id = str(mol.get("mol_id", ""))
+            if not mol_id:
+                continue
+            if mol_id in existing_ids:
+                if self._fill_missing_identity(df, mol_id, mol):
+                    changed = True
+                continue
+            df.loc[len(df)] = self._build_state_row(mol)
+            existing_ids.add(mol_id)
+            added += 1
+            changed = True
+
+        if changed:
+            self._save_csv()
+        LOG.info("Reconciled batch_state.csv: added %d molecule(s)", added)
+        return added
 
     def get_pending_molecules(self) -> list[str]:
         """Return molecule identifiers with pending status."""
@@ -411,6 +442,27 @@ class BatchStateManager:
         df = self._ensure_loaded()
         idx = self._find_molecule_index(df, mol_id)
         return str(df.at[idx, "status"])
+
+    def get_reruns(self, mol_id: str) -> int:
+        """Return the current rerun count for one molecule."""
+        df = self._ensure_loaded()
+        idx = self._find_molecule_index(df, mol_id)
+        return self._safe_int(df.at[idx, "reruns"])
+
+    def snapshot_row(self, mol_id: str) -> dict[str, Any]:
+        """Return a copy of one operational row for compensating rollback."""
+        df = self._ensure_loaded()
+        idx = self._find_molecule_index(df, mol_id)
+        return {col: df.at[idx, col] for col in BATCH_STATE_COLUMNS}
+
+    def restore_row(self, mol_id: str, snapshot: dict[str, Any]) -> None:
+        """Restore a previously captured row snapshot (rollback)."""
+        df = self._ensure_loaded()
+        idx = self._find_molecule_index(df, mol_id)
+        for column, value in snapshot.items():
+            if column in BATCH_STATE_COLUMNS:
+                df.at[idx, column] = value
+        self._save_csv()
 
     def get_status_counts(self) -> dict[str, int]:
         """Return counts by operational status."""
@@ -542,6 +594,48 @@ class BatchStateManager:
         )
         df.loc[len(df)] = row
         return int(df.index[-1])
+
+    _EXPLICIT_SEED_FIELDS = frozenset(
+        {"mol_id", "smiles", "status", "worker_status", "reruns"}
+    )
+
+    def _build_state_row(self, mol: dict[str, Any]) -> dict[str, Any]:
+        """Build one ``batch_state.csv`` row from a seed/reconcile dict.
+
+        Sets the core identity/defaults, then copies every remaining provided
+        key that is a real ``BATCH_STATE_COLUMNS`` column (e.g. ``charge``,
+        ``multiplicity``, ``method_id``). Unknown keys are dropped; absent
+        fields keep their defaults.
+        """
+        row: dict[str, Any] = dict.fromkeys(BATCH_STATE_COLUMNS, "")
+        row["mol_id"] = mol.get("mol_id", "")
+        row["smiles"] = mol.get("smiles", "")
+        row["status"] = mol.get("status", MoleculeStatus.PENDING.value)
+        row["worker_status"] = WorkerStatus.UNASSIGNED.value
+        row["reruns"] = str(mol.get("reruns", 0))
+        row.update(
+            {
+                column: value
+                for column, value in mol.items()
+                if column in BATCH_STATE_COLUMNS
+                and column not in self._EXPLICIT_SEED_FIELDS
+            }
+        )
+        return row
+
+    def _fill_missing_identity(
+        self, df: pd.DataFrame, mol_id: str, mol: dict[str, Any]
+    ) -> bool:
+        """Fill only an empty SMILES identity on an existing row; never state.
+
+        Returns ``True`` when a value was written.
+        """
+        idx = self._find_molecule_index(df, mol_id)
+        smiles = mol.get("smiles", "")
+        if smiles and not str(df.at[idx, "smiles"]):
+            df.at[idx, "smiles"] = smiles
+            return True
+        return False
 
     def _update_operational_fields(
         self, mol_id: str, field_updates: dict[str, Any]

@@ -177,6 +177,9 @@ branch = true
 omit = ["*/tests/*"]
 
 [tool.coverage.report]
+# Global minimum coverage gate. Applied whenever a coverage report is produced
+# (e.g. `pytest --cov`), so targeted local runs without --cov are unaffected.
+fail_under = 85
 exclude_lines = [
     "pragma: no cover",
     "def __repr__",

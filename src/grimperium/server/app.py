@@ -100,6 +100,62 @@ async def _verify_token(
 AuthDep = Annotated[None, Depends(_verify_token)]
 
 
+# ── Result application (dual-write consistency) ────────────────────────────────
+
+
+def _apply_worker_result(
+    csv_manager: BatchCSVManager,
+    state_manager: BatchStateManager,
+    *,
+    mol_id: str,
+    success: bool,
+    error: str | None = None,
+    force_skip: bool = False,
+    result_update: dict[str, Any] | None = None,
+) -> str:
+    """Apply one worker result to BOTH the scientific CSV and operational state.
+
+    ``BatchStateManager`` is the single authority for the Rerun/Skip decision;
+    the scientific CSV only mirrors it (via ``apply_operational_status``), so the
+    retry counter is never incremented twice. The two writes are protected by a
+    compensating rollback: if the mirror write fails, the authoritative write is
+    reverted and the error propagates, so the two files never diverge silently.
+
+    This is a synchronous helper meant to run inside ``asyncio.to_thread`` while
+    the caller holds the single application lock. Shared by ``/report/success``,
+    ``/report/failure`` and ``/sync_results``.
+
+    Returns:
+        The final molecule status.
+    """
+    if success:
+        csv_snapshot = csv_manager.snapshot_row(mol_id)
+        csv_manager.mark_success(mol_id, result_update or {})
+        try:
+            state_manager.mark_success(mol_id)
+        except Exception:
+            csv_manager.restore_row(mol_id, csv_snapshot)
+            raise
+        return MoleculeStatus.OK.value
+
+    # Failure: operational state decides once; the scientific CSV mirrors it.
+    state_snapshot = state_manager.snapshot_row(mol_id)
+    if force_skip:
+        status = MoleculeStatus.SKIP.value
+        state_manager.update_molecule_status(mol_id, status)
+    else:
+        status = state_manager.record_rerun_or_skip(mol_id, error or "failure")
+    reruns = state_manager.get_reruns(mol_id)
+    try:
+        csv_manager.apply_operational_status(
+            mol_id, status, reruns=reruns, result_update=result_update
+        )
+    except Exception:
+        state_manager.restore_row(mol_id, state_snapshot)
+        raise
+    return status
+
+
 # ── Factory ───────────────────────────────────────────────────────────────────
 
 
@@ -112,24 +168,31 @@ def create_app(config: ServerConfig) -> FastAPI:
     csv_manager.load_csv()
     app.state.csv_manager = csv_manager
 
-    # Build operational state manager and seed batch_state.csv when absent.
-    # The scientific CSV (thermo_pm7.csv) is the source of truth for pending
-    # molecules; the operational CSV (batch_state.csv) tracks assignment state
-    # that no longer lives in the scientific schema.
+    # Build operational state manager and reconcile batch_state.csv against the
+    # scientific CSV. The scientific CSV (thermo_pm7.csv) is the source of truth
+    # for which molecules exist and their legacy status; the operational CSV
+    # (batch_state.csv) owns assignment state that no longer lives in the
+    # scientific schema. Reconciliation copies each molecule's legacy status only
+    # when creating a missing operational row and never overwrites existing
+    # operational state, so a restart preserves in-flight assignments. All
+    # molecules are considered (not just Pending/Rerun) so status counts stay
+    # complete; claim_single_molecule still restricts itself to Pending/Rerun.
     state_csv_path = Path(config.csv_path).parent / "batch_state.csv"
-    state_manager = BatchStateManager(state_csv_path, PM7Config())
-    # Seed from PENDING and RERUN rows in the scientific CSV so the server can
-    # claim molecules via batch_state.csv from first startup.  The state manager
-    # skips non-empty files, preserving existing operational state.
-    claimable_statuses = {MoleculeStatus.PENDING.value, MoleculeStatus.RERUN.value}
+    # BatchStateManager is now the sole authority for the Rerun/Skip decision,
+    # so it must share the same retry ceiling as the scientific CSV manager.
+    state_manager = BatchStateManager(
+        state_csv_path, PM7Config(), max_reruns=config.max_reruns
+    )
     if csv_manager.df is not None:
-        seed_rows = csv_manager.df[csv_manager.df["status"].isin(claimable_statuses)][
+        reconcile_rows = csv_manager.df[
             ["mol_id", "smiles", "status", "reruns"]
         ].to_dict("records")
     else:
-        seed_rows = []
-    seeded = state_manager.seed_from_mol_list(seed_rows)
-    LOG.info("Seeded batch_state.csv with %d molecule(s) from scientific CSV", seeded)
+        reconcile_rows = []
+    added = state_manager.reconcile_molecules(reconcile_rows)
+    LOG.info(
+        "Reconciled batch_state.csv: added %d molecule(s) from scientific CSV", added
+    )
     app.state.state_manager = state_manager
 
     app.state.lock = asyncio.Lock()
@@ -246,10 +309,13 @@ def _register_routes(app: FastAPI) -> None:
         try:
             async with lock:
                 await asyncio.to_thread(
-                    csv_manager.mark_success, req.mol_id, req.result_update
+                    _apply_worker_result,
+                    csv_manager,
+                    sm,
+                    mol_id=req.mol_id,
+                    success=True,
+                    result_update=req.result_update,
                 )
-                # Mirror operational success in batch_state.csv.
-                await asyncio.to_thread(sm.mark_success, req.mol_id)
         except KeyError as exc:
             raise HTTPException(
                 status_code=404, detail=f"mol_id not found: {req.mol_id}"
@@ -275,20 +341,15 @@ def _register_routes(app: FastAPI) -> None:
 
         try:
             async with lock:
-                if req.force_skip:
-                    await asyncio.to_thread(
-                        csv_manager.mark_skip, req.mol_id, req.error
-                    )
-                    # Mirror skip in operational state.
-                    await asyncio.to_thread(
-                        sm.update_molecule_status, req.mol_id, MoleculeStatus.SKIP.value
-                    )
-                else:
-                    await asyncio.to_thread(
-                        csv_manager.mark_rerun, req.mol_id, req.error
-                    )
-                    # Mirror rerun/skip decision in operational state.
-                    await asyncio.to_thread(sm.mark_rerun, req.mol_id, req.error)
+                await asyncio.to_thread(
+                    _apply_worker_result,
+                    csv_manager,
+                    sm,
+                    mol_id=req.mol_id,
+                    success=False,
+                    error=req.error,
+                    force_skip=req.force_skip,
+                )
         except KeyError as exc:
             raise HTTPException(
                 status_code=404, detail=f"mol_id not found: {req.mol_id}"
@@ -313,6 +374,7 @@ def _register_routes(app: FastAPI) -> None:
         req: SyncResultsRequest, request: Request, _: AuthDep
     ) -> SyncResponse:
         csv_manager: BatchCSVManager = request.app.state.csv_manager
+        sm: BatchStateManager = request.app.state.state_manager
         lock: asyncio.Lock = request.app.state.lock
         running_molecules: dict[str, str] = request.app.state.running_molecules
 
@@ -322,21 +384,21 @@ def _register_routes(app: FastAPI) -> None:
         for result in req.results:
             try:
                 async with lock:
-                    if result.success:
-                        await asyncio.to_thread(
-                            csv_manager.mark_success,
-                            result.mol_id,
-                            result.result_update or {},
-                        )
-                    else:
-                        await asyncio.to_thread(
-                            csv_manager.mark_rerun,
-                            result.mol_id,
-                            result.error or "sync failure",
-                        )
+                    # Consistent dual-write: only counted accepted when BOTH the
+                    # scientific CSV and operational state are persisted (or an
+                    # explicit compensating rollback leaves them consistent).
+                    await asyncio.to_thread(
+                        _apply_worker_result,
+                        csv_manager,
+                        sm,
+                        mol_id=result.mol_id,
+                        success=result.success,
+                        error=result.error,
+                        result_update=result.result_update,
+                    )
                 running_molecules.pop(result.mol_id, None)
                 accepted += 1
-            except (KeyError, Exception) as exc:
+            except Exception as exc:
                 LOG.warning("sync_results rejected %s: %s", result.mol_id, exc)
                 rejected += 1
 
@@ -344,13 +406,15 @@ def _register_routes(app: FastAPI) -> None:
 
     @app.get("/status", response_model=StatusResponse)
     async def status(request: Request, _: AuthDep) -> StatusResponse:
-        csv_manager: BatchCSVManager = request.app.state.csv_manager
+        sm: BatchStateManager = request.app.state.state_manager
         lock: asyncio.Lock = request.app.state.lock
         registry: dict[str, tuple[str, datetime]] = request.app.state.heartbeat_registry
         running_molecules: dict[str, str] = request.app.state.running_molecules
 
+        # Counts come from the operational state (batch_state.csv), the single
+        # authority for status; the scientific CSV may lag behind assignments.
         async with lock:
-            counts = await asyncio.to_thread(csv_manager.get_status_counts)
+            counts = await asyncio.to_thread(sm.status_counts)
 
         # Build worker list — invert running_molecules for current mol
         worker_current: dict[str, str | None] = {}

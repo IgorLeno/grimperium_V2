@@ -414,3 +414,136 @@ def test_seed_from_mol_list_preserves_rerun_status(tmp_path: Path) -> None:
     rows = _read_state_csv(state_path)
     assert rows.iloc[0]["status"] == MoleculeStatus.RERUN.value
     assert int(rows.iloc[0]["reruns"]) == 2
+
+
+def test_seed_from_mol_list_preserves_all_provided_fields(tmp_path: Path) -> None:
+    state_path = tmp_path / "batch_state.csv"
+
+    seeded = BatchStateManager(state_path, PM7Config()).seed_from_mol_list(
+        [
+            {
+                "mol_id": "mol-001",
+                "smiles": "CCO",
+                "status": MoleculeStatus.PENDING.value,
+                "charge": -1,
+                "multiplicity": 2,
+                "method_id": "semiempirical_am1_pm3_pm7",
+                "method_version": "0.1.0",
+                "batch_id": "batch-001",
+                "not_a_column": "ignored",
+            }
+        ]
+    )
+
+    assert seeded == 1
+    rows = _read_state_csv(state_path)
+    row = rows.iloc[0]
+    # Every provided field that is a real column is persisted.
+    assert int(row["charge"]) == -1
+    assert int(row["multiplicity"]) == 2
+    assert str(row["method_id"]) == "semiempirical_am1_pm3_pm7"
+    assert str(row["method_version"]) == "0.1.0"
+    assert str(row["batch_id"]) == "batch-001"
+    assert str(row["smiles"]) == "CCO"
+    assert row["status"] == MoleculeStatus.PENDING.value
+    # Defaults applied only where fields are absent.
+    assert row["worker_status"] == WorkerStatus.UNASSIGNED.value
+    assert int(row["reruns"]) == 0
+    # Unknown keys are never written as columns.
+    assert "not_a_column" not in rows.columns
+    assert set(rows.columns) == set(BATCH_STATE_COLUMNS)
+
+
+# ── reconcile_molecules ───────────────────────────────────────────────────────
+
+
+def test_reconcile_molecules_creates_file_when_missing(tmp_path: Path) -> None:
+    state_path = tmp_path / "batch_state.csv"
+
+    added = _manager(state_path).reconcile_molecules(
+        [{"mol_id": "m1", "smiles": "C"}, {"mol_id": "m2", "smiles": "CC"}]
+    )
+
+    assert added == 2
+    assert state_path.exists()
+    rows = _read_state_csv(state_path)
+    assert list(rows["mol_id"]) == ["m1", "m2"]
+    assert all(rows["status"] == MoleculeStatus.PENDING.value)
+
+
+def test_reconcile_molecules_seeds_empty_file(tmp_path: Path) -> None:
+    state_path = tmp_path / "batch_state.csv"
+    _write_state_csv(state_path, [])
+
+    added = _manager(state_path).reconcile_molecules([{"mol_id": "m1", "smiles": "C"}])
+
+    assert added == 1
+    assert list(_read_state_csv(state_path)["mol_id"]) == ["m1"]
+
+
+def test_reconcile_molecules_adds_missing_and_preserves_existing(
+    tmp_path: Path,
+) -> None:
+    state_path = tmp_path / "batch_state.csv"
+    running = _row("mol-001", MoleculeStatus.RUNNING.value)
+    running.update(
+        {
+            "assigned_worker": "worker-a",
+            "worker_status": WorkerStatus.ONLINE.value,
+            "reruns": 1,
+            "method_id": "legacy",
+            "method_version": "9.9.9",
+        }
+    )
+    _write_state_csv(state_path, [running])
+
+    added = _manager(state_path).reconcile_molecules(
+        [
+            {"mol_id": "mol-001", "smiles": "CCO", "status": "Pending", "reruns": 0},
+            {"mol_id": "mol-002", "smiles": "CC"},
+        ]
+    )
+
+    assert added == 1
+    rows = _read_state_csv(state_path).set_index("mol_id")
+    # Existing operational state untouched — never demoted from Running.
+    assert rows.loc["mol-001", "status"] == MoleculeStatus.RUNNING.value
+    assert rows.loc["mol-001", "assigned_worker"] == "worker-a"
+    assert int(rows.loc["mol-001", "reruns"]) == 1
+    assert rows.loc["mol-001", "method_id"] == "legacy"
+    assert rows.loc["mol-001", "method_version"] == "9.9.9"
+    # New molecule appended as Pending.
+    assert rows.loc["mol-002", "status"] == MoleculeStatus.PENDING.value
+
+
+def test_reconcile_molecules_is_idempotent(tmp_path: Path) -> None:
+    state_path = tmp_path / "batch_state.csv"
+    mols = [{"mol_id": "m1", "smiles": "C"}, {"mol_id": "m2", "smiles": "CC"}]
+
+    assert _manager(state_path).reconcile_molecules(mols) == 2
+    second = _manager(state_path).reconcile_molecules(mols)
+
+    assert second == 0
+    rows = _read_state_csv(state_path)
+    assert list(rows["mol_id"]) == ["m1", "m2"]  # no duplicates
+
+
+def test_reconcile_molecules_fills_only_missing_smiles(tmp_path: Path) -> None:
+    state_path = tmp_path / "batch_state.csv"
+    no_smiles = _row("mol-001", MoleculeStatus.OK.value)
+    no_smiles["smiles"] = ""
+    has_smiles = _row("mol-002", MoleculeStatus.OK.value)
+    has_smiles["smiles"] = "CC"
+    _write_state_csv(state_path, [no_smiles, has_smiles])
+
+    _manager(state_path).reconcile_molecules(
+        [
+            {"mol_id": "mol-001", "smiles": "CCO"},
+            {"mol_id": "mol-002", "smiles": "OVERWRITE"},
+        ]
+    )
+
+    rows = _read_state_csv(state_path).set_index("mol_id")
+    assert rows.loc["mol-001", "smiles"] == "CCO"  # empty identity filled
+    assert rows.loc["mol-002", "smiles"] == "CC"  # existing identity preserved
+    assert rows.loc["mol-001", "status"] == MoleculeStatus.OK.value  # state kept

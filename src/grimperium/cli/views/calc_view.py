@@ -540,6 +540,42 @@ using the Delta-Learning model.
             n_conformers=pipeline_result.n_conformers,
         )
 
+    def _prediction_result_from_canonical(
+        self,
+        smiles: str,
+        canonical: MoleculeCalculationResult,
+        pipeline_result: CalcPipelineResult,
+    ) -> PredictionResult:
+        """Derive the display view model from canonical estimates.
+
+        The scientific values (baseline/correction/final) come from the canonical
+        estimates so there is a single source of truth; ancillary display fields
+        (model, timing, conformer count) reuse the pipeline view model.
+        """
+        h298_pm7 = self._estimate_value(canonical, PropertyRole.BASELINE)
+        delta = self._estimate_value(canonical, PropertyRole.CORRECTION)
+        h298_corrected = self._estimate_value(canonical, PropertyRole.FINAL)
+        return PredictionResult(
+            smiles=smiles,
+            h298_pm7=h298_pm7,
+            delta_correction=delta,
+            h298_corrected=h298_corrected,
+            model_name=self.controller.current_model,
+            model_version=pipeline_result.model_version,
+            execution_time=pipeline_result.execution_time,
+            n_conformers=pipeline_result.n_conformers,
+        )
+
+    @staticmethod
+    def _estimate_value(
+        canonical: MoleculeCalculationResult,
+        role: PropertyRole,
+    ) -> float:
+        for estimate in canonical.estimates:
+            if estimate.role is role and estimate.value_kcal_mol is not None:
+                return estimate.value_kcal_mol
+        raise ValueError(f"Canonical result missing a {role.value} estimate")
+
     def _run_method_b(
         self,
         smiles: str,
@@ -568,7 +604,14 @@ using the Delta-Learning model.
             self.show_error(f"Unexpected error: {exc}")
             return True
 
-        result = self._prediction_result_from_pipeline(smiles, pipeline_result)
+        canonical = pipeline_result.canonical
+        if canonical is not None:
+            self.last_calculation_result = canonical
+            result = self._prediction_result_from_canonical(
+                smiles, canonical, pipeline_result
+            )
+        else:
+            result = self._prediction_result_from_pipeline(smiles, pipeline_result)
         self.last_result = result
         self.history.append(result)
         self.console.print(

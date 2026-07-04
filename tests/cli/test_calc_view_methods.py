@@ -24,6 +24,56 @@ from grimperium.cli.mock_data import PredictionResult
 from grimperium.cli.views.calc_view import CalcView
 
 
+def _canonical_stub(
+    *, baseline: float, delta: float, final: float
+) -> MoleculeCalculationResult:
+    """Build a minimal canonical result with BASELINE/CORRECTION/FINAL estimates."""
+
+    def _est(
+        role: PropertyRole, value: float, model_path: str | None
+    ) -> PropertyEstimate:
+        return PropertyEstimate(
+            estimate_id=role.value,
+            property_id="standard_enthalpy_of_formation",
+            role=role,
+            method_id="pm7_delta_learning",
+            method_version="0.1.0",
+            hamiltonian="PM7" if role is PropertyRole.BASELINE else None,
+            value=Quantity(value=value, unit="kcal/mol"),
+            value_kcal_mol=value,
+            value_kj_mol=None,
+            conformer_source_id=1,
+            uncertainty=None,
+            model_path=model_path,
+        )
+
+    return MoleculeCalculationResult(
+        molecule=MoleculeData(smiles="CCO", name="m"),
+        run=RunMetadata(
+            run_id="r",
+            execution_phase="B",
+            method_ref=CalculationMethodReference(
+                method_id="pm7_delta_learning",
+                method_version="0.1.0",
+                property_id="standard_enthalpy_of_formation",
+            ),
+            started_at=None,
+            completed_at=None,
+            grimperium_version=None,
+        ),
+        overall_status=OverallStatus.SUCCESS,
+        conformers=[],
+        molecular_descriptors=None,
+        estimates=[
+            _est(PropertyRole.BASELINE, baseline, None),
+            _est(PropertyRole.CORRECTION, delta, "model.pkl"),
+            _est(PropertyRole.FINAL, final, "model.pkl"),
+        ],
+        artifacts=[],
+        stage_executions=[],
+    )
+
+
 @pytest.fixture
 def controller() -> MagicMock:
     buffer = io.StringIO()
@@ -296,6 +346,7 @@ def test_method_b_validates_selected_model_and_uses_existing_pipeline(
             n_conformers=3,
             execution_time=120.0,
             model_version="1.0.0",
+            canonical=_canonical_stub(baseline=-65.0, delta=-1.0, final=-66.0),
         )
 
     from grimperium.cli.views import calc_view
@@ -314,6 +365,12 @@ def test_method_b_validates_selected_model_and_uses_existing_pipeline(
     assert validations == [(model_path, "pm7_delta_learning")]
     assert predictions == [("CCO", model_path)]
     assert view.history[-1].h298_corrected == -66.0
+    # Method B now records the canonical domain result (parity with Method A).
+    assert view.last_calculation_result is not None
+    assert view.last_calculation_result.run.method_ref.method_id == "pm7_delta_learning"
+    # Displayed values are derived from the canonical estimates (single source).
+    assert view.history[-1].h298_pm7 == -65.0
+    assert view.history[-1].delta_correction == -1.0
 
 
 def test_method_a_result_can_render_both_units_without_mutating_canonical_value(

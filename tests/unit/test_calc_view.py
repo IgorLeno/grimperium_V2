@@ -14,7 +14,8 @@ from grimperium.cli.calc_pipeline import (
 from grimperium.cli.controller import CliController
 from grimperium.cli.mock_data import PredictionResult
 from grimperium.cli.views.calc_view import CalcView
-from grimperium.crest_pm7.config import PM7Config
+from grimperium.crest_pm7.config import CRESTStatus, MOPACStatus, PM7Config
+from grimperium.crest_pm7.molecule_processor import ConformerData, PM7Result
 
 
 @pytest.fixture
@@ -204,19 +205,29 @@ def test_run_single_molecule_prediction_delta_correction_scalar() -> None:
     fake_feature_pipeline = MagicMock()
     fake_feature_pipeline.transform.return_value = np.array([[1.0, 2.0, 3.0]])
 
-    fake_conformer = MagicMock()
-    fake_conformer.mopac_output_file = Path("/fake/mol.out")
+    selected = ConformerData(index=0, mol_id="calc_123456", crest_rank=1)
+    selected.crest_status = CRESTStatus.SUCCESS
+    selected.crest_geometry_file = Path("work/calc/conf_1.xyz")
+    selected.mopac_status = MOPACStatus.SUCCESS
+    selected.mopac_output_file = Path("work/calc/conf_1.out")
+    selected.energy_hof = -72.76
+    selected.hof_extraction_successful = True
 
-    fake_pm7_result = MagicMock()
-    fake_pm7_result.success = True
-    fake_pm7_result.error_message = None
-    fake_pm7_result.most_stable_hof = -72.76
-    fake_pm7_result.nheavy = 2
-    fake_pm7_result.crest_conformers_generated = 7
-    fake_pm7_result.num_conformers_selected = 3
-    fake_pm7_result.crest_time = 12.0
-    fake_pm7_result.total_execution_time = 30.0
-    fake_pm7_result.get_selected_conformer.return_value = fake_conformer
+    real_pm7_result = PM7Result(
+        mol_id="calc_123456",
+        smiles="CCO",
+        phase="B",
+        nheavy=2,
+        rdkit_descriptors={},
+        crest_status=CRESTStatus.SUCCESS,
+        crest_conformers_generated=7,
+        crest_time=12.0,
+        conformers=[selected],
+        num_conformers_selected=3,
+        k_selected_pm7=1,
+        total_execution_time=30.0,
+        success=True,
+    )
 
     with (
         patch("grimperium.cli.calc_pipeline.CRESTPM7Pipeline") as mock_pipeline_cls,
@@ -229,15 +240,11 @@ def test_run_single_molecule_prediction_delta_correction_scalar() -> None:
             return_value={"version": "v2.1"},
         ),
         patch(
-            "grimperium.cli.calculation_features.extract_all_rdkit_descriptors",
-            return_value={"rdkit_nrotbonds": 1.0},
-        ),
-        patch(
-            "grimperium.cli.calculation_features.extract_mopac_descriptors",
-            return_value={"mopac_homo_ev": -10.5},
+            "grimperium.cli.calc_pipeline.build_pm7_delta_feature_frame",
+            return_value=MagicMock(shape=(1, 3)),
         ),
     ):
-        mock_pipeline_cls.return_value.process_molecule.return_value = fake_pm7_result
+        mock_pipeline_cls.return_value.process_molecule.return_value = real_pm7_result
 
         result = run_single_molecule_prediction(
             smiles="CCO",
@@ -256,6 +263,8 @@ def test_run_single_molecule_prediction_delta_correction_scalar() -> None:
     assert -10.0 < result.delta_correction < 10.0
     assert result.h298_corrected == pytest.approx(-69.52)
     assert result.h298_corrected != pytest.approx(result.h298_pm7 + result.h298_pm7)
+    # Method B now yields the canonical domain result as the single source.
+    assert result.canonical is not None
 
 
 def test_set_model_com_path() -> None:

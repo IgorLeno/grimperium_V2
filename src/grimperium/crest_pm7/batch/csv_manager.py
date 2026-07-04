@@ -944,6 +944,55 @@ class BatchCSVManager:
         self.save_csv()
         LOG.warning(f"Marked {mol_id} as SKIP (reruns={reruns}): {error_base}")
 
+    def apply_operational_status(
+        self,
+        mol_id: str,
+        status: str,
+        *,
+        reruns: int | None = None,
+        result_update: dict[str, Any] | None = None,
+    ) -> None:
+        """Mirror an operational status decided by ``BatchStateManager``.
+
+        Writes ``status`` (and ``reruns`` when given) verbatim into the legacy
+        scientific CSV. Unlike :meth:`mark_rerun`, this makes NO retry decision
+        and never increments the counter — the operational state manager owns
+        that decision and this method only projects it, keeping the two files
+        consistent.
+
+        Args:
+            mol_id: Molecule identifier.
+            status: Status decided by ``BatchStateManager``.
+            reruns: Rerun count to mirror, or ``None`` to leave unchanged.
+            result_update: Optional partial scientific columns to persist.
+        """
+        idx = self._get_row_index(mol_id)
+        df = self._ensure_loaded()
+        df.at[idx, "status"] = status
+        if reruns is not None:
+            df.at[idx, "reruns"] = reruns
+        if result_update:
+            for col, val in result_update.items():
+                if col in df.columns:
+                    df.at[idx, col] = val
+        self.save_csv()
+
+    def snapshot_row(self, mol_id: str) -> dict[str, Any]:
+        """Return a copy of one scientific row for compensating rollback."""
+        idx = self._get_row_index(mol_id)
+        df = self._ensure_loaded()
+        snapshot: dict[str, Any] = df.loc[idx].to_dict()
+        return snapshot
+
+    def restore_row(self, mol_id: str, snapshot: dict[str, Any]) -> None:
+        """Restore a previously captured row snapshot (rollback)."""
+        idx = self._get_row_index(mol_id)
+        df = self._ensure_loaded()
+        for col, val in snapshot.items():
+            if col in df.columns:
+                df.at[idx, col] = val
+        self.save_csv()
+
     def _update_extra_fields(
         self,
         mol_id: str,

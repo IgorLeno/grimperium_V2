@@ -109,7 +109,7 @@ jobs:
       - name: Run Mypy (capture logs)
         run: |
           set +e
-          mypy src/grimperium \
+          mypy src/grimperium --strict \
             > ${{ github.workspace }}/type.log 2>&1
           echo "$?" > ${{ github.workspace }}/mypy.exitcode
           set -e

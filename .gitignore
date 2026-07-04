@@ -122,7 +122,10 @@ logs/
 # Local work files
 anexos/
 .claude/settings.local.json
-docs/plans/
+docs/plans/*
+# Keep the Package Boundary Review versioned: CHANGELOG.md references it and a
+# guard test (tests/test_pr7_boundary_review_doc.py) asserts its presence.
+!docs/plans/pr7-package-boundary-review.md
 
 # Git worktrees
 .worktrees/

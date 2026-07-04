@@ -7,7 +7,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Canonical calculation & batch-state transition completed** (2026-07-04)
+  - `BatchStateManager.reconcile_molecules()` — idempotent, atomic reconciliation
+    that adds missing molecules and preserves existing operational state
+    (`Running`/`Assigned`/`OK`/`Rerun`/`Skip` never overwritten). `create_app`
+    now reconciles all scientific-CSV molecules into `batch_state.csv` instead
+    of only seeding PENDING/RERUN, so status counts stay complete.
+  - `PM7DeltaLearningRunner` (`calculation/runners/pm7_delta_runner.py`) — Method
+    B now returns the canonical `MoleculeCalculationResult` with `BASELINE` (PM7),
+    `CORRECTION` (delta = final − baseline) and `FINAL` estimates. `CalcView`
+    populates `last_calculation_result` for both Method A and Method B, and
+    `cli/calc_pipeline.run_single_molecule_prediction` is now a thin wrapper over
+    the runner (single scientific source of truth).
+  - Canonical batch output wired into `BatchExecutionManager`: successful
+    PM7-only molecules are written to `calculation_results.csv`/`.xlsx` via
+    `write_batch_calculation_results` (injectable `output_layout`/`result_writer`).
+    Only a `BASELINE` estimate is emitted — no ML `FINAL`/`CORRECTION` is invented.
+- **Package Boundary Review versioned** — `docs/plans/pr7-package-boundary-review.md`
+  is now tracked (un-ignored in `.gitignore`) and covered by a guard test.
+
+### Changed
+- **Server dual-write consistency** — `/status` now reads status counts from the
+  authoritative `BatchStateManager`; `/sync_results`, `/report/success` and
+  `/report/failure` share one `_apply_worker_result` helper where the state
+  manager decides Rerun/Skip once and the legacy CSV mirrors that decision (no
+  double rerun increment), with a compensating rollback if the second write
+  fails. `BatchStateManager` uses the configured `max_reruns`.
+- **Quality gates** — CI type-check now runs `mypy src/grimperium --strict`
+  (parity with pre-commit); a global coverage floor `fail_under = 85` was added
+  to `[tool.coverage.report]`.
+
 ### Fixed
+- Removed three unused `# type: ignore[no-untyped-call]` comments flagged by
+  `mypy --strict` (rdkit `GetAtoms()` calls).
 - **PR6 server runtime bug — distributed primitives wired to BatchStateManager** (2026-07-03)
   - `BatchCSVManager.reset_stuck_assigned`, `claim_single_molecule`, and
     `mark_worker_offline` were removed in PR6/PR6D but `server/app.py` and

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Protocol
@@ -51,12 +52,15 @@ class PM7Result(Protocol):
     nrotbonds: int | None
     tpsa: float | None
     rdkit_descriptors: dict[str, float]
-    conformers: list[ConformerData]
+    conformers: Sequence[ConformerData]
     k_selected_pm7: int | None
     total_execution_time: float | None
     success: bool
     error_message: str | None
-    successful_conformers: list[ConformerData]
+
+    @property
+    def successful_conformers(self) -> Sequence[ConformerData]:
+        """Return successfully processed conformers (read-only)."""
 
     def get_selected_conformer(self) -> ConformerData | None:
         """Return the legacy PM7-selected conformer."""
@@ -244,8 +248,20 @@ def _artifacts_for_conformer(conformer: ConformerData) -> list[CalculationArtifa
     return artifacts
 
 
-def pm7result_to_canonical(result: PM7Result) -> MoleculeCalculationResult:
-    """Convert a legacy PM7Result to a canonical calculation result."""
+def pm7result_to_canonical(
+    result: PM7Result,
+    *,
+    method_id: str = LEGACY_METHOD_ID,
+    method_version: str = LEGACY_METHOD_VERSION,
+    property_role: PropertyRole = PropertyRole.BASELINE,
+) -> MoleculeCalculationResult:
+    """Convert a legacy PM7Result to a canonical calculation result.
+
+    The optional ``method_id``/``method_version``/``property_role`` parameters let
+    higher-level runners (e.g. the PM7 + Delta Learning runner or the batch
+    executor) attribute the PM7 estimate to the true method that produced it. The
+    defaults preserve the original legacy-baseline behavior for existing callers.
+    """
     run_id = str(uuid4())
     artifacts: list[CalculationArtifact] = []
     conformers: list[ConformerResult] = []
@@ -267,9 +283,9 @@ def pm7result_to_canonical(result: PM7Result) -> MoleculeCalculationResult:
             PropertyEstimate(
                 estimate_id=str(uuid4()),
                 property_id=PROPERTY_ID,
-                role=PropertyRole.BASELINE,
-                method_id=LEGACY_METHOD_ID,
-                method_version=LEGACY_METHOD_VERSION,
+                role=property_role,
+                method_id=method_id,
+                method_version=method_version,
                 hamiltonian=HAMILTONIAN,
                 value=Quantity(value=selected.energy_hof, unit="kcal/mol"),
                 value_kcal_mol=selected.energy_hof,
@@ -285,8 +301,8 @@ def pm7result_to_canonical(result: PM7Result) -> MoleculeCalculationResult:
         )
 
     method_ref = CalculationMethodReference(
-        method_id=LEGACY_METHOD_ID,
-        method_version=LEGACY_METHOD_VERSION,
+        method_id=method_id,
+        method_version=method_version,
         property_id=PROPERTY_ID,
     )
     timestamp = result.timestamp
