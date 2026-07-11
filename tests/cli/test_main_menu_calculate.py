@@ -26,11 +26,15 @@ def test_main_menu_labels_calculate_without_changing_route(
 
     monkeypatch.setattr(menu.questionary, "select", fake_select)
 
-    result = menu.show_main_menu(current_model="model", status="Ready")
+    result = menu.show_main_menu(model_label="model", status="Ready")
 
     titles = [
         choice.title for choice in captured["choices"] if hasattr(choice, "title")
     ]
     assert result == "calc"
     assert any("CALCULATE" in title for title in titles)
-    assert all("CALC" not in title.replace("CALCULATE", "") for title in titles)
+    # Route value remains "calc"; label is CALCULATE (not a short "CALC" item).
+    assert not any(
+        "CALC" in title.replace("CALCULATE", "").replace("CALCULATION METHODS", "")
+        for title in titles
+    )

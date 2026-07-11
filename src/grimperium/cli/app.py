@@ -28,6 +28,7 @@ from grimperium.cli.views import (
     BatchView,
     CalcView,
     DatabasesView,
+    MethodsView,
     ModelsView,
     ResultsView,
     SettingsView,
@@ -51,6 +52,7 @@ class GrimperiumCLI:
         """Register all views with the controller."""
         self.controller.register_view("batch", BatchView(self.controller))
         self.controller.register_view("calc", CalcView(self.controller))
+        self.controller.register_view("methods", MethodsView(self.controller))
         self.controller.register_view("databases", DatabasesView(self.controller))
         self.controller.register_view("models", ModelsView(self.controller))
         self.controller.register_view("results", ResultsView(self.controller))
@@ -89,9 +91,12 @@ class GrimperiumCLI:
         )
         self.console.print()
 
+        summary = self.controller.session_summary()
         return show_main_menu(
-            current_model=self.controller.current_model,
-            status=self.controller.status,
+            property_label=summary["property"],
+            method_label=summary["method"],
+            model_label=summary["model"],
+            status=summary["status"],
         )
 
     def run_view(self, view_name: str) -> str | None:

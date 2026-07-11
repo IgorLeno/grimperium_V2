@@ -14,7 +14,7 @@ Modules:
     controller: Navigation and state management
     menu: Interactive menu system
     styles: Colors, themes, and ASCII art
-    mock_data: Mock data for MVP
+    viewmodels: UI-facing result structures
     views: View modules for each section
 """
 

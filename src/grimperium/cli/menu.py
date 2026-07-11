@@ -203,26 +203,57 @@ def text_input(
         return None
 
 
+def format_session_header(
+    *,
+    property_label: str = "Not selected",
+    method_label: str = "Not selected",
+    model_label: str = "No model selected",
+    status: str = "No method selected",
+) -> str:
+    """Format the main-menu session context header."""
+    return (
+        f"[Property: {property_label} | Method: {method_label} | "
+        f"Model: {model_label} | Status: {status}]"
+    )
+
+
 def show_main_menu(
-    current_model: str = "DeltaXGB_v1.0",
-    status: str = "Ready",
+    *,
+    property_label: str = "Not selected",
+    method_label: str = "Not selected",
+    model_label: str = "No model selected",
+    status: str = "No method selected",
+    current_model: str | None = None,
 ) -> str | None:
     """
     Display the main application menu.
 
     Args:
-        current_model: Name of the currently selected model
+        property_label: Active scientific property display name
+        method_label: Active calculation method display name
+        model_label: Active model display name (or Not required)
         status: System status string
+        current_model: Deprecated alias for model_label (tests/compat)
 
     Returns:
         Selected menu action, or None if cancelled
     """
+    if current_model is not None:
+        model_label = current_model
+
     options = [
         MenuOption(
             label="CALCULATE",
             value="calc",
             icon=ICONS["calc"],
-            description="Predict molecular properties",
+            description="Run calculation with active method",
+            style="calc",
+        ),
+        MenuOption(
+            label="CALCULATION METHODS",
+            value="methods",
+            icon=ICONS["methods"],
+            description="Select and configure calculation methods",
             style="calc",
         ),
         MenuOption(
@@ -264,8 +295,13 @@ def show_main_menu(
 
     return show_menu_with_separator(
         options=options,
-        title=f"[Model: {current_model} | Status: {status}]",
-        separator_after=[3],  # Separator after RESULTS
+        title=format_session_header(
+            property_label=property_label,
+            method_label=method_label,
+            model_label=model_label,
+            status=status,
+        ),
+        separator_after=[4],  # Separator after RESULTS
     )
 
 

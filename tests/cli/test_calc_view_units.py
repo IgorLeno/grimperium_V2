@@ -11,7 +11,7 @@ from unittest.mock import MagicMock
 import pytest
 from rich.console import Console
 
-from grimperium.cli.mock_data import PredictionResult
+from grimperium.cli.viewmodels import PredictionResult
 from grimperium.cli.views.calc_view import KCAL_TO_KJ, CalcView
 
 
@@ -22,6 +22,14 @@ def mock_controller() -> MagicMock:
     ctrl = MagicMock()
     ctrl.console = console
     ctrl.current_model = "test_model"
+    ctrl.current_method_definition = None
+    ctrl.session_summary.return_value = {
+        "property": "Not selected",
+        "method": "Not selected",
+        "dataset": "Not selected",
+        "model": "test_model",
+        "status": "No method selected",
+    }
     return ctrl
 
 

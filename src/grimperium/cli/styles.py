@@ -98,6 +98,7 @@ VERSION_LINE = f"[muted]Delta-Learning Framework v{_grim_version}[/muted]"
 # Menu icons
 ICONS = {
     "calc": "🧪",
+    "methods": "🧬",
     "databases": "📊",
     "models": "🤖",
     "results": "📈",

@@ -1,13 +1,33 @@
 """
-Mock data for GRIMPERIUM CLI MVP.
+Mock data for GRIMPERIUM CLI tests and demos.
 
-This module provides mock data for the CLI interface before
-real integration with the ML models and databases.
+Production CLI code must not import this module for session state.
 """
 
 from dataclasses import dataclass
 from datetime import date, datetime
 from random import Random
+
+from grimperium.cli.viewmodels import PredictionResult
+
+__all__ = [
+    "DATABASES",
+    "DEFAULT_MODEL",
+    "DIVERGENCE_STATS",
+    "MODELS",
+    "MOLECULE_NAMES",
+    "SYSTEM_INFO",
+    "Database",
+    "DivergenceStats",
+    "Model",
+    "PredictionResult",
+    "get_database_by_name",
+    "get_model_by_name",
+    "get_molecule_name",
+    "get_ready_databases",
+    "get_ready_models",
+    "mock_predict",
+]
 
 
 @dataclass
@@ -37,20 +57,6 @@ class Model:
 
 
 @dataclass
-class PredictionResult:
-    """Represents a prediction result from the real pipeline."""
-
-    smiles: str
-    h298_pm7: float  # Raw MOPAC HOF, kcal/mol
-    delta_correction: float  # Model-predicted delta, kcal/mol
-    h298_corrected: float  # h298_pm7 + delta_correction
-    model_name: str
-    model_version: str  # From metadata
-    execution_time: float  # Total seconds
-    n_conformers: int  # Conformers from CREST
-
-
-@dataclass
 class DivergenceStats:
     """Statistics for CBS vs PM7 divergence."""
 
@@ -61,10 +67,7 @@ class DivergenceStats:
     percentage: float
 
 
-# Mock databases
-# NOTE: CREST PM7 is now loaded dynamically from phase_a_results.json
-# by DatabasesView.load_real_phase_a_results(). This entry serves as
-# fallback when the file doesn't exist (dev/demo mode).
+# Mock databases (test fixtures only)
 DATABASES: list[Database] = [
     Database(
         name="CBS Reference (CHON-only)",
@@ -80,9 +83,9 @@ DATABASES: list[Database] = [
     Database(
         name="CREST PM7",
         description="CREST conformer search with PM7 optimization",
-        molecules=0,  # Real count comes from phase_a_results.json
+        molecules=0,
         last_updated=date(2026, 1, 1),
-        status="in_development",  # Reflects that no calculations done yet
+        status="in_development",
         properties=["H298_pm7", "conformers", "smiles", "quality_grade"],
     ),
     Database(
@@ -202,7 +205,6 @@ DIVERGENCE_STATS: list[DivergenceStats] = [
     ),
 ]
 
-# Common molecule names for mock predictions
 MOLECULE_NAMES: dict[str, str] = {
     "CCO": "Ethanol",
     "CC(=O)O": "Acetic Acid",
@@ -218,7 +220,7 @@ MOLECULE_NAMES: dict[str, str] = {
     "CC(C)O": "Isopropanol",
 }
 
-# Default model for predictions
+# Fixture label only — never used as live session default in production CLI.
 DEFAULT_MODEL = "DeltaXGB_v1.0"
 
 
@@ -234,10 +236,8 @@ def mock_predict(
     """
     Generate a mock prediction for a given SMILES string.
 
-    DEPRECATED: This function is replaced by the real pipeline.
-    Kept for backward compatibility and tests.
+    DEPRECATED: Replaced by the real pipeline. Kept for tests only.
     """
-    # Generate deterministic but varied values based on SMILES
     seed = sum(ord(c) for c in smiles)
     rnd = Random(seed)
 
@@ -282,7 +282,6 @@ def get_ready_databases() -> list[Database]:
     return [db for db in DATABASES if db.status == "ready"]
 
 
-# System status info
 SYSTEM_INFO = {
     "version": "1.0.0-beta",
     "build_date": date(2026, 1, 12),

@@ -8,6 +8,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **CLI Information Architecture MVP** — session-aware CLI navigation:
+  - `CliController` tracks `current_method_*` / property and exposes
+    `session_summary()` (Property | Method | Model | Status).
+  - New `MethodsView` (`CALCULATION METHODS`) to select the active method.
+  - Main menu header shows real session context (no mock model name).
+  - `PredictionResult` moved to `cli/viewmodels.py`; production code must not
+    import `cli.mock_data` (boundary test).
+  - Calculate uses the active method; without one, redirects to Methods.
 - **Canonical calculation & batch-state transition completed** (2026-07-04)
   - `BatchStateManager.reconcile_molecules()` — idempotent, atomic reconciliation
     that adds missing molecules and preserves existing operational state

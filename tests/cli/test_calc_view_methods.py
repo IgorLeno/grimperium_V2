@@ -20,7 +20,7 @@ from grimperium.calculation.contracts.models import (
 from grimperium.calculation.contracts.quantity import Quantity
 from grimperium.calculation.methods import get_calculation_method
 from grimperium.cli.calc_pipeline import CalcPipelineResult
-from grimperium.cli.mock_data import PredictionResult
+from grimperium.cli.viewmodels import PredictionResult
 from grimperium.cli.views.calc_view import CalcView
 
 
@@ -82,7 +82,16 @@ def controller() -> MagicMock:
     ctrl.console = console
     ctrl.current_model = "test_model"
     ctrl.current_model_path = None
+    ctrl.current_method_definition = None
+    ctrl.current_method_id = None
     ctrl.settings_manager = MagicMock()
+    ctrl.session_summary.return_value = {
+        "property": "Not selected",
+        "method": "Not selected",
+        "dataset": "Not selected",
+        "model": "test_model",
+        "status": "No method selected",
+    }
     return ctrl
 
 
@@ -98,12 +107,18 @@ def test_render_available_methods_lists_standard_enthalpy_methods(
     assert "pm7_delta_learning" in output
 
 
-def test_calculation_methods_action_is_available(controller: MagicMock) -> None:
+def test_change_method_action_is_available(controller: MagicMock) -> None:
     view = CalcView(controller)
 
     options = view.get_menu_options()
 
     assert any(option.value == "methods" for option in options)
+    assert any(option.label == "Change Method" for option in options)
+
+
+def test_methods_action_navigates_to_methods_view(controller: MagicMock) -> None:
+    view = CalcView(controller)
+    assert view.handle_action("methods") == "methods"
 
 
 def test_resolve_required_model_offers_selection_when_no_session_model(

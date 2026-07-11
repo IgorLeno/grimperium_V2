@@ -12,7 +12,7 @@ from grimperium.cli.calc_pipeline import (
     run_single_molecule_prediction,
 )
 from grimperium.cli.controller import CliController
-from grimperium.cli.mock_data import PredictionResult
+from grimperium.cli.viewmodels import PredictionResult
 from grimperium.cli.views.calc_view import CalcView
 from grimperium.crest_pm7.config import CRESTStatus, MOPACStatus, PM7Config
 from grimperium.crest_pm7.molecule_processor import ConformerData, PM7Result
@@ -24,6 +24,14 @@ def mock_controller() -> MagicMock:
     controller = MagicMock()
     controller.current_model = "DeltaXGB_v1.0"
     controller.current_model_path = None
+    controller.current_method_definition = None
+    controller.session_summary.return_value = {
+        "property": "Not selected",
+        "method": "Not selected",
+        "dataset": "Not selected",
+        "model": "No model selected",
+        "status": "No method selected",
+    }
     return controller
 
 
@@ -62,7 +70,7 @@ def test_do_prediction_sem_modelo(
     and returns None so the pipeline is never reached.
     """
     mock_method = _mock_pm7_delta_method()
-    calc_view._select_method = MagicMock(return_value=mock_method)
+    calc_view.controller.current_method_definition = mock_method
     calc_view._select_units = MagicMock(return_value="both")
     calc_view.render = MagicMock()
     calc_view.show_error = MagicMock()
@@ -82,7 +90,7 @@ def test_do_prediction_sem_modelo(
     error_msg = calc_view.show_error.call_args[0][0]
     assert "model" in error_msg.lower() or "Model" in error_msg
     mock_pipeline.assert_not_called()
-    assert result is True
+    assert result is None
 
 
 @patch("grimperium.cli.views.calc_view.text_input", return_value="CCO")
@@ -92,7 +100,7 @@ def test_do_prediction_crest_falha(
 ) -> None:
     """CREST failure → CalcPipelineError → show_error."""
     mock_method = _mock_pm7_delta_method()
-    calc_view._select_method = MagicMock(return_value=mock_method)
+    calc_view.controller.current_method_definition = mock_method
     calc_view._select_units = MagicMock(return_value="both")
     calc_view._resolve_required_model = MagicMock(  # type: ignore[method-assign]
         return_value=Path("/fake/model.joblib"),
@@ -109,7 +117,7 @@ def test_do_prediction_crest_falha(
     calc_view.show_error.assert_called_once()
     error_msg = calc_view.show_error.call_args[0][0]
     assert "CREST" in error_msg
-    assert result is True
+    assert result is None
     assert len(calc_view.history) == 0
 
 
@@ -120,7 +128,7 @@ def test_do_prediction_mopac_falha(
 ) -> None:
     """MOPAC failure → CalcPipelineError → show_error."""
     mock_method = _mock_pm7_delta_method()
-    calc_view._select_method = MagicMock(return_value=mock_method)
+    calc_view.controller.current_method_definition = mock_method
     calc_view._select_units = MagicMock(return_value="both")
     calc_view._resolve_required_model = MagicMock(  # type: ignore[method-assign]
         return_value=Path("/fake/model.joblib"),
@@ -137,7 +145,7 @@ def test_do_prediction_mopac_falha(
     calc_view.show_error.assert_called_once()
     error_msg = calc_view.show_error.call_args[0][0]
     assert "MOPAC" in error_msg
-    assert result is True
+    assert result is None
     assert len(calc_view.history) == 0
 
 
@@ -148,7 +156,7 @@ def test_do_prediction_sucesso_completo(
 ) -> None:
     """Full pipeline success → PredictionResult with all real fields."""
     mock_method = _mock_pm7_delta_method()
-    calc_view._select_method = MagicMock(return_value=mock_method)
+    calc_view.controller.current_method_definition = mock_method
     calc_view._select_units = MagicMock(return_value="both")
     calc_view._resolve_required_model = MagicMock(  # type: ignore[method-assign]
         return_value=Path("/fake/model.joblib"),
@@ -171,7 +179,7 @@ def test_do_prediction_sucesso_completo(
     ):
         result = calc_view.do_prediction()
 
-    assert result is True
+    assert result is None
     assert len(calc_view.history) == 1
 
     pred = calc_view.history[0]

@@ -11,11 +11,15 @@ from typing import TYPE_CHECKING
 
 from rich.console import Console
 
-from grimperium.cli.mock_data import DEFAULT_MODEL
+from grimperium.cli.model_compatibility import (
+    ModelCompatibilityError,
+    validate_model_for_method,
+)
 from grimperium.cli.settings_manager import SettingsManager
 from grimperium.cli.styles import CLI_THEME
 
 if TYPE_CHECKING:
+    from grimperium.calculation.methods import CalculationMethodDefinition
     from grimperium.cli.views.base_view import BaseView
 
 
@@ -27,17 +31,21 @@ class CliController:
     - Maintaining navigation history (breadcrumbs)
     - Managing the current view state
     - Providing a shared console for rendering
-    - Tracking application-wide settings
+    - Tracking application-wide settings and scientific session context
     """
 
     def __init__(self) -> None:
         """Initialize the CLI controller."""
         self.history: list[str] = []
         self.current_view: str = "main"
-        self.current_model: str = DEFAULT_MODEL
+        self.current_model: str | None = None
         self.current_model_path: Path | None = None
         self.current_csv_path: Path | None = None
-        self.status: str = "Ready"
+        self.current_property_id: str | None = None
+        self.current_method_id: str | None = None
+        self.current_method_version: str | None = None
+        self.current_method_definition: CalculationMethodDefinition | None = None
+        self.status: str = "No method selected"
         self.console = Console(theme=CLI_THEME)
         self.settings_manager = SettingsManager(console=self.console)
         self.settings_manager.load_from_file()
@@ -137,6 +145,73 @@ class CliController:
         """
         self.current_model = model_name
         self.current_model_path = model_path
+        self._refresh_status()
+
+    def set_method(self, method: CalculationMethodDefinition) -> None:
+        """Set the active calculation method for this session."""
+        self.current_method_definition = method
+        self.current_method_id = method.method_id
+        self.current_method_version = method.version
+        self.current_property_id = method.property_id
+        self._refresh_status()
+
+    def clear_method(self) -> None:
+        """Clear the active calculation method."""
+        self.current_method_definition = None
+        self.current_method_id = None
+        self.current_method_version = None
+        self.current_property_id = None
+        self._refresh_status()
+
+    def _refresh_status(self) -> None:
+        """Recompute session status from method and model context."""
+        method = self.current_method_definition
+        if method is None:
+            self.status = "No method selected"
+            return
+
+        if not method.model_requirement.model_required:
+            self.status = "Ready"
+            return
+
+        model_path = self.current_model_path
+        if model_path is None or not model_path.exists():
+            self.status = "Model required"
+            return
+
+        try:
+            validate_model_for_method(model_path, method)
+        except ModelCompatibilityError:
+            self.status = "Model incompatible"
+            return
+
+        self.status = "Ready"
+
+    def session_summary(self) -> dict[str, str]:
+        """Return display strings for the main-menu session header."""
+        method = self.current_method_definition
+
+        if method is not None:
+            property_label = method.property_name
+            method_label = method.display_name
+        else:
+            property_label = "Not selected"
+            method_label = "Not selected"
+
+        if method is not None and not method.model_requirement.model_required:
+            model_label = "Not required"
+        elif self.current_model:
+            model_label = self.current_model
+        else:
+            model_label = "No model selected"
+
+        return {
+            "property": property_label,
+            "method": method_label,
+            "dataset": "Not selected",
+            "model": model_label,
+            "status": self.status,
+        }
 
     def set_csv(self, csv_path: Path | None) -> None:
         """

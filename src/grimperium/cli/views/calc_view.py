@@ -30,12 +30,12 @@ from grimperium.cli.calc_pipeline import (
     run_single_molecule_prediction,
 )
 from grimperium.cli.menu import MenuOption, show_back_menu, show_menu, text_input
-from grimperium.cli.mock_data import PredictionResult
 from grimperium.cli.model_compatibility import (
     ModelCompatibilityError,
     validate_model_for_method,
 )
 from grimperium.cli.styles import COLORS, ICONS
+from grimperium.cli.viewmodels import PredictionResult
 from grimperium.cli.views.base_view import BaseView
 from grimperium.cli.views.models_view import discover_available_models
 from grimperium.crest_pm7.config import PM7Config
@@ -47,10 +47,10 @@ KCAL_TO_KJ: float = 4.184  # exact per IUPAC definition
 
 
 class CalcView(BaseView):
-    """View for molecular property predictions."""
+    """View for molecular property calculations."""
 
     name = "calc"
-    title = "Prediction Engine"
+    title = "Calculation"
     icon = ICONS["calc"]
     color = COLORS["calc"]
 
@@ -66,13 +66,29 @@ class CalcView(BaseView):
         self.clear_screen()
         self.show_header()
 
+        summary = self.controller.session_summary()
+        method = self.controller.current_method_definition
+        if method is None:
+            guidance = (
+                "No calculation method is selected.\n"
+                "Open CALCULATION METHODS to choose Method A or B first."
+            )
+        else:
+            guidance = (
+                f"Run a calculation with the active method:\n"
+                f"[bold]{method.display_name}[/bold]\n\n"
+                "Enter a SMILES string to compute the Heat of Formation (HOF)."
+            )
+
         intro = f"""
-[bold]Molecular Property Prediction[/bold]
+[bold]Molecular Property Calculation[/bold]
 
-Enter a SMILES string to predict the Heat of Formation (HOF)
-using the Delta-Learning model.
+{guidance}
 
-[{COLORS['muted']}]Current Model:[/{COLORS['muted']}] [{COLORS['calc']}]{self.controller.current_model}[/{COLORS['calc']}]
+[{COLORS['muted']}]Property:[/{COLORS['muted']}] [{COLORS['calc']}]{summary['property']}[/{COLORS['calc']}]
+[{COLORS['muted']}]Method:[/{COLORS['muted']}] [{COLORS['calc']}]{summary['method']}[/{COLORS['calc']}]
+[{COLORS['muted']}]Model:[/{COLORS['muted']}] [{COLORS['calc']}]{summary['model']}[/{COLORS['calc']}]
+[{COLORS['muted']}]Status:[/{COLORS['muted']}] [{COLORS['calc']}]{summary['status']}[/{COLORS['calc']}]
 """
         self.console.print(
             Panel(
@@ -534,7 +550,7 @@ using the Delta-Learning model.
             h298_pm7=pipeline_result.h298_pm7,
             delta_correction=pipeline_result.delta_correction,
             h298_corrected=pipeline_result.h298_corrected,
-            model_name=self.controller.current_model,
+            model_name=self.controller.current_model or "No model selected",
             model_version=pipeline_result.model_version,
             execution_time=pipeline_result.execution_time,
             n_conformers=pipeline_result.n_conformers,
@@ -560,7 +576,7 @@ using the Delta-Learning model.
             h298_pm7=h298_pm7,
             delta_correction=delta,
             h298_corrected=h298_corrected,
-            model_name=self.controller.current_model,
+            model_name=self.controller.current_model or "No model selected",
             model_version=pipeline_result.model_version,
             execution_time=pipeline_result.execution_time,
             n_conformers=pipeline_result.n_conformers,
@@ -672,18 +688,24 @@ using the Delta-Learning model.
             )
         )
 
-    def do_prediction(self) -> bool:
+    def do_prediction(self) -> str | None:
         """
-        Perform a prediction interaction using the real pipeline.
+        Perform a calculation using the active session method.
 
         Returns:
-            True to continue, False to go back
+            ``"methods"`` when no method is selected (redirect),
+            otherwise ``None`` to stay in the calc view.
         """
         self.render()
 
-        method = self._select_method()
+        method = self.controller.current_method_definition
         if method is None:
-            return True
+            self.show_error(
+                "No calculation method selected. "
+                "Choose a method in CALCULATION METHODS first."
+            )
+            self.wait_for_enter()
+            return "methods"
 
         # Get SMILES input
         smiles = text_input(
@@ -692,11 +714,11 @@ using the Delta-Learning model.
         )
 
         if smiles is None:  # Ctrl+C
-            return True  # Stay in calc view
+            return None
 
         smiles = smiles.strip()
         if not smiles:
-            return True
+            return None
 
         units = self._select_units()
         self.render_review_panel(method=method, smiles=smiles, units=units)
@@ -704,14 +726,16 @@ using the Delta-Learning model.
         self.console.print()
 
         if method.method_id == "semiempirical_am1_pm3_pm7":
-            return self._run_method_a(smiles, method, units=units)
-        return self._run_method_b(smiles, method)
+            self._run_method_a(smiles, method, units=units)
+            return None
+        self._run_method_b(smiles, method)
+        return None
 
     def get_menu_options(self) -> list[MenuOption]:
         """Return menu options for the calc view."""
         options = [
             MenuOption(
-                label="Predict New Molecule",
+                label="Calculate New Molecule",
                 value="predict",
                 icon=ICONS["calc"],
             ),
@@ -729,9 +753,9 @@ using the Delta-Learning model.
         options.extend(
             [
                 MenuOption(
-                    label="Calculation Methods",
+                    label="Change Method",
                     value="methods",
-                    icon=ICONS["settings"],
+                    icon=ICONS["methods"],
                 ),
                 MenuOption(
                     label="Batch Processing",
@@ -758,8 +782,7 @@ using the Delta-Learning model.
             return "main"
 
         if action == "predict":
-            self.do_prediction()
-            return None
+            return self.do_prediction()
 
         if action == "history":
             self.clear_screen()
@@ -769,11 +792,7 @@ using the Delta-Learning model.
             return None
 
         if action == "methods":
-            self.clear_screen()
-            self.show_header()
-            self.render_available_methods()
-            self.wait_for_enter()
-            return None
+            return "methods"
 
         # Handle in-development features
         if action in ["batch", "export"]:
