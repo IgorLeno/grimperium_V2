@@ -59,6 +59,10 @@ class BatchResult(BaseModel):
     rerun_mol_ids: list[str] = Field(
         default_factory=list, description="mol_ids marked rerun"
     )
+    invalidated: bool = Field(
+        default=False,
+        description="Whether an ALL_OR_NOTHING reset invalidated batch completion",
+    )
 
     @computed_field  # type: ignore[prop-decorator]
     @property
@@ -108,6 +112,8 @@ class BatchMolecule(BaseModel):
     # Molecular descriptors (for timeout prediction)
     nheavy: int = Field(..., description="Number of heavy atoms")
     nrotbonds: int = Field(default=0, description="Number of rotatable bonds")
+    charge: int = Field(default=0, description="Molecular charge")
+    multiplicity: int = Field(default=1, description="Spin multiplicity")
 
     # Retry tracking
     reruns: int = Field(default=0, description="Number of previous attempts")
@@ -146,7 +152,7 @@ class Batch(BaseModel):
         description="How to handle failures in this batch",
     )
     method_id: str = Field(
-        default="pm7_delta_learning",
+        default="crest_pm7",
         description="Calculation method registry identifier used for the batch",
     )
     method_version: str = Field(

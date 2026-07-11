@@ -212,19 +212,27 @@ class BatchStateManager:
         Returns:
             Number of molecules reset to Pending.
         """
+        reset = self.reset_stuck_running_molecules()
+        count = len(reset)
+        LOG.info("Startup recovery: reset %d RUNNING molecule(s) to Pending", count)
+        return count
+
+    def reset_stuck_running_molecules(self) -> list[str]:
+        """Reset RUNNING molecules and return the affected molecule IDs."""
         df = self._ensure_loaded()
         running_mask = df["status"] == MoleculeStatus.RUNNING.value
         running_rows = df[running_mask]
         if running_rows.empty:
-            return 0
+            return []
 
+        reset: list[str] = []
         for idx in running_rows.index:
-            self._clear_assignment(cast(int, idx))
+            row_idx = cast(int, idx)
+            reset.append(str(df.at[row_idx, "mol_id"]))
+            self._clear_assignment(row_idx)
 
         self._save_csv()
-        count = len(running_rows)
-        LOG.info("Startup recovery: reset %d RUNNING molecule(s) to Pending", count)
-        return count
+        return reset
 
     def mark_worker_offline(self, worker_id: str) -> int:
         """Return assigned or running molecules from an offline worker to PENDING.
@@ -333,6 +341,76 @@ class BatchStateManager:
         LOG.info("Reconciled batch_state.csv: added %d molecule(s)", added)
         return added
 
+    def mark_selected(
+        self,
+        mol_ids: list[str],
+        *,
+        batch_id: str = "",
+        extra_fields_by_mol: dict[str, dict[str, Any]] | None = None,
+    ) -> None:
+        """Mark molecules as Selected without assigning worker fields."""
+        if not mol_ids:
+            return
+        df = self._ensure_loaded()
+        fields_by_mol = extra_fields_by_mol or {}
+        for mol_id in mol_ids:
+            fields = fields_by_mol.get(mol_id, {})
+            idx = self._ensure_molecule_index(df, mol_id, fields)
+            df.at[idx, "status"] = MoleculeStatus.SELECTED.value
+            if batch_id:
+                df.at[idx, "batch_id"] = batch_id
+            for column, value in fields.items():
+                if column not in BATCH_STATE_COLUMNS:
+                    raise ValueError(f"Unknown batch_state.csv column: {column}")
+                df.at[idx, column] = value
+            self._clear_assignment_fields(idx)
+        self._save_csv()
+
+    def mark_selected_from_batch(self, batch: Any) -> None:
+        """Mirror a selected ``Batch`` into operational state."""
+        fields_by_mol: dict[str, dict[str, Any]] = {}
+        mol_ids: list[str] = []
+        for mol in batch.molecules:
+            mol_ids.append(str(mol.mol_id))
+            fields_by_mol[str(mol.mol_id)] = {
+                "smiles": mol.smiles,
+                "nheavy": mol.nheavy,
+                "charge": mol.charge,
+                "multiplicity": mol.multiplicity,
+                "batch_id": batch.batch_id,
+                "batch_order": mol.batch_order,
+                "batch_failure_policy": batch.failure_policy.value,
+                "assigned_crest_timeout": batch.crest_timeout_minutes,
+                "assigned_mopac_timeout": batch.mopac_timeout_minutes,
+                "method_id": batch.method_id,
+                "method_version": batch.method_version,
+            }
+        self.mark_selected(
+            mol_ids,
+            batch_id=batch.batch_id,
+            extra_fields_by_mol=fields_by_mol,
+        )
+
+    def get_molecules_by_batch_id(self, batch_id: str) -> list[str]:
+        """Return molecule identifiers currently associated with a batch."""
+        df = self._ensure_loaded()
+        values = df.loc[df["batch_id"] == batch_id, "mol_id"].tolist()
+        return [str(value) for value in values]
+
+    def get_active_worker_assignments(self) -> dict[str, str]:
+        """Return mol_id -> worker_id for assigned or running molecules."""
+        df = self._ensure_loaded()
+        active_mask = df["status"].isin(
+            [MoleculeStatus.ASSIGNED.value, MoleculeStatus.RUNNING.value]
+        )
+        assignments: dict[str, str] = {}
+        for _, row in df[active_mask].iterrows():
+            worker_id = str(row.get("assigned_worker", ""))
+            if not worker_id:
+                continue
+            assignments[str(row["mol_id"])] = worker_id
+        return assignments
+
     def get_pending_molecules(self) -> list[str]:
         """Return molecule identifiers with pending status."""
         return self.get_molecules_by_status(MoleculeStatus.PENDING.value)
@@ -368,6 +446,8 @@ class BatchStateManager:
             if column not in BATCH_STATE_COLUMNS:
                 raise ValueError(f"Unknown batch_state.csv column: {column}")
             df.at[idx, column] = value
+        if df.at[idx, "status"] in self._completion_statuses():
+            self._clear_assignment_fields(idx)
         self._save_csv()
 
     def mark_running(
@@ -433,6 +513,7 @@ class BatchStateManager:
         else:
             new_status = MoleculeStatus.RERUN.value
         df.at[idx, "status"] = new_status
+        self._clear_assignment_fields(idx)
         self._save_csv()
         LOG.warning("%s marked %s after failure: %s", mol_id, new_status, error_message)
         return new_status
@@ -563,9 +644,22 @@ class BatchStateManager:
         """Clear assignment fields and return a row to pending state."""
         df = self._ensure_loaded()
         df.at[idx, "status"] = MoleculeStatus.PENDING.value
+        self._clear_assignment_fields(idx)
+
+    def _clear_assignment_fields(self, idx: int) -> None:
+        """Clear worker assignment fields without changing molecule status."""
+        df = self._ensure_loaded()
         df.at[idx, "assigned_worker"] = ""
         df.at[idx, "worker_status"] = WorkerStatus.UNASSIGNED.value
         df.at[idx, "assigned_at"] = ""
+
+    def _completion_statuses(self) -> set[str]:
+        """Statuses that should not retain worker assignment fields."""
+        return {
+            MoleculeStatus.OK.value,
+            MoleculeStatus.RERUN.value,
+            MoleculeStatus.SKIP.value,
+        }
 
     def _find_molecule_index(self, df: pd.DataFrame, name: str) -> int:
         """Return the integer DataFrame index for a molecule identifier."""

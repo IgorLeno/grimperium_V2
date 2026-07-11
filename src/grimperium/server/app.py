@@ -19,7 +19,12 @@ from fastapi import Depends, FastAPI, Header, HTTPException, Request
 
 from grimperium.cli.settings_manager import DistributedDefaults, SettingsManager
 from grimperium.crest_pm7.batch.csv_manager import BatchCSVManager
-from grimperium.crest_pm7.batch.enums import MoleculeStatus
+from grimperium.crest_pm7.batch.result_applier import BatchResultApplier
+from grimperium.crest_pm7.batch.result_ledger import (
+    LedgerStatus,
+    ResultLedger,
+    build_result_fingerprint,
+)
 from grimperium.crest_pm7.batch.state_manager import BatchStateManager
 from grimperium.crest_pm7.config import PM7Config
 from grimperium.server.config import ServerConfig
@@ -35,6 +40,7 @@ from grimperium.server.models import (
     ShutdownResponse,
     StatusResponse,
     SyncResponse,
+    SyncResult,
     SyncResultsRequest,
     WorkerInfo,
     WorkerInfoExtended,
@@ -56,6 +62,7 @@ _STATE_CONFIG = "config"
 _STATE_WORKER_REGISTRY = "worker_registry"
 _STATE_DISPATCH_ENABLED = "dispatch_enabled"
 _STATE_DISTRIBUTED_DEFAULTS = "distributed_defaults"
+_STATE_RESULT_LEDGER = "result_ledger"
 
 
 # ── Lifespan ──────────────────────────────────────────────────────────────────
@@ -113,47 +120,36 @@ def _apply_worker_result(
     force_skip: bool = False,
     result_update: dict[str, Any] | None = None,
 ) -> str:
-    """Apply one worker result to BOTH the scientific CSV and operational state.
-
-    ``BatchStateManager`` is the single authority for the Rerun/Skip decision;
-    the scientific CSV only mirrors it (via ``apply_operational_status``), so the
-    retry counter is never incremented twice. The two writes are protected by a
-    compensating rollback: if the mirror write fails, the authoritative write is
-    reverted and the error propagates, so the two files never diverge silently.
-
-    This is a synchronous helper meant to run inside ``asyncio.to_thread`` while
-    the caller holds the single application lock. Shared by ``/report/success``,
-    ``/report/failure`` and ``/sync_results``.
-
-    Returns:
-        The final molecule status.
-    """
+    """Apply one worker result through the shared dual-write service."""
+    applier = BatchResultApplier(state_manager=state_manager, csv_manager=csv_manager)
     if success:
-        csv_snapshot = csv_manager.snapshot_row(mol_id)
-        csv_manager.mark_success(mol_id, result_update or {})
-        try:
-            state_manager.mark_success(mol_id)
-        except Exception:
-            csv_manager.restore_row(mol_id, csv_snapshot)
-            raise
-        return MoleculeStatus.OK.value
+        return applier.apply_success(mol_id, result_update or {}).final_status
 
-    # Failure: operational state decides once; the scientific CSV mirrors it.
-    state_snapshot = state_manager.snapshot_row(mol_id)
-    if force_skip:
-        status = MoleculeStatus.SKIP.value
-        state_manager.update_molecule_status(mol_id, status)
-    else:
-        status = state_manager.record_rerun_or_skip(mol_id, error or "failure")
-    reruns = state_manager.get_reruns(mol_id)
-    try:
-        csv_manager.apply_operational_status(
-            mol_id, status, reruns=reruns, result_update=result_update
-        )
-    except Exception:
-        state_manager.restore_row(mol_id, state_snapshot)
-        raise
-    return status
+    return applier.apply_failure(
+        mol_id,
+        error or "failure",
+        force_skip=force_skip,
+        result_update=result_update,
+    ).final_status
+
+
+def _sync_result_payload(result: SyncResult) -> dict[str, Any]:
+    """Return the stable payload used for ledger fingerprinting."""
+    return {
+        "mol_id": result.mol_id,
+        "success": result.success,
+        "result_update": result.result_update,
+        "error": result.error,
+        "completed_at": result.completed_at,
+    }
+
+
+def _sync_result_id(result: SyncResult, state_manager: BatchStateManager) -> str:
+    """Resolve explicit result_id or the deterministic legacy fallback key."""
+    if result.result_id:
+        return result.result_id
+    attempt = state_manager.get_reruns(result.mol_id)
+    return f"{result.mol_id}|{attempt}|{result.completed_at}|{result.success}"
 
 
 # ── Factory ───────────────────────────────────────────────────────────────────
@@ -194,10 +190,13 @@ def create_app(config: ServerConfig) -> FastAPI:
         "Reconciled batch_state.csv: added %d molecule(s) from scientific CSV", added
     )
     app.state.state_manager = state_manager
+    app.state.result_ledger = ResultLedger(
+        Path(config.csv_path).parent / "result_ledger.jsonl"
+    )
 
     app.state.lock = asyncio.Lock()
     app.state.heartbeat_registry = make_heartbeat_registry()
-    app.state.running_molecules = {}  # dict[str, str]: mol_id -> worker_id
+    app.state.running_molecules = state_manager.get_active_worker_assignments()
     app.state.worker_registry = make_worker_registry()
     app.state.dispatch_enabled = False
     try:
@@ -375,15 +374,33 @@ def _register_routes(app: FastAPI) -> None:
     ) -> SyncResponse:
         csv_manager: BatchCSVManager = request.app.state.csv_manager
         sm: BatchStateManager = request.app.state.state_manager
+        ledger: ResultLedger = request.app.state.result_ledger
         lock: asyncio.Lock = request.app.state.lock
         running_molecules: dict[str, str] = request.app.state.running_molecules
 
         accepted = 0
         rejected = 0
+        duplicate_seen = False
 
         for result in req.results:
             try:
                 async with lock:
+                    result_id = await asyncio.to_thread(_sync_result_id, result, sm)
+                    fingerprint = build_result_fingerprint(_sync_result_payload(result))
+                    ledger_decision = await asyncio.to_thread(
+                        ledger.check,
+                        result_id,
+                        fingerprint,
+                    )
+                    if ledger_decision.status is LedgerStatus.DUPLICATE:
+                        duplicate_seen = True
+                        running_molecules.pop(result.mol_id, None)
+                        continue
+                    if ledger_decision.status is LedgerStatus.CONFLICT:
+                        raise HTTPException(
+                            status_code=409,
+                            detail=f"Conflicting sync result_id: {result_id}",
+                        )
                     # Consistent dual-write: only counted accepted when BOTH the
                     # scientific CSV and operational state are persisted (or an
                     # explicit compensating rollback leaves them consistent).
@@ -396,13 +413,25 @@ def _register_routes(app: FastAPI) -> None:
                         error=result.error,
                         result_update=result.result_update,
                     )
+                    await asyncio.to_thread(
+                        ledger.check_and_record,
+                        result_id,
+                        result.mol_id,
+                        fingerprint,
+                    )
                 running_molecules.pop(result.mol_id, None)
                 accepted += 1
+            except HTTPException:
+                raise
             except Exception as exc:
                 LOG.warning("sync_results rejected %s: %s", result.mol_id, exc)
                 rejected += 1
 
-        return SyncResponse(accepted=accepted, rejected=rejected)
+        return SyncResponse(
+            accepted=accepted,
+            rejected=rejected,
+            duplicate=duplicate_seen,
+        )
 
     @app.get("/status", response_model=StatusResponse)
     async def status(request: Request, _: AuthDep) -> StatusResponse:

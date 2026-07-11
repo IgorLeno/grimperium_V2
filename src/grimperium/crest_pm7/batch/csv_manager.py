@@ -387,6 +387,38 @@ class BatchCSVManager:
             raise RuntimeError("load_csv() did not populate self.df")
         return self.df
 
+    def state_seed_rows(self) -> list[dict[str, Any]]:
+        """Return scientific CSV rows suitable for batch_state reconciliation."""
+        df = self._ensure_loaded()
+        seed_columns = [
+            "mol_id",
+            "smiles",
+            "status",
+            "reruns",
+            "nheavy",
+            "charge",
+            "multiplicity",
+            "batch_id",
+            "batch_order",
+            "batch_failure_policy",
+            "assigned_crest_timeout",
+            "assigned_mopac_timeout",
+            "crest_status",
+            "mopac_status",
+        ]
+        rows: list[dict[str, Any]] = []
+        for _, row in df.iterrows():
+            seed: dict[str, Any] = {}
+            for column in seed_columns:
+                if column not in df.columns:
+                    continue
+                value = row.get(column)
+                if pd.isna(value):
+                    value = ""
+                seed[column] = value
+            rows.append(seed)
+        return rows
+
     def _safe_int(self, val: Any, default: int = 0) -> int:
         """Safely convert value to int, handling NaN and invalid types.
 
@@ -482,6 +514,9 @@ class BatchCSVManager:
         """
         df = self._ensure_loaded()
 
+        if "batch_id" not in df.columns:
+            return "batch_0001"
+
         existing_batches = df["batch_id"].dropna().unique()
         batch_numbers = []
 
@@ -569,6 +604,8 @@ class BatchCSVManager:
                     batch_order=batch_order,
                     nheavy=self._safe_int(row["nheavy"], 0),
                     nrotbonds=self._safe_int(row.get("rdkit_nrotbonds", 0), 0),
+                    charge=self._safe_int(row.get("charge", 0), 0),
+                    multiplicity=self._safe_int(row.get("multiplicity", 1), 1),
                     reruns=self._safe_int(row.get("reruns", 0), 0),
                 )
                 orphan_molecules.append(mol)
@@ -616,6 +653,8 @@ class BatchCSVManager:
                         batch_order=batch_order,
                         nheavy=self._safe_int(row["nheavy"], 0),
                         nrotbonds=self._safe_int(row.get("rdkit_nrotbonds", 0), 0),
+                        charge=self._safe_int(row.get("charge", 0), 0),
+                        multiplicity=self._safe_int(row.get("multiplicity", 1), 1),
                         reruns=self._safe_int(row.get("reruns", 0), 0),
                     )
                     new_molecules.append(mol)
@@ -859,6 +898,7 @@ class BatchCSVManager:
         df.at[idx, "status"] = MoleculeStatus.OK.value
 
         # Apply result updates
+        self._ensure_known_update_columns(result_update)
         for col, val in result_update.items():
             if col in df.columns:
                 df.at[idx, col] = val
@@ -911,6 +951,7 @@ class BatchCSVManager:
 
         # Apply partial results if provided
         if result_update:
+            self._ensure_known_update_columns(result_update)
             for col, val in result_update.items():
                 if col in df.columns:
                     df.at[idx, col] = val
@@ -972,10 +1013,19 @@ class BatchCSVManager:
         if reruns is not None:
             df.at[idx, "reruns"] = reruns
         if result_update:
+            self._ensure_known_update_columns(result_update)
             for col, val in result_update.items():
                 if col in df.columns:
                     df.at[idx, col] = val
         self.save_csv()
+
+    def _ensure_known_update_columns(self, updates: dict[str, Any]) -> None:
+        """Create missing scientific columns only when an update needs them."""
+        df = self._ensure_loaded()
+        schema = set(self.get_schema())
+        for column in updates:
+            if column in schema and column not in df.columns:
+                df[column] = pd.NA
 
     def snapshot_row(self, mol_id: str) -> dict[str, Any]:
         """Return a copy of one scientific row for compensating rollback."""

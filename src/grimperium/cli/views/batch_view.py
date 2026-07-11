@@ -14,6 +14,7 @@ Progress Tracking:
 import logging
 import threading
 import time
+from datetime import datetime, timezone
 from pathlib import Path
 from queue import Queue
 from typing import TYPE_CHECKING, Any, ClassVar
@@ -33,6 +34,17 @@ from grimperium.cli.progress_tracker import (
 from grimperium.cli.settings_manager import SettingsManager
 from grimperium.cli.styles import COLORS, ICONS
 from grimperium.cli.views.base_view import BaseView
+from grimperium.crest_pm7.batch import (
+    BatchCSVManager,
+    BatchExecutionManager,
+    BatchOutputLayout,
+    BatchSortingStrategy,
+    BatchStateManager,
+    ConformerDetailManager,
+    FixedTimeoutProcessor,
+)
+from grimperium.crest_pm7.batch.enums import MoleculeStatus
+from grimperium.crest_pm7.config import PM7Config
 
 if TYPE_CHECKING:
     from grimperium.cli.controller import CliController
@@ -111,8 +123,6 @@ class BatchView(BaseView):
     def _render_status(self) -> None:
         """Render current batch status from CSV."""
         try:
-            from grimperium.crest_pm7.batch import BatchCSVManager
-
             if self.csv_path is None:
                 self.console.print("[yellow]No CSV path configured[/]")
                 return
@@ -304,16 +314,6 @@ class BatchView(BaseView):
         Raises:
             ValueError: If CSV path is not configured
         """
-        from grimperium.crest_pm7.batch import (
-            BatchCSVManager,
-            BatchExecutionManager,
-            BatchSortingStrategy,
-            BatchStateManager,
-            ConformerDetailManager,
-            FixedTimeoutProcessor,
-        )
-        from grimperium.crest_pm7.config import PM7Config
-
         if self.csv_path is None:
             raise ValueError("CSV path not configured")
 
@@ -324,12 +324,21 @@ class BatchView(BaseView):
         csv_manager = BatchCSVManager(self.csv_path)
         csv_manager.load_csv()
 
-        detail_manager = ConformerDetailManager(self.detail_dir)
         pm7_config = PM7Config()
         state_manager = BatchStateManager(
             self.csv_path.parent / "batch_state.csv",
             pm7_config,
         )
+        state_manager.reconcile_molecules(csv_manager.state_seed_rows())
+        stuck_mol_ids = state_manager.reset_stuck_running_molecules()
+        for mol_id in stuck_mol_ids:
+            csv_manager.apply_operational_status(mol_id, MoleculeStatus.PENDING.value)
+        if stuck_mol_ids:
+            self.console.print(
+                f"[yellow]Recovered {len(stuck_mol_ids)} stuck RUNNING molecule(s) -> PENDING[/yellow]"
+            )
+
+        detail_manager = ConformerDetailManager(self.detail_dir)
         settings_manager: SettingsManager | None = getattr(
             self.controller, "settings_manager", None
         )
@@ -348,21 +357,6 @@ class BatchView(BaseView):
             ),
         )
 
-        exec_manager = BatchExecutionManager(
-            csv_manager=csv_manager,
-            state_manager=state_manager,
-            detail_manager=detail_manager,
-            pm7_config=pm7_config,
-            processor_adapter=processor,
-        )
-
-        # Recover any molecules stuck in RUNNING from interrupted batches
-        stuck_count = csv_manager.reset_stuck_running()
-        if stuck_count > 0:
-            self.console.print(
-                f"[yellow]Recovered {stuck_count} stuck RUNNING molecule(s) → PENDING[/yellow]"
-            )
-
         # Create batch
         batch_id = csv_manager.generate_batch_id()
         batch = csv_manager.select_batch(
@@ -372,8 +366,26 @@ class BatchView(BaseView):
             mopac_timeout_minutes=self.mopac_timeout,
             strategy=BatchSortingStrategy.RERUN_FIRST_THEN_EASY,
         )
+        state_manager.mark_selected_from_batch(batch)
+
+        output_layout = BatchOutputLayout(self._batch_output_dir(batch.batch_id))
+        exec_manager = BatchExecutionManager(
+            csv_manager=csv_manager,
+            state_manager=state_manager,
+            detail_manager=detail_manager,
+            pm7_config=pm7_config,
+            processor_adapter=processor,
+            output_layout=output_layout,
+        )
 
         return exec_manager, batch
+
+    def _batch_output_dir(self, batch_id: str) -> Path:
+        """Build a unique canonical output directory for one local batch run."""
+        if self.csv_path is None:
+            raise ValueError("CSV path not configured")
+        timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+        return self.csv_path.parent / "batch_outputs" / f"{batch_id}_{timestamp}"
 
     def _run_batch_with_tracker(self) -> None:
         """Run batch with granular 5-stage progress tracking.
@@ -407,9 +419,11 @@ class BatchView(BaseView):
         if csv_path is None:
             raise ValueError("CSV path not configured")
 
+        monitor_path = exec_manager.state_manager.state_csv_path
+
         # Initialize CSV monitor (daemon thread)
         csv_monitor = CSVMonitor(
-            csv_path=csv_path,
+            csv_path=monitor_path if monitor_path.exists() else csv_path,
             event_queue=event_queue,
             poll_interval_ms=500,
         )

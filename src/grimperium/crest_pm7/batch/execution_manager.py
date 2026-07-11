@@ -12,11 +12,15 @@ import logging
 import time
 from collections.abc import Callable
 from datetime import datetime, timezone
+from inspect import Parameter, signature
 from pathlib import Path
 from typing import Any, cast
 
 from grimperium.calculation.contracts.adapters import PM7Result as AdapterPM7Result
-from grimperium.calculation.contracts.adapters import pm7result_to_canonical
+from grimperium.calculation.contracts.adapters import (
+    canonical_pm7_method_id,
+    pm7result_to_canonical,
+)
 from grimperium.calculation.contracts.models import MoleculeCalculationResult
 from grimperium.crest_pm7.batch.artifact_manager import ArtifactManager
 from grimperium.crest_pm7.batch.csv_manager import BatchCSVManager
@@ -29,6 +33,7 @@ from grimperium.crest_pm7.batch.output_contracts import (
     write_batch_calculation_results,
 )
 from grimperium.crest_pm7.batch.processor_adapter import FixedTimeoutProcessor
+from grimperium.crest_pm7.batch.result_applier import BatchResultApplier
 from grimperium.crest_pm7.batch.state_manager import BatchStateManager
 from grimperium.crest_pm7.config import PM7Config
 from grimperium.crest_pm7.csv_enhancements import (
@@ -109,6 +114,10 @@ class BatchExecutionManager:
         self._result_writer = result_writer
         self._write_xlsx = write_xlsx
         self._canonical_results: list[MoleculeCalculationResult] = []
+        self.result_applier = BatchResultApplier(
+            state_manager=state_manager,
+            csv_manager=csv_manager,
+        )
 
         LOG.info("BatchExecutionManager initialized")
 
@@ -193,6 +202,8 @@ class BatchExecutionManager:
                     smiles=mol.smiles,
                     batch_id=batch.batch_id,
                     batch_order=mol.batch_order,
+                    charge=mol.charge,
+                    multiplicity=mol.multiplicity,
                     crest_timeout=batch.crest_timeout_minutes,
                     mopac_timeout=batch.mopac_timeout_minutes,
                     result=result,
@@ -244,7 +255,14 @@ class BatchExecutionManager:
             LOG.warning(
                 f"ALL_OR_NOTHING: Resetting batch {batch.batch_id} due to failures"
             )
+            batch_mol_ids = self.state_manager.get_molecules_by_batch_id(batch.batch_id)
             reset_count = self.state_manager.reset_all_or_nothing(batch.batch_id)
+            for mol_id in batch_mol_ids:
+                self.csv_manager.apply_operational_status(
+                    mol_id,
+                    MoleculeStatus.PENDING.value,
+                )
+            result.invalidated = bool(reset_count)
             LOG.info(f"Reset {reset_count} molecules from batch {batch.batch_id}")
 
         LOG.info(
@@ -267,6 +285,8 @@ class BatchExecutionManager:
         mopac_timeout: float,
         result: BatchResult,
         hof_values: list[tuple[str, float]],
+        charge: int = 0,
+        multiplicity: int = 1,
         method_id: str = "pm7_delta_learning",
         method_version: str = "1.0.0",
         method_snapshot: dict[str, Any] | None = None,
@@ -316,6 +336,8 @@ class BatchExecutionManager:
             "smiles": smiles,
             "batch_id": batch_id,
             "batch_order": batch_order,
+            "charge": charge,
+            "multiplicity": multiplicity,
             "batch_failure_policy": batch_failure_policy,
             "assigned_crest_timeout": crest_timeout,
             "assigned_mopac_timeout": mopac_timeout,
@@ -359,10 +381,12 @@ class BatchExecutionManager:
 
         try:
             # Process molecule
-            pm7_result = self.processor_adapter.process_with_fixed_timeout(
+            pm7_result = self._process_with_charge_metadata(
                 mol_id=mol_id,
                 smiles=smiles,
                 progress_callback=progress_callback,
+                charge=charge,
+                multiplicity=multiplicity,
             )
 
             # Save detail file
@@ -411,11 +435,7 @@ class BatchExecutionManager:
                     crest_timeout_used=crest_timeout,
                     mopac_timeout_used=mopac_timeout,
                 )
-                self.state_manager.update_molecule_status(
-                    mol_id,
-                    MoleculeStatus.OK.value,
-                )
-                self.csv_manager.mark_success(mol_id, csv_update)
+                self.result_applier.apply_success(mol_id, csv_update)
                 result.success_count += 1
 
                 # Accumulate the canonical scientific result when canonical output
@@ -424,7 +444,11 @@ class BatchExecutionManager:
                 # CORRECTION/FINAL is invented.
                 if self._output_layout is not None:
                     self._canonical_results.append(
-                        pm7result_to_canonical(cast(AdapterPM7Result, pm7_result))
+                        pm7result_to_canonical(
+                            cast(AdapterPM7Result, pm7_result),
+                            method_id=canonical_pm7_method_id(method_id),
+                            method_version=method_version,
+                        )
                     )
 
                 # Enhance CSV with delta calculations and batch settings
@@ -470,7 +494,8 @@ class BatchExecutionManager:
             else:
                 # Record retry state, or terminal skip when attempts are exhausted.
                 error_msg = pm7_result.error_message or "Unknown error"
-                new_status = self.state_manager.record_rerun_or_skip(mol_id, error_msg)
+                decision = self.result_applier.apply_failure(mol_id, error_msg)
+                new_status = decision.final_status
 
                 if new_status == MoleculeStatus.SKIP.value:
                     result.skip_count += 1
@@ -485,7 +510,8 @@ class BatchExecutionManager:
             error_msg = f"Processing exception: {str(e)}"
             LOG.error(f"{mol_id}: {error_msg}", exc_info=True)
 
-            new_status = self.state_manager.record_rerun_or_skip(mol_id, error_msg)
+            decision = self.result_applier.apply_failure(mol_id, error_msg)
+            new_status = decision.final_status
 
             if new_status == MoleculeStatus.SKIP.value:
                 result.skip_count += 1
@@ -551,6 +577,36 @@ class BatchExecutionManager:
                 exc,
                 exc_info=True,
             )
+
+    def _process_with_charge_metadata(
+        self,
+        *,
+        mol_id: str,
+        smiles: str,
+        progress_callback: Callable[[BatchProgressStage], None],
+        charge: int,
+        multiplicity: int,
+    ) -> Any:
+        """Call the processor with charge metadata when its adapter supports it."""
+        processor_method = self.processor_adapter.process_with_fixed_timeout
+        parameters = signature(processor_method).parameters.values()
+        accepts_kwargs = any(
+            parameter.kind is Parameter.VAR_KEYWORD for parameter in parameters
+        )
+        names = {parameter.name for parameter in parameters}
+        if accepts_kwargs or {"charge", "multiplicity"}.issubset(names):
+            return processor_method(
+                mol_id=mol_id,
+                smiles=smiles,
+                progress_callback=progress_callback,
+                charge=charge,
+                multiplicity=multiplicity,
+            )
+        return processor_method(
+            mol_id=mol_id,
+            smiles=smiles,
+            progress_callback=progress_callback,
+        )
 
     def _serialize_method_snapshot(self, method_snapshot: dict[str, Any]) -> str:
         """Serialize method metadata for the operational state CSV."""

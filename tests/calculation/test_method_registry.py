@@ -69,6 +69,7 @@ def test_list_standard_enthalpy_methods_returns_method_a_and_b() -> None:
 
     assert [method.method_id for method in methods] == [
         "semiempirical_am1_pm3_pm7",
+        "crest_pm7",
         "pm7_delta_learning",
     ]
     assert all(isinstance(method, CalculationMethodDefinition) for method in methods)

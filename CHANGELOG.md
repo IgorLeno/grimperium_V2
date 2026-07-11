@@ -8,6 +8,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Macrobloco 1 operational batch closure** (2026-07-11)
+  - Added shared `BatchResultApplier` dual-write service and append-only
+    `ResultLedger` for idempotent distributed `/sync_results`.
+  - Added `crest_pm7` method definition and canonical PM7 method-ID mapping.
+  - Added tests for result application, idempotent sync, operational authority,
+    ALL_OR_NOTHING reset mirroring, CLI canonical output wiring, and fake E2E
+    batch execution.
 - **CLI Information Architecture MVP** — session-aware CLI navigation:
   - `CliController` tracks `current_method_*` / property and exposes
     `session_summary()` (Property | Method | Model | Status).

@@ -81,7 +81,7 @@ def test_pm7_adapter_maps_selected_conformer_and_preserves_hof() -> None:
     canonical = pm7result_to_canonical(_pm7_result())
 
     assert canonical.run.execution_phase == "B"
-    assert canonical.run.method_ref.method_id == "pm7_delta_legacy"
+    assert canonical.run.method_ref.method_id == "crest_pm7"
     assert canonical.run.method_ref.method_version == "0.0.0"
     assert canonical.overall_status is OverallStatus.SUCCESS
     assert len(canonical.estimates) == 1

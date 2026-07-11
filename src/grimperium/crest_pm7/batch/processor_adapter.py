@@ -228,6 +228,8 @@ class FixedTimeoutProcessor:
         smiles: str,
         input_xyz: Path | None = None,
         progress_callback: BatchProgressCallback | None = None,
+        charge: int = 0,
+        multiplicity: int = 1,
     ) -> PM7Result:
         """Process molecule with fixed timeouts.
 
@@ -240,6 +242,8 @@ class FixedTimeoutProcessor:
             smiles: SMILES string
             input_xyz: Optional input XYZ file
             progress_callback: Optional callback for progress stage updates
+            charge: Molecular charge used for MOPAC input
+            multiplicity: Spin multiplicity used for MOPAC input
 
         Returns:
             PM7Result from processing
@@ -271,6 +275,8 @@ class FixedTimeoutProcessor:
             input_xyz,
             progress_callback=progress_callback,
             preopt_reported=preopt_reported,
+            charge=charge,
+            multiplicity=multiplicity,
         )
 
     def update_timeouts(

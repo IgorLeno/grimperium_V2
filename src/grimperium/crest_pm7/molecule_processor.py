@@ -160,6 +160,8 @@ class PM7Result:
     # Metadata
     nheavy: int | None = None
     nrotbonds: int | None = None
+    charge: int = 0
+    multiplicity: int = 1
     tpsa: float | None = None
     aromatic_rings: int | None = None
     has_heteroatoms: bool | None = None
@@ -236,6 +238,8 @@ class PM7Result:
             "phase": self.phase,
             "nheavy": self.nheavy,
             "nrotbonds": self.nrotbonds,
+            "charge": self.charge,
+            "multiplicity": self.multiplicity,
             "tpsa": self.tpsa,
             "aromatic_rings": self.aromatic_rings,
             "has_heteroatoms": self.has_heteroatoms,
@@ -446,6 +450,8 @@ class MoleculeProcessor:
         *,
         progress_callback: BatchProgressCallback | None = None,
         preopt_reported: bool = False,
+        charge: int = 0,
+        multiplicity: int = 1,
     ) -> PM7Result:
         """Process a single molecule.
 
@@ -455,6 +461,8 @@ class MoleculeProcessor:
             input_xyz: Optional input XYZ (if None, generate from SMILES)
             progress_callback: Optional callback for progress stage updates
             preopt_reported: Whether xTB pre-optimization stage was already reported
+            charge: Molecular charge used for MOPAC input
+            multiplicity: Spin multiplicity used for MOPAC input
 
         Returns:
             PM7Result with all processing results
@@ -472,6 +480,8 @@ class MoleculeProcessor:
             mol_id=mol_id,
             smiles=smiles,
             phase=phase_value,
+            charge=charge,
+            multiplicity=multiplicity,
         )
 
         LOG.info(f"Processing molecule: {mol_id} ({smiles})")
@@ -580,6 +590,8 @@ class MoleculeProcessor:
                 timeout=per_conformer_timeout,
                 nheavy=result.nheavy,
                 conf_index=idx,
+                charge=charge,
+                multiplicity=multiplicity,
             )
 
             conf_data.mopac_status = mopac_result.status

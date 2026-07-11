@@ -26,6 +26,7 @@ from .quantity import Quantity
 PROPERTY_ID = "standard_enthalpy_of_formation"
 LEGACY_METHOD_ID = "pm7_delta_legacy"
 LEGACY_METHOD_VERSION = "0.0.0"
+CREST_PM7_METHOD_ID = "crest_pm7"
 HAMILTONIAN = "PM7"
 
 
@@ -97,6 +98,13 @@ _ELECTRONIC_DESCRIPTOR_KEYS = [
     "mopac_point_group",
     "mopac_time_s",
 ]
+
+
+def canonical_pm7_method_id(method_id: str) -> str:
+    """Map legacy or batch-only PM7 method IDs to the canonical CREST+PM7 ID."""
+    if method_id in {LEGACY_METHOD_ID, "pm7_delta_learning"}:
+        return CREST_PM7_METHOD_ID
+    return method_id
 
 
 def _relative_path(path: Path) -> str:
@@ -262,6 +270,8 @@ def pm7result_to_canonical(
     executor) attribute the PM7 estimate to the true method that produced it. The
     defaults preserve the original legacy-baseline behavior for existing callers.
     """
+    if method_id == LEGACY_METHOD_ID:
+        method_id = CREST_PM7_METHOD_ID
     run_id = str(uuid4())
     artifacts: list[CalculationArtifact] = []
     conformers: list[ConformerResult] = []

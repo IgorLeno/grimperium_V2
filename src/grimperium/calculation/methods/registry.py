@@ -15,6 +15,7 @@ STANDARD_ENTHALPY_PACKAGE = (
 )
 STANDARD_ENTHALPY_RESOURCES = (
     "semiempirical_am1_pm3_pm7.yaml",
+    "crest_pm7.yaml",
     "pm7_delta_learning.yaml",
 )
 

@@ -155,10 +155,7 @@ def test_process_molecule_success_updates_state_and_scientific_csv(
             method_snapshot={},
         )
 
-    state_manager.update_molecule_status.assert_any_call(
-        "mol_001",
-        MoleculeStatus.OK.value,
-    )
+    state_manager.mark_success.assert_called_once_with("mol_001")
     csv_manager.pm7result_to_csv_update.assert_called_once()
     csv_manager.mark_success.assert_called_once_with("mol_001", {"H298_pm7": -55.0})
 

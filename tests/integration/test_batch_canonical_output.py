@@ -242,8 +242,8 @@ def test_legacy_and_operational_paths_still_invoked(tmp_path: Path) -> None:
 
     # Legacy scientific CSV path preserved.
     csv_manager.mark_success.assert_called_once()
-    # Operational state still marked OK via the state manager.
-    state_manager.update_molecule_status.assert_any_call("m1", MoleculeStatus.OK.value)
+    # Operational state still marked OK via the shared result applier.
+    state_manager.mark_success.assert_called_once_with("m1")
 
 
 def test_no_canonical_files_when_output_disabled(tmp_path: Path) -> None:

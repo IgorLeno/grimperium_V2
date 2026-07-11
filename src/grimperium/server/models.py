@@ -41,6 +41,7 @@ class ReportFailureRequest(BaseModel):
 
 
 class SyncResult(BaseModel):
+    result_id: str | None = None
     mol_id: str
     success: bool
     result_update: dict[str, Any] | None
@@ -73,6 +74,7 @@ class StatusResponse(BaseModel):
 class SyncResponse(BaseModel):
     accepted: int
     rejected: int
+    duplicate: bool = False
 
 
 class RegisterResponse(BaseModel):

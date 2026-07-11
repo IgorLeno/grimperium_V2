@@ -10,7 +10,7 @@ import logging
 import multiprocessing
 import threading
 import time
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from pathlib import Path
 from queue import Queue
 from typing import TYPE_CHECKING, Any
@@ -21,7 +21,7 @@ from rich.live import Live
 from rich.panel import Panel
 from rich.table import Table
 
-from grimperium.cli.constants import DATA_DIR, PHASE_A_RESULTS_FILE
+from grimperium.cli.constants import DATA_DIR
 from grimperium.cli.database_registry import DatabaseInfo, DatabaseRegistry
 from grimperium.cli.menu import MenuOption, show_back_menu
 from grimperium.cli.menu import confirm as menu_confirm
@@ -42,6 +42,14 @@ from grimperium.cli.settings_manager import DistributedDefaults, SettingsManager
 from grimperium.cli.styles import COLORS, ICONS
 from grimperium.cli.views.base_view import BaseView
 from grimperium.core.metrics import mae, r2_score
+from grimperium.crest_pm7.batch import (
+    BatchCSVManager,
+    BatchExecutionManager,
+    BatchOutputLayout,
+    BatchSortingStrategy,
+    ConformerDetailManager,
+    FixedTimeoutProcessor,
+)
 from grimperium.crest_pm7.batch.enums import MoleculeStatus, WorkerStatus
 from grimperium.crest_pm7.batch.state_manager import BatchStateManager
 from grimperium.crest_pm7.config import PM7Config
@@ -931,16 +939,6 @@ class DatabasesView(BaseView):
             crest_timeout_minutes: CREST timeout per molecule
             mopac_timeout_minutes: MOPAC timeout per molecule
         """
-        from grimperium.crest_pm7.batch import (
-            BatchCSVManager,
-            BatchExecutionManager,
-            BatchSortingStrategy,
-            BatchStateManager,
-            ConformerDetailManager,
-            FixedTimeoutProcessor,
-        )
-        from grimperium.crest_pm7.config import PM7Config
-
         csv_path = DATA_DIR / "thermo_pm7.csv"
         detail_dir = DATA_DIR / "molecules_pm7" / "conformer_details"
 
@@ -967,6 +965,16 @@ class DatabasesView(BaseView):
                 csv_path.parent / "batch_state.csv", pm7_config
             )
             csv_manager.load_csv()
+            state_manager.reconcile_molecules(csv_manager.state_seed_rows())
+            stuck_mol_ids = state_manager.reset_stuck_running_molecules()
+            for mol_id in stuck_mol_ids:
+                csv_manager.apply_operational_status(
+                    mol_id, MoleculeStatus.PENDING.value
+                )
+            if stuck_mol_ids:
+                self.console.print(
+                    f"[yellow]Recovered {len(stuck_mol_ids)} stuck RUNNING molecule(s) -> PENDING[/yellow]"
+                )
 
             detail_dir.mkdir(parents=True, exist_ok=True)
             detail_manager = ConformerDetailManager(detail_dir)
@@ -983,21 +991,6 @@ class DatabasesView(BaseView):
                 ),
             )
 
-            exec_manager = BatchExecutionManager(
-                csv_manager=csv_manager,
-                state_manager=state_manager,
-                detail_manager=detail_manager,
-                pm7_config=pm7_config,
-                processor_adapter=processor,
-            )
-
-            # Recover any molecules stuck in RUNNING from interrupted batches
-            stuck_count = csv_manager.reset_stuck_running()
-            if stuck_count > 0:
-                self.console.print(
-                    f"[yellow]Recovered {stuck_count} stuck RUNNING molecule(s) → PENDING[/yellow]"
-                )
-
             batch_id = csv_manager.generate_batch_id()
             batch = csv_manager.select_batch(
                 batch_id=batch_id,
@@ -1005,6 +998,18 @@ class DatabasesView(BaseView):
                 crest_timeout_minutes=crest_timeout_minutes,
                 mopac_timeout_minutes=mopac_timeout_minutes,
                 strategy=BatchSortingStrategy.RERUN_FIRST_THEN_EASY,
+            )
+            state_manager.mark_selected_from_batch(batch)
+            output_layout = BatchOutputLayout(
+                self._pm7_batch_output_dir(csv_path, batch_id)
+            )
+            exec_manager = BatchExecutionManager(
+                csv_manager=csv_manager,
+                state_manager=state_manager,
+                detail_manager=detail_manager,
+                pm7_config=pm7_config,
+                processor_adapter=processor,
+                output_layout=output_layout,
             )
 
             if batch.is_empty:
@@ -1027,7 +1032,11 @@ class DatabasesView(BaseView):
                 batch_size=batch.size,
             )
             csv_monitor = CSVMonitor(
-                csv_path=csv_path,
+                csv_path=(
+                    state_manager.state_csv_path
+                    if state_manager.state_csv_path.exists()
+                    else csv_path
+                ),
                 event_queue=event_queue,
                 poll_interval_ms=500,
             )
@@ -1109,7 +1118,7 @@ class DatabasesView(BaseView):
 
             self.console.print()
             self.console.print(
-                f"[cyan]Results saved to:[/cyan] {PHASE_A_RESULTS_FILE.parent}"
+                f"[cyan]Results saved to:[/cyan] {output_layout.output_dir}"
             )
 
         except FileNotFoundError as e:
@@ -1121,6 +1130,11 @@ class DatabasesView(BaseView):
 
         self.console.print()
         self.console.input("[dim]Press Enter to continue...[/dim]")
+
+    def _pm7_batch_output_dir(self, csv_path: Path, batch_id: str) -> Path:
+        """Build a unique canonical output directory for one PM7 batch run."""
+        timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+        return csv_path.parent / "batch_outputs" / f"{batch_id}_{timestamp}"
 
     def _render_pm7_batch_display(
         self, tracker: ProgressTracker, frame_idx: int
@@ -1515,8 +1529,6 @@ class DatabasesView(BaseView):
                 for w in workers
                 if w.get("worker_id")
             ]
-            from datetime import timezone
-
             session = SessionState(
                 started_at=datetime.now(timezone.utc).isoformat(),
                 server_url=server_url,
