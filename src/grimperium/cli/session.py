@@ -53,9 +53,10 @@ class AnalysisSourceRef:
 
 @dataclass(frozen=True)
 class RunRef:
-    """Placeholder for a future persisted run reference."""
+    """Reference to the latest persisted run in the current CLI session."""
 
     run_id: str | None = None
+    status: str | None = None
 
 
 @dataclass

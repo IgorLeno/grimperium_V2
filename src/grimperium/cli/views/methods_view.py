@@ -17,7 +17,8 @@ from grimperium.calculation.methods import (
     list_calculation_methods,
     list_calculation_properties,
 )
-from grimperium.cli.menu import MenuOption, show_back_menu, show_menu
+from grimperium.cli.components import SessionContextPanel
+from grimperium.cli.menu import MenuOption, show_back_menu, show_menu, text_input
 from grimperium.cli.styles import COLORS, ICONS
 from grimperium.cli.views.base_view import BaseView
 
@@ -61,24 +62,7 @@ class MethodsView(BaseView):
         self.show_header()
 
         summary = self.controller.session_summary()
-        active = (
-            f"[{COLORS['muted']}]Active Property:[/{COLORS['muted']}] "
-            f"[{COLORS['calc']}]{summary['property']}[/{COLORS['calc']}]\n"
-            f"[{COLORS['muted']}]Active Method:[/{COLORS['muted']}] "
-            f"[{COLORS['calc']}]{summary['method']}[/{COLORS['calc']}]\n"
-            f"[{COLORS['muted']}]Model:[/{COLORS['muted']}] "
-            f"[{COLORS['calc']}]{summary['model']}[/{COLORS['calc']}]\n"
-            f"[{COLORS['muted']}]Status:[/{COLORS['muted']}] "
-            f"[{COLORS['calc']}]{summary['status']}[/{COLORS['calc']}]"
-        )
-        self.console.print(
-            Panel(
-                active,
-                title=f"[bold {COLORS['calc']}]Session[/bold {COLORS['calc']}]",
-                border_style=COLORS["border"],
-                padding=(1, 2),
-            )
-        )
+        self.console.print(SessionContextPanel(summary).render())
         self.console.print()
         self._render_property_catalog()
 
@@ -134,7 +118,7 @@ class MethodsView(BaseView):
 [{COLORS['muted']}]Conformer strategy:[/{COLORS['muted']}] {method.conformer_selection.strategy}
 [{COLORS['muted']}]Model:[/{COLORS['muted']}] {model_line}
 [{COLORS['muted']}]xTB:[/{COLORS['muted']}] {xtb_line}
-[{COLORS['muted']}]Execution overrides:[/{COLORS['muted']}] Coming in next release
+[{COLORS['muted']}]Execution overrides:[/{COLORS['muted']}] {self._format_overrides()}
 """
         self.console.print(
             Panel(
@@ -211,6 +195,11 @@ class MethodsView(BaseView):
                 value="details",
                 icon=ICONS["about"],
             ),
+            MenuOption(
+                label="Configure Execution Overrides",
+                value="configure_overrides",
+                icon=ICONS["settings"],
+            ),
         ]
 
     def handle_action(self, action: str) -> str | None:
@@ -222,7 +211,90 @@ class MethodsView(BaseView):
         if action == "details":
             self.show_active_details()
             return None
+        if action == "configure_overrides":
+            self.configure_execution_overrides()
+            return None
         return None
+
+    def configure_execution_overrides(self) -> None:
+        """Configure method execution overrides stored in the session."""
+        overrides = self.controller.session.overrides
+        try:
+            cancelled, n_conformers = self._prompt_optional_int(
+                "Max conformers (blank clears)", overrides.n_conformers
+            )
+            if cancelled:
+                return
+            cancelled, batch_size = self._prompt_optional_int(
+                "Batch size (blank clears)", overrides.batch_size
+            )
+            if cancelled:
+                return
+            cancelled, crest_timeout = self._prompt_optional_float(
+                "CREST timeout minutes (blank clears)", overrides.crest_timeout_minutes
+            )
+            if cancelled:
+                return
+            cancelled, mopac_timeout = self._prompt_optional_float(
+                "MOPAC timeout minutes (blank clears)",
+                overrides.mopac_timeout_minutes,
+            )
+            if cancelled:
+                return
+        except ValueError as exc:
+            self.show_error(str(exc))
+            self.wait_for_enter()
+            return
+
+        overrides.n_conformers = n_conformers
+        overrides.batch_size = batch_size
+        overrides.crest_timeout_minutes = crest_timeout
+        overrides.mopac_timeout_minutes = mopac_timeout
+        self.show_success("Execution overrides updated")
+        self.wait_for_enter()
+
+    def _prompt_optional_int(
+        self, message: str, current: int | None
+    ) -> tuple[bool, int | None]:
+        value = text_input(message, default="" if current is None else str(current))
+        if value is None:
+            return True, current
+        value = value.strip()
+        if not value:
+            return False, None
+        parsed = int(value)
+        if parsed <= 0:
+            raise ValueError("Override values must be positive")
+        return False, parsed
+
+    def _prompt_optional_float(
+        self,
+        message: str,
+        current: float | None,
+    ) -> tuple[bool, float | None]:
+        value = text_input(message, default="" if current is None else str(current))
+        if value is None:
+            return True, current
+        value = value.strip()
+        if not value:
+            return False, None
+        parsed = float(value)
+        if parsed <= 0:
+            raise ValueError("Override values must be positive")
+        return False, parsed
+
+    def _format_overrides(self) -> str:
+        overrides = self.controller.session.overrides
+        parts = []
+        if overrides.n_conformers is not None:
+            parts.append(f"n_conformers={overrides.n_conformers}")
+        if overrides.batch_size is not None:
+            parts.append(f"batch_size={overrides.batch_size}")
+        if overrides.crest_timeout_minutes is not None:
+            parts.append(f"crest={overrides.crest_timeout_minutes:g}min")
+        if overrides.mopac_timeout_minutes is not None:
+            parts.append(f"mopac={overrides.mopac_timeout_minutes:g}min")
+        return ", ".join(parts) if parts else "None"
 
     def run(self) -> str | None:
         while True:

@@ -8,28 +8,20 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
-import numpy as np
-import pandas as pd
 from rich.panel import Panel
 from rich.table import Table
 
+from grimperium.cli.components import EmptyStatePanel, StatusBadge
 from grimperium.cli.menu import MenuOption, show_back_menu
+from grimperium.cli.session import RunRef
 from grimperium.cli.styles import COLORS, ICONS
 from grimperium.cli.views.base_view import BaseView
-from grimperium.ml.persistence import load_model_metadata
-
-if TYPE_CHECKING:
-    from grimperium import DictStrAny
-
-# Static thresholds for divergence severity (no env dependency)
-_DIVERGENCE_THRESHOLDS = [
-    ("LOW", 0, 10),
-    ("MEDIUM", 10, 25),
-    ("HIGH", 25, 50),
-    ("CRITICAL", 50, float("inf")),
-]
+from grimperium.ml import charts as charts_module
+from grimperium.ml import html_report as html_report_module
+from grimperium.results.models import ResultsAnalysisReport
+from grimperium.results.service import ResultsService
 
 
 class ResultsView(BaseView):
@@ -39,6 +31,10 @@ class ResultsView(BaseView):
     title = "Results"
     icon = ICONS["results"]
     color = COLORS["results"]
+
+    def __init__(self, controller: Any) -> None:
+        super().__init__(controller)
+        self.results_service = ResultsService()
 
     def _get_model_path(self) -> Path | None:
         """Resolve model path from the live controller session.
@@ -55,86 +51,62 @@ class ResultsView(BaseView):
             return None
         return Path(model_path)
 
-    def _get_csv_path(self) -> Path:
+    def _get_csv_path(self) -> Path | None:
         """Resolve CSV path from the typed live controller session."""
         session = getattr(self.controller, "__dict__", {}).get("session")
         csv_path = getattr(session, "analysis_path", None)
         if csv_path is None:
             csv_path = getattr(self.controller, "current_csv_path", None)
         if csv_path is None:
-            fallback = Path("data/thermo_pm7.csv")
-            self.console.print(
-                f"[{COLORS['warning']}]Using default data file: {fallback}"
-                f"[/{COLORS['warning']}]"
-            )
-            return fallback
+            return None
         return Path(csv_path)
 
-    def _show_analysis_only_message(self, message: str) -> None:
-        """Show a boundary message for actions now owned by Models."""
-        self.console.print()
-        self.console.print(
-            Panel(
-                f"[{COLORS['warning']}]{message}[/{COLORS['warning']}]",
-                title=f"[bold {COLORS['warning']}]Analysis Only[/bold {COLORS['warning']}]",
-                border_style=COLORS["warning"],
-                padding=(1, 2),
-            )
-        )
-        self.console.print()
-        self.wait_for_enter()
+    def _session_model_name(self) -> str | None:
+        session = getattr(self.controller, "__dict__", {}).get("session")
+        model = getattr(session, "model", None)
+        model_name = getattr(model, "name", None)
+        if model_name:
+            return str(model_name)
+        current_model = getattr(self.controller, "current_model", None)
+        return str(current_model) if current_model else None
 
-    def _load_real_model_row(self) -> dict[str, Any] | None:
-        """Load model metadata for display. Returns None if not available."""
-        model_path = self._get_model_path()
-        if model_path is None:
+    def _active_run_id(self) -> str | None:
+        session = getattr(self.controller, "__dict__", {}).get("session")
+        run_ref = getattr(session, "run", None)
+        run_id = getattr(run_ref, "run_id", None)
+        return str(run_id) if run_id else None
+
+    def _load_analysis_report(
+        self, *, show_errors: bool
+    ) -> ResultsAnalysisReport | None:
+        """Load the active run or dataset analysis through ResultsService."""
+        run_id = self._active_run_id()
+        if run_id is not None:
+            try:
+                return self.results_service.analyze_run(run_id)
+            except (FileNotFoundError, ValueError) as exc:
+                if show_errors:
+                    self.show_error(str(exc))
+                return None
+
+        csv_path = self._get_csv_path()
+        if csv_path is None:
+            if show_errors:
+                self.show_error(
+                    "No analysis source selected. Choose a dataset, select a run, "
+                    "or run a calculation first."
+                )
+            return None
+        if not csv_path.exists():
+            if show_errors:
+                self.show_error(f"Data file not found: {csv_path}")
             return None
         try:
-            return load_model_metadata(model_path)
-        except (FileNotFoundError, KeyError, Exception):
+            return self.results_service.analyze_dataset(csv_path)
+        except ValueError as exc:
+            if show_errors:
+                self.show_error(str(exc))
             return None
-
-    def _compute_divergence_stats(self) -> list[DictStrAny] | None:
-        """Compute divergence statistics from predictions vs CBS values.
-
-        Returns None if CSV is missing or has no predictions.
-        """
-        csv_path = self._get_csv_path()
-        if not csv_path.exists():
-            return None
-
-        df = pd.read_csv(csv_path)
-        if "H298_predicted" not in df.columns or "H298_cbs" not in df.columns:
-            return None
-
-        # Only rows with both predicted and CBS values
-        valid = df.dropna(subset=["H298_predicted", "H298_cbs"])
-        if len(valid) == 0:
-            return None
-
-        # Compute relative divergence: |predicted - cbs| / |cbs| * 100
-        cbs_abs = valid["H298_cbs"].abs()
-        # Avoid division by zero: use small epsilon
-        safe_cbs = cbs_abs.replace(0, np.finfo(float).eps)
-        divergence_pct = (
-            (valid["H298_predicted"] - valid["H298_cbs"]).abs() / safe_cbs * 100
-        )
-
-        total = len(divergence_pct)
-        stats: list[DictStrAny] = []
-        for severity, lo, hi in _DIVERGENCE_THRESHOLDS:
-            count = int(((divergence_pct >= lo) & (divergence_pct < hi)).sum())
-            pct = (count / total * 100) if total > 0 else 0.0
-            stats.append(
-                {
-                    "severity": severity,
-                    "range_min": lo,
-                    "range_max": hi if hi != float("inf") else 100,
-                    "count": count,
-                    "percentage": pct,
-                }
-            )
-        return stats
 
     def render(self) -> None:
         """Render the results overview."""
@@ -158,32 +130,31 @@ class ResultsView(BaseView):
         table.add_column("R\u00b2", justify="right")
         table.add_column("Status")
 
-        metadata = self._load_real_model_row()
+        metadata = self.results_service.model_metadata(
+            self._get_model_path(),
+            model_name=self._session_model_name(),
+        )
         if metadata is not None:
-            test_metrics = metadata.get("metrics", {}).get("test", {})
-            mae_val = test_metrics.get("mae")
-            r2_val = test_metrics.get("r2")
+            mae_val = metadata.get("mae")
+            r2_val = metadata.get("r2")
             mae_str = f"{mae_val:.3f}" if mae_val is not None else "-"
             r2_str = f"{r2_val:.4f}" if r2_val is not None else "-"
-            status = (
-                f"[{COLORS['success']}]{ICONS['success']} Ready"
-                f"[/{COLORS['success']}]"
-            )
+            status_text = str(metadata.get("status", "Ready"))
+            status = StatusBadge(status_text).text
             table.add_row(
-                "DeltaLearner v1",
-                "KRR + XGBoost Ensemble",
+                str(metadata.get("model_label", "Selected model")),
+                str(metadata.get("algorithm", "model bundle")),
                 mae_str,
                 r2_str,
                 status,
             )
         else:
             table.add_row(
-                "DeltaLearner v1",
-                "KRR + XGBoost Ensemble",
+                self._session_model_name() or "No model selected",
                 "-",
                 "-",
-                f"[{COLORS['in_dev']}]{ICONS['in_dev']} Not Trained"
-                f"[/{COLORS['in_dev']}]",
+                "-",
+                StatusBadge("Not selected").text,
             )
 
         self.console.print(table)
@@ -191,22 +162,23 @@ class ResultsView(BaseView):
 
     def _render_divergence_analysis(self) -> None:
         """Render CBS vs Predicted divergence analysis from real data."""
-        stats = self._compute_divergence_stats()
+        report = self._load_analysis_report(show_errors=False)
 
-        if stats is None:
+        if report is None:
             self.console.print(
-                Panel(
-                    f"[{COLORS['muted']}]No predictions available. "
-                    f"Use Models > Predict Batch before returning here for analysis."
-                    f"[/{COLORS['muted']}]",
+                EmptyStatePanel(
                     title=f"[bold {COLORS['results']}]Divergence Analysis"
                     f"[/bold {COLORS['results']}]",
+                    message=(
+                        "No predictions available. Run Calculate, select a dataset, "
+                        "or select a saved run before returning here for analysis."
+                    ),
                     border_style=COLORS["border"],
-                    padding=(1, 2),
-                )
+                ).render()
             )
             self.console.print()
             return
+        stats = report.divergence_distribution
 
         # Divergence distribution table
         table = Table(
@@ -228,11 +200,11 @@ class ResultsView(BaseView):
             "CRITICAL": COLORS["error"],
         }
 
-        total_molecules = sum(s["count"] for s in stats)
+        total_molecules = sum(stat.count for stat in stats)
 
         for stat in stats:
-            color = severity_colors.get(stat["severity"], COLORS["muted"])
-            pct = max(0, min(stat["percentage"], 100))
+            color = severity_colors.get(stat.severity, COLORS["muted"])
+            pct = max(0.0, min(stat.percentage, 100.0))
             bar_length = max(0, min(int(pct / 5), 20))
             bar = (
                 f"[{color}]"
@@ -240,18 +212,18 @@ class ResultsView(BaseView):
                 f"[/{color}]"
             )
 
-            range_max = stat["range_max"]
+            range_max = stat.range_max
             range_str = (
-                f"{stat['range_min']:.0f}% - {range_max:.0f}%"
-                if range_max < 100
-                else f"{stat['range_min']:.0f}%+"
+                f"{stat.range_min:.0f}% - {range_max:.0f}%"
+                if range_max is not None
+                else f"{stat.range_min:.0f}%+"
             )
 
             table.add_row(
-                f"[{color}]{stat['severity']}[/{color}]",
+                f"[{color}]{stat.severity}[/{color}]",
                 range_str,
-                f"{stat['count']:,}",
-                f"{stat['percentage']:.1f}%",
+                f"{stat.count:,}",
+                f"{stat.percentage:.1f}%",
                 bar,
             )
 
@@ -260,7 +232,7 @@ class ResultsView(BaseView):
 
         # Summary panel
         low_medium = sum(
-            s["count"] for s in stats if s["severity"] in ["LOW", "MEDIUM"]
+            stat.count for stat in stats if stat.severity in ["LOW", "MEDIUM"]
         )
         low_medium_pct = (
             (low_medium / total_molecules) * 100 if total_molecules > 0 else 0
@@ -271,7 +243,7 @@ class ResultsView(BaseView):
 
 \u2022 Total molecules analyzed: {total_molecules:,}
 \u2022 Molecules with LOW/MEDIUM divergence: {low_medium:,} ({low_medium_pct:.1f}%)
-\u2022 The Delta-Learning approach effectively corrects PM7 predictions
+\u2022 Source analyzed: {report.source_label}
 
 [bold]Interpretation:[/bold]
 
@@ -295,18 +267,14 @@ class ResultsView(BaseView):
         """Return menu options for the results view."""
         return [
             MenuOption(
-                label="Run New Analysis",
-                value="run_analysis",
-                icon=ICONS.get("models", "\U0001f916"),
-                disabled=True,
-                disabled_reason="Use Models view",
+                label="Analyze Active Source",
+                value="analyze_source",
+                icon=ICONS.get("results", "\U0001f4ca"),
             ),
             MenuOption(
-                label="Predict Batch",
-                value="predict_batch",
+                label="Select Saved Run",
+                value="select_run",
                 icon=ICONS.get("calc", "\u26a1"),
-                disabled=True,
-                disabled_reason="Use Models view",
             ),
             MenuOption(
                 label="Detailed Metrics",
@@ -345,12 +313,12 @@ class ResultsView(BaseView):
         if action == "back":
             return "main"
 
-        if action == "run_analysis":
-            self._handle_run_analysis()
+        if action == "analyze_source":
+            self._handle_analyze_source()
             return None
 
-        if action == "predict_batch":
-            self._handle_predict_batch()
+        if action == "select_run":
+            self._handle_select_run()
             return None
 
         if action == "charts":
@@ -389,30 +357,12 @@ class ResultsView(BaseView):
 
     def _handle_detailed_metrics(self) -> None:
         """Display detailed statistical metrics; delegates all computation to analyze()."""
-        from grimperium.ml.error_analysis import analyze
-
-        csv_path = self._get_csv_path()
-        if not csv_path.exists():
-            self.show_error(f"Data file not found: {csv_path}")
+        report = self._load_analysis_report(show_errors=True)
+        if report is None:
             self.wait_for_enter()
             return
 
-        df = pd.read_csv(csv_path)
-        if "H298_predicted" not in df.columns or "H298_cbs" not in df.columns:
-            self.show_error(
-                "CSV must contain both 'H298_predicted' and 'H298_cbs' columns."
-            )
-            self.wait_for_enter()
-            return
-
-        valid = df.dropna(subset=["H298_predicted", "H298_cbs"])
-        if len(valid) == 0:
-            self.show_error("No valid rows with both predicted and CBS values.")
-            self.wait_for_enter()
-            return
-
-        result = analyze(df)
-        s = result.summary
+        s = report.summary
 
         mae_val = float(s["mae"])
         rmse_val = float(s["rmse"])
@@ -442,7 +392,7 @@ class ResultsView(BaseView):
         table.add_row("R\u00b2", f"{r2_val:.4f}")
         table.add_row(
             "Pearson r",
-            f"{pearson_r:.5f}" if not np.isnan(pearson_r) else "N/A",
+            f"{pearson_r:.5f}" if pearson_r == pearson_r else "N/A",
         )
         table.add_row("", "")
         table.add_row("Within \u00b11 kcal/mol", f"{pct_1:.1f}%")
@@ -479,23 +429,12 @@ class ResultsView(BaseView):
 
     def _handle_show_outliers(self) -> None:
         """Display outlier molecules detected by analyze()."""
-        from grimperium.ml.error_analysis import analyze
-
-        csv_path = self._get_csv_path()
-        if not csv_path.exists():
-            self.show_error(f"Data file not found: {csv_path}")
+        report = self._load_analysis_report(show_errors=True)
+        if report is None:
             self.wait_for_enter()
             return
 
-        df = pd.read_csv(csv_path)
-        try:
-            result = analyze(df)
-        except ValueError as exc:
-            self.show_error(str(exc))
-            self.wait_for_enter()
-            return
-
-        outliers = result.outliers_df
+        outliers = report.outliers_df
         if outliers.empty:
             self.console.print(
                 f"\n[{COLORS['muted']}]No outliers detected.[/{COLORS['muted']}]\n"
@@ -540,23 +479,12 @@ class ResultsView(BaseView):
 
     def _handle_top_errors(self) -> None:
         """Display top-N molecules by absolute error."""
-        from grimperium.ml.error_analysis import analyze
-
-        csv_path = self._get_csv_path()
-        if not csv_path.exists():
-            self.show_error(f"Data file not found: {csv_path}")
+        report = self._load_analysis_report(show_errors=True)
+        if report is None:
             self.wait_for_enter()
             return
 
-        df = pd.read_csv(csv_path)
-        try:
-            result = analyze(df)
-        except ValueError as exc:
-            self.show_error(str(exc))
-            self.wait_for_enter()
-            return
-
-        top = result.top_n_df
+        top = report.top_n_df
 
         table = Table(
             title=f"Top {len(top)} Error Molecules",
@@ -586,58 +514,40 @@ class ResultsView(BaseView):
 
     def _handle_html_report(self) -> None:
         """Generate HTML error analysis report."""
-        from grimperium.ml.error_analysis import analyze
-        from grimperium.ml.html_report import generate_html_report
-
-        csv_path = self._get_csv_path()
-        if not csv_path.exists():
-            self.show_error(f"Data file not found: {csv_path}")
-            self.wait_for_enter()
-            return
-
-        df = pd.read_csv(csv_path)
-        try:
-            result = analyze(df)
-        except ValueError as exc:
-            self.show_error(str(exc))
+        report = self._load_analysis_report(show_errors=True)
+        if report is None:
             self.wait_for_enter()
             return
 
         output_path = self._get_charts_dir() / "error_report.html"
-        saved = generate_html_report(result, output_path)
+        saved = html_report_module.generate_html_report(report.analysis, output_path)
         self.show_success(f"HTML report saved: {saved}")
         self.wait_for_enter()
 
     def _handle_export_outliers(self) -> None:
         """Export outlier molecules to CSV."""
-        from grimperium.ml.error_analysis import analyze
-
-        csv_path = self._get_csv_path()
-        if not csv_path.exists():
-            self.show_error(f"Data file not found: {csv_path}")
-            self.wait_for_enter()
-            return
-
-        df = pd.read_csv(csv_path)
-        try:
-            result = analyze(df)
-        except ValueError as exc:
-            self.show_error(str(exc))
+        report = self._load_analysis_report(show_errors=True)
+        if report is None:
             self.wait_for_enter()
             return
 
         output_path = self._get_charts_dir() / "outliers.csv"
         output_path.parent.mkdir(parents=True, exist_ok=True)
-        result.outliers_df.to_csv(output_path, index=False)
-        n = len(result.outliers_df)
+        report.outliers_df.to_csv(output_path, index=False)
+        n = len(report.outliers_df)
         self.show_success(f"Exported {n} outlier(s) to: {output_path}")
         self.wait_for_enter()
 
     def _handle_charts(self) -> None:
         """Generate visualization charts and display results."""
-        from grimperium.ml.charts import ChartGenerationResult, generate_charts
-
         csv_path = self._get_csv_path()
+        if csv_path is None:
+            self.show_error(
+                "No analysis source selected. Choose a dataset, select a run, "
+                "or run a calculation first."
+            )
+            self.wait_for_enter()
+            return
         charts_dir = self._get_charts_dir()
 
         self.console.print()
@@ -648,7 +558,7 @@ class ResultsView(BaseView):
         self.console.print()
 
         try:
-            result: ChartGenerationResult = generate_charts(csv_path, charts_dir)
+            result = charts_module.generate_charts(csv_path, charts_dir)
 
             result_text = f"""
 [bold]Charts Generated Successfully![/bold]
@@ -683,20 +593,62 @@ class ResultsView(BaseView):
 
         self.wait_for_enter()
 
-    def _handle_predict_batch(self) -> None:
-        """Redirect batch prediction to Models; Results is analysis-only."""
-        self._show_analysis_only_message(
-            "Batch prediction is handled in Models > Predict Batch.\n"
-            "Results is for analysis only."
-        )
+    def _handle_analyze_source(self) -> None:
+        """Re-render analysis for the active run or dataset."""
+        report = self._load_analysis_report(show_errors=True)
+        if report is None:
+            self.wait_for_enter()
+            return
+        self.clear_screen()
+        self.show_header()
+        self._render_model_comparison()
+        self._render_divergence_analysis()
+        self.wait_for_enter()
 
-    def _handle_run_analysis(self) -> None:
-        """Redirect model training and prediction to Models."""
-        self._show_analysis_only_message(
-            "Training and prediction are handled in Models.\n"
-            "Use Models > Train Model and Models > Predict Batch first,\n"
-            "then return here for analysis."
-        )
+    def _handle_select_run(self) -> None:
+        """Let the user pick a persisted run as the active analysis source."""
+        run_service = getattr(self.controller, "run_service", None)
+        if run_service is None:
+            self.show_error("Run service unavailable.")
+            self.wait_for_enter()
+            return
+
+        manifests = run_service.list_runs()
+        if not manifests:
+            self.console.print(
+                EmptyStatePanel(
+                    title="Saved Runs",
+                    message=(
+                        "No saved runs found. Execute Calculate or a batch job "
+                        "first, then return here to analyze the run outputs."
+                    ),
+                    border_style=COLORS["border"],
+                ).render()
+            )
+            self.wait_for_enter()
+            return
+
+        options = [
+            MenuOption(
+                label=f"{manifest.run_id} [{manifest.status.value}]",
+                value=manifest.run_id,
+                icon=ICONS.get("results", "\U0001f4ca"),
+            )
+            for manifest in manifests
+        ]
+        selected = show_back_menu(options=options, title="Select Saved Run")
+        if selected is None or selected == "back":
+            return
+
+        manifest = run_service.get_run(selected)
+        run_ref = RunRef(run_id=manifest.run_id, status=manifest.status.value)
+        set_run = getattr(self.controller, "set_run", None)
+        if callable(set_run):
+            set_run(run_ref)
+        else:
+            self.controller.session.run = run_ref
+        self.show_success(f"Active run set to {manifest.run_id}")
+        self.wait_for_enter()
 
     def run(self) -> str | None:
         """Run the results view interaction loop."""

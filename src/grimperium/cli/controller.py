@@ -20,10 +20,12 @@ from grimperium.cli.session import (
     DatasetRef,
     ModelRef,
     ModelState,
+    RunRef,
     SessionContext,
 )
 from grimperium.cli.settings_manager import SettingsManager
 from grimperium.cli.styles import CLI_THEME
+from grimperium.runs.service import RunService
 
 if TYPE_CHECKING:
     from grimperium.calculation.methods import CalculationMethodDefinition
@@ -49,6 +51,7 @@ class CliController:
         self.status: str = "No method selected"
         self.console = Console(theme=CLI_THEME)
         self.settings_manager = SettingsManager(console=self.console)
+        self.run_service = RunService.from_environment()
         self.settings_manager.load_from_file()
         self._views: dict[str, BaseView] = {}
         self._running: bool = False
@@ -244,6 +247,10 @@ class CliController:
     def clear_analysis_source(self) -> None:
         """Clear the ad-hoc analysis source without touching the dataset."""
         self.session.analysis_source = None
+
+    def set_run(self, run: RunRef | None) -> None:
+        """Set or clear the active run reference for Results analysis."""
+        self.session.run = run if run is not None else RunRef()
 
     def _refresh_status(self) -> None:
         """Recompute session status from method and model context."""

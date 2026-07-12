@@ -20,11 +20,16 @@ from grimperium.crest_pm7.molecule_processor import ConformerData, PM7Result
 
 @pytest.fixture
 def mock_controller() -> MagicMock:
-    """Create mock controller for CalcView."""
+    """Create mock controller for CalcView with a real SessionContext."""
+    from grimperium.cli.session import SessionContext
+    from grimperium.runs.service import RunService
+
     controller = MagicMock()
     controller.current_model = "DeltaXGB_v1.0"
     controller.current_model_path = None
     controller.current_method_definition = None
+    controller.session = SessionContext()
+    controller.run_service = RunService.from_environment()
     controller.session_summary.return_value = {
         "property": "Not selected",
         "method": "Not selected",
@@ -50,6 +55,8 @@ def _mock_pm7_delta_method() -> MagicMock:
     """Build a minimal method mock for do_prediction tests."""
     mock_method = MagicMock()
     mock_method.method_id = "pm7_delta_learning"
+    mock_method.version = "1.0"
+    mock_method.property_id = "standard_enthalpy_of_formation"
     mock_method.property_name = "Standard enthalpy of formation"
     mock_method.display_name = "PM7 + Delta Learning"
     mock_method.model_requirement.model_required = True

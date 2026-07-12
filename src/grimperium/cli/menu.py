@@ -210,12 +210,28 @@ def format_session_header(
     dataset_label: str = "Not selected",
     model_label: str = "No model selected",
     status: str = "No method selected",
+    width: int | None = None,
 ) -> str:
     """Format the main-menu session context header."""
+    if width is not None:
+        available = max(8, (width - 72) // 5)
+        property_label = _truncate_label(property_label, available)
+        method_label = _truncate_label(method_label, available)
+        dataset_label = _truncate_label(dataset_label, available)
+        model_label = _truncate_label(model_label, available)
+        status = _truncate_label(status, available)
     return (
         f"[Property: {property_label} | Method: {method_label} | "
         f"Dataset: {dataset_label} | Model: {model_label} | Status: {status}]"
     )
+
+
+def _truncate_label(value: str, max_length: int) -> str:
+    if len(value) <= max_length:
+        return value
+    if max_length <= 3:
+        return "." * max_length
+    return value[: max_length - 3] + "..."
 
 
 def show_main_menu(
@@ -226,6 +242,7 @@ def show_main_menu(
     model_label: str = "No model selected",
     status: str = "No method selected",
     current_model: str | None = None,
+    width: int | None = None,
 ) -> str | None:
     """
     Display the main application menu.
@@ -303,6 +320,7 @@ def show_main_menu(
             dataset_label=dataset_label,
             model_label=model_label,
             status=status,
+            width=width,
         ),
         separator_after=[4],  # Separator after RESULTS
     )

@@ -98,6 +98,7 @@ class GrimperiumCLI:
             dataset_label=summary["dataset"],
             model_label=summary["model"],
             status=summary["status"],
+            width=self.console.size.width,
         )
 
     def run_view(self, view_name: str) -> str | None:

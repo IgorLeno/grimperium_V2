@@ -9,9 +9,9 @@ from __future__ import annotations
 import sys
 
 from rich.panel import Panel
-from rich.table import Table
 
 from grimperium import __version__
+from grimperium.cli.components import SessionContextPanel
 from grimperium.cli.menu import MenuOption, show_back_menu
 from grimperium.cli.styles import COLORS, ICONS
 from grimperium.cli.views.base_view import BaseView
@@ -56,22 +56,9 @@ Learning Δ = (y_cbs - y_pm7) is easier than learning y_cbs directly.
         self.console.print()
 
         summary = self.controller.session_summary()
-        status_table = Table(
-            title="Session Status",
-            show_header=True,
-            header_style=f"bold {COLORS['about']}",
-            border_style=COLORS["border"],
+        self.console.print(
+            SessionContextPanel(summary, title="Session Status").render()
         )
-        status_table.add_column("Component", style="bold")
-        status_table.add_column("Value")
-
-        status_table.add_row(f"{ICONS['calc']} Property", summary["property"])
-        status_table.add_row(f"{ICONS['methods']} Method", summary["method"])
-        status_table.add_row(f"{ICONS['databases']} Dataset", summary["dataset"])
-        status_table.add_row(f"{ICONS['models']} Model", summary["model"])
-        status_table.add_row("Status", summary["status"])
-
-        self.console.print(status_table)
         self.console.print()
 
         links = """

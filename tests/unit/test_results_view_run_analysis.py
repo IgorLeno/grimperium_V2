@@ -1,9 +1,9 @@
-"""Tests for redirected ResultsView calculation actions."""
+"""Tests for ResultsView analysis source actions."""
 
 from __future__ import annotations
 
 import io
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 from rich.console import Console
 
@@ -17,74 +17,67 @@ def _create_results_view() -> tuple[ResultsView, io.StringIO]:
     controller.console = console
     controller.current_model_path = None
     controller.current_csv_path = None
+    controller.session = MagicMock(analysis_path=None, run=None)
     view = ResultsView(controller)
     view.wait_for_enter = MagicMock()  # type: ignore[method-assign]
     return view, buf
 
 
-def test_run_analysis_menu_option_is_disabled() -> None:
+def test_analyze_source_menu_option_is_enabled() -> None:
     view, _ = _create_results_view()
 
-    analysis = next(o for o in view.get_menu_options() if o.value == "run_analysis")
+    analysis = next(o for o in view.get_menu_options() if o.value == "analyze_source")
 
-    assert analysis.label == "Run New Analysis"
-    assert analysis.disabled is True
-    assert analysis.disabled_reason == "Use Models view"
+    assert analysis.label == "Analyze Active Source"
+    assert analysis.disabled is False
 
 
-def test_predict_batch_menu_option_is_disabled() -> None:
+def test_select_run_menu_option_is_enabled() -> None:
     view, _ = _create_results_view()
 
-    predict = next(o for o in view.get_menu_options() if o.value == "predict_batch")
+    select_run = next(o for o in view.get_menu_options() if o.value == "select_run")
 
-    assert predict.label == "Predict Batch"
-    assert predict.disabled is True
-    assert predict.disabled_reason == "Use Models view"
+    assert select_run.label == "Select Saved Run"
+    assert select_run.disabled is False
 
 
-def test_handle_action_routes_run_analysis_to_redirect_handler() -> None:
+def test_handle_action_routes_analyze_source() -> None:
     view, _ = _create_results_view()
+    view._handle_analyze_source = MagicMock()  # type: ignore[method-assign]
 
-    with patch.object(view, "_handle_run_analysis") as mock_handler:
-        result = view.handle_action("run_analysis")
+    result = view.handle_action("analyze_source")
 
-    mock_handler.assert_called_once()
+    view._handle_analyze_source.assert_called_once()
     assert result is None
 
 
-def test_handle_action_routes_predict_batch_to_redirect_handler() -> None:
+def test_handle_action_routes_select_run() -> None:
     view, _ = _create_results_view()
+    view._handle_select_run = MagicMock()  # type: ignore[method-assign]
 
-    with patch.object(view, "_handle_predict_batch") as mock_handler:
-        result = view.handle_action("predict_batch")
+    result = view.handle_action("select_run")
 
-    mock_handler.assert_called_once()
+    view._handle_select_run.assert_called_once()
     assert result is None
 
 
-def test_predict_batch_handler_redirects_without_prediction() -> None:
+def test_analyze_source_without_source_shows_error() -> None:
     view, buf = _create_results_view()
+    view._load_analysis_report = MagicMock(return_value=None)  # type: ignore[method-assign]
 
-    with patch("grimperium.ml.predictor.predict_batch") as mock_predict:
-        view._handle_predict_batch()
+    view._handle_analyze_source()
 
-    mock_predict.assert_not_called()
-    output = buf.getvalue()
-    assert "Batch prediction is handled in Models > Predict Batch" in output
-    assert "Results is for analysis only" in output
+    view._load_analysis_report.assert_called_once_with(show_errors=True)
+    view.wait_for_enter.assert_called_once()
 
 
-def test_run_analysis_handler_redirects_without_train_or_predict() -> None:
+def test_select_run_empty_history_does_not_call_set_run() -> None:
     view, buf = _create_results_view()
+    view.controller.run_service = MagicMock()
+    view.controller.run_service.list_runs.return_value = []
+    view.controller.set_run = MagicMock()
 
-    with (
-        patch("grimperium.ml.trainer.train") as mock_train,
-        patch("grimperium.ml.predictor.predict_batch") as mock_predict,
-    ):
-        view._handle_run_analysis()
+    view._handle_select_run()
 
-    mock_train.assert_not_called()
-    mock_predict.assert_not_called()
-    output = buf.getvalue()
-    assert "Training and prediction are handled in Models" in output
-    assert "Use Models > Train Model and Models > Predict Batch first" in output
+    view.controller.set_run.assert_not_called()
+    assert "No saved runs found" in buf.getvalue()

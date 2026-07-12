@@ -14,6 +14,7 @@ Progress Tracking:
 import logging
 import threading
 import time
+from dataclasses import asdict
 from datetime import datetime, timezone
 from pathlib import Path
 from queue import Queue
@@ -31,6 +32,7 @@ from grimperium.cli.progress_tracker import (
     ProgressTracker,
     consume_events,
 )
+from grimperium.cli.session import MethodExecutionOverrides, RunRef
 from grimperium.cli.settings_manager import SettingsManager
 from grimperium.cli.styles import COLORS, ICONS
 from grimperium.cli.views.base_view import BaseView
@@ -45,6 +47,8 @@ from grimperium.crest_pm7.batch import (
 )
 from grimperium.crest_pm7.batch.enums import MoleculeStatus
 from grimperium.crest_pm7.config import PM7Config
+from grimperium.runs.models import RunManifest
+from grimperium.runs.service import RunService
 
 if TYPE_CHECKING:
     from grimperium.cli.controller import CliController
@@ -76,6 +80,54 @@ class BatchView(BaseView):
         self.batch_size: int = 10
         self.crest_timeout: int = 30
         self.mopac_timeout: int = 60
+
+    def _run_service(self) -> RunService:
+        service = getattr(self.controller, "__dict__", {}).get("run_service")
+        return (
+            service
+            if isinstance(service, RunService)
+            else RunService.from_environment()
+        )
+
+    def _method_run_fields(self) -> tuple[str, str, dict[str, Any]]:
+        method = getattr(self.controller, "current_method_definition", None)
+        if method is None:
+            return "crest_pm7", "1.0.0", {"method_id": "crest_pm7"}
+        return method.method_id, method.version, asdict(method)
+
+    def _execution_overrides_snapshot(self, batch_size: int) -> dict[str, Any]:
+        session = getattr(self.controller, "session", None)
+        overrides_obj = (
+            session.overrides if session is not None else MethodExecutionOverrides()
+        )
+        overrides = asdict(overrides_obj)
+        active = {key: value for key, value in overrides.items() if value is not None}
+        active.update(
+            {
+                "batch_size": batch_size,
+                "crest_timeout_minutes": self.crest_timeout,
+                "mopac_timeout_minutes": self.mopac_timeout,
+            }
+        )
+        return active
+
+    def _dataset_ref_snapshot(self, csv_path: Path) -> dict[str, str]:
+        return {"path": str(csv_path)}
+
+    def _attach_existing_outputs(
+        self,
+        manifest: RunManifest,
+        output_layout: BatchOutputLayout,
+    ) -> RunManifest:
+        paths = {
+            "calculation_results_csv": output_layout.calculation_results_csv,
+            "calculation_results_xlsx": output_layout.calculation_results_xlsx,
+            "batch_state_csv": output_layout.batch_state_csv,
+        }
+        existing_paths = {key: path for key, path in paths.items() if path.exists()}
+        if not existing_paths:
+            return manifest
+        return self._run_service().attach_output_paths(manifest.run_id, existing_paths)
 
     def render(self) -> None:
         """Render batch processing view."""
@@ -324,7 +376,17 @@ class BatchView(BaseView):
         csv_manager = BatchCSVManager(self.csv_path)
         csv_manager.load_csv()
 
+        session = getattr(self.controller, "session", None)
+        overrides = (
+            session.overrides if session is not None else MethodExecutionOverrides()
+        )
+        batch_size = overrides.batch_size or self.batch_size
+        crest_timeout = int(overrides.crest_timeout_minutes or self.crest_timeout)
+        mopac_timeout = int(overrides.mopac_timeout_minutes or self.mopac_timeout)
+
         pm7_config = PM7Config()
+        if overrides.n_conformers is not None:
+            pm7_config.max_conformers = overrides.n_conformers
         state_manager = BatchStateManager(
             self.csv_path.parent / "batch_state.csv",
             pm7_config,
@@ -344,26 +406,32 @@ class BatchView(BaseView):
         )
         if settings_manager is not None:
             settings_manager.apply_to_pm7_config(pm7_config)
+        xtb_timeout_seconds = (
+            int(overrides.xtb_timeout_seconds)
+            if overrides.xtb_timeout_seconds is not None
+            else (
+                int(settings_manager.xtb.timeout_seconds)
+                if settings_manager is not None
+                and settings_manager.xtb.timeout_seconds is not None
+                else None
+            )
+        )
 
         processor = FixedTimeoutProcessor(
             config=pm7_config,
-            crest_timeout_minutes=self.crest_timeout,
-            mopac_timeout_minutes=self.mopac_timeout,
+            crest_timeout_minutes=crest_timeout,
+            mopac_timeout_minutes=mopac_timeout,
             enable_xtb_preopt=pm7_config.xtb_preopt,
-            xtb_timeout_seconds=(
-                settings_manager.xtb.timeout_seconds
-                if settings_manager is not None
-                else None
-            ),
+            xtb_timeout_seconds=xtb_timeout_seconds,
         )
 
         # Create batch
         batch_id = csv_manager.generate_batch_id()
         batch = csv_manager.select_batch(
             batch_id=batch_id,
-            batch_size=self.batch_size,
-            crest_timeout_minutes=self.crest_timeout,
-            mopac_timeout_minutes=self.mopac_timeout,
+            batch_size=batch_size,
+            crest_timeout_minutes=crest_timeout,
+            mopac_timeout_minutes=mopac_timeout,
             strategy=BatchSortingStrategy.RERUN_FIRST_THEN_EASY,
         )
         state_manager.mark_selected_from_batch(batch)
@@ -395,8 +463,40 @@ class BatchView(BaseView):
         """
         # Prepare batch components
         exec_manager, batch = self._prepare_batch()
+        output_layout = getattr(exec_manager, "_output_layout", None)
+        if not isinstance(output_layout, BatchOutputLayout):
+            raise ValueError("Batch output layout not configured")
+
+        csv_path = self.csv_path
+        if csv_path is None:
+            raise ValueError("CSV path not configured")
+
+        method_id, method_version, method_snapshot = self._method_run_fields()
+        manifest = self._run_service().create_run(
+            property_id="standard_enthalpy_of_formation",
+            method_id=method_id,
+            method_version=method_version,
+            method_snapshot=method_snapshot,
+            execution_overrides=self._execution_overrides_snapshot(batch.size),
+            dataset_ref=self._dataset_ref_snapshot(csv_path),
+            model_ref=None,
+            molecule_count=batch.size,
+        )
+        manifest = self._run_service().start_run(manifest.run_id)
+        self.controller.session.run = RunRef(
+            run_id=manifest.run_id,
+            status=manifest.status.value,
+        )
 
         if batch.is_empty:
+            cancelled = self._run_service().cancel_run(
+                manifest.run_id,
+                error="No molecules available for processing",
+            )
+            self.controller.session.run = RunRef(
+                run_id=cancelled.run_id,
+                status=cancelled.status.value,
+            )
             self.show_success("No molecules available for processing")
             return
 
@@ -414,10 +514,6 @@ class BatchView(BaseView):
             console=self.console,
             batch_size=batch.size,
         )
-
-        csv_path = self.csv_path
-        if csv_path is None:
-            raise ValueError("CSV path not configured")
 
         monitor_path = exec_manager.state_manager.state_csv_path
 
@@ -443,74 +539,74 @@ class BatchView(BaseView):
         logging.disable(logging.INFO)
 
         try:
-            with Live(console=self.console, refresh_per_second=3) as live:
-                # Reduced from 5 to 3 to prevent header duplication glitch
-                # when moving between displays (notebook + external monitor).
-                # This is a known issue with Rich when terminal size changes rapidly.
-                # Start batch execution in a way that allows progress updates
-                # We need to run execute_batch and update display concurrently
+            try:
+                with Live(console=self.console, refresh_per_second=3) as live:
+                    # Reduced to 3 FPS to avoid display glitches on resize.
+                    batch_complete = threading.Event()
+                    batch_error: Exception | None = None
 
-                # Use threading to run batch in background while updating display
-                batch_complete = threading.Event()
-                batch_error: Exception | None = None
+                    def run_batch() -> None:
+                        nonlocal result, batch_error
+                        try:
+                            result = exec_manager.execute_batch(batch)
+                        except Exception as e:
+                            batch_error = e
+                        finally:
+                            batch_complete.set()
 
-                def run_batch() -> None:
-                    nonlocal result, batch_error
-                    try:
-                        result = exec_manager.execute_batch(batch)
-                    except Exception as e:
-                        batch_error = e
-                    finally:
-                        batch_complete.set()
+                    batch_thread = threading.Thread(target=run_batch, daemon=True)
+                    batch_thread.start()
 
-                batch_thread = threading.Thread(target=run_batch, daemon=True)
-                batch_thread.start()
+                    last_size_check = 0.0
+                    last_terminal_size: tuple[int, int] | None = None
+                    resize_cooldown_until = 0.0
+                    size_check_interval = 0.5
+                    resize_debounce_seconds = 0.6
+                    frame_delay = 1 / 3
+                    while not batch_complete.is_set():
+                        consume_events(event_queue, tracker)
 
-                # Main loop: consume events and update display
-                last_size_check = 0.0
-                last_terminal_size: tuple[int, int] | None = None
-                resize_cooldown_until = 0.0
-                size_check_interval = 0.5
-                resize_debounce_seconds = 0.6
-                frame_delay = 1 / 3
-                while not batch_complete.is_set():
-                    # Consume all pending events (non-blocking)
+                        now = time.monotonic()
+                        if now - last_size_check >= size_check_interval:
+                            size = self.console.size
+                            size_tuple = (size.width, size.height)
+                            if last_terminal_size is None:
+                                last_terminal_size = size_tuple
+                            elif size_tuple != last_terminal_size:
+                                last_terminal_size = size_tuple
+                                resize_cooldown_until = now + resize_debounce_seconds
+                            last_size_check = now
+
+                        if now < resize_cooldown_until:
+                            time.sleep(frame_delay)
+                            continue
+
+                        # Render display
+                        display = self._render_batch_display(tracker, frame_idx)
+                        live.update(display)
+
+                        frame_idx += 1
+                        time.sleep(frame_delay)  # 3 FPS
+
+                    # Final update after batch completes
                     consume_events(event_queue, tracker)
-
-                    now = time.monotonic()
-                    if now - last_size_check >= size_check_interval:
-                        size = self.console.size
-                        size_tuple = (size.width, size.height)
-                        if last_terminal_size is None:
-                            last_terminal_size = size_tuple
-                        elif size_tuple != last_terminal_size:
-                            last_terminal_size = size_tuple
-                            resize_cooldown_until = now + resize_debounce_seconds
-                        last_size_check = now
-
-                    if now < resize_cooldown_until:
-                        time.sleep(frame_delay)
-                        continue
-
-                    # Render display
+                    if result is not None:
+                        tracker.successful = result.success_count
+                        tracker.failed = result.rerun_count  # Rerun implies failure
+                        tracker.skipped = result.skip_count
+                        tracker.total_processed = result.total_count
                     display = self._render_batch_display(tracker, frame_idx)
                     live.update(display)
 
-                    frame_idx += 1
-                    time.sleep(frame_delay)  # 3 FPS
-
-                # Final update after batch completes
-                consume_events(event_queue, tracker)
-                if result is not None:
-                    tracker.successful = result.success_count
-                    tracker.failed = result.rerun_count  # Rerun implies failure
-                    tracker.skipped = result.skip_count
-                    tracker.total_processed = result.total_count
-                display = self._render_batch_display(tracker, frame_idx)
-                live.update(display)
-
-                if batch_error is not None:
-                    raise batch_error
+                    if batch_error is not None:
+                        raise batch_error
+            except Exception as exc:
+                failed = self._run_service().fail_run(manifest.run_id, error=str(exc))
+                self.controller.session.run = RunRef(
+                    run_id=failed.run_id,
+                    status=failed.status.value,
+                )
+                raise
 
         finally:
             logging.disable(previous_disable)
@@ -519,6 +615,25 @@ class BatchView(BaseView):
         # Display final result
         if result is not None:
             self._display_batch_result(result)
+            manifest = self._attach_existing_outputs(manifest, output_layout)
+            failure_count = result.failed_count + result.rerun_count + result.skip_count
+            if result.invalidated:
+                finalized = self._run_service().invalidate_run(
+                    manifest.run_id,
+                    error="ALL_OR_NOTHING reset invalidated scientific completion",
+                    success_count=result.success_count,
+                    failure_count=failure_count,
+                )
+            else:
+                finalized = self._run_service().complete_run(
+                    manifest.run_id,
+                    success_count=result.success_count,
+                    failure_count=failure_count,
+                )
+            self.controller.session.run = RunRef(
+                run_id=finalized.run_id,
+                status=finalized.status.value,
+            )
 
     def _render_batch_display(self, tracker: ProgressTracker, frame_idx: int) -> Panel:
         """Render batch display: header + current molecule + completion history.

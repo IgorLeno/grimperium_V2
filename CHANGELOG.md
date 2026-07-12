@@ -8,6 +8,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Macrobloco 3 run management and results domain redesign** (2026-07-11)
+  - Added `grimperium.runs` with persisted run manifests, atomic JSON writes,
+    run-root-relative artifact paths, lifecycle transitions, and validation that
+    completed runs reference existing outputs.
+  - Added `grimperium.results` with legacy-wide and canonical-long CSV loaders,
+    dataset/run analysis service contracts, divergence DTOs, and basic run
+    comparison.
+  - Wired CLI calculation and batch flows to persisted run references, including
+    execution override snapshots and ALL_OR_NOTHING invalidation handling.
+  - Added reusable Rich UI components for session context, empty states, status
+    badges, detail tables, and confirmation summaries.
 - **Macrobloco 2 typed CLI context and data catalog** (2026-07-11)
   - Added typed `SessionContext` with dataset/model/run/analysis-source refs and
     execution override schema placeholder.

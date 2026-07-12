@@ -5,9 +5,11 @@ Handles molecular property predictions.
 """
 
 import hashlib
+import json
 import os
+from dataclasses import asdict, is_dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from rdkit import Chem
 from rich.panel import Panel
@@ -32,11 +34,14 @@ from grimperium.cli.model_compatibility import (
     ModelCompatibilityError,
     validate_model_for_method,
 )
+from grimperium.cli.session import RunRef
 from grimperium.cli.styles import COLORS, ICONS
 from grimperium.cli.viewmodels import PredictionResult
 from grimperium.cli.views.base_view import BaseView
 from grimperium.cli.views.models_view import discover_available_models
 from grimperium.crest_pm7.config import PM7Config
+from grimperium.runs.models import RunManifest
+from grimperium.runs.service import RunService
 
 if TYPE_CHECKING:
     from grimperium.cli.controller import CliController
@@ -368,7 +373,169 @@ class CalcView(BaseView):
     def _pm7_config_from_settings(self) -> PM7Config:
         config = PM7Config()
         self.controller.settings_manager.apply_to_pm7_config(config)
+        overrides = getattr(self.controller.session, "overrides", None)
+        if overrides is not None:
+            if overrides.n_conformers is not None:
+                config.max_conformers = overrides.n_conformers
+            if overrides.crest_timeout_minutes is not None:
+                config.crest_timeout = overrides.crest_timeout_minutes * 60.0
+            if overrides.mopac_timeout_minutes is not None:
+                config.mopac_timeout_base = overrides.mopac_timeout_minutes * 60.0
         return config
+
+    def _run_service(self) -> RunService:
+        service = getattr(self.controller, "__dict__", {}).get("run_service")
+        return (
+            service
+            if isinstance(service, RunService)
+            else RunService.from_environment()
+        )
+
+    def _create_single_run(
+        self,
+        method: CalculationMethodDefinition,
+        *,
+        molecule_count: int = 1,
+    ) -> RunManifest:
+        service = self._run_service()
+        snapshot = self._method_snapshot(method)
+        manifest = service.create_run(
+            property_id=str(snapshot["property_id"]),
+            method_id=str(snapshot["method_id"]),
+            method_version=str(snapshot["version"]),
+            method_snapshot=snapshot,
+            execution_overrides=self._execution_overrides_snapshot(),
+            dataset_ref=self._dataset_ref_snapshot(),
+            model_ref=self._model_ref_snapshot(),
+            molecule_count=molecule_count,
+        )
+        manifest = service.start_run(manifest.run_id)
+        self.controller.session.run = RunRef(
+            run_id=manifest.run_id,
+            status=manifest.status.value,
+        )
+        return manifest
+
+    @staticmethod
+    def _method_snapshot(method: CalculationMethodDefinition) -> dict[str, Any]:
+        """Serialize a method definition for RunManifest persistence."""
+        if is_dataclass(method) and not isinstance(method, type):
+            return asdict(method)
+
+        def _as_str(value: object, fallback: str) -> str:
+            return value if isinstance(value, str) else fallback
+
+        method_id = _as_str(getattr(method, "method_id", None), "unknown_method")
+        return {
+            "method_id": method_id,
+            "version": _as_str(getattr(method, "version", None), "0"),
+            "property_id": _as_str(getattr(method, "property_id", None), "unknown"),
+            "display_name": _as_str(
+                getattr(method, "display_name", None),
+                method_id,
+            ),
+            "property_name": _as_str(
+                getattr(method, "property_name", None),
+                "unknown",
+            ),
+        }
+
+    def _complete_single_run(
+        self,
+        manifest: RunManifest,
+        result: PredictionResult,
+    ) -> None:
+        service = self._run_service()
+        output_path = service.runs_root / manifest.run_id / "single_result.json"
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        payload = {
+            "smiles": result.smiles,
+            "h298_pm7": result.h298_pm7,
+            "delta_correction": result.delta_correction,
+            "h298_corrected": result.h298_corrected,
+            "model_name": result.model_name,
+            "model_version": result.model_version,
+            "n_conformers": result.n_conformers,
+            "execution_time": result.execution_time,
+        }
+        output_path.write_text(
+            json.dumps(payload, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        service.attach_output_paths(manifest.run_id, {"single_result": output_path})
+        completed = service.complete_run(
+            manifest.run_id,
+            success_count=1,
+            failure_count=0,
+        )
+        self.controller.session.run = RunRef(
+            run_id=completed.run_id,
+            status=completed.status.value,
+        )
+
+    def _fail_single_run(self, manifest: RunManifest, error: str) -> None:
+        failed = self._run_service().fail_run(
+            manifest.run_id,
+            error=error,
+            success_count=0,
+            failure_count=1,
+        )
+        self.controller.session.run = RunRef(
+            run_id=failed.run_id,
+            status=failed.status.value,
+        )
+
+    def _execution_overrides_snapshot(self) -> dict[str, object]:
+        overrides_obj = getattr(self.controller.session, "overrides", None)
+        if is_dataclass(overrides_obj) and not isinstance(overrides_obj, type):
+            overrides = asdict(overrides_obj)
+        elif isinstance(overrides_obj, dict):
+            overrides = dict(overrides_obj)
+        else:
+            overrides = {}
+        return {key: value for key, value in overrides.items() if value is not None}
+
+    def _dataset_ref_snapshot(self) -> dict[str, object] | None:
+        dataset = getattr(self.controller.session, "dataset", None)
+        if dataset is None:
+            return None
+        if is_dataclass(dataset) and not isinstance(dataset, type):
+            payload = asdict(dataset)
+            path_value = payload.get("path")
+            if path_value is not None:
+                payload["path"] = str(path_value)
+            capabilities = payload.get("capabilities")
+            if capabilities is not None:
+                payload["capabilities"] = sorted(str(item) for item in capabilities)
+            return payload
+        path = getattr(dataset, "path", None)
+        capabilities = getattr(dataset, "capabilities", ())
+        if not isinstance(capabilities, set | frozenset | list | tuple):
+            capabilities = ()
+        return {
+            "database_id": getattr(dataset, "database_id", None),
+            "alias": getattr(dataset, "alias", None),
+            "name": getattr(dataset, "name", None),
+            "path": str(path) if isinstance(path, str | Path) else None,
+            "role": getattr(dataset, "role", None),
+            "capabilities": sorted(str(item) for item in capabilities),
+        }
+
+    def _model_ref_snapshot(self) -> dict[str, object] | None:
+        model = getattr(self.controller.session, "model", None)
+        if model is None:
+            return None
+        name = getattr(model, "name", None)
+        path = getattr(model, "path", None)
+        state = getattr(model, "state", None)
+        if name is None and path is None:
+            return None
+        state_value = getattr(state, "value", state)
+        return {
+            "name": name,
+            "path": str(path) if path is not None else None,
+            "state": state_value,
+        }
 
     def render_method_a_result(
         self,
@@ -669,10 +836,21 @@ class CalcView(BaseView):
         self.console.print()
         self.console.print()
 
-        if method.method_id == "semiempirical_am1_pm3_pm7":
-            self._run_method_a(smiles, method, units=units)
-            return None
-        self._run_method_b(smiles, method)
+        manifest = self._create_single_run(method)
+        previous_result = self.last_result
+        try:
+            if method.method_id == "semiempirical_am1_pm3_pm7":
+                self._run_method_a(smiles, method, units=units)
+            else:
+                self._run_method_b(smiles, method)
+        except Exception as exc:
+            self._fail_single_run(manifest, str(exc))
+            raise
+
+        if self.last_result is not None and self.last_result is not previous_result:
+            self._complete_single_run(manifest, self.last_result)
+        else:
+            self._fail_single_run(manifest, "Calculation did not produce a result")
         return None
 
     def get_menu_options(self) -> list[MenuOption]:

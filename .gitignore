@@ -143,9 +143,17 @@ src/grimperium/crest_pm7/tmp/*/
 # Local run directories
 runs/
 /home/*/grimperium/runs/
+!src/grimperium/runs/
+!src/grimperium/runs/*.py
+!tests/runs/
+!tests/runs/*.py
 
 # Generated result outputs
 results/
+!src/grimperium/results/
+!src/grimperium/results/*.py
+!tests/results/
+!tests/results/*.py
 
 # CREST output files (generated in work directories and accidentally in root)
 confcross.xyz

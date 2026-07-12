@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import io
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 from rich.console import Console
 
@@ -19,6 +19,7 @@ def _create_results_view() -> tuple[ResultsView, io.StringIO, MagicMock]:
     controller.console = console
     controller.current_model_path = None
     controller.current_csv_path = None
+    controller.session = MagicMock(analysis_path=None, run=None)
     view = ResultsView(controller)
     view.wait_for_enter = MagicMock()  # type: ignore[method-assign]
     return view, buf, controller
@@ -37,15 +38,15 @@ def test_controller_tracks_current_csv_path() -> None:
     assert controller.current_csv_path is None
 
 
-def test_calculation_actions_are_disabled_in_results_menu() -> None:
+def test_analysis_actions_are_enabled_in_results_menu() -> None:
     view, _, _ = _create_results_view()
 
     options = {option.value: option for option in view.get_menu_options()}
 
-    assert options["run_analysis"].disabled is True
-    assert options["run_analysis"].disabled_reason == "Use Models view"
-    assert options["predict_batch"].disabled is True
-    assert options["predict_batch"].disabled_reason == "Use Models view"
+    assert options["analyze_source"].disabled is False
+    assert options["select_run"].disabled is False
+    assert "predict_batch" not in options
+    assert "run_analysis" not in options
 
 
 def test_pure_analysis_actions_remain_enabled() -> None:
@@ -92,37 +93,26 @@ def test_get_csv_path_uses_controller_session_not_env(monkeypatch) -> None:
     assert "default data file" not in buf.getvalue()
 
 
-def test_get_csv_path_falls_back_with_warning() -> None:
+def test_get_csv_path_returns_none_when_unselected() -> None:
     view, buf, controller = _create_results_view()
     controller.current_csv_path = None
 
-    assert view._get_csv_path() == Path("data/thermo_pm7.csv")
-    assert "default data file" in buf.getvalue()
+    assert view._get_csv_path() is None
+    assert "default data file" not in buf.getvalue()
 
 
-def test_predict_batch_redirect_does_not_call_predictor() -> None:
-    view, buf, _ = _create_results_view()
+def test_analyze_source_routes_without_predictor() -> None:
+    view, _, _ = _create_results_view()
+    view._load_analysis_report = MagicMock(return_value=None)  # type: ignore[method-assign]
 
-    with patch("grimperium.ml.predictor.predict_batch") as mock_predict:
-        view._handle_predict_batch()
-
-    mock_predict.assert_not_called()
-    output = buf.getvalue()
-    assert "Batch prediction is handled in Models > Predict Batch" in output
-    assert "Results is for analysis only" in output
+    assert view.handle_action("analyze_source") is None
+    view._load_analysis_report.assert_called_once_with(show_errors=True)
 
 
-def test_run_analysis_redirect_does_not_call_training_or_prediction() -> None:
-    view, buf, _ = _create_results_view()
+def test_select_run_with_empty_history_shows_empty_state() -> None:
+    view, buf, controller = _create_results_view()
+    controller.run_service = MagicMock()
+    controller.run_service.list_runs.return_value = []
 
-    with (
-        patch("grimperium.ml.trainer.train") as mock_train,
-        patch("grimperium.ml.predictor.predict_batch") as mock_predict,
-    ):
-        view._handle_run_analysis()
-
-    mock_train.assert_not_called()
-    mock_predict.assert_not_called()
-    output = buf.getvalue()
-    assert "Training and prediction are handled in Models" in output
-    assert "Use Models > Train Model and Models > Predict Batch first" in output
+    assert view.handle_action("select_run") is None
+    assert "No saved runs found" in buf.getvalue()

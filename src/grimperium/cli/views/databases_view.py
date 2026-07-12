@@ -10,6 +10,7 @@ import logging
 import multiprocessing
 import threading
 import time
+from dataclasses import asdict
 from datetime import date, datetime, timezone
 from pathlib import Path
 from queue import Queue
@@ -31,7 +32,7 @@ from grimperium.cli.progress_tracker import (
     ProgressTracker,
     consume_events,
 )
-from grimperium.cli.session import DatasetRef
+from grimperium.cli.session import DatasetRef, RunRef
 from grimperium.cli.session_store import (
     SessionState,
     WorkerSessionInfo,
@@ -55,6 +56,8 @@ from grimperium.crest_pm7.batch.enums import MoleculeStatus, WorkerStatus
 from grimperium.crest_pm7.batch.state_manager import BatchStateManager
 from grimperium.crest_pm7.config import PM7Config
 from grimperium.crest_pm7.database_analyzer import AnalysisReport
+from grimperium.runs.models import RunManifest
+from grimperium.runs.service import RunService
 from grimperium.worker.client import WorkerClient, WorkerClientConfig
 from grimperium.worker.runner import WorkerConfig, WorkerRunner
 
@@ -401,6 +404,65 @@ class DatabasesView(BaseView):
             return path
         csv_path = getattr(db, "csv_path", "")
         return DATA_DIR / csv_path if csv_path else Path("")
+
+    def _run_service(self) -> RunService:
+        service = getattr(self.controller, "__dict__", {}).get("run_service")
+        return (
+            service
+            if isinstance(service, RunService)
+            else RunService.from_environment()
+        )
+
+    def _method_run_fields(self) -> tuple[str, str, dict[str, Any]]:
+        method = getattr(self.controller, "current_method_definition", None)
+        if method is None:
+            return "crest_pm7", "1.0.0", {"method_id": "crest_pm7"}
+        return method.method_id, method.version, asdict(method)
+
+    def _database_ref_snapshot(self, csv_path: Path) -> dict[str, Any] | None:
+        if self.selected_db is None:
+            return {"path": str(csv_path)}
+        return {
+            "database_id": self.selected_db.database_id,
+            "alias": self.selected_db.alias,
+            "name": self.selected_db.name,
+            "path": str(csv_path),
+            "role": self.selected_db.role,
+            "capabilities": sorted(self.selected_db.capabilities),
+        }
+
+    def _execution_overrides_snapshot(
+        self,
+        *,
+        batch_size: int,
+        crest_timeout_minutes: int,
+        mopac_timeout_minutes: int,
+    ) -> dict[str, Any]:
+        overrides = asdict(self.controller.session.overrides)
+        active = {key: value for key, value in overrides.items() if value is not None}
+        active.update(
+            {
+                "batch_size": batch_size,
+                "crest_timeout_minutes": crest_timeout_minutes,
+                "mopac_timeout_minutes": mopac_timeout_minutes,
+            }
+        )
+        return active
+
+    def _attach_existing_outputs(
+        self,
+        manifest: RunManifest,
+        output_layout: BatchOutputLayout,
+    ) -> RunManifest:
+        paths = {
+            "calculation_results_csv": output_layout.calculation_results_csv,
+            "calculation_results_xlsx": output_layout.calculation_results_xlsx,
+            "batch_state_csv": output_layout.batch_state_csv,
+        }
+        existing_paths = {key: path for key, path in paths.items() if path.exists()}
+        if not existing_paths:
+            return manifest
+        return self._run_service().attach_output_paths(manifest.run_id, existing_paths)
 
     def _require_selected_capability(self, capability: str) -> bool:
         """Validate the selected database supports the requested action."""
@@ -1038,9 +1100,10 @@ class DatabasesView(BaseView):
         self.console.print()
 
         try:
+            overrides = self.controller.session.overrides
             num_molecules = self._prompt_positive_int(
                 "How many molecules to calculate?",
-                default=10,
+                default=overrides.batch_size or 10,
                 max_value=30026,
             )
             if num_molecules is None:
@@ -1048,14 +1111,14 @@ class DatabasesView(BaseView):
 
             crest_timeout = self._prompt_positive_int(
                 "CREST timeout per molecule (minutes)?",
-                default=30,
+                default=int(overrides.crest_timeout_minutes or 30),
             )
             if crest_timeout is None:
                 return
 
             mopac_timeout = self._prompt_positive_int(
                 "MOPAC/PM7 timeout per molecule (minutes)?",
-                default=60,
+                default=int(overrides.mopac_timeout_minutes or 60),
             )
             if mopac_timeout is None:
                 return
@@ -1156,6 +1219,7 @@ class DatabasesView(BaseView):
             self.console.input("[dim]Press Enter to continue...[/dim]")
             return
 
+        manifest: RunManifest | None = None
         try:
             self.console.print()
             self.console.print("[bold cyan]Initializing batch processor...[/bold cyan]")
@@ -1209,6 +1273,26 @@ class DatabasesView(BaseView):
             output_layout = BatchOutputLayout(
                 self._pm7_batch_output_dir(csv_path, batch_id)
             )
+            method_id, method_version, method_snapshot = self._method_run_fields()
+            manifest = self._run_service().create_run(
+                property_id="standard_enthalpy_of_formation",
+                method_id=method_id,
+                method_version=method_version,
+                method_snapshot=method_snapshot,
+                execution_overrides=self._execution_overrides_snapshot(
+                    batch_size=batch.size,
+                    crest_timeout_minutes=crest_timeout_minutes,
+                    mopac_timeout_minutes=mopac_timeout_minutes,
+                ),
+                dataset_ref=self._database_ref_snapshot(csv_path),
+                model_ref=None,
+                molecule_count=batch.size,
+            )
+            manifest = self._run_service().start_run(manifest.run_id)
+            self.controller.session.run = RunRef(
+                run_id=manifest.run_id,
+                status=manifest.status.value,
+            )
             exec_manager = BatchExecutionManager(
                 csv_manager=csv_manager,
                 state_manager=state_manager,
@@ -1219,6 +1303,14 @@ class DatabasesView(BaseView):
             )
 
             if batch.is_empty:
+                cancelled = self._run_service().cancel_run(
+                    manifest.run_id,
+                    error="No molecules available for processing",
+                )
+                self.controller.session.run = RunRef(
+                    run_id=cancelled.run_id,
+                    status=cancelled.status.value,
+                )
                 self.console.print(
                     "[yellow]No molecules available for processing.[/yellow]\n"
                     "[dim]All molecules may already be processed or none are PENDING.[/dim]"
@@ -1326,12 +1418,52 @@ class DatabasesView(BaseView):
             self.console.print(
                 f"[cyan]Results saved to:[/cyan] {output_layout.output_dir}"
             )
+            if manifest is not None and result is not None:
+                manifest = self._attach_existing_outputs(manifest, output_layout)
+                failure_count = (
+                    result.failed_count + result.rerun_count + result.skip_count
+                )
+                if result.invalidated:
+                    finalized = self._run_service().invalidate_run(
+                        manifest.run_id,
+                        error="ALL_OR_NOTHING reset invalidated scientific completion",
+                        success_count=result.success_count,
+                        failure_count=failure_count,
+                    )
+                else:
+                    finalized = self._run_service().complete_run(
+                        manifest.run_id,
+                        success_count=result.success_count,
+                        failure_count=failure_count,
+                    )
+                self.controller.session.run = RunRef(
+                    run_id=finalized.run_id,
+                    status=finalized.status.value,
+                )
 
         except FileNotFoundError as e:
+            if manifest is not None:
+                failed = self._run_service().fail_run(manifest.run_id, error=str(e))
+                self.controller.session.run = RunRef(
+                    run_id=failed.run_id,
+                    status=failed.status.value,
+                )
             self.console.print(f"[red]✗ File not found: {e}[/red]")
         except RuntimeError as e:
+            if manifest is not None:
+                failed = self._run_service().fail_run(manifest.run_id, error=str(e))
+                self.controller.session.run = RunRef(
+                    run_id=failed.run_id,
+                    status=failed.status.value,
+                )
             self.console.print(f"[red]✗ Runtime error: {e}[/red]")
         except Exception as e:
+            if manifest is not None:
+                failed = self._run_service().fail_run(manifest.run_id, error=str(e))
+                self.controller.session.run = RunRef(
+                    run_id=failed.run_id,
+                    status=failed.status.value,
+                )
             self.console.print(f"[red]✗ Unexpected error: {e}[/red]")
 
         self.console.print()
