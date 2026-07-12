@@ -44,3 +44,13 @@ def test_no_production_imports_of_mock_data() -> None:
     ), "Production modules must not import grimperium.cli.mock_data: " + ", ".join(
         offenders
     )
+
+
+def test_database_registry_does_not_embed_legacy_default_aliases() -> None:
+    registry_path = SRC_ROOT / "cli" / "database_registry.py"
+    source = registry_path.read_text(encoding="utf-8")
+
+    assert "_create_defaults" not in source
+    assert '"CBS"' not in source
+    assert '"PM7"' not in source
+    assert '"NIST"' not in source

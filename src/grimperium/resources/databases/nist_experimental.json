@@ -1,0 +1,22 @@
+{
+  "schema_version": 2,
+  "database_id": "official.nist_experimental",
+  "origin": "official",
+  "manifest_version": "1.0.0",
+  "role": "reference",
+  "capabilities": [
+    "reference_values"
+  ],
+  "path": "",
+  "metadata": {
+    "name": "NIST Experimental",
+    "alias": "NIST",
+    "description": "NIST experimental thermochemistry data placeholder.",
+    "properties": [
+      "H298_exp",
+      "uncertainty",
+      "reference"
+    ],
+    "created_at": "2026-01-01"
+  }
+}

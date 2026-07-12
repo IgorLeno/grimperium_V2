@@ -13,11 +13,18 @@ from grimperium.calculation.methods.feature_schema import get_feature_schema
 STANDARD_ENTHALPY_PACKAGE = (
     "grimperium.calculation.methods.standard_enthalpy_of_formation"
 )
-STANDARD_ENTHALPY_RESOURCES = (
-    "semiempirical_am1_pm3_pm7.yaml",
-    "crest_pm7.yaml",
-    "pm7_delta_learning.yaml",
-)
+METHOD_PROPERTY_PACKAGES = {
+    "standard_enthalpy_of_formation": STANDARD_ENTHALPY_PACKAGE,
+}
+
+
+@dataclass(frozen=True)
+class CalculationPropertyDefinition:
+    """Property catalogue entry visible in the CLI."""
+
+    property_id: str
+    display_name: str
+    package: str
 
 
 @dataclass(frozen=True)
@@ -68,6 +75,15 @@ class CalculationMethodDefinition:
     compatibility: CompatibilityDefinition
     xtb: XtbDefinition
     output: dict[str, Any]
+
+
+PROPERTY_CATALOG = (
+    CalculationPropertyDefinition(
+        property_id="standard_enthalpy_of_formation",
+        display_name="Standard enthalpy of formation",
+        package=STANDARD_ENTHALPY_PACKAGE,
+    ),
+)
 
 
 def _require_mapping(value: Any, field_name: str) -> Mapping[str, Any]:
@@ -259,24 +275,63 @@ def load_method_definition(
     return parse_method_definition(loaded)
 
 
-def _standard_enthalpy_resource_names() -> list[str]:
-    package_files = resources.files(STANDARD_ENTHALPY_PACKAGE)
-    available = {resource.name for resource in package_files.iterdir()}
-    return [
-        resource_name
-        for resource_name in STANDARD_ENTHALPY_RESOURCES
-        if resource_name in available
-    ]
+def list_calculation_properties() -> list[CalculationPropertyDefinition]:
+    """List supported calculation properties."""
+    return sorted(PROPERTY_CATALOG, key=lambda item: item.property_id)
+
+
+def get_calculation_property(property_id: str) -> CalculationPropertyDefinition:
+    """Return a single supported calculation property by ID."""
+    for definition in PROPERTY_CATALOG:
+        if definition.property_id == property_id:
+            return definition
+    raise ValueError(f"Unknown calculation property: {property_id}")
+
+
+def _yaml_resource_names(package: str) -> list[str]:
+    package_files = resources.files(package)
+    return sorted(
+        resource.name
+        for resource in package_files.iterdir()
+        if resource.name.endswith(".yaml")
+    )
+
+
+def discover_calculation_methods(
+    property_packages: Mapping[str, str] | None = None,
+) -> list[CalculationMethodDefinition]:
+    """Discover and validate YAML method definitions from property packages."""
+    packages = property_packages or METHOD_PROPERTY_PACKAGES
+    methods: list[CalculationMethodDefinition] = []
+    seen: dict[str, str] = {}
+    for package_property_id, package in sorted(packages.items()):
+        for resource_name in _yaml_resource_names(package):
+            try:
+                method = load_method_definition(package, resource_name)
+            except ValueError as exc:
+                raise ValueError(
+                    f"Invalid method definition {package}:{resource_name}: {exc}"
+                ) from exc
+            if method.property_id != package_property_id:
+                raise ValueError(
+                    f"Method {method.method_id} declares property "
+                    f"{method.property_id!r}, expected {package_property_id!r}"
+                )
+            if method.method_id in seen:
+                raise ValueError(
+                    f"Duplicate calculation method_id {method.method_id!r} in "
+                    f"{package}:{resource_name} and {seen[method.method_id]}"
+                )
+            seen[method.method_id] = f"{package}:{resource_name}"
+            methods.append(method)
+    return methods
 
 
 def list_calculation_methods(
     property_id: str | None = None,
 ) -> list[CalculationMethodDefinition]:
     """List known calculation methods, optionally filtered by property ID."""
-    methods = [
-        load_method_definition(STANDARD_ENTHALPY_PACKAGE, resource_name)
-        for resource_name in _standard_enthalpy_resource_names()
-    ]
+    methods = discover_calculation_methods()
     if property_id is not None:
         methods = [method for method in methods if method.property_id == property_id]
     return methods

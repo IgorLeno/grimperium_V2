@@ -67,6 +67,7 @@ Learning Δ = (y_cbs - y_pm7) is easier than learning y_cbs directly.
 
         status_table.add_row(f"{ICONS['calc']} Property", summary["property"])
         status_table.add_row(f"{ICONS['methods']} Method", summary["method"])
+        status_table.add_row(f"{ICONS['databases']} Dataset", summary["dataset"])
         status_table.add_row(f"{ICONS['models']} Model", summary["model"])
         status_table.add_row("Status", summary["status"])
 
@@ -78,10 +79,10 @@ Learning Δ = (y_cbs - y_pm7) is easier than learning y_cbs directly.
   https://grimperium.readthedocs.io
 
 [bold]GitHub Repository[/bold]
-  https://github.com/grimperium/grimperium
+  https://github.com/IgorLeno/grimperium_V2
 
 [bold]Report Issues[/bold]
-  https://github.com/grimperium/grimperium/issues
+  https://github.com/IgorLeno/grimperium_V2/issues
 """
         self.console.print(
             Panel(

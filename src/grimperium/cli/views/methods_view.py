@@ -15,6 +15,7 @@ from grimperium.calculation.methods import (
     CalculationMethodDefinition,
     get_calculation_method,
     list_calculation_methods,
+    list_calculation_properties,
 )
 from grimperium.cli.menu import MenuOption, show_back_menu, show_menu
 from grimperium.cli.styles import COLORS, ICONS
@@ -39,6 +40,20 @@ class MethodsView(BaseView):
 
     def _available_methods(self) -> list[CalculationMethodDefinition]:
         return list_calculation_methods(DEFAULT_PROPERTY_ID)
+
+    def _render_property_catalog(self) -> None:
+        table = Table(
+            title="Available Properties",
+            show_header=True,
+            header_style=f"bold {COLORS['calc']}",
+            border_style=COLORS["border"],
+        )
+        table.add_column("Property ID", style="bold")
+        table.add_column("Name")
+        for prop in list_calculation_properties():
+            table.add_row(prop.property_id, prop.display_name)
+        self.console.print(table)
+        self.console.print()
 
     def render(self) -> None:
         """Render the methods catalogue and active session method."""
@@ -65,6 +80,7 @@ class MethodsView(BaseView):
             )
         )
         self.console.print()
+        self._render_property_catalog()
 
         table = Table(
             title="Available Methods",
@@ -118,6 +134,7 @@ class MethodsView(BaseView):
 [{COLORS['muted']}]Conformer strategy:[/{COLORS['muted']}] {method.conformer_selection.strategy}
 [{COLORS['muted']}]Model:[/{COLORS['muted']}] {model_line}
 [{COLORS['muted']}]xTB:[/{COLORS['muted']}] {xtb_line}
+[{COLORS['muted']}]Execution overrides:[/{COLORS['muted']}] Coming in next release
 """
         self.console.print(
             Panel(

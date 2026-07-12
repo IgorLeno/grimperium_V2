@@ -20,8 +20,6 @@ from grimperium.calculation.contracts.models import (
 )
 from grimperium.calculation.methods import (
     CalculationMethodDefinition,
-    get_calculation_method,
-    list_calculation_methods,
 )
 from grimperium.calculation.runners import SemiempiricalFormationEnthalpyRunner
 from grimperium.cli.calc_pipeline import (
@@ -188,39 +186,6 @@ class CalcView(BaseView):
         self.console.print(table)
         self.console.print()
 
-    def render_available_methods(self) -> None:
-        """Render available standard enthalpy calculation methods."""
-        methods = list_calculation_methods("standard_enthalpy_of_formation")
-        table = Table(
-            title="Calculation Methods",
-            show_header=True,
-            header_style=f"bold {COLORS['calc']}",
-            border_style=COLORS["border"],
-        )
-        table.add_column("Method ID", style="bold", min_width=30, no_wrap=True)
-        table.add_column("Name")
-        table.add_column("Model")
-        table.add_column("Conformer Strategy")
-        table.add_column("xTB")
-
-        for method in methods:
-            model = "Required" if method.model_requirement.model_required else "No"
-            xtb = (
-                "Default"
-                if method.xtb.optional and method.xtb.enabled_by_default
-                else "Disabled"
-            )
-            table.add_row(
-                method.method_id,
-                method.display_name,
-                model,
-                method.conformer_selection.strategy,
-                xtb,
-            )
-
-        self.console.print(table)
-        self.console.print()
-
     def validate_smiles(self, smiles: str) -> bool | str:
         """
         Validate SMILES string using RDKit.
@@ -325,27 +290,6 @@ class CalcView(BaseView):
                 return path
 
         return None
-
-    def _select_method(self) -> CalculationMethodDefinition | None:
-        """Prompt for a standard enthalpy calculation method."""
-        methods = list_calculation_methods("standard_enthalpy_of_formation")
-        selected = show_menu(
-            [
-                MenuOption(
-                    label=method.display_name,
-                    value=method.method_id,
-                    icon=ICONS["calc"],
-                )
-                for method in methods
-            ],
-            title="Calculation Method",
-        )
-        if selected is None:
-            return None
-        return get_calculation_method(
-            selected,
-            property_id="standard_enthalpy_of_formation",
-        )
 
     def _resolve_required_model(
         self,

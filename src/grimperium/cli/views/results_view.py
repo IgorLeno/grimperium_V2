@@ -56,12 +56,11 @@ class ResultsView(BaseView):
         return Path(model_path)
 
     def _get_csv_path(self) -> Path:
-        """Resolve CSV path from the live controller session.
-
-        Falls back to the canonical legacy CSV path when no session CSV is
-        selected. Results never reads GRIMPERIUM_DATA_PATH.
-        """
-        csv_path = getattr(self.controller, "current_csv_path", None)
+        """Resolve CSV path from the typed live controller session."""
+        session = getattr(self.controller, "__dict__", {}).get("session")
+        csv_path = getattr(session, "analysis_path", None)
+        if csv_path is None:
+            csv_path = getattr(self.controller, "current_csv_path", None)
         if csv_path is None:
             fallback = Path("data/thermo_pm7.csv")
             self.console.print(

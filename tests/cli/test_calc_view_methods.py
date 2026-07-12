@@ -22,6 +22,7 @@ from grimperium.calculation.methods import get_calculation_method
 from grimperium.cli.calc_pipeline import CalcPipelineResult
 from grimperium.cli.viewmodels import PredictionResult
 from grimperium.cli.views.calc_view import CalcView
+from grimperium.cli.views.methods_view import MethodsView
 
 
 def _canonical_stub(
@@ -95,16 +96,17 @@ def controller() -> MagicMock:
     return ctrl
 
 
-def test_render_available_methods_lists_standard_enthalpy_methods(
+def test_methods_view_lists_standard_enthalpy_methods(
     controller: MagicMock,
 ) -> None:
-    view = CalcView(controller)
+    view = MethodsView(controller)
 
-    view.render_available_methods()
+    view.render()
 
     output = controller.console.file.getvalue()
     assert "semiempirical_am1_pm3_pm7" in output
     assert "pm7_delta_learning" in output
+    assert "standard_enthalpy_of_formation" in output
 
 
 def test_change_method_action_is_available(controller: MagicMock) -> None:

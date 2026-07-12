@@ -1,0 +1,30 @@
+{
+  "schema_version": 2,
+  "database_id": "official.crest_pm7",
+  "origin": "official",
+  "manifest_version": "1.0.0",
+  "role": "crest_pm7",
+  "capabilities": [
+    "readable",
+    "writable",
+    "batch_input",
+    "analysis_input",
+    "model_training",
+    "reference_values"
+  ],
+  "path": "thermo_pm7.csv",
+  "metadata": {
+    "name": "CREST PM7",
+    "alias": "PM7",
+    "description": "CREST conformer search with MOPAC PM7 optimization.",
+    "properties": [
+      "H298_pm7",
+      "H298_cbs",
+      "conformers",
+      "smiles",
+      "quality_grade"
+    ],
+    "created_at": "2026-01-01",
+    "reference_db": "official.cbs_chon"
+  }
+}

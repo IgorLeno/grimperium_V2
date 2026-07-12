@@ -23,7 +23,7 @@ from rich.table import Table
 
 from grimperium.cli.constants import DATA_DIR
 from grimperium.cli.database_registry import DatabaseInfo, DatabaseRegistry
-from grimperium.cli.menu import MenuOption, show_back_menu
+from grimperium.cli.menu import MenuOption, show_back_menu, show_menu, text_input
 from grimperium.cli.menu import confirm as menu_confirm
 from grimperium.cli.progress_tracker import (
     CSVMonitor,
@@ -31,6 +31,7 @@ from grimperium.cli.progress_tracker import (
     ProgressTracker,
     consume_events,
 )
+from grimperium.cli.session import DatasetRef
 from grimperium.cli.session_store import (
     SessionState,
     WorkerSessionInfo,
@@ -178,12 +179,14 @@ class DatabasesView(BaseView):
         table.add_column("Status")
 
         for db in self.get_databases():
-            if db.status == "ready":
+            if db.status == "available":
                 status = f"[{COLORS['success']}]{ICONS['success']} Ready[/{COLORS['success']}]"
+            elif db.status == "missing":
+                status = f"[{COLORS['warning']}]Missing[/{COLORS['warning']}]"
+            elif db.status == "invalid_schema":
+                status = f"[{COLORS['error']}]Invalid schema[/{COLORS['error']}]"
             else:
-                status = (
-                    f"[{COLORS['in_dev']}]{ICONS['in_dev']} In Dev[/{COLORS['in_dev']}]"
-                )
+                status = f"[{COLORS['error']}]Unreadable[/{COLORS['error']}]"
 
             last_updated_str = self._format_last_updated(db.last_updated)
 
@@ -203,19 +206,19 @@ class DatabasesView(BaseView):
         self.show_header()
 
         # Database info panel
-        status_text = (
-            f"[{COLORS['success']}]{ICONS['success']} Ready[/{COLORS['success']}]"
-            if db.status == "ready"
-            else f"[{COLORS['in_dev']}]{ICONS['in_dev']} In Development[/{COLORS['in_dev']}]"
-        )
+        status_text = self._format_availability(db.status)
 
         last_updated_str = self._format_last_updated(db.last_updated)
+        capabilities = ", ".join(sorted(db.capabilities)) or "-"
 
         info = f"""
 [bold]Name:[/bold]         {db.name}
 [bold]Alias:[/bold]        {db.alias}
+[bold]ID:[/bold]           {db.database_id}
 [bold]Description:[/bold]  {db.description}
-[bold]Pipeline:[/bold]     {db.pipeline}
+[bold]Role:[/bold]         {db.role}
+[bold]Path:[/bold]         {db.path}
+[bold]Capabilities:[/bold] {capabilities}
 [bold]Molecules:[/bold]    {db.molecules:,}
 [bold]Last Updated:[/bold] {last_updated_str}
 [bold]Status:[/bold]       {status_text}
@@ -235,6 +238,16 @@ class DatabasesView(BaseView):
         )
         self.console.print()
 
+    def _format_availability(self, status: str) -> str:
+        """Format computed database availability for Rich output."""
+        if status == "available":
+            return f"[{COLORS['success']}]{ICONS['success']} Available[/{COLORS['success']}]"
+        if status == "missing":
+            return f"[{COLORS['warning']}]Missing[/{COLORS['warning']}]"
+        if status == "invalid_schema":
+            return f"[{COLORS['error']}]Invalid schema[/{COLORS['error']}]"
+        return f"[{COLORS['error']}]Unreadable[/{COLORS['error']}]"
+
     def get_menu_options(self) -> list[MenuOption]:
         """Return menu options for the databases view."""
         options = []
@@ -242,8 +255,9 @@ class DatabasesView(BaseView):
             options.append(
                 MenuOption(
                     label=db.alias,
-                    value=f"view_{db.alias}",
+                    value=f"view_{db.database_id}",
                     icon=ICONS["databases"],
+                    description=db.name,
                 )
             )
 
@@ -258,8 +272,8 @@ class DatabasesView(BaseView):
                 MenuOption(
                     label="Add New Database",
                     value="add",
-                    disabled=True,
-                    disabled_reason="In Development",
+                    icon=ICONS["databases"],
+                    description="Register a user CSV in the catalog",
                 ),
             ]
         )
@@ -268,10 +282,22 @@ class DatabasesView(BaseView):
 
     def get_detail_menu_options(self) -> list[MenuOption]:
         """Return menu options for database detail view."""
+        can_batch = self.selected_db is not None and self.selected_db.has_capability(
+            "batch_input"
+        )
+        can_analyze = self.selected_db is not None and self.selected_db.has_capability(
+            "analysis_input"
+        )
         options = [
+            MenuOption(
+                label="Use as Session Dataset",
+                value="use_session_dataset",
+            ),
             MenuOption(
                 label="Run Calculation",
                 value="calculate_run",
+                disabled=not can_batch,
+                disabled_reason="Requires batch_input capability",
             ),
             MenuOption(
                 label="Configuration",
@@ -280,12 +306,14 @@ class DatabasesView(BaseView):
             MenuOption(
                 label="Analyze Database",
                 value="analyze",
+                disabled=not can_analyze,
+                disabled_reason="Requires analysis_input capability",
             ),
         ]
 
         # Conditionally add PM7 Baseline Analysis if CSV has required columns
         if self.selected_db and self.selected_db.csv_path:
-            csv_path = DATA_DIR / self.selected_db.csv_path
+            csv_path = self._database_path(self.selected_db)
             if csv_path.exists():
                 try:
                     csv_cols = pd.read_csv(csv_path, nrows=0).columns
@@ -301,18 +329,8 @@ class DatabasesView(BaseView):
 
         options.extend(
             [
-                MenuOption(
-                    label="Edit Database",
-                    value="edit",
-                    disabled=True,
-                    disabled_reason="In Development",
-                ),
-                MenuOption(
-                    label="Delete Database",
-                    value="delete",
-                    disabled=True,
-                    disabled_reason="In Development",
-                ),
+                MenuOption(label="Edit Database", value="edit"),
+                MenuOption(label="Remove from Catalog", value="delete"),
             ]
         )
         return options
@@ -326,11 +344,15 @@ class DatabasesView(BaseView):
             return "main"
 
         if action and action.startswith("view_"):
-            alias = action.removeprefix("view_")
-            self.selected_db = self.registry.get_by_alias(alias)
+            identifier = action.removeprefix("view_")
+            self.selected_db = self.registry.get_by_id(identifier)
+            if self.selected_db is None:
+                self.selected_db = self.registry.get_by_alias(identifier)
             return None
 
         if action == "calculate_run":
+            if not self._require_selected_capability("batch_input"):
+                return None
             self._handle_run_calculation_menu()
             return None
 
@@ -339,6 +361,8 @@ class DatabasesView(BaseView):
             return None
 
         if action == "analyze":
+            if not self._require_selected_capability("analysis_input"):
+                return None
             self._handle_analyze()
             return None
 
@@ -348,15 +372,178 @@ class DatabasesView(BaseView):
 
         if action == "refresh":
             self.registry.reload()
-            self.refresh_databases_from_filesystem()
+            self.refresh_databases_from_filesystem(offer_registration=True)
             self.console.input("[dim]Press Enter to continue...[/dim]")
             return None
 
-        if action in ["add", "edit", "delete"]:
-            self.show_in_development(action.title())
+        if action == "add":
+            self._handle_add_database_wizard()
+            return None
+
+        if action == "edit":
+            self._handle_edit_database()
+            return None
+
+        if action == "delete":
+            self._handle_remove_from_catalog()
+            return None
+
+        if action == "use_session_dataset":
+            self._handle_use_as_session_dataset()
             return None
 
         return None
+
+    def _database_path(self, db: DatabaseInfo) -> Path:
+        """Resolve a DatabaseInfo path, with MagicMock-test compatibility."""
+        path = getattr(db, "path", None)
+        if isinstance(path, Path):
+            return path
+        csv_path = getattr(db, "csv_path", "")
+        return DATA_DIR / csv_path if csv_path else Path("")
+
+    def _require_selected_capability(self, capability: str) -> bool:
+        """Validate the selected database supports the requested action."""
+        if self.selected_db is None:
+            return False
+        if self.selected_db.has_capability(capability):
+            return True
+        self.show_error(
+            f"{self.selected_db.alias} cannot be used for this action "
+            f"(missing {capability})."
+        )
+        self.wait_for_enter()
+        return False
+
+    def _handle_use_as_session_dataset(self) -> None:
+        """Store the selected catalog database on the typed CLI session."""
+        if self.selected_db is None:
+            return
+        dataset = DatasetRef(
+            database_id=self.selected_db.database_id,
+            alias=self.selected_db.alias,
+            name=self.selected_db.name,
+            path=self._database_path(self.selected_db),
+            role=self.selected_db.role,
+            capabilities=self.selected_db.capabilities,
+        )
+        self.controller.set_dataset(dataset)
+        self.show_success(f"Session dataset set to: {self.selected_db.alias}")
+        self.wait_for_enter()
+
+    def _handle_add_database_wizard(self, default_path: Path | None = None) -> None:
+        """Register a user CSV in the database overlay."""
+        path_text = text_input(
+            "CSV path",
+            default=str(default_path) if default_path is not None else "",
+        )
+        if path_text is None or not path_text.strip():
+            return
+        name = text_input("Database name")
+        if name is None or not name.strip():
+            return
+        alias = text_input("Display alias", default=name.strip())
+        if alias is None or not alias.strip():
+            return
+        description = text_input("Description", default="")
+        if description is None:
+            return
+        role = show_menu(
+            [
+                MenuOption("Reference", "reference"),
+                MenuOption("CREST PM7", "crest_pm7"),
+                MenuOption("Analysis", "analysis"),
+            ],
+            title="Database role",
+        )
+        if role is None:
+            return
+        capabilities_text = text_input(
+            "Capabilities (comma-separated)",
+            default="readable,analysis_input",
+        )
+        if capabilities_text is None:
+            return
+        capabilities = self._parse_capabilities(capabilities_text)
+        try:
+            entry = self.registry.add_user_database(
+                path=Path(path_text).expanduser(),
+                name=name.strip(),
+                alias=alias.strip(),
+                description=description.strip(),
+                role=role,
+                capabilities=capabilities,
+            )
+        except ValueError as exc:
+            self.show_error(str(exc))
+            self.wait_for_enter()
+            return
+        self.selected_db = entry
+        self.show_success(f"Database registered: {entry.alias}")
+        self.wait_for_enter()
+
+    def _handle_edit_database(self) -> None:
+        """Edit user metadata or official path/metadata overlay."""
+        if self.selected_db is None:
+            return
+        path_text = text_input(
+            "CSV path", default=str(self._database_path(self.selected_db))
+        )
+        if path_text is None:
+            return
+        metadata: dict[str, Any] = {}
+        if self.selected_db.origin == "user":
+            name = text_input("Database name", default=self.selected_db.name)
+            if name is None:
+                return
+            alias = text_input("Display alias", default=self.selected_db.alias)
+            if alias is None:
+                return
+            description = text_input(
+                "Description", default=self.selected_db.description
+            )
+            if description is None:
+                return
+            metadata.update(
+                {
+                    "name": name.strip(),
+                    "alias": alias.strip(),
+                    "description": description.strip(),
+                }
+            )
+        try:
+            self.registry.update_entry(
+                self.selected_db.database_id,
+                path=Path(path_text).expanduser() if path_text.strip() else Path(""),
+                metadata=metadata,
+            )
+        except ValueError as exc:
+            self.show_error(str(exc))
+            self.wait_for_enter()
+            return
+        self.selected_db = self.registry.get_by_id(self.selected_db.database_id)
+        self.show_success("Database catalog entry updated")
+        self.wait_for_enter()
+
+    def _handle_remove_from_catalog(self) -> None:
+        """Remove user overlay data without deleting the physical CSV."""
+        if self.selected_db is None:
+            return
+        if not menu_confirm(
+            f"Remove {self.selected_db.alias} from catalog overlay? Files are not deleted.",
+            default=False,
+        ):
+            return
+        removed_id = self.selected_db.database_id
+        self.registry.remove_from_catalog(removed_id)
+        self.selected_db = None
+        self.show_success("Catalog overlay entry removed")
+        self.wait_for_enter()
+
+    @staticmethod
+    def _parse_capabilities(value: str) -> set[str]:
+        """Parse a comma-separated capability list."""
+        return {item.strip() for item in value.split(",") if item.strip()}
 
     def _handle_calculate_config(self) -> None:
         """Show CREST/MOPAC configuration submenus."""
@@ -386,9 +573,7 @@ class DatabasesView(BaseView):
         if self.selected_db is None:
             return
 
-        csv_path = (
-            DATA_DIR / self.selected_db.csv_path if self.selected_db.csv_path else None
-        )
+        csv_path = self._database_path(self.selected_db)
         if csv_path is None or not csv_path.exists():
             self.console.print(
                 f"[{COLORS['warning']}]No CSV file available for {self.selected_db.alias}.[/{COLORS['warning']}]"
@@ -414,9 +599,7 @@ class DatabasesView(BaseView):
         if self.selected_db is None:
             return
 
-        csv_path = (
-            DATA_DIR / self.selected_db.csv_path if self.selected_db.csv_path else None
-        )
+        csv_path = self._database_path(self.selected_db)
         if csv_path is None or not csv_path.exists():
             self.show_error(f"CSV file not found for {self.selected_db.alias}.")
             self.wait_for_enter()
@@ -743,7 +926,9 @@ class DatabasesView(BaseView):
             self.console.print(f"[red]Refresh failed: {e}[/red]")
         self.console.input("[dim]Press Enter to continue...[/dim]")
 
-    def refresh_databases_from_filesystem(self) -> int:
+    def refresh_databases_from_filesystem(
+        self, offer_registration: bool = False
+    ) -> int:
         """Scan data/ directory for CSV files and display database info.
 
         Discovers available database CSV files in the data/ directory,
@@ -759,8 +944,8 @@ class DatabasesView(BaseView):
                 )
                 return 0
 
-            # Find all CSV files in data/ directory
-            csv_files = list(DATA_DIR.glob("*.csv"))
+            scan = self.registry.scan_data_dir()
+            csv_files = scan.known + scan.unregistered
 
             if not csv_files:
                 self.console.print(
@@ -770,12 +955,11 @@ class DatabasesView(BaseView):
 
             self.console.print()
             self.console.print(
-                f"[bold {COLORS['databases']}]Discovered {len(csv_files)} database(s):[/bold {COLORS['databases']}]"
+                f"[bold {COLORS['databases']}]Discovered {len(csv_files)} CSV file(s):[/bold {COLORS['databases']}]"
             )
             self.console.print()
 
-            # Display each database with molecule count
-            for csv_file in sorted(csv_files):
+            for csv_file in sorted(scan.known):
                 try:
                     df = pd.read_csv(csv_file)
 
@@ -807,9 +991,27 @@ class DatabasesView(BaseView):
                         f"[{COLORS['muted']}]Error reading file: {e}[/{COLORS['muted']}]"
                     )
 
+            for db in scan.missing:
+                self.console.print(
+                    f"  [{COLORS['warning']}]![/{COLORS['warning']}] "
+                    f"[bold]{db.alias}[/bold]: missing catalog path {db.path}"
+                )
+
+            for csv_file in sorted(scan.unregistered):
+                self.console.print(
+                    f"  [{COLORS['warning']}]?[/{COLORS['warning']}] "
+                    f"[bold]{csv_file.name}[/bold]: unregistered CSV"
+                )
+                if offer_registration and menu_confirm(
+                    f"Register {csv_file.name} in the catalog?", default=False
+                ):
+                    self._handle_add_database_wizard(default_path=csv_file)
+
             self.console.print()
             self.console.print(
-                f"[{COLORS['success']}]✓ Refresh complete: {len(csv_files)} database(s) found[/{COLORS['success']}]"
+                f"[{COLORS['success']}]✓ Refresh complete: "
+                f"{len(scan.known)} known, {len(scan.missing)} missing, "
+                f"{len(scan.unregistered)} unregistered[/{COLORS['success']}]"
             )
 
             return len(csv_files)
@@ -939,7 +1141,11 @@ class DatabasesView(BaseView):
             crest_timeout_minutes: CREST timeout per molecule
             mopac_timeout_minutes: MOPAC timeout per molecule
         """
-        csv_path = DATA_DIR / "thermo_pm7.csv"
+        csv_path = (
+            self._database_path(self.selected_db)
+            if self.selected_db is not None
+            else DATA_DIR / "thermo_pm7.csv"
+        )
         detail_dir = DATA_DIR / "molecules_pm7" / "conformer_details"
 
         if not csv_path.exists():

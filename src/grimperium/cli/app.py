@@ -95,6 +95,7 @@ class GrimperiumCLI:
         return show_main_menu(
             property_label=summary["property"],
             method_label=summary["method"],
+            dataset_label=summary["dataset"],
             model_label=summary["model"],
             status=summary["status"],
         )

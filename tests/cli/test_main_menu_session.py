@@ -51,6 +51,7 @@ def test_main_menu_header_has_no_mock_model(monkeypatch: Any) -> None:
     assert "DeltaXGB" not in message
     assert "Method:" in message
     assert "Property:" in message
+    assert "Dataset:" in message
     assert "Not selected" in message
 
 
@@ -60,10 +61,12 @@ def test_format_session_header_from_controller() -> None:
     header = format_session_header(
         property_label=summary["property"],
         method_label=summary["method"],
+        dataset_label=summary["dataset"],
         model_label=summary["model"],
         status=summary["status"],
     )
     assert "Method: Not selected" in header
+    assert "Dataset: Not selected" in header
     assert "No model selected" in header
     assert "DeltaXGB" not in header
 

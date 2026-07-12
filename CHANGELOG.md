@@ -8,6 +8,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Macrobloco 2 typed CLI context and data catalog** (2026-07-11)
+  - Added typed `SessionContext` with dataset/model/run/analysis-source refs and
+    execution override schema placeholder.
+  - Added dynamic database catalog v2 with packaged official manifests,
+    computed availability, user overlay at `~/.grimperium`, legacy registry
+    migration, and Databases view catalog management actions.
+  - Added explicit calculation property catalog and dynamic YAML method
+    discovery with duplicate/invalid definition checks.
 - **Macrobloco 1 operational batch closure** (2026-07-11)
   - Added shared `BatchResultApplier` dual-write service and append-only
     `ResultLedger` for idempotent distributed `/sync_results`.

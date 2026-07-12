@@ -207,13 +207,14 @@ def format_session_header(
     *,
     property_label: str = "Not selected",
     method_label: str = "Not selected",
+    dataset_label: str = "Not selected",
     model_label: str = "No model selected",
     status: str = "No method selected",
 ) -> str:
     """Format the main-menu session context header."""
     return (
         f"[Property: {property_label} | Method: {method_label} | "
-        f"Model: {model_label} | Status: {status}]"
+        f"Dataset: {dataset_label} | Model: {model_label} | Status: {status}]"
     )
 
 
@@ -221,6 +222,7 @@ def show_main_menu(
     *,
     property_label: str = "Not selected",
     method_label: str = "Not selected",
+    dataset_label: str = "Not selected",
     model_label: str = "No model selected",
     status: str = "No method selected",
     current_model: str | None = None,
@@ -298,6 +300,7 @@ def show_main_menu(
         title=format_session_header(
             property_label=property_label,
             method_label=method_label,
+            dataset_label=dataset_label,
             model_label=model_label,
             status=status,
         ),
