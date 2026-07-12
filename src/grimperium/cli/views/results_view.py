@@ -20,7 +20,7 @@ from grimperium.cli.styles import COLORS, ICONS
 from grimperium.cli.views.base_view import BaseView
 from grimperium.ml import charts as charts_module
 from grimperium.ml import html_report as html_report_module
-from grimperium.results.models import ResultsAnalysisReport
+from grimperium.results.models import ResultsAnalysisMode, ResultsAnalysisReport
 from grimperium.results.service import ResultsService
 
 
@@ -84,9 +84,21 @@ class ResultsView(BaseView):
         if run_id is not None:
             try:
                 return self.results_service.analyze_run(run_id)
-            except (FileNotFoundError, ValueError) as exc:
+            except FileNotFoundError as exc:
                 if show_errors:
-                    self.show_error(str(exc))
+                    self.show_error(f"Output ausente: {exc}")
+                return None
+            except ValueError as exc:
+                if show_errors:
+                    message = str(exc)
+                    if "incompatible" in message.lower():
+                        self.show_error(f"Run incompatível: {message}")
+                    elif "inválido" in message.lower() or "invalid" in message.lower():
+                        self.show_error(f"Arquivo inválido: {message}")
+                    elif "refer" in message.lower():
+                        self.show_error(f"Sem referência disponível: {message}")
+                    else:
+                        self.show_error(message)
                 return None
 
         csv_path = self._get_csv_path()
@@ -99,13 +111,13 @@ class ResultsView(BaseView):
             return None
         if not csv_path.exists():
             if show_errors:
-                self.show_error(f"Data file not found: {csv_path}")
+                self.show_error(f"Output ausente: {csv_path}")
             return None
         try:
             return self.results_service.analyze_dataset(csv_path)
         except ValueError as exc:
             if show_errors:
-                self.show_error(str(exc))
+                self.show_error(f"Arquivo inválido: {exc}")
             return None
 
     def render(self) -> None:
@@ -161,7 +173,7 @@ class ResultsView(BaseView):
         self.console.print()
 
     def _render_divergence_analysis(self) -> None:
-        """Render CBS vs Predicted divergence analysis from real data."""
+        """Render comparative divergence or scientific summary by analysis mode."""
         report = self._load_analysis_report(show_errors=False)
 
         if report is None:
@@ -178,11 +190,27 @@ class ResultsView(BaseView):
             )
             self.console.print()
             return
+
+        if report.analysis_mode is ResultsAnalysisMode.SCIENTIFIC_SUMMARY_ONLY:
+            self._render_scientific_summary(report)
+            return
+
+        title = (
+            "PM7 Baseline vs Reference Divergence"
+            if report.analysis_mode is ResultsAnalysisMode.BASELINE_WITH_REFERENCE
+            else "Predicted vs CBS Divergence Distribution"
+        )
+        if report.scientific_summary.comparison_label:
+            self.console.print(
+                f"[{COLORS['muted']}]Comparison: "
+                f"{report.scientific_summary.comparison_label}"
+                f"[/{COLORS['muted']}]"
+            )
         stats = report.divergence_distribution
 
         # Divergence distribution table
         table = Table(
-            title="Predicted vs CBS Divergence Distribution",
+            title=title,
             show_header=True,
             header_style=f"bold {COLORS['results']}",
             border_style=COLORS["border"],
@@ -261,6 +289,54 @@ class ResultsView(BaseView):
                 padding=(1, 2),
             )
         )
+        self.console.print()
+
+    def _render_scientific_summary(self, report: ResultsAnalysisReport) -> None:
+        """Render a non-comparative scientific overview for baseline-only runs."""
+        sci = report.scientific_summary
+        table = Table(
+            title="Scientific Run Summary",
+            show_header=True,
+            header_style=f"bold {COLORS['results']}",
+            border_style=COLORS["border"],
+        )
+        table.add_column("Field", style="bold")
+        table.add_column("Value")
+        table.add_row("Molecules", str(sci.n_molecules))
+        table.add_row("Estimates", str(sci.n_estimates))
+        table.add_row("Roles", ", ".join(sci.roles) or "-")
+        table.add_row("Hamiltonians", ", ".join(sci.hamiltonians) or "-")
+        table.add_row(
+            "Value range (kcal/mol)",
+            (
+                f"{sci.value_min:.3f} … {sci.value_max:.3f}"
+                if sci.value_min is not None and sci.value_max is not None
+                else "-"
+            ),
+        )
+        table.add_row(
+            "Mean / median",
+            (
+                f"{sci.value_mean:.3f} / {sci.value_median:.3f}"
+                if sci.value_mean is not None and sci.value_median is not None
+                else "-"
+            ),
+        )
+        table.add_row("Method", sci.method_id or report.method_label or "-")
+        table.add_row("Run status", sci.run_status or report.run_status or "-")
+        table.add_row("Started", sci.started_at or "-")
+        table.add_row("Completed", sci.completed_at or "-")
+        table.add_row(
+            "Duration (s)",
+            f"{sci.duration_seconds:.1f}" if sci.duration_seconds is not None else "-",
+        )
+        table.add_row("Comparative metrics", "not available (no reference)")
+        self.console.print(table)
+        if sci.warnings:
+            for warning in sci.warnings:
+                self.console.print(
+                    f"[{COLORS['warning']}]{warning}[/{COLORS['warning']}]"
+                )
         self.console.print()
 
     def get_menu_options(self) -> list[MenuOption]:
@@ -359,6 +435,11 @@ class ResultsView(BaseView):
         """Display detailed statistical metrics; delegates all computation to analyze()."""
         report = self._load_analysis_report(show_errors=True)
         if report is None:
+            self.wait_for_enter()
+            return
+
+        if not report.has_comparative_metrics:
+            self._render_scientific_summary(report)
             self.wait_for_enter()
             return
 
@@ -516,6 +597,13 @@ class ResultsView(BaseView):
         """Generate HTML error analysis report."""
         report = self._load_analysis_report(show_errors=True)
         if report is None:
+            self.wait_for_enter()
+            return
+        if report.analysis is None:
+            self.show_error(
+                "HTML report requires comparative metrics "
+                f"(mode={report.analysis_mode.value})."
+            )
             self.wait_for_enter()
             return
 

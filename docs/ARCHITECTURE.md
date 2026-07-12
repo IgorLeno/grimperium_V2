@@ -710,3 +710,48 @@ A: Also valid (energy can be zero). MoleculeValueConverter preserves.
 **Document Version:** 2.2.0
 **Last Updated:** 2026-01-19
 **Next Review:** 2026-06-19 (or after 100K molecules processed)
+
+---
+
+## Runs, Results, and Distributed Sync (stabilization 2026-07-12)
+
+### Results analysis modes
+
+`ResultsService` selects a typed `ResultsAnalysisMode`:
+
+| Mode | When | Metrics |
+|------|------|---------|
+| `PREDICTION_WITH_REFERENCE` | FINAL + REFERENCE (or `H298_predicted` + `H298_cbs`) | MAE/RMSE/bias/R² vs reference |
+| `BASELINE_WITH_REFERENCE` | BASELINE + REFERENCE (or `H298_pm7` + `H298_cbs`) | Same stats after **in-memory** baseline→predicted adaptation; canonical CSV unchanged |
+| `SCIENTIFIC_SUMMARY_ONLY` | No comparable reference | Counts, roles, Hamiltonians, value stats, run metadata/times — no false comparative metrics |
+
+PM7-only runs must never persist a fictitious `FINAL` estimate.
+
+### Run lifecycle
+
+```
+created  → running | cancelled | failed
+running  → completed | partial | failed | cancelled | invalidated
+terminal → (none)
+```
+
+`completed` requires zero failures; `partial` requires ≥1 success and ≥1 failure.
+Mandatory outputs must exist before completion. Artifact paths are stored relative
+to `runs_root` so relocating the runs directory keeps manifests portable.
+
+Authoritative scientific outputs for batch and individual calc live under
+`runs/<run_id>/` (e.g. `calculation_results.csv`).
+
+### PM7 batch provenance
+
+`DatabasesView._run_pm7_batch` always labels `crest_pm7` regardless of the active
+session method. Session Delta Learning does not silently relabel a CREST+PM7
+baseline batch.
+
+### `/sync_results` journal
+
+Ledger transaction states: `prepared` → `committed` | `failed`.
+Invariant: the same `result_id` + fingerprint applies operational effect at most once.
+Workers mint an explicit `result_id` and persist it in an offline JSONL queue for
+retries. Legacy clients without `result_id` get a content-stable fingerprint ID
+that does **not** include mutable `reruns`.

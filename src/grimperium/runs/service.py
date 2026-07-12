@@ -9,7 +9,12 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from grimperium.runs.models import TERMINAL_STATUSES, RunManifest, RunStatus
+from grimperium.runs.models import (
+    ALLOWED_TRANSITIONS,
+    TERMINAL_STATUSES,
+    RunManifest,
+    RunStatus,
+)
 from grimperium.runs.persistence import RunManifestStore
 
 DEFAULT_SCHEMA_VERSION = "1.0"
@@ -67,7 +72,7 @@ class RunService:
 
     def start_run(self, run_id: str) -> RunManifest:
         """Mark a created run as running."""
-        manifest = self._load_mutable(run_id)
+        manifest = self._load_for_transition(run_id, RunStatus.RUNNING)
         started_at = manifest.started_at or _utc_now()
         return self._write(
             manifest.with_updates(
@@ -96,9 +101,22 @@ class RunService:
         failure_count: int,
     ) -> RunManifest:
         """Finalize a run as completed or partial after validating outputs."""
-        manifest = self._load_mutable(run_id)
-        self._validate_completion_outputs(manifest)
+        if success_count < 0 or failure_count < 0:
+            raise ValueError("success_count and failure_count must be >= 0")
         status = RunStatus.COMPLETED if failure_count == 0 else RunStatus.PARTIAL
+        if status is RunStatus.COMPLETED and success_count <= 0 and failure_count == 0:
+            # Zero-failure completion with zero successes is allowed only when
+            # molecule_count is also zero (empty batch cancelled elsewhere).
+            pass
+        if status is RunStatus.PARTIAL and (success_count < 1 or failure_count < 1):
+            raise ValueError(
+                "partial runs require at least one success and one failure"
+            )
+        if status is RunStatus.COMPLETED and failure_count != 0:
+            raise ValueError("completed runs require failure_count == 0")
+        manifest = self._load_for_transition(run_id, status)
+        self._validate_completion_outputs(manifest)
+        self._validate_counts(manifest, success_count, failure_count)
         return self._write(
             manifest.with_updates(
                 status=status,
@@ -118,7 +136,7 @@ class RunService:
         failure_count: int = 0,
     ) -> RunManifest:
         """Finalize a run as failed."""
-        manifest = self._load_mutable(run_id)
+        manifest = self._load_for_transition(run_id, RunStatus.FAILED)
         return self._write(
             manifest.with_updates(
                 status=RunStatus.FAILED,
@@ -138,7 +156,7 @@ class RunService:
         failure_count: int = 0,
     ) -> RunManifest:
         """Finalize an ALL_OR_NOTHING run as invalidated without deleting artifacts."""
-        manifest = self._load_mutable(run_id)
+        manifest = self._load_for_transition(run_id, RunStatus.INVALIDATED)
         return self._write(
             manifest.with_updates(
                 status=RunStatus.INVALIDATED,
@@ -151,7 +169,7 @@ class RunService:
 
     def cancel_run(self, run_id: str, *, error: str | None = None) -> RunManifest:
         """Finalize a run as cancelled."""
-        manifest = self._load_mutable(run_id)
+        manifest = self._load_for_transition(run_id, RunStatus.CANCELLED)
         return self._write(
             manifest.with_updates(
                 status=RunStatus.CANCELLED,
@@ -176,6 +194,15 @@ class RunService:
             )
         return manifest
 
+    def _load_for_transition(self, run_id: str, target: RunStatus) -> RunManifest:
+        manifest = self.store.read(run_id)
+        allowed = ALLOWED_TRANSITIONS.get(manifest.status, frozenset())
+        if target not in allowed:
+            raise ValueError(
+                f"Invalid run transition: {manifest.status.value} → {target.value}"
+            )
+        return manifest
+
     def _write(self, manifest: RunManifest) -> RunManifest:
         self.store.write(manifest)
         return manifest
@@ -191,6 +218,17 @@ class RunService:
         if missing:
             raise ValueError(
                 "completed run requires existing output paths: " + ", ".join(missing)
+            )
+
+    @staticmethod
+    def _validate_counts(
+        manifest: RunManifest, success_count: int, failure_count: int
+    ) -> None:
+        total = success_count + failure_count
+        if manifest.molecule_count > 0 and total > manifest.molecule_count:
+            raise ValueError(
+                "success_count + failure_count exceeds molecule_count "
+                f"({total} > {manifest.molecule_count})"
             )
 
     @staticmethod

@@ -14,8 +14,9 @@ from grimperium.crest_pm7.progress import (
     CREST_STATUS_NOT_ATTEMPTED,
     MOPAC_STATUS_NOT_ATTEMPTED,
 )
-from grimperium.worker.client import WorkerClient, WorkerClientConfig
+from grimperium.worker.client import ServerError, WorkerClient, WorkerClientConfig
 from grimperium.worker.local_store import LocalStore
+from grimperium.worker.offline_queue import OfflineResultQueue
 
 LOG = logging.getLogger(__name__)
 
@@ -71,6 +72,7 @@ class WorkerConfig:
     consecutive_failure_stop: bool = True
     max_consecutive_failures: int = 10
     csv_path: str | None = None
+    offline_queue_path: str | None = None
 
 
 class WorkerRunner:
@@ -104,6 +106,15 @@ class WorkerRunner:
         )
         self._client = client or WorkerClient(client_cfg)
         self._store = LocalStore()
+        queue_path = (
+            Path(config.offline_queue_path)
+            if config.offline_queue_path
+            else Path.home()
+            / ".grimperium"
+            / "worker"
+            / f"{config.worker_id}_offline_results.jsonl"
+        )
+        self._offline_queue = OfflineResultQueue(queue_path)
         self._stop_event = threading.Event()
         self._consecutive_failures: int = 0
         self._last_run_succeeded: bool = False
@@ -226,7 +237,12 @@ class WorkerRunner:
                     },
                 )
                 self._store.mark_success(mol_id, update)
-                self._client.report_success(mol_id, update)
+                self._report_or_enqueue(
+                    mol_id=mol_id,
+                    success=True,
+                    result_update=update,
+                    error=None,
+                )
                 self._last_run_succeeded = True
                 self._consecutive_failures = 0
             else:
@@ -249,7 +265,12 @@ class WorkerRunner:
                     },
                 )
                 self._store.mark_failure(mol_id, error)
-                self._client.report_failure(mol_id, error)
+                self._report_or_enqueue(
+                    mol_id=mol_id,
+                    success=False,
+                    result_update=failure_update or None,
+                    error=error,
+                )
                 self._last_run_succeeded = False
                 self._consecutive_failures += 1
         except Exception as exc:
@@ -260,7 +281,12 @@ class WorkerRunner:
             self._last_run_succeeded = False
             self._consecutive_failures += 1
             try:
-                self._client.report_failure(mol_id, error_str)
+                self._report_or_enqueue(
+                    mol_id=mol_id,
+                    success=False,
+                    result_update=None,
+                    error=error_str,
+                )
             except Exception:
                 LOG.exception("Failed to report failure for %s", mol_id)
         finally:
@@ -268,7 +294,66 @@ class WorkerRunner:
             hb_thread.join(timeout=5.0)
 
         self._store.clear_completed()
+        self.flush_offline_queue()
         return True
+
+    def _report_or_enqueue(
+        self,
+        *,
+        mol_id: str,
+        success: bool,
+        result_update: dict[str, Any] | None,
+        error: str | None,
+    ) -> None:
+        """Persist result_id first, then report online; keep queue on failure."""
+        record = self._store.get(mol_id)
+        result_id = record.result_id if record is not None else None
+        entry = self._offline_queue.enqueue(
+            mol_id=mol_id,
+            success=success,
+            result_update=result_update,
+            error=error,
+            result_id=result_id,
+            completed_at=(
+                record.completed_at.isoformat().replace("+00:00", "Z")
+                if record is not None and record.completed_at is not None
+                else None
+            ),
+        )
+        if record is not None:
+            record.result_id = entry.result_id
+        try:
+            if success:
+                self._client.report_success(mol_id, result_update or {})
+            else:
+                self._client.report_failure(mol_id, error or "failure")
+            self._offline_queue.confirm(entry.result_id)
+        except ServerError:
+            LOG.warning(
+                "Online report failed for %s — keeping result_id=%s for sync_results",
+                mol_id,
+                entry.result_id,
+            )
+
+    def flush_offline_queue(self) -> tuple[int, int]:
+        """Reenviar resultados pendentes via /sync_results com o mesmo result_id."""
+        pending = self._offline_queue.pending()
+        if not pending:
+            return 0, 0
+        try:
+            accepted, rejected = self._client.sync_results(
+                [entry.to_sync_dict() for entry in pending]
+            )
+        except ServerError as exc:
+            LOG.warning("Offline queue flush failed: %s", exc)
+            return 0, len(pending)
+        # Confirmar apenas os que o servidor aceitou ou já tinha (accepted + no raise).
+        # Em caso de partial reject, reter todos e deixar o próximo flush decidir —
+        # sync_results é idempotente por result_id.
+        if rejected == 0:
+            for entry in pending:
+                self._offline_queue.confirm(entry.result_id)
+        return accepted, rejected
 
     def run(self, max_molecules: int | None = None) -> int:
         """Process molecules until stopped, queue exhausted, or max reached.
@@ -281,6 +366,7 @@ class WorkerRunner:
             Number of molecules successfully processed.
         """
         self._client.register()
+        self.flush_offline_queue()
         processed = 0
         attempted = 0
         idle_count = 0

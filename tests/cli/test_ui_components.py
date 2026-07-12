@@ -66,6 +66,7 @@ def test_format_session_header_respects_terminal_widths() -> None:
             status="Ready",
             width=width,
         )
-        assert len(header) <= width + 20
+        for line in header.splitlines():
+            assert len(line) <= width
         assert "Property:" in header
         assert "Method:" in header

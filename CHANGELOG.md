@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **Stabilization: Runs, Results, sync idempotency, PM7 provenance** (2026-07-12)
+  - Results recognizes `PREDICTION_WITH_REFERENCE`, `BASELINE_WITH_REFERENCE`, and
+    `SCIENTIFIC_SUMMARY_ONLY` without inventing fictitious FINAL estimates for
+    PM7-only runs; baseline stats adapt in-memory only.
+  - Individual Method A/B calc writes canonical `calculation_results.csv` under
+    `runs/<run_id>/`; `single_result.json` remains a secondary compatibility artifact.
+  - DatabasesView PM7 batch always records `crest_pm7` provenance and stores
+    authoritative outputs under `runs/<run_id>/` even when the session method is
+    Delta Learning.
+  - `/sync_results` uses a durable prepared/committed/failed journal; legacy
+    `result_id` fallback is content-stable (no `reruns`); WorkerRegistry counters
+    update only on real apply; worker persists offline queue with stable IDs.
+  - Run lifecycle enforces an explicit transition matrix and count/output checks.
+  - Database overlay writes are atomic (tmp+fsync+replace); wizard validates
+    path/header/alias/path uniqueness; official DBs expose override reset instead
+    of remove-from-catalog.
+  - Session header respects real terminal width (80/100/120).
+
 ### Added
 - **Macrobloco 3 run management and results domain redesign** (2026-07-11)
   - Added `grimperium.runs` with persisted run manifests, atomic JSON writes,

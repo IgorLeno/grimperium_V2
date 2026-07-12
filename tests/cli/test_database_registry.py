@@ -145,3 +145,99 @@ def test_migrates_legacy_data_registry_to_overlay(
     assert pm7.path == data_dir / "legacy_pm7.csv"
     assert not legacy_path.exists()
     assert (data_dir / "databases_registry.json.bak").exists()
+
+
+def test_add_user_database_rejects_duplicate_alias(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    registry = _registry(tmp_path, monkeypatch)
+    csv_a = tmp_path / "a.csv"
+    csv_b = tmp_path / "b.csv"
+    csv_a.write_text("smiles\nC\n", encoding="utf-8")
+    csv_b.write_text("smiles\nCC\n", encoding="utf-8")
+    registry.add_user_database(
+        path=csv_a,
+        name="A",
+        alias="DUP",
+        description="",
+        role="analysis",
+        capabilities={"readable"},
+    )
+    try:
+        registry.add_user_database(
+            path=csv_b,
+            name="B",
+            alias="DUP",
+            description="",
+            role="analysis",
+            capabilities={"readable"},
+        )
+        raise AssertionError("expected ValueError")
+    except ValueError as exc:
+        assert "Alias already registered" in str(exc)
+
+
+def test_write_overlay_is_atomic_and_valid_json(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    registry = _registry(tmp_path, monkeypatch)
+    csv_path = tmp_path / "custom.csv"
+    csv_path.write_text("smiles\nC\n", encoding="utf-8")
+    registry.add_user_database(
+        path=csv_path,
+        name="Custom",
+        alias="CUSTOM",
+        description="",
+        role="analysis",
+        capabilities={"readable"},
+    )
+    payload = json.loads(registry.overlay_path.read_text(encoding="utf-8"))
+    assert payload["schema_version"] == 2
+    assert isinstance(payload["entries"], list)
+
+
+def test_reset_official_overrides_clears_path(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    registry = _registry(tmp_path, monkeypatch)
+    override_path = tmp_path / "pm7_override.csv"
+    override_path.write_text("smiles,status\nC,OK\n", encoding="utf-8")
+    registry.update_entry("official.crest_pm7", path=override_path)
+    registry.reset_official_overrides("official.crest_pm7")
+    pm7 = registry.get_by_id("official.crest_pm7")
+    assert pm7 is not None
+    assert pm7.path != override_path
+
+
+def test_legacy_migration_is_idempotent(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    data_dir = tmp_path / "data"
+    data_dir.mkdir()
+    legacy_path = data_dir / "databases_registry.json"
+    legacy_path.write_text(
+        json.dumps(
+            [
+                {
+                    "name": "Legacy User",
+                    "alias": "LEGACY_USER",
+                    "csv_path": "legacy_user.csv",
+                    "description": "legacy",
+                    "pipeline": "analysis",
+                    "created_at": "2026-01-01",
+                    "properties": ["smiles"],
+                }
+            ]
+        ),
+        encoding="utf-8",
+    )
+    first = _registry(tmp_path, monkeypatch)
+    first_count = len([e for e in first.load() if e.origin == "user"])
+    # Recreate registry against same overlay (legacy already migrated away).
+    second = DatabaseRegistry(data_dir)
+    second_count = len([e for e in second.load() if e.origin == "user"])
+    assert first_count == second_count == 1

@@ -19,10 +19,12 @@ from fastapi import Depends, FastAPI, Header, HTTPException, Request
 
 from grimperium.cli.settings_manager import DistributedDefaults, SettingsManager
 from grimperium.crest_pm7.batch.csv_manager import BatchCSVManager
+from grimperium.crest_pm7.batch.enums import MoleculeStatus
 from grimperium.crest_pm7.batch.result_applier import BatchResultApplier
 from grimperium.crest_pm7.batch.result_ledger import (
     LedgerStatus,
     ResultLedger,
+    build_legacy_result_id,
     build_result_fingerprint,
 )
 from grimperium.crest_pm7.batch.state_manager import BatchStateManager
@@ -145,11 +147,53 @@ def _sync_result_payload(result: SyncResult) -> dict[str, Any]:
 
 
 def _sync_result_id(result: SyncResult, state_manager: BatchStateManager) -> str:
-    """Resolve explicit result_id or the deterministic legacy fallback key."""
+    """Resolve explicit result_id or a content-stable legacy fallback key.
+
+    Legacy clients without ``result_id`` get a deterministic ID derived from the
+    immutable payload. Mutable operational state such as ``reruns`` is never
+    included — otherwise retries after the first apply would mint a new ID.
+    """
+    del state_manager  # kept for call-site compatibility; must not affect ID
     if result.result_id:
         return result.result_id
-    attempt = state_manager.get_reruns(result.mol_id)
-    return f"{result.mol_id}|{attempt}|{result.completed_at}|{result.success}"
+    return build_legacy_result_id(_sync_result_payload(result))
+
+
+def _record_worker_sync_metrics(
+    worker_reg: WorkerRegistry,
+    worker_id: str,
+    *,
+    final_status: str,
+) -> None:
+    """Update WorkerRegistry counters from the applier's final operational status."""
+    if final_status == MoleculeStatus.OK.value:
+        worker_reg.record_success(worker_id)
+    elif final_status == MoleculeStatus.SKIP.value:
+        worker_reg.record_skip(worker_id)
+    else:
+        worker_reg.record_failure(worker_id)
+
+
+def _recover_sync_journal(
+    ledger: ResultLedger,
+    state_manager: BatchStateManager,
+) -> None:
+    """Commit prepared journal entries whose dual-write already landed."""
+
+    def _already_applied(entry: object) -> bool:
+        mol_id = getattr(entry, "mol_id", None)
+        if not isinstance(mol_id, str):
+            return False
+        try:
+            current = state_manager.get_status(mol_id)
+        except Exception:
+            return False
+        # If molecule left RUNNING, the dual-write almost certainly finished.
+        return str(current).lower() not in {"running", "claimed", "selected"}
+
+    recovered = ledger.recover_incomplete(is_already_applied=_already_applied)
+    if recovered:
+        LOG.info("Recovered %d incomplete sync journal entr(y/ies)", len(recovered))
 
 
 # ── Factory ───────────────────────────────────────────────────────────────────
@@ -193,6 +237,7 @@ def create_app(config: ServerConfig) -> FastAPI:
     app.state.result_ledger = ResultLedger(
         Path(config.csv_path).parent / "result_ledger.jsonl"
     )
+    _recover_sync_journal(app.state.result_ledger, state_manager)
 
     app.state.lock = asyncio.Lock()
     app.state.heartbeat_registry = make_heartbeat_registry()
@@ -377,6 +422,7 @@ def _register_routes(app: FastAPI) -> None:
         ledger: ResultLedger = request.app.state.result_ledger
         lock: asyncio.Lock = request.app.state.lock
         running_molecules: dict[str, str] = request.app.state.running_molecules
+        worker_reg: WorkerRegistry = request.app.state.worker_registry
 
         accepted = 0
         rejected = 0
@@ -395,29 +441,80 @@ def _register_routes(app: FastAPI) -> None:
                     if ledger_decision.status is LedgerStatus.DUPLICATE:
                         duplicate_seen = True
                         running_molecules.pop(result.mol_id, None)
+                        worker_reg.clear_current_mol(req.worker_id)
                         continue
                     if ledger_decision.status is LedgerStatus.CONFLICT:
                         raise HTTPException(
                             status_code=409,
                             detail=f"Conflicting sync result_id: {result_id}",
                         )
-                    # Consistent dual-write: only counted accepted when BOTH the
-                    # scientific CSV and operational state are persisted (or an
-                    # explicit compensating rollback leaves them consistent).
-                    await asyncio.to_thread(
-                        _apply_worker_result,
-                        csv_manager,
-                        sm,
-                        mol_id=result.mol_id,
-                        success=result.success,
-                        error=result.error,
-                        result_update=result.result_update,
+
+                    incomplete = {
+                        entry.result_id: entry for entry in ledger.get_incomplete()
+                    }
+                    prepared = incomplete.get(result_id)
+                    current_status = sm.get_status(result.mol_id)
+                    if (
+                        prepared is not None
+                        and prepared.fingerprint == fingerprint
+                        and current_status
+                        in {
+                            MoleculeStatus.OK.value,
+                            MoleculeStatus.RERUN.value,
+                            MoleculeStatus.SKIP.value,
+                        }
+                    ):
+                        await asyncio.to_thread(
+                            ledger.commit,
+                            result_id,
+                            final_status=current_status,
+                        )
+                        running_molecules.pop(result.mol_id, None)
+                        worker_reg.clear_current_mol(req.worker_id)
+                        duplicate_seen = True
+                        continue
+
+                    previous_status = await asyncio.to_thread(
+                        sm.get_status, result.mol_id
+                    )
+                    previous_reruns = await asyncio.to_thread(
+                        sm.get_reruns, result.mol_id
                     )
                     await asyncio.to_thread(
-                        ledger.check_and_record,
+                        ledger.prepare,
+                        result_id=result_id,
+                        mol_id=result.mol_id,
+                        fingerprint=fingerprint,
+                        desired_success=result.success,
+                        previous_status=previous_status,
+                        previous_reruns=previous_reruns,
+                    )
+                    try:
+                        final_status = await asyncio.to_thread(
+                            _apply_worker_result,
+                            csv_manager,
+                            sm,
+                            mol_id=result.mol_id,
+                            success=result.success,
+                            error=result.error,
+                            result_update=result.result_update,
+                        )
+                    except Exception as apply_exc:
+                        await asyncio.to_thread(
+                            ledger.mark_failed,
+                            result_id,
+                            error=str(apply_exc),
+                        )
+                        raise
+                    await asyncio.to_thread(
+                        ledger.commit,
                         result_id,
-                        result.mol_id,
-                        fingerprint,
+                        final_status=final_status,
+                    )
+                    _record_worker_sync_metrics(
+                        worker_reg,
+                        req.worker_id,
+                        final_status=final_status,
                     )
                 running_molecules.pop(result.mol_id, None)
                 accepted += 1

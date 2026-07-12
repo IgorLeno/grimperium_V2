@@ -31,6 +31,27 @@ TERMINAL_STATUSES = frozenset(
     }
 )
 
+# Explicit lifecycle transition matrix. Terminal states accept no further transitions.
+ALLOWED_TRANSITIONS: dict[RunStatus, frozenset[RunStatus]] = {
+    RunStatus.CREATED: frozenset(
+        {RunStatus.RUNNING, RunStatus.CANCELLED, RunStatus.FAILED}
+    ),
+    RunStatus.RUNNING: frozenset(
+        {
+            RunStatus.COMPLETED,
+            RunStatus.PARTIAL,
+            RunStatus.FAILED,
+            RunStatus.CANCELLED,
+            RunStatus.INVALIDATED,
+        }
+    ),
+    RunStatus.COMPLETED: frozenset(),
+    RunStatus.PARTIAL: frozenset(),
+    RunStatus.FAILED: frozenset(),
+    RunStatus.CANCELLED: frozenset(),
+    RunStatus.INVALIDATED: frozenset(),
+}
+
 
 @dataclass(frozen=True)
 class RunManifest:

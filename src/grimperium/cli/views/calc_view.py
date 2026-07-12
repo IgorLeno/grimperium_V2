@@ -23,6 +23,7 @@ from grimperium.calculation.contracts.models import (
 from grimperium.calculation.methods import (
     CalculationMethodDefinition,
 )
+from grimperium.calculation.output.csv_writer import write_canonical_csv
 from grimperium.calculation.runners import SemiempiricalFormationEnthalpyRunner
 from grimperium.cli.calc_pipeline import (
     CalcPipelineError,
@@ -446,8 +447,21 @@ class CalcView(BaseView):
         result: PredictionResult,
     ) -> None:
         service = self._run_service()
-        output_path = service.runs_root / manifest.run_id / "single_result.json"
-        output_path.parent.mkdir(parents=True, exist_ok=True)
+        run_dir = service.runs_root / manifest.run_id
+        run_dir.mkdir(parents=True, exist_ok=True)
+
+        canonical = self.last_calculation_result
+        if canonical is None:
+            raise ValueError(
+                "Cannot complete scientific run without MoleculeCalculationResult; "
+                "got only a PredictionResult view model"
+            )
+
+        csv_path = run_dir / "calculation_results.csv"
+        write_canonical_csv([canonical], csv_path)
+
+        # Resumo visual de compatibilidade — não é a fonte científica autoritativa.
+        compat_path = run_dir / "single_result.json"
         payload = {
             "smiles": result.smiles,
             "h298_pm7": result.h298_pm7,
@@ -458,11 +472,17 @@ class CalcView(BaseView):
             "n_conformers": result.n_conformers,
             "execution_time": result.execution_time,
         }
-        output_path.write_text(
+        compat_path.write_text(
             json.dumps(payload, indent=2, sort_keys=True) + "\n",
             encoding="utf-8",
         )
-        service.attach_output_paths(manifest.run_id, {"single_result": output_path})
+        service.attach_output_paths(
+            manifest.run_id,
+            {
+                "calculation_results_csv": csv_path,
+                "single_result": compat_path,
+            },
+        )
         completed = service.complete_run(
             manifest.run_id,
             success_count=1,
@@ -848,7 +868,13 @@ class CalcView(BaseView):
             raise
 
         if self.last_result is not None and self.last_result is not previous_result:
-            self._complete_single_run(manifest, self.last_result)
+            if self.last_calculation_result is None:
+                self._fail_single_run(
+                    manifest,
+                    "Calculation did not produce MoleculeCalculationResult",
+                )
+            else:
+                self._complete_single_run(manifest, self.last_result)
         else:
             self._fail_single_run(manifest, "Calculation did not produce a result")
         return None

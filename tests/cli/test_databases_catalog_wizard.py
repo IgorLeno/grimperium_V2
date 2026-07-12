@@ -49,6 +49,10 @@ def test_add_database_wizard_persists_user_overlay(
         "grimperium.cli.views.databases_view.show_menu",
         lambda *args, **kwargs: "analysis",
     )
+    monkeypatch.setattr(
+        "grimperium.cli.views.databases_view.menu_confirm",
+        lambda *args, **kwargs: True,
+    )
 
     view._handle_add_database_wizard()
 
@@ -57,6 +61,47 @@ def test_add_database_wizard_persists_user_overlay(
     assert added.origin == "user"
     assert added.database_id.startswith("user.")
     assert added.capabilities == frozenset({"readable", "analysis_input"})
+
+
+def test_add_database_wizard_rejects_duplicate_alias(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    csv_path = tmp_path / "custom.csv"
+    csv_path.write_text("smiles,H298_cbs\nC,-10\n", encoding="utf-8")
+    view = _view(tmp_path, monkeypatch)
+    view.registry.add_user_database(
+        path=csv_path,
+        name="Existing",
+        alias="CUSTOM",
+        description="",
+        role="analysis",
+        capabilities={"readable", "analysis_input"},
+    )
+    other = tmp_path / "other.csv"
+    other.write_text("smiles,H298_cbs\nCC,-11\n", encoding="utf-8")
+    answers = iter([str(other), "Other", "CUSTOM"])
+    monkeypatch.setattr(
+        "grimperium.cli.views.databases_view.text_input",
+        lambda *args, **kwargs: next(answers),
+    )
+    view.show_error = MagicMock()  # type: ignore[method-assign]
+
+    view._handle_add_database_wizard()
+
+    view.show_error.assert_called()
+    assert "Alias already registered" in str(view.show_error.call_args)
+
+
+def test_official_detail_menu_offers_reset_not_remove(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    view = _view(tmp_path, monkeypatch)
+    view.selected_db = view.registry.get_by_id("official.crest_pm7")
+    labels = [opt.label for opt in view.get_detail_menu_options()]
+    assert "Reset Official Overrides" in labels
+    assert "Remove from Catalog" not in labels
 
 
 def test_use_as_session_dataset_updates_controller_session(

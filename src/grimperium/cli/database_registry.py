@@ -7,6 +7,7 @@ import logging
 import os
 import shutil
 import uuid
+from csv import reader as csv_reader
 from dataclasses import dataclass, field
 from datetime import date
 from importlib import resources
@@ -176,6 +177,12 @@ class DatabaseRegistry:
     ) -> DatabaseInfo:
         """Create and persist a user database with a stable user UUID."""
         self._validate_capabilities(capabilities)
+        resolved = Path(path).expanduser().resolve()
+        if not resolved.exists():
+            raise ValueError(f"CSV path does not exist: {resolved}")
+        if not resolved.is_file():
+            raise ValueError(f"CSV path is not a file: {resolved}")
+        self._assert_unique_alias_and_path(alias=alias, path=resolved)
         database_id = f"{USER_ID_PREFIX}{uuid.uuid4()}"
         entry = DatabaseInfo(
             schema_version=SCHEMA_VERSION,
@@ -184,7 +191,7 @@ class DatabaseRegistry:
             manifest_version="1.0.0",
             role=role,
             capabilities=frozenset(capabilities),
-            path=path,
+            path=resolved,
             metadata={
                 "name": name,
                 "alias": alias,
@@ -193,6 +200,44 @@ class DatabaseRegistry:
         )
         self.add_entry(entry)
         return self.get_by_id(database_id) or entry
+
+    def reset_official_overrides(self, database_id: str) -> None:
+        """Clear overlay overrides for an official database (manifest path returns)."""
+        current = self.get_by_id(database_id)
+        if current is None:
+            raise ValueError(f"Unknown database: {database_id}")
+        if current.origin != "official":
+            raise ValueError(
+                f"reset_official_overrides requires an official database, got {database_id}"
+            )
+        payload = self._read_overlay()
+        if database_id in payload.overrides:
+            del payload.overrides[database_id]
+            self._write_overlay(payload)
+            self._cache = None
+
+    def preview_csv_header(self, path: Path, *, max_columns: int = 12) -> list[str]:
+        """Read only the CSV header for wizard preview (does not load the dataset)."""
+        resolved = Path(path).expanduser()
+        if not resolved.exists():
+            raise ValueError(f"CSV path does not exist: {resolved}")
+        if not resolved.is_file():
+            raise ValueError(f"CSV path is not a file: {resolved}")
+        with resolved.open("r", encoding="utf-8", newline="") as handle:
+            try:
+                header = next(csv_reader(handle))
+            except StopIteration as exc:
+                raise ValueError(f"CSV file is empty: {resolved}") from exc
+        return [col.strip() for col in header[:max_columns] if col.strip()]
+
+    def _assert_unique_alias_and_path(self, *, alias: str, path: Path) -> None:
+        alias_lower = alias.strip().lower()
+        resolved = path.resolve()
+        for entry in self.load():
+            if entry.alias.lower() == alias_lower:
+                raise ValueError(f"Alias already registered: {alias}")
+            if self._path_is_set(entry.path) and entry.path.resolve() == resolved:
+                raise ValueError(f"Path already registered: {resolved}")
 
     def update_entry(
         self,
@@ -339,20 +384,57 @@ class DatabaseRegistry:
             "entries": payload.entries,
             "overrides": payload.overrides,
         }
-        self.overlay_path.write_text(
-            json.dumps(data, indent=2, ensure_ascii=False),
-            encoding="utf-8",
+        # Validate before touching the live file.
+        serialized = json.dumps(data, indent=2, ensure_ascii=False)
+        json.loads(serialized)
+
+        tmp_path = self.overlay_path.with_name(
+            f".{self.overlay_path.name}.{os.getpid()}.tmp"
         )
+        try:
+            with tmp_path.open("w", encoding="utf-8") as handle:
+                handle.write(serialized)
+                handle.flush()
+                os.fsync(handle.fileno())
+            os.replace(tmp_path, self.overlay_path)
+        finally:
+            if tmp_path.exists():
+                tmp_path.unlink(missing_ok=True)
 
     def _migrate_legacy_registry(self) -> None:
         if not self._legacy_registry_path.exists():
             return
         raw_entries = self._read_legacy_entries(self._legacy_registry_path)
         payload = self._read_overlay()
+        existing_ids = {str(entry.get("database_id", "")) for entry in payload.entries}
+        existing_aliases = {
+            str(entry.get("alias", "")).lower() for entry in payload.entries
+        }
+        existing_paths = {
+            str(Path(str(entry.get("path", ""))).resolve())
+            for entry in payload.entries
+            if entry.get("path")
+        }
+        added = 0
         for raw in raw_entries:
             mapped_id = self._legacy_alias_to_official_id(str(raw.get("alias", "")))
             if mapped_id is None:
-                payload.entries.append(self._legacy_to_v2(raw))
+                candidate = self._legacy_to_v2(raw)
+                candidate_id = str(candidate.get("database_id", ""))
+                candidate_alias = str(candidate.get("alias", "")).lower()
+                candidate_path = str(Path(str(candidate.get("path", ""))).resolve())
+                if (
+                    candidate_id in existing_ids
+                    or candidate_alias in existing_aliases
+                    or (candidate_path and candidate_path in existing_paths)
+                ):
+                    continue
+                payload.entries.append(candidate)
+                existing_ids.add(candidate_id)
+                existing_aliases.add(candidate_alias)
+                if candidate_path:
+                    existing_paths.add(candidate_path)
+                added += 1
                 continue
             override = payload.overrides.get(mapped_id, {})
             path = raw.get("csv_path")
@@ -370,7 +452,13 @@ class DatabaseRegistry:
         )
         if not backup_path.exists():
             shutil.copy2(self._legacy_registry_path, backup_path)
-        self._legacy_registry_path.unlink()
+        # Only remove legacy after overlay+backup are confirmed.
+        if self.overlay_path.exists() and backup_path.exists():
+            self._legacy_registry_path.unlink()
+            logger.info(
+                "Migrated legacy database registry (%d user entr(y/ies) added)",
+                added,
+            )
 
     @staticmethod
     def _read_legacy_entries(path: Path) -> list[dict[str, Any]]:

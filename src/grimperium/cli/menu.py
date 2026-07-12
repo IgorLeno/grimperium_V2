@@ -212,21 +212,60 @@ def format_session_header(
     status: str = "No method selected",
     width: int | None = None,
 ) -> str:
-    """Format the main-menu session context header."""
-    if width is not None:
-        available = max(8, (width - 72) // 5)
-        property_label = _truncate_label(property_label, available)
-        method_label = _truncate_label(method_label, available)
-        dataset_label = _truncate_label(dataset_label, available)
-        model_label = _truncate_label(model_label, available)
-        status = _truncate_label(status, available)
-    return (
-        f"[Property: {property_label} | Method: {method_label} | "
-        f"Dataset: {dataset_label} | Model: {model_label} | Status: {status}]"
-    )
+    """Format the main-menu session context header.
+
+    When ``width`` is set, the rendered visual width is guaranteed to be
+    ``<= width`` by shrinking secondary fields and, if needed, switching to a
+    compact multiline layout.
+    """
+    fields = [
+        ("Property", property_label),
+        ("Method", method_label),
+        ("Dataset", dataset_label),
+        ("Model", model_label),
+        ("Status", status),
+    ]
+    if width is None:
+        return _format_header_line(fields)
+
+    # Single-line attempt with progressive truncation.
+    for budget in (max(4, (width - 72) // 5), 12, 8, 4):
+        truncated = [(label, _truncate_label(value, budget)) for label, value in fields]
+        line = _format_header_line(truncated)
+        if _visual_width(line) <= width:
+            return line
+
+    # Multiline compact panel: omit Model then Dataset if still too wide.
+    lines = [
+        f"Property: {_truncate_label(property_label, max(8, width - 12))}",
+        f"Method: {_truncate_label(method_label, max(8, width - 10))}",
+        f"Status: {_truncate_label(status, max(8, width - 10))}",
+    ]
+    dataset_line = f"Dataset: {_truncate_label(dataset_label, max(8, width - 11))}"
+    model_line = f"Model: {_truncate_label(model_label, max(8, width - 9))}"
+    if max(_visual_width(dataset_line), _visual_width(model_line)) <= width:
+        lines.insert(2, dataset_line)
+        lines.insert(3, model_line)
+    elif _visual_width(dataset_line) <= width:
+        lines.insert(2, dataset_line)
+
+    # Final hard clamp per line.
+    return "\n".join(_truncate_label(line, width) for line in lines)
+
+
+def _format_header_line(fields: list[tuple[str, str]]) -> str:
+    inner = " | ".join(f"{label}: {value}" for label, value in fields)
+    return f"[{inner}]"
+
+
+def _visual_width(text: str) -> int:
+    """Approximate terminal columns for plain ASCII/Unicode header text."""
+    return len(text)
 
 
 def _truncate_label(value: str, max_length: int) -> str:
+    if max_length <= 0:
+        return ""
     if len(value) <= max_length:
         return value
     if max_length <= 3:

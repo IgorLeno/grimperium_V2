@@ -4,6 +4,8 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any
 
+from grimperium.worker.offline_queue import new_result_id
+
 
 @dataclass
 class LocalRecord:
@@ -17,6 +19,7 @@ class LocalRecord:
     result_update: dict[str, Any] = field(default_factory=dict)
     error: str | None = None
     completed_at: datetime | None = None
+    result_id: str | None = None
 
 
 class LocalStore:
@@ -45,6 +48,8 @@ class LocalStore:
         record.success = True
         record.result_update = result_update
         record.completed_at = datetime.now(timezone.utc)
+        if not record.result_id:
+            record.result_id = new_result_id()
 
     def mark_failure(self, mol_id: str, error: str) -> None:
         record = self._records[mol_id]
@@ -52,6 +57,8 @@ class LocalStore:
         record.success = False
         record.error = error
         record.completed_at = datetime.now(timezone.utc)
+        if not record.result_id:
+            record.result_id = new_result_id()
 
     def pending(self) -> list[LocalRecord]:
         return [r for r in self._records.values() if not r.completed]

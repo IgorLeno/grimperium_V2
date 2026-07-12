@@ -22,6 +22,7 @@ from rich.live import Live
 from rich.panel import Panel
 from rich.table import Table
 
+from grimperium.calculation.methods import get_calculation_method
 from grimperium.cli.constants import DATA_DIR
 from grimperium.cli.database_registry import DatabaseInfo, DatabaseRegistry
 from grimperium.cli.menu import MenuOption, show_back_menu, show_menu, text_input
@@ -333,9 +334,18 @@ class DatabasesView(BaseView):
         options.extend(
             [
                 MenuOption(label="Edit Database", value="edit"),
-                MenuOption(label="Remove from Catalog", value="delete"),
             ]
         )
+        if self.selected_db is not None and self.selected_db.origin == "official":
+            options.append(
+                MenuOption(
+                    label="Reset Official Overrides",
+                    value="reset_overrides",
+                    description="Clear path/metadata overrides; packaged manifest returns",
+                )
+            )
+        else:
+            options.append(MenuOption(label="Remove from Catalog", value="delete"))
         return options
 
     def handle_action(self, action: str) -> str | None:
@@ -391,6 +401,10 @@ class DatabasesView(BaseView):
             self._handle_remove_from_catalog()
             return None
 
+        if action == "reset_overrides":
+            self._handle_reset_official_overrides()
+            return None
+
         if action == "use_session_dataset":
             self._handle_use_as_session_dataset()
             return None
@@ -414,9 +428,16 @@ class DatabasesView(BaseView):
         )
 
     def _method_run_fields(self) -> tuple[str, str, dict[str, Any]]:
-        method = getattr(self.controller, "current_method_definition", None)
-        if method is None:
-            return "crest_pm7", "1.0.0", {"method_id": "crest_pm7"}
+        """Provenance for CREST+PM7 batch — always crest_pm7, never session method.
+
+        DatabasesView._run_pm7_batch always executes FixedTimeoutProcessor /
+        BatchExecutionManager (CREST + PM7 baseline). The active session method
+        (e.g. pm7_delta_learning) must not silently relabel that execution.
+        """
+        method = get_calculation_method(
+            "crest_pm7",
+            property_id="standard_enthalpy_of_formation",
+        )
         return method.method_id, method.version, asdict(method)
 
     def _database_ref_snapshot(self, csv_path: Path) -> dict[str, Any] | None:
@@ -494,19 +515,62 @@ class DatabasesView(BaseView):
         self.wait_for_enter()
 
     def _handle_add_database_wizard(self, default_path: Path | None = None) -> None:
-        """Register a user CSV in the database overlay."""
+        """Register a user CSV in the database overlay with validation + preview."""
         path_text = text_input(
             "CSV path",
             default=str(default_path) if default_path is not None else "",
         )
         if path_text is None or not path_text.strip():
             return
+        csv_path = Path(path_text).expanduser()
+        if not csv_path.exists():
+            self.show_error(f"Path does not exist: {csv_path}")
+            self.wait_for_enter()
+            return
+        if not csv_path.is_file():
+            self.show_error(f"Path is not a file: {csv_path}")
+            self.wait_for_enter()
+            return
+        try:
+            header = self.registry.preview_csv_header(csv_path)
+        except ValueError as exc:
+            self.show_error(str(exc))
+            self.wait_for_enter()
+            return
+        if not header:
+            self.show_error("CSV header is empty")
+            self.wait_for_enter()
+            return
+        self.console.print(
+            f"[cyan]Header preview ({len(header)} cols):[/cyan] {', '.join(header)}"
+        )
+        status_hint = (
+            "available"
+            if {"smiles"}.issubset({c.lower() for c in header})
+            else "invalid_schema (missing smiles)"
+        )
+        self.console.print(
+            f"[dim]Expected status after registration: {status_hint}[/dim]"
+        )
+
         name = text_input("Database name")
         if name is None or not name.strip():
             return
         alias = text_input("Display alias", default=name.strip())
         if alias is None or not alias.strip():
             return
+        if self.registry.get_by_alias(alias.strip()) is not None:
+            self.show_error(f"Alias already registered: {alias.strip()}")
+            self.wait_for_enter()
+            return
+        for existing in self.registry.load():
+            if (
+                DatabaseRegistry._path_is_set(existing.path)
+                and existing.path.resolve() == csv_path.resolve()
+            ):
+                self.show_error(f"Path already registered as {existing.alias}")
+                self.wait_for_enter()
+                return
         description = text_input("Description", default="")
         if description is None:
             return
@@ -528,8 +592,19 @@ class DatabasesView(BaseView):
             return
         capabilities = self._parse_capabilities(capabilities_text)
         try:
+            DatabaseRegistry._validate_capabilities(capabilities)
+        except ValueError as exc:
+            self.show_error(str(exc))
+            self.wait_for_enter()
+            return
+        if not menu_confirm(
+            f"Register '{alias.strip()}' from {csv_path}?",
+            default=True,
+        ):
+            return
+        try:
             entry = self.registry.add_user_database(
-                path=Path(path_text).expanduser(),
+                path=csv_path,
                 name=name.strip(),
                 alias=alias.strip(),
                 description=description.strip(),
@@ -591,6 +666,13 @@ class DatabasesView(BaseView):
         """Remove user overlay data without deleting the physical CSV."""
         if self.selected_db is None:
             return
+        if self.selected_db.origin == "official":
+            self.show_error(
+                "Official databases cannot be removed from the catalog. "
+                "Use 'Reset Official Overrides' instead."
+            )
+            self.wait_for_enter()
+            return
         if not menu_confirm(
             f"Remove {self.selected_db.alias} from catalog overlay? Files are not deleted.",
             default=False,
@@ -600,6 +682,26 @@ class DatabasesView(BaseView):
         self.registry.remove_from_catalog(removed_id)
         self.selected_db = None
         self.show_success("Catalog overlay entry removed")
+        self.wait_for_enter()
+
+    def _handle_reset_official_overrides(self) -> None:
+        """Clear overlay overrides for an official database."""
+        if self.selected_db is None:
+            return
+        if self.selected_db.origin != "official":
+            self.show_error("Only official databases support override reset.")
+            self.wait_for_enter()
+            return
+        if not menu_confirm(
+            f"Reset overrides for {self.selected_db.alias}? "
+            "Packaged manifest path/metadata will return.",
+            default=False,
+        ):
+            return
+        database_id = self.selected_db.database_id
+        self.registry.reset_official_overrides(database_id)
+        self.selected_db = self.registry.get_by_id(database_id)
+        self.show_success("Official overrides cleared")
         self.wait_for_enter()
 
     @staticmethod
@@ -967,27 +1069,6 @@ class DatabasesView(BaseView):
         self.console.print()
         self.wait_for_enter()
 
-    def _refresh_database(self) -> None:
-        """Trigger database refresh from source.
-
-        Resyncs the working CSV from the source-of-truth CSV,
-        resetting all status fields to PENDING.
-        """
-        from grimperium.cli.dataset_manager import DatasetManager
-
-        manager = DatasetManager(
-            source_csv=DATA_DIR / "thermo_cbs_chon.csv",
-            working_csv=DATA_DIR / "thermo_pm7.csv",
-        )
-        try:
-            manager.refresh_database()
-            self.console.print("[green]Database refreshed[/green]")
-        except FileNotFoundError as e:
-            self.console.print(f"[red]Refresh failed: {e}[/red]")
-        except Exception as e:
-            self.console.print(f"[red]Refresh failed: {e}[/red]")
-        self.console.input("[dim]Press Enter to continue...[/dim]")
-
     def refresh_databases_from_filesystem(
         self, offer_registration: bool = False
     ) -> int:
@@ -1269,11 +1350,23 @@ class DatabasesView(BaseView):
                 mopac_timeout_minutes=mopac_timeout_minutes,
                 strategy=BatchSortingStrategy.RERUN_FIRST_THEN_EASY,
             )
-            state_manager.mark_selected_from_batch(batch)
-            output_layout = BatchOutputLayout(
-                self._pm7_batch_output_dir(csv_path, batch_id)
-            )
             method_id, method_version, method_snapshot = self._method_run_fields()
+            batch = batch.model_copy(
+                update={
+                    "method_id": method_id,
+                    "method_version": method_version,
+                    "method_snapshot": method_snapshot,
+                }
+            )
+            state_manager.mark_selected_from_batch(batch)
+            active_method = getattr(self.controller, "current_method_definition", None)
+            active_method_id = getattr(active_method, "method_id", None)
+            if active_method_id and active_method_id != "crest_pm7":
+                self.console.print(
+                    "[yellow]Session method is "
+                    f"{active_method_id}; this batch executes CREST + PM7 "
+                    f"baseline ({method_id}) only — not Delta Learning.[/yellow]"
+                )
             manifest = self._run_service().create_run(
                 property_id="standard_enthalpy_of_formation",
                 method_id=method_id,
@@ -1287,6 +1380,11 @@ class DatabasesView(BaseView):
                 dataset_ref=self._database_ref_snapshot(csv_path),
                 model_ref=None,
                 molecule_count=batch.size,
+            )
+            # Outputs autoritativos vivem em runs/<run_id>/ (portáveis).
+            # batch_outputs/ legado não é mais a fonte científica.
+            output_layout = BatchOutputLayout(
+                self._pm7_batch_output_dir(manifest.run_id)
             )
             manifest = self._run_service().start_run(manifest.run_id)
             self.controller.session.run = RunRef(
@@ -1469,10 +1567,9 @@ class DatabasesView(BaseView):
         self.console.print()
         self.console.input("[dim]Press Enter to continue...[/dim]")
 
-    def _pm7_batch_output_dir(self, csv_path: Path, batch_id: str) -> Path:
-        """Build a unique canonical output directory for one PM7 batch run."""
-        timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-        return csv_path.parent / "batch_outputs" / f"{batch_id}_{timestamp}"
+    def _pm7_batch_output_dir(self, run_id: str) -> Path:
+        """Canonical scientific outputs live under runs/<run_id>/ (portable)."""
+        return self._run_service().runs_root / run_id
 
     def _render_pm7_batch_display(
         self, tracker: ProgressTracker, frame_idx: int

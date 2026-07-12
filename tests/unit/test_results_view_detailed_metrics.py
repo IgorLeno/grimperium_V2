@@ -68,7 +68,7 @@ def test_detailed_metrics_no_csv(tmp_path: Path) -> None:
 
 
 def test_detailed_metrics_no_predicted_column(tmp_path: Path) -> None:
-    """CSV without H298_predicted column → show_error."""
+    """CSV with reference only → scientific summary (no false comparative metrics)."""
     csv_path = tmp_path / "thermo_pm7.csv"
     df = pd.DataFrame({"H298_cbs": [-100.0], "other_col": [1.0]})
     df.to_csv(csv_path, index=False)
@@ -77,7 +77,9 @@ def test_detailed_metrics_no_predicted_column(tmp_path: Path) -> None:
     with patch.object(view, "_get_csv_path", return_value=csv_path):
         view._handle_detailed_metrics()
     output = buf.getvalue()
-    assert "Error" in output
+    assert "Scientific Run Summary" in output
+    assert "not available (no reference)" in output or "Comparative metrics" in output
+    assert "MAE" not in output or "not available" in output
 
 
 def test_detailed_metrics_computation_perfect(tmp_path: Path) -> None:
