@@ -756,9 +756,10 @@ rejects runs with incompatible `property_id`, reference label, or analysis mode.
 ### PM7 batch provenance
 
 `DatabasesView._run_pm7_batch` always labels `crest_pm7` regardless of the active
-session method. The legacy `BatchView` also forces `crest_pm7` because
-`BatchExecutionManager` is PM7-only. Session Delta Learning does not silently
-relabel a CREST+PM7 baseline batch.
+session method. `BatchView` also forces `crest_pm7` because
+`BatchExecutionManager` is PM7-only, and both views write scientific outputs
+under `runs/<run_id>/` (not legacy `batch_outputs/`). Session Delta Learning does
+not silently relabel a CREST+PM7 baseline batch.
 
 Empty runs (`molecule_count <= 0`) cannot be marked `completed` by
 `RunService.complete_run`; callers must cancel empty batches instead.
@@ -777,21 +778,43 @@ A result whose `attempt_id` does not match the current assignment is rejected
 as `stale_attempt` and must not clear a newer lease. Legacy clients without
 `attempt_id` are accepted only when no active lease exists.
 
+Lease invalidation is total: `reset_all_or_nothing`, reclaim, and stuck-reset
+paths clear `assigned_worker`, `worker_status`, `assigned_at`, and `attempt_id`
+via `_clear_assignment_fields`. After ALL_OR_NOTHING returns a molecule to
+Pending, a delayed result from the prior attempt is `stale_attempt`.
+
+Invariant: one `result_id` applies at most once; one `attempt_id` produces at
+most one terminal scientific result. A terminal molecule (`OK`/`Skip`) without a
+matching active lease rejects a **new** `result_id` as `stale_attempt`; the same
+committed `result_id` remains `duplicate`.
+
 The unique delivery protocol is shared by online and offline paths:
 `check -> prepare -> dual-write -> commit -> metrics -> cleanup`.
 `WorkerRegistry` metrics after commit are **best-effort** in-memory
 observability; they are not journaled and duplicate retries do not reconcile
 counters. Scientific/operational authority remains CSV + ledger.
 
+`force_skip` (legacy `/report/failure`) is an administrative Skip: `reruns` does
+not increment; journal `expected_reruns` equals the previous count so crash
+recovery can verify without a second apply.
+
 Workers enqueue results before the immediate online attempt, resend the same
 `result_id` until the server returns a terminal per-item status
 (`applied` / `duplicate` / `conflict` / `stale_attempt`), and `/sync_results`
 always finishes the batch with HTTP 200 and `items[]` (never aborts the whole
 response on a single conflict). Unit wrappers `/report/*` still map individual
-conflicts to HTTP 409.
+conflicts to HTTP 409. Terminal `conflict`/`stale_attempt` are written to a
+durable worker dead-letter JSONL before leaving the offline queue; applied and
+duplicate are confirmed without dead-letter.
+
+`PUT /heartbeat/{mol_id}` requires the current owner `worker_id` and matching
+`attempt_id` when a lease is active. Legacy heartbeats without `attempt_id` are
+accepted only when no active lease exists (otherwise HTTP 409).
 
 Journal recovery is conservative. A `committed` entry indexes the fingerprint and
 turns later deliveries into duplicates. A `prepared` entry is resumed only when
-the current molecule state proves the effect is already applied or still safely
-in flight; otherwise the server refuses blind reapply. A failed dual-write marks
-the journal entry `failed` instead of pretending the result was delivered.
+journal/payload/state `attempt_id` values match and the molecule is still in an
+active assignment status (`Assigned`/`Running`/`Selected`), or when exact apply
+proof already exists; otherwise the server returns `stale_attempt` / refuses
+blind reapply. A failed dual-write marks the journal entry `failed` instead of
+pretending the result was delivered.

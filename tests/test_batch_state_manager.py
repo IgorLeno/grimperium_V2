@@ -6,7 +6,11 @@ from threading import Thread
 
 import pandas as pd
 
-from grimperium.crest_pm7.batch.enums import MoleculeStatus, WorkerStatus
+from grimperium.crest_pm7.batch.enums import (
+    BatchFailurePolicy,
+    MoleculeStatus,
+    WorkerStatus,
+)
 from grimperium.crest_pm7.batch.output_contracts import BATCH_STATE_COLUMNS
 from grimperium.crest_pm7.batch.state_manager import BatchStateManager
 from grimperium.crest_pm7.config import PM7Config
@@ -337,15 +341,27 @@ def test_mark_worker_offline_reclaims_assigned_and_running_molecules(
     state_path = tmp_path / "batch_state.csv"
     assigned = _row("mol-001", MoleculeStatus.ASSIGNED.value)
     assigned.update(
-        {"assigned_worker": "worker-x", "worker_status": WorkerStatus.ONLINE.value}
+        {
+            "assigned_worker": "worker-x",
+            "worker_status": WorkerStatus.ONLINE.value,
+            "attempt_id": "attempt-assigned",
+        }
     )
     running = _row("mol-002", MoleculeStatus.RUNNING.value)
     running.update(
-        {"assigned_worker": "worker-x", "worker_status": WorkerStatus.ONLINE.value}
+        {
+            "assigned_worker": "worker-x",
+            "worker_status": WorkerStatus.ONLINE.value,
+            "attempt_id": "attempt-running",
+        }
     )
     other = _row("mol-003", MoleculeStatus.ASSIGNED.value)
     other.update(
-        {"assigned_worker": "worker-y", "worker_status": WorkerStatus.ONLINE.value}
+        {
+            "assigned_worker": "worker-y",
+            "worker_status": WorkerStatus.ONLINE.value,
+            "attempt_id": "attempt-other",
+        }
     )
     _write_state_csv(state_path, [assigned, running, other])
 
@@ -356,8 +372,11 @@ def test_mark_worker_offline_reclaims_assigned_and_running_molecules(
     assert rows.loc["mol-001", "status"] == MoleculeStatus.PENDING.value
     assert rows.loc["mol-001", "assigned_worker"] == ""
     assert rows.loc["mol-001", "worker_status"] == WorkerStatus.UNASSIGNED.value
+    assert rows.loc["mol-001", "attempt_id"] == ""
     assert rows.loc["mol-002", "status"] == MoleculeStatus.PENDING.value
+    assert rows.loc["mol-002", "attempt_id"] == ""
     assert rows.loc["mol-003", "status"] == MoleculeStatus.ASSIGNED.value  # untouched
+    assert rows.loc["mol-003", "attempt_id"] == "attempt-other"
 
 
 def test_mark_worker_offline_returns_zero_for_unknown_worker(tmp_path: Path) -> None:
@@ -551,3 +570,33 @@ def test_reconcile_molecules_fills_only_missing_smiles(tmp_path: Path) -> None:
     assert rows.loc["mol-001", "smiles"] == "CCO"  # empty identity filled
     assert rows.loc["mol-002", "smiles"] == "CC"  # existing identity preserved
     assert rows.loc["mol-001", "status"] == MoleculeStatus.OK.value  # state kept
+
+
+def test_reset_all_or_nothing_clears_attempt_id(tmp_path: Path) -> None:
+    state_path = tmp_path / "batch_state.csv"
+    pending = _row("mol-001")
+    pending.update(
+        {
+            "batch_id": "batch-aon",
+            "batch_failure_policy": BatchFailurePolicy.ALL_OR_NOTHING.value,
+        }
+    )
+    _write_state_csv(state_path, [pending])
+
+    manager = _manager(state_path)
+    claimed = manager.claim_single_molecule("worker-a")
+    assert claimed is not None
+    mol_id, _, attempt_id = claimed
+    assert mol_id == "mol-001"
+    assert attempt_id
+    assert manager.get_attempt_id("mol-001") == attempt_id
+
+    reset_count = manager.reset_all_or_nothing("batch-aon")
+
+    assert reset_count == 1
+    rows = _read_state_csv(state_path)
+    row = rows.loc[rows["mol_id"] == "mol-001"].iloc[0]
+    assert row["status"] == MoleculeStatus.PENDING.value
+    assert row["assigned_worker"] == ""
+    assert row["attempt_id"] == ""
+    assert manager.get_attempt_id("mol-001") is None

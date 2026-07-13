@@ -317,6 +317,36 @@ def _register_routes(app: FastAPI) -> None:
         if mol_id not in running_molecules:
             raise HTTPException(status_code=404, detail=f"{mol_id} is not RUNNING")
 
+        owner = running_molecules[mol_id]
+        if owner != req.worker_id:
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    f"worker {req.worker_id!r} does not own {mol_id} "
+                    f"(owner={owner!r})"
+                ),
+            )
+
+        sm: BatchStateManager = request.app.state.state_manager
+        current_attempt = sm.get_attempt_id(mol_id)
+        if req.attempt_id is None:
+            if current_attempt is not None:
+                raise HTTPException(
+                    status_code=409,
+                    detail=(
+                        f"legacy heartbeat without attempt_id rejected: "
+                        f"active lease attempt_id={current_attempt!r}"
+                    ),
+                )
+        elif current_attempt is None or req.attempt_id != current_attempt:
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    f"attempt_id mismatch: got={req.attempt_id!r} "
+                    f"current={current_attempt!r}"
+                ),
+            )
+
         registry: dict[str, tuple[str, datetime]] = request.app.state.heartbeat_registry
         if req.worker_id in registry:
             hostname = registry[req.worker_id][0]

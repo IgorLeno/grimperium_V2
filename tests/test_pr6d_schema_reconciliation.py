@@ -11,7 +11,12 @@ from grimperium.crest_pm7.batch.state_manager import BatchStateManager
 from grimperium.crest_pm7.config import PM7Config
 from tests.test_csv_schema import EXPECTED_COLUMNS
 
-LEGACY_STATE_ONLY_COLUMNS = ["assigned_worker", "worker_status", "assigned_at"]
+LEGACY_STATE_ONLY_COLUMNS = [
+    "assigned_worker",
+    "worker_status",
+    "assigned_at",
+    "attempt_id",
+]
 
 
 def test_batch_csv_manager_creates_legacy_thermo_pm7_with_61_columns(

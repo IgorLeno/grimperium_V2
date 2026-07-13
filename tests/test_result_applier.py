@@ -99,3 +99,18 @@ def test_apply_failure_mirrors_skip_after_retry_limit(tmp_path: Path) -> None:
     scientific = pd.read_csv(tmp_path / "thermo_pm7.csv")
     assert scientific.loc[0, "status"] == MoleculeStatus.SKIP.value
     assert int(scientific.loc[0, "reruns"]) == 3
+
+
+def test_apply_failure_force_skip_keeps_reruns_unchanged(tmp_path: Path) -> None:
+    applier = _applier(tmp_path, reruns=1)
+
+    decision = applier.apply_failure("mol_001", "manual skip", force_skip=True)
+
+    assert decision.final_status == MoleculeStatus.SKIP.value
+    assert decision.reruns == 1
+    state = pd.read_csv(tmp_path / "batch_state.csv", keep_default_na=False)
+    scientific = pd.read_csv(tmp_path / "thermo_pm7.csv")
+    assert state.loc[0, "status"] == MoleculeStatus.SKIP.value
+    assert int(state.loc[0, "reruns"]) == 1
+    assert scientific.loc[0, "status"] == MoleculeStatus.SKIP.value
+    assert int(scientific.loc[0, "reruns"]) == 1

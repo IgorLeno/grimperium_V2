@@ -4,6 +4,7 @@ import logging
 import threading
 import time
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -16,7 +17,13 @@ from grimperium.crest_pm7.progress import (
 )
 from grimperium.worker.client import ServerError, WorkerClient, WorkerClientConfig
 from grimperium.worker.local_store import LocalStore
-from grimperium.worker.offline_queue import OfflineResult, OfflineResultQueue
+from grimperium.worker.offline_queue import (
+    DeadLetterQueue,
+    DeadLetterRecord,
+    OfflineResult,
+    OfflineResultQueue,
+    dead_letter_path_for,
+)
 
 LOG = logging.getLogger(__name__)
 
@@ -45,11 +52,12 @@ def _run_heartbeat(
     stop_event: threading.Event,
     client: WorkerClient,
     interval_s: float,
+    attempt_id: str | None = None,
 ) -> None:
     """Send periodic heartbeats until stop_event is set."""
     while not stop_event.wait(timeout=interval_s):
         try:
-            client.heartbeat(mol_id)
+            client.heartbeat(mol_id, attempt_id=attempt_id)
             LOG.debug("Heartbeat sent for %s", mol_id)
         except Exception:
             LOG.warning("Heartbeat failed for %s", mol_id)
@@ -115,6 +123,7 @@ class WorkerRunner:
             / f"{config.worker_id}_offline_results.jsonl"
         )
         self._offline_queue = OfflineResultQueue(queue_path)
+        self._dead_letter = DeadLetterQueue(dead_letter_path_for(queue_path))
         self._stop_event = threading.Event()
         self._consecutive_failures: int = 0
         self._last_run_succeeded: bool = False
@@ -215,6 +224,7 @@ class WorkerRunner:
                 _stop_hb,
                 self._client,
                 self._config.heartbeat_interval_s,
+                attempt_id,
             ),
             daemon=True,
         )
@@ -335,7 +345,7 @@ class WorkerRunner:
         return self._flush_entries(pending)
 
     def _flush_entries(self, pending: list[OfflineResult]) -> tuple[int, int]:
-        """Confirmar apenas itens applied/duplicate identificados por result_id."""
+        """Confirmar apenas itens applied/duplicate; conflict/stale → dead-letter."""
         try:
             response = self._client.sync_results(
                 [entry.to_sync_dict() for entry in pending]
@@ -346,28 +356,63 @@ class WorkerRunner:
 
         items = response.get("items")
         confirmed: set[str] = set()
-        terminal_statuses = {
-            "applied",
-            "duplicate",
-            "conflict",
-            "stale_attempt",
-        }
+        by_result_id = {entry.result_id: entry for entry in pending}
+        dead_letter_statuses = {"conflict", "stale_attempt"}
+        confirm_statuses = {"applied", "duplicate"} | dead_letter_statuses
         if isinstance(items, list) and items:
             for item in items:
                 if not isinstance(item, dict):
                     continue
                 status = str(item.get("status", ""))
                 result_id = str(item.get("result_id", ""))
-                if result_id and status in terminal_statuses:
-                    if status in {"conflict", "stale_attempt"}:
+                if not result_id or status not in confirm_statuses:
+                    continue
+                if status in dead_letter_statuses:
+                    entry = by_result_id.get(result_id)
+                    if entry is None:
                         LOG.error(
-                            "Terminal sync rejection for result_id=%s status=%s — "
-                            "removing from offline queue",
+                            "Terminal sync rejection for unknown result_id=%s "
+                            "status=%s — keeping offline queue unchanged",
                             result_id,
                             status,
                         )
-                    confirmed.add(result_id)
-                    self._offline_queue.confirm(result_id)
+                        continue
+                    try:
+                        self._dead_letter.append(
+                            DeadLetterRecord(
+                                result_id=result_id,
+                                mol_id=entry.mol_id,
+                                attempt_id=entry.attempt_id,
+                                original_payload=entry.to_sync_dict(),
+                                returned_status=status,
+                                detail=(
+                                    str(item["detail"])
+                                    if item.get("detail") is not None
+                                    else None
+                                ),
+                                worker_id=self._config.worker_id,
+                                rejected_at=datetime.now(timezone.utc)
+                                .isoformat()
+                                .replace("+00:00", "Z"),
+                                rejection_origin="sync_results",
+                            )
+                        )
+                    except Exception:
+                        LOG.exception(
+                            "Dead-letter write failed for result_id=%s status=%s — "
+                            "keeping item in offline queue",
+                            result_id,
+                            status,
+                        )
+                        continue
+                    LOG.error(
+                        "Terminal sync rejection for result_id=%s status=%s — "
+                        "moved to dead-letter",
+                        result_id,
+                        status,
+                    )
+                confirmed.add(result_id)
+                self._offline_queue.confirm(result_id)
         else:
             # Compat com servidores sem items: só confirmar se rejected==0.
             rejected = int(response.get("rejected", 0))

@@ -142,20 +142,20 @@ class TestHeartbeat:
         t = _MockTransport()
         t.add("PUT", "/heartbeat/m1", _json_response(200, {"status": "ok"}))
         client = _make_client(t)
-        client.heartbeat("m1")  # must not raise
+        client.heartbeat("m1", attempt_id="att-1")  # must not raise
 
     def test_heartbeat_silently_tolerates_404(self) -> None:
         t = _MockTransport()
         t.add("PUT", "/heartbeat/ghost", _json_response(404, {"detail": "not running"}))
         client = _make_client(t)
-        client.heartbeat("ghost")  # must not raise
+        client.heartbeat("ghost", attempt_id="att-1")  # must not raise
 
     def test_heartbeat_raises_on_5xx(self) -> None:
         t = _MockTransport()
         t.add("PUT", "/heartbeat/m1", _json_response(500, {"detail": "error"}))
         client = _make_client(t)
         with pytest.raises(ServerError):
-            client.heartbeat("m1")
+            client.heartbeat("m1", attempt_id="att-1")
 
     def test_heartbeat_sends_worker_id(self) -> None:
         t = _MockTransport()
@@ -164,6 +164,15 @@ class TestHeartbeat:
         client.heartbeat("m1")
         body = _json.loads(t.requests[-1].content)
         assert body["worker_id"] == "w1"
+
+    def test_heartbeat_sends_attempt_id_when_available(self) -> None:
+        t = _MockTransport()
+        t.add("PUT", "/heartbeat/m1", _json_response(200, {"status": "ok"}))
+        client = _make_client(t)
+        client.heartbeat("m1", attempt_id="att-42")
+        body = _json.loads(t.requests[-1].content)
+        assert body["worker_id"] == "w1"
+        assert body["attempt_id"] == "att-42"
 
 
 # ── /report/success ───────────────────────────────────────────────────────────

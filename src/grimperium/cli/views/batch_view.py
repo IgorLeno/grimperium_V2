@@ -15,7 +15,6 @@ import logging
 import threading
 import time
 from dataclasses import asdict
-from datetime import datetime, timezone
 from pathlib import Path
 from queue import Queue
 from typing import TYPE_CHECKING, Any, ClassVar
@@ -356,11 +355,15 @@ class BatchView(BaseView):
             self.show_error(f"Batch processing failed: {e}")
             logger.exception("Batch processing error")
 
-    def _prepare_batch(self) -> tuple[Any, Any]:
-        """Prepare batch components and create batch.
+    def _prepare_batch(self) -> tuple[Any, Any, RunManifest]:
+        """Select batch, create RunManifest, then wire outputs under runs/<run_id>/.
+
+        Order (locked): select/create batch → create RunManifest →
+        BatchOutputLayout(runs_root / run_id) → BatchExecutionManager with
+        output_layout + canonical_run_id.
 
         Returns:
-            Tuple of (BatchExecutionManager, Batch)
+            Tuple of (BatchExecutionManager, Batch, RunManifest)
 
         Raises:
             ValueError: If CSV path is not configured
@@ -435,7 +438,20 @@ class BatchView(BaseView):
         )
         state_manager.mark_selected_from_batch(batch)
 
-        output_layout = BatchOutputLayout(self._batch_output_dir(batch.batch_id))
+        method_id, method_version, method_snapshot = self._method_run_fields()
+        manifest = self._run_service().create_run(
+            property_id="standard_enthalpy_of_formation",
+            method_id=method_id,
+            method_version=method_version,
+            method_snapshot=method_snapshot,
+            execution_overrides=self._execution_overrides_snapshot(batch.size),
+            dataset_ref=self._dataset_ref_snapshot(self.csv_path),
+            model_ref=None,
+            molecule_count=batch.size,
+        )
+        # Outputs autoritativos vivem em runs/<run_id>/ (portáveis).
+        # batch_outputs/ legado não é mais a fonte científica.
+        output_layout = BatchOutputLayout(self._batch_output_dir(manifest.run_id))
         exec_manager = BatchExecutionManager(
             csv_manager=csv_manager,
             state_manager=state_manager,
@@ -443,16 +459,14 @@ class BatchView(BaseView):
             pm7_config=pm7_config,
             processor_adapter=processor,
             output_layout=output_layout,
+            canonical_run_id=manifest.run_id,
         )
 
-        return exec_manager, batch
+        return exec_manager, batch, manifest
 
-    def _batch_output_dir(self, batch_id: str) -> Path:
-        """Build a unique canonical output directory for one local batch run."""
-        if self.csv_path is None:
-            raise ValueError("CSV path not configured")
-        timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-        return self.csv_path.parent / "batch_outputs" / f"{batch_id}_{timestamp}"
+    def _batch_output_dir(self, run_id: str) -> Path:
+        """Canonical scientific outputs live under runs/<run_id>/ (portable)."""
+        return self._run_service().run_dir(run_id)
 
     def _run_batch_with_tracker(self) -> None:
         """Run batch with granular 5-stage progress tracking.
@@ -460,8 +474,8 @@ class BatchView(BaseView):
         Uses Queue pattern for thread-safe communication between
         CSVMonitor daemon thread and main thread Rich.Live updates.
         """
-        # Prepare batch components
-        exec_manager, batch = self._prepare_batch()
+        # Prepare batch components (select → create_run → layout under runs/)
+        exec_manager, batch, manifest = self._prepare_batch()
         output_layout = getattr(exec_manager, "_output_layout", None)
         if not isinstance(output_layout, BatchOutputLayout):
             raise ValueError("Batch output layout not configured")
@@ -470,18 +484,6 @@ class BatchView(BaseView):
         if csv_path is None:
             raise ValueError("CSV path not configured")
 
-        method_id, method_version, method_snapshot = self._method_run_fields()
-        manifest = self._run_service().create_run(
-            property_id="standard_enthalpy_of_formation",
-            method_id=method_id,
-            method_version=method_version,
-            method_snapshot=method_snapshot,
-            execution_overrides=self._execution_overrides_snapshot(batch.size),
-            dataset_ref=self._dataset_ref_snapshot(csv_path),
-            model_ref=None,
-            molecule_count=batch.size,
-        )
-        exec_manager.canonical_run_id = manifest.run_id
         manifest = self._run_service().start_run(manifest.run_id)
         self.controller.session.run = RunRef(
             run_id=manifest.run_id,

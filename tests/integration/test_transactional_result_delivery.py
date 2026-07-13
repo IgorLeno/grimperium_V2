@@ -2,24 +2,42 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 from unittest.mock import MagicMock
 
 import pandas as pd
 import pytest
 from httpx import ASGITransport, AsyncClient
+from rich.console import Console
 
-from grimperium.crest_pm7.batch.enums import MoleculeStatus
+from grimperium.cli.session import SessionContext
+from grimperium.cli.views.batch_view import BatchView
+from grimperium.crest_pm7.batch.enums import BatchFailurePolicy, MoleculeStatus
 from grimperium.crest_pm7.batch.result_ledger import (
     JournalTxnStatus,
     ResultLedger,
     build_result_fingerprint,
 )
+from grimperium.runs.models import RunStatus
+from grimperium.runs.persistence import MANIFEST_FILENAME
+from grimperium.runs.service import RunService
 from grimperium.server.app import create_app
 from grimperium.server.config import ServerConfig
+from grimperium.server.models import SyncResult
+from grimperium.server.sync_application import (
+    SyncResultApplicationService,
+    apply_worker_result,
+    sync_result_payload,
+)
 from grimperium.worker.client import ServerError, WorkerClient
-from grimperium.worker.offline_queue import OfflineResultQueue
+from grimperium.worker.offline_queue import (
+    DeadLetterQueue,
+    OfflineResultQueue,
+    dead_letter_path_for,
+)
 from grimperium.worker.runner import WorkerConfig, WorkerRunner
 
 
@@ -700,3 +718,424 @@ async def test_mixed_batch_with_conflict_returns_200_per_item(
                 queue.confirm(item["result_id"])
                 queue.confirm("conflict-payload")
         assert len(queue.pending()) == 0
+
+
+# ---------------------------------------------------------------------------
+# Cenários finais A–F (lease / recovery / dead-letter / Runs)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.anyio
+async def test_scenario_a_all_or_nothing_clears_attempt_rejects_late_result(
+    tmp_path: Path,
+) -> None:
+    """AoN reset limpa attempt_id; resultado atrasado → stale_attempt; Pending intacto."""
+    csv_path = tmp_path / "thermo_pm7.csv"
+    _write_csv(csv_path)
+    science_before = csv_path.read_text(encoding="utf-8")
+    app = create_app(
+        ServerConfig(
+            csv_path=str(csv_path),
+            api_token="",
+            startup_grace_s=0,
+            watchdog_interval_s=999,
+        )
+    )
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        mol_id, attempt_a = await _claim(client)
+        sm = app.state.state_manager
+        df = sm._ensure_loaded()
+        row_idx = int(df.index[df["mol_id"] == mol_id][0])
+        df.at[row_idx, "batch_id"] = "batch-aon"
+        df.at[row_idx, "batch_failure_policy"] = BatchFailurePolicy.ALL_OR_NOTHING.value
+        sm._save_csv()
+
+        reset_count = sm.reset_all_or_nothing("batch-aon")
+        assert reset_count == 1
+        assert sm.get_attempt_id(mol_id) is None
+        assert sm.get_status(mol_id) == MoleculeStatus.PENDING.value
+        app.state.running_molecules.pop(mol_id, None)
+
+        late = await client.post(
+            "/sync_results",
+            json={
+                "worker_id": "w1",
+                "results": [
+                    {
+                        "result_id": "late-aon-a",
+                        "mol_id": mol_id,
+                        "attempt_id": attempt_a,
+                        "success": True,
+                        "result_update": {"H298_pm7": -99.0},
+                        "error": None,
+                        "completed_at": "2026-04-21T10:00:00Z",
+                    }
+                ],
+            },
+        )
+        assert late.status_code == 200
+        assert late.json()["items"][0]["status"] == "stale_attempt"
+
+    state = pd.read_csv(tmp_path / "batch_state.csv")
+    row = state.loc[state["mol_id"] == mol_id].iloc[0]
+    assert str(row["status"]) == MoleculeStatus.PENDING.value
+    assert str(row["attempt_id"]) in {"", "nan"}
+    assert csv_path.read_text(encoding="utf-8") == science_before
+
+
+@pytest.mark.anyio
+async def test_scenario_b_second_result_id_same_attempt_rejected(
+    tmp_path: Path,
+) -> None:
+    """Uma attempt_id produz no máximo um resultado terminal."""
+    csv_path = tmp_path / "thermo_pm7.csv"
+    _write_csv(csv_path)
+    app = create_app(
+        ServerConfig(
+            csv_path=str(csv_path),
+            api_token="",
+            startup_grace_s=0,
+            watchdog_interval_s=999,
+        )
+    )
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        mol_id, attempt_id = await _claim(client)
+        r1 = await client.post(
+            "/sync_results",
+            json={
+                "worker_id": "w1",
+                "results": [
+                    {
+                        "result_id": "r1-terminal",
+                        "mol_id": mol_id,
+                        "attempt_id": attempt_id,
+                        "success": True,
+                        "result_update": {"H298_pm7": -55.0},
+                        "error": None,
+                        "completed_at": "2026-04-21T10:00:00Z",
+                    }
+                ],
+            },
+        )
+        assert r1.json()["items"][0]["status"] == "applied"
+        science_after_r1 = pd.read_csv(csv_path)
+        reruns_after_r1 = app.state.state_manager.get_reruns(mol_id)
+
+        dup = await client.post(
+            "/sync_results",
+            json={
+                "worker_id": "w1",
+                "results": [
+                    {
+                        "result_id": "r1-terminal",
+                        "mol_id": mol_id,
+                        "attempt_id": attempt_id,
+                        "success": True,
+                        "result_update": {"H298_pm7": -55.0},
+                        "error": None,
+                        "completed_at": "2026-04-21T10:00:00Z",
+                    }
+                ],
+            },
+        )
+        assert dup.json()["items"][0]["status"] == "duplicate"
+
+        r2 = await client.post(
+            "/sync_results",
+            json={
+                "worker_id": "w1",
+                "results": [
+                    {
+                        "result_id": "r2-same-attempt",
+                        "mol_id": mol_id,
+                        "attempt_id": attempt_id,
+                        "success": False,
+                        "result_update": None,
+                        "error": "late failure",
+                        "completed_at": "2026-04-21T10:01:00Z",
+                    }
+                ],
+            },
+        )
+        assert r2.json()["items"][0]["status"] == "stale_attempt"
+
+    assert app.state.state_manager.get_status(mol_id) == MoleculeStatus.OK.value
+    assert app.state.state_manager.get_reruns(mol_id) == reruns_after_r1
+    science_final = pd.read_csv(csv_path)
+    assert float(science_final.loc[0, "H298_pm7"]) == float(
+        science_after_r1.loc[0, "H298_pm7"]
+    )
+    worker = app.state.worker_registry.get_worker("w1")
+    assert worker is not None
+    assert worker.successful == 1
+
+
+@pytest.mark.anyio
+async def test_scenario_c_prepared_old_lease_vs_new_claim(tmp_path: Path) -> None:
+    """PREPARED da tentativa A não retoma após reclaim + claim B."""
+    csv_path = tmp_path / "thermo_pm7.csv"
+    _write_csv(csv_path)
+    app = create_app(
+        ServerConfig(
+            csv_path=str(csv_path),
+            api_token="",
+            startup_grace_s=0,
+            watchdog_interval_s=999,
+        )
+    )
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        mol_id, attempt_a = await _claim(client, worker_id="w1")
+        fingerprint = build_result_fingerprint(
+            {
+                "mol_id": mol_id,
+                "success": True,
+                "result_update": {"H298_pm7": -11.0},
+                "error": None,
+                "completed_at": "2026-04-21T10:00:00Z",
+                "attempt_id": attempt_a,
+            }
+        )
+        app.state.result_ledger.prepare(
+            result_id="prep-a",
+            mol_id=mol_id,
+            fingerprint=fingerprint,
+            desired_success=True,
+            previous_status=MoleculeStatus.ASSIGNED.value,
+            previous_reruns=0,
+            expected_final_status=MoleculeStatus.OK.value,
+            expected_reruns=0,
+            expected_science_hash=build_result_fingerprint(
+                {"H298_pm7": -11.0, "G298_pm7": None, "gap": None}
+            ),
+            worker_id="w1",
+            attempt_id=attempt_a,
+        )
+        app.state.state_manager.mark_worker_offline("w1")
+        app.state.running_molecules.pop(mol_id, None)
+
+        await client.post("/register", json={"worker_id": "w2", "hostname": "lab2"})
+        claimed = await client.post("/claim", json={"worker_id": "w2"})
+        body = claimed.json()
+        assert body["mol_id"] == mol_id
+        attempt_b = body["attempt_id"]
+        assert attempt_b != attempt_a
+        assert app.state.state_manager.get_attempt_id(mol_id) == attempt_b
+
+        retry_a = await client.post(
+            "/sync_results",
+            json={
+                "worker_id": "w1",
+                "results": [
+                    {
+                        "result_id": "prep-a",
+                        "mol_id": mol_id,
+                        "attempt_id": attempt_a,
+                        "success": True,
+                        "result_update": {"H298_pm7": -11.0},
+                        "error": None,
+                        "completed_at": "2026-04-21T10:00:00Z",
+                    }
+                ],
+            },
+        )
+        assert retry_a.status_code == 200
+        assert retry_a.json()["items"][0]["status"] == "stale_attempt"
+        assert app.state.state_manager.get_attempt_id(mol_id) == attempt_b
+        assert (
+            app.state.state_manager.get_status(mol_id) == MoleculeStatus.ASSIGNED.value
+        )
+
+
+@pytest.mark.anyio
+async def test_scenario_d_force_skip_crash_recovery(tmp_path: Path) -> None:
+    """force_skip: dual-write + crash antes do commit → retry sem reaplicar."""
+    csv_path = tmp_path / "thermo_pm7.csv"
+    _write_csv(csv_path)
+    app = create_app(
+        ServerConfig(
+            csv_path=str(csv_path),
+            api_token="",
+            startup_grace_s=0,
+            watchdog_interval_s=999,
+        )
+    )
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        mol_id, attempt_id = await _claim(client)
+        sync_service = SyncResultApplicationService(
+            csv_manager=app.state.csv_manager,
+            state_manager=app.state.state_manager,
+            ledger=app.state.result_ledger,
+            worker_registry=app.state.worker_registry,
+            running_molecules=app.state.running_molecules,
+        )
+        result = SyncResult(
+            result_id="force-skip-crash",
+            mol_id=mol_id,
+            success=False,
+            result_update=None,
+            error="manual skip",
+            completed_at="2026-04-21T10:00:00Z",
+            attempt_id=attempt_id,
+        )
+        fingerprint = build_result_fingerprint(sync_result_payload(result))
+        previous_reruns = app.state.state_manager.get_reruns(mol_id)
+        app.state.result_ledger.prepare(
+            result_id="force-skip-crash",
+            mol_id=mol_id,
+            fingerprint=fingerprint,
+            desired_success=False,
+            previous_status=MoleculeStatus.ASSIGNED.value,
+            previous_reruns=previous_reruns,
+            expected_final_status=MoleculeStatus.SKIP.value,
+            expected_reruns=previous_reruns,
+            attempt_id=attempt_id,
+            worker_id="w1",
+        )
+        apply_worker_result(
+            app.state.csv_manager,
+            app.state.state_manager,
+            mol_id=mol_id,
+            success=False,
+            error="manual skip",
+            force_skip=True,
+        )
+        assert app.state.state_manager.get_status(mol_id) == MoleculeStatus.SKIP.value
+        assert app.state.state_manager.get_reruns(mol_id) == previous_reruns
+
+        recovered = sync_service.apply_force_skip("w1", result, "manual skip")
+        assert recovered.item.status.value == "duplicate"
+        assert app.state.state_manager.get_reruns(mol_id) == previous_reruns
+        entry = app.state.result_ledger._journal["force-skip-crash"]
+        assert entry.txn_status is JournalTxnStatus.COMMITTED
+        worker = app.state.worker_registry.get_worker("w1")
+        assert worker is not None
+        assert worker.skipped == 0
+
+
+def test_scenario_e_dead_letter_flush_mixed_batch(tmp_path: Path) -> None:
+    """applied/duplicate confirmados; conflict/stale arquivados; fila não bloqueada."""
+    queue_path = tmp_path / "offline.jsonl"
+    queue = OfflineResultQueue(queue_path)
+    for result_id, status_hint in (
+        ("ok-1", "applied"),
+        ("dup-1", "duplicate"),
+        ("conflict-1", "conflict"),
+        ("stale-1", "stale_attempt"),
+    ):
+        queue.enqueue(
+            mol_id="m1",
+            success=True,
+            result_update={"H298_pm7": -1.0},
+            error=None,
+            result_id=result_id,
+            attempt_id=f"att-{result_id}",
+            completed_at="2026-04-21T10:00:00Z",
+        )
+        del status_hint
+
+    client = MagicMock(spec=WorkerClient)
+
+    def _sync(results: list[dict[str, Any]]) -> dict[str, Any]:
+        status_by_id = {
+            "ok-1": "applied",
+            "dup-1": "duplicate",
+            "conflict-1": "conflict",
+            "stale-1": "stale_attempt",
+        }
+        items = [
+            {
+                "result_id": item["result_id"],
+                "mol_id": item["mol_id"],
+                "status": status_by_id[str(item["result_id"])],
+                "detail": "test",
+            }
+            for item in results
+        ]
+        return {"accepted": 2, "rejected": 0, "duplicate": True, "items": items}
+
+    client.sync_results.side_effect = _sync
+    runner = WorkerRunner(
+        WorkerConfig(
+            server_url="http://test",
+            worker_id="w1",
+            offline_queue_path=str(queue_path),
+            heartbeat_interval_s=999.0,
+        ),
+        pipeline=MagicMock(),
+        client=client,
+    )
+    runner.flush_offline_queue()
+
+    assert len(OfflineResultQueue(queue_path).pending()) == 0
+    dl = DeadLetterQueue(dead_letter_path_for(queue_path)).entries()
+    statuses = {entry.returned_status for entry in dl}
+    assert statuses == {"conflict", "stale_attempt"}
+    assert {entry.result_id for entry in dl} == {"conflict-1", "stale-1"}
+    for entry in dl:
+        assert entry.original_payload["result_id"] == entry.result_id
+        assert entry.worker_id == "w1"
+        assert entry.rejection_origin == "sync_results"
+
+    # Restart: dead-letter persiste; fila principal permanece vazia.
+    assert len(OfflineResultQueue(queue_path).pending()) == 0
+    assert len(DeadLetterQueue(dead_letter_path_for(queue_path)).entries()) == 2
+
+
+def test_scenario_f_batch_view_portable_runs(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """BatchView cria Run, grava sob runs/<run_id>/ e manifest recarrega outputs."""
+    runs_root = tmp_path / "runs"
+    monkeypatch.setenv("GRIMPERIUM_RUNS_DIR", str(runs_root))
+    csv_path = tmp_path / "thermo_pm7.csv"
+    _write_csv(csv_path)
+    service = RunService(runs_root)
+    controller = SimpleNamespace(
+        console=Console(record=True),
+        settings_manager=None,
+        session=SessionContext(),
+        run_service=service,
+    )
+    view = BatchView(controller)  # type: ignore[arg-type]
+    view.csv_path = csv_path
+    view.detail_dir = tmp_path / "details"
+
+    exec_manager, batch, manifest = view._prepare_batch()
+    assert batch.batch_id
+    assert exec_manager.canonical_run_id == manifest.run_id
+    layout = exec_manager._output_layout
+    assert layout is not None
+    assert layout.output_dir == service.run_dir(manifest.run_id)
+    assert not (tmp_path / "batch_outputs").exists()
+
+    layout.output_dir.mkdir(parents=True, exist_ok=True)
+    layout.calculation_results_csv.write_text(
+        f"mol_id,H298_pm7,run_id\nmol_001,-10.0,{manifest.run_id}\n",
+        encoding="utf-8",
+    )
+    service.start_run(manifest.run_id)
+    view._attach_existing_outputs(manifest, layout)
+    service.complete_run(manifest.run_id, success_count=1, failure_count=0)
+
+    raw = json.loads(
+        (runs_root / manifest.run_id / MANIFEST_FILENAME).read_text(encoding="utf-8")
+    )
+    assert raw["output_paths"]["calculation_results_csv"] == (
+        f"{manifest.run_id}/calculation_results.csv"
+    )
+    reloaded = RunService(runs_root).get_run(manifest.run_id)
+    assert reloaded.status is RunStatus.COMPLETED
+    assert reloaded.output_paths["calculation_results_csv"].exists()
+    # Results consegue localizar o output via path portátil do manifest.
+    assert "mol_001" in reloaded.output_paths["calculation_results_csv"].read_text(
+        encoding="utf-8"
+    )

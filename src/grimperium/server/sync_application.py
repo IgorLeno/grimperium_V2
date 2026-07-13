@@ -31,6 +31,34 @@ from grimperium.server.worker_registry import WorkerRegistry
 
 LOG = logging.getLogger(__name__)
 
+_ACTIVE_ASSIGNMENT_STATUSES = frozenset(
+    {
+        MoleculeStatus.ASSIGNED.value.lower(),
+        MoleculeStatus.RUNNING.value.lower(),
+        MoleculeStatus.SELECTED.value.lower(),
+    }
+)
+_TERMINAL_STATUSES = frozenset(
+    {
+        MoleculeStatus.OK.value.lower(),
+        MoleculeStatus.SKIP.value.lower(),
+    }
+)
+
+
+def is_active_assignment_status(status: str | None) -> bool:
+    """Return True for Assigned/Running/Selected (never the phantom ``claimed``)."""
+    if status is None:
+        return False
+    return str(status).lower() in _ACTIVE_ASSIGNMENT_STATUSES
+
+
+def is_terminal_status(status: str | None) -> bool:
+    """Return True for OK/Skip terminal molecule statuses."""
+    if status is None:
+        return False
+    return str(status).lower() in _TERMINAL_STATUSES
+
 
 class SyncConflictError(Exception):
     """result_id reutilizado com fingerprint diferente."""
@@ -85,62 +113,24 @@ class SyncResultApplicationService:
         if decision.status is LedgerStatus.CONFLICT:
             raise SyncConflictError(result_id)
 
-        incomplete = {entry.result_id: entry for entry in self._ledger.get_incomplete()}
-        prepared = incomplete.get(result_id)
-        if prepared is not None and prepared.fingerprint == fingerprint:
-            if self.verify_applied(prepared):
-                self._ledger.commit(
-                    result_id,
-                    final_status=prepared.expected_final_status
-                    or self._state_manager.get_status(result.mol_id),
-                )
-                self._cleanup_assignment(worker_id, result.mol_id, result.attempt_id)
-                return SyncApplyOutcome(
-                    item=SyncItemResult(
-                        result_id=result_id,
-                        mol_id=result.mol_id,
-                        status=SyncItemOutcome.DUPLICATE,
-                        detail="recovered prepared transaction",
-                    )
-                )
-            current_status = self._state_manager.get_status(result.mol_id)
-            if str(current_status).lower() in {"running", "claimed", "selected"}:
-                return self._resume_prepared(
-                    worker_id=worker_id,
-                    result=result,
-                    result_id=result_id,
-                )
-            # Prepare sem apply + reclaim para Pending: retomar com segurança.
-            prev = (prepared.previous_status or "").lower()
-            if str(current_status).lower() == "pending" and prev in {
-                "running",
-                "claimed",
-                "selected",
-            }:
-                return self._resume_prepared(
-                    worker_id=worker_id,
-                    result=result,
-                    result_id=result_id,
-                )
-            LOG.warning(
-                "Prepared journal without exact proof; refusing blind reapply "
-                "(result_id=%s mol_id=%s status=%s)",
-                result_id,
-                result.mol_id,
-                current_status,
-            )
-            return SyncApplyOutcome(
-                item=SyncItemResult(
-                    result_id=result_id,
-                    mol_id=result.mol_id,
-                    status=SyncItemOutcome.REJECTED,
-                    detail="prepared without verifiable effect",
-                )
-            )
+        prepared_outcome = self._handle_prepared_if_any(
+            worker_id=worker_id,
+            result=result,
+            result_id=result_id,
+            fingerprint=fingerprint,
+            force_skip=False,
+            error=result.error,
+        )
+        if prepared_outcome is not None:
+            return prepared_outcome
 
         stale = self._stale_attempt_outcome(result_id, result)
         if stale is not None:
             return stale
+
+        attempt_stale = self._stale_if_attempt_already_committed(result_id, result)
+        if attempt_stale is not None:
+            return attempt_stale
 
         previous_status = self._state_manager.get_status(result.mol_id)
         previous_reruns = self._state_manager.get_reruns(result.mol_id)
@@ -189,6 +179,129 @@ class SyncResultApplicationService:
             final_status=final_status,
         )
 
+    def _handle_prepared_if_any(
+        self,
+        *,
+        worker_id: str,
+        result: SyncResult,
+        result_id: str,
+        fingerprint: str,
+        force_skip: bool,
+        error: str | None,
+    ) -> SyncApplyOutcome | None:
+        """Resume or recover a PREPARED journal entry; None if none applies."""
+        incomplete = {entry.result_id: entry for entry in self._ledger.get_incomplete()}
+        prepared = incomplete.get(result_id)
+        if prepared is None or prepared.fingerprint != fingerprint:
+            return None
+
+        if self.verify_applied(prepared):
+            self._ledger.commit(
+                result_id,
+                final_status=prepared.expected_final_status
+                or self._state_manager.get_status(result.mol_id),
+            )
+            self._cleanup_assignment(worker_id, result.mol_id, result.attempt_id)
+            return SyncApplyOutcome(
+                item=SyncItemResult(
+                    result_id=result_id,
+                    mol_id=result.mol_id,
+                    status=SyncItemOutcome.DUPLICATE,
+                    detail="recovered prepared transaction",
+                )
+            )
+
+        lease_stale = self._prepared_lease_mismatch(prepared, result, result_id)
+        if lease_stale is not None:
+            return lease_stale
+
+        current_status = self._state_manager.get_status(result.mol_id)
+        if is_active_assignment_status(current_status):
+            return self._resume_prepared(
+                worker_id=worker_id,
+                result=result,
+                result_id=result_id,
+                force_skip=force_skip,
+                error=error,
+            )
+        # Prepare sem apply + reclaim para Pending: retomar com segurança.
+        prev = prepared.previous_status
+        if str(
+            current_status
+        ).lower() == MoleculeStatus.PENDING.value.lower() and is_active_assignment_status(
+            prev
+        ):
+            return self._resume_prepared(
+                worker_id=worker_id,
+                result=result,
+                result_id=result_id,
+                force_skip=force_skip,
+                error=error,
+            )
+        LOG.warning(
+            "Prepared journal without exact proof; refusing blind reapply "
+            "(result_id=%s mol_id=%s status=%s)",
+            result_id,
+            result.mol_id,
+            current_status,
+        )
+        return SyncApplyOutcome(
+            item=SyncItemResult(
+                result_id=result_id,
+                mol_id=result.mol_id,
+                status=SyncItemOutcome.REJECTED,
+                detail="prepared without verifiable effect",
+            )
+        )
+
+    def _prepared_lease_mismatch(
+        self,
+        prepared: JournalEntry,
+        result: SyncResult,
+        result_id: str,
+    ) -> SyncApplyOutcome | None:
+        """Reject PREPARED resume when journal/payload/state attempt_ids disagree."""
+        current_attempt = self._state_manager.get_attempt_id(result.mol_id)
+        if (
+            prepared.attempt_id == result.attempt_id
+            and result.attempt_id == current_attempt
+        ):
+            return None
+        return SyncApplyOutcome(
+            item=SyncItemResult(
+                result_id=result_id,
+                mol_id=result.mol_id,
+                status=SyncItemOutcome.STALE_ATTEMPT,
+                detail=(
+                    "prepared lease mismatch: "
+                    f"journal={prepared.attempt_id!r} "
+                    f"payload={result.attempt_id!r} "
+                    f"current={current_attempt!r}"
+                ),
+            )
+        )
+
+    def _stale_if_attempt_already_committed(
+        self, result_id: str, result: SyncResult
+    ) -> SyncApplyOutcome | None:
+        """One attempt_id → at most one terminal result (different result_id)."""
+        if not result.attempt_id:
+            return None
+        committed = self._ledger.find_committed_by_attempt(result.attempt_id)
+        if committed is None or committed.result_id == result_id:
+            return None
+        return SyncApplyOutcome(
+            item=SyncItemResult(
+                result_id=result_id,
+                mol_id=result.mol_id,
+                status=SyncItemOutcome.STALE_ATTEMPT,
+                detail=(
+                    f"attempt_id={result.attempt_id!r} already committed as "
+                    f"result_id={committed.result_id!r}"
+                ),
+            )
+        )
+
     def _stale_attempt_outcome(
         self, result_id: str, result: SyncResult
     ) -> SyncApplyOutcome | None:
@@ -211,9 +324,20 @@ class SyncResultApplicationService:
                 status = str(self._state_manager.get_status(result.mol_id)).lower()
             except Exception:
                 status = ""
-            # Molécula terminal: deferir ao ledger (duplicate/recovery).
-            if status in {"ok", "skip"}:
-                return None
+            # Terminal sem lease ativo: NEW result_id é stale (duplicate já
+            # tratado pelo ledger para o mesmo result_id).
+            if is_terminal_status(status):
+                return SyncApplyOutcome(
+                    item=SyncItemResult(
+                        result_id=result_id,
+                        mol_id=result.mol_id,
+                        status=SyncItemOutcome.STALE_ATTEMPT,
+                        detail=(
+                            f"attempt_id={result.attempt_id!r} no longer assigned "
+                            f"(status={status!r})"
+                        ),
+                    )
+                )
             return SyncApplyOutcome(
                 item=SyncItemResult(
                     result_id=result_id,
@@ -245,6 +369,8 @@ class SyncResultApplicationService:
         worker_id: str,
         result: SyncResult,
         result_id: str,
+        force_skip: bool = False,
+        error: str | None = None,
     ) -> SyncApplyOutcome:
         """Retomar dual-write de uma transação prepared ainda em voo."""
         try:
@@ -252,9 +378,10 @@ class SyncResultApplicationService:
                 self._csv_manager,
                 self._state_manager,
                 mol_id=result.mol_id,
-                success=result.success,
-                error=result.error,
-                result_update=result.result_update,
+                success=result.success and not force_skip,
+                error=error if force_skip else result.error,
+                force_skip=force_skip,
+                result_update=None if force_skip else result.result_update,
             )
         except Exception as apply_exc:
             self._ledger.mark_failed(result_id, error=str(apply_exc))
@@ -292,12 +419,34 @@ class SyncResultApplicationService:
         if decision.status is LedgerStatus.CONFLICT:
             raise SyncConflictError(result_id)
 
+        prepared_outcome = self._handle_prepared_if_any(
+            worker_id=worker_id,
+            result=result,
+            result_id=result_id,
+            fingerprint=fingerprint,
+            force_skip=True,
+            error=error,
+        )
+        if prepared_outcome is not None:
+            return prepared_outcome
+
         stale = self._stale_attempt_outcome(result_id, result)
         if stale is not None:
             return stale
 
+        attempt_stale = self._stale_if_attempt_already_committed(result_id, result)
+        if attempt_stale is not None:
+            return attempt_stale
+
         previous_status = self._state_manager.get_status(result.mol_id)
         previous_reruns = self._state_manager.get_reruns(result.mol_id)
+        expected = self._expected_effect(
+            success=False,
+            previous_status=previous_status,
+            previous_reruns=previous_reruns,
+            force_skip=True,
+            result_update=None,
+        )
         self._ledger.prepare(
             result_id=result_id,
             mol_id=result.mol_id,
@@ -305,9 +454,9 @@ class SyncResultApplicationService:
             desired_success=False,
             previous_status=previous_status,
             previous_reruns=previous_reruns,
-            expected_final_status=MoleculeStatus.SKIP.value,
-            expected_reruns=previous_reruns + 1,
-            expected_science_hash=None,
+            expected_final_status=expected.final_status,
+            expected_reruns=expected.reruns,
+            expected_science_hash=expected.science_hash,
             worker_id=worker_id,
             attempt_id=result.attempt_id,
         )
@@ -349,7 +498,10 @@ class SyncResultApplicationService:
         except Exception:
             return False
 
-        if str(current_status).lower() in {"running", "claimed", "selected", "pending"}:
+        if (
+            is_active_assignment_status(current_status)
+            or str(current_status).lower() == MoleculeStatus.PENDING.value.lower()
+        ):
             return False
 
         expected_status = entry.expected_final_status
@@ -421,9 +573,10 @@ class SyncResultApplicationService:
                 science_hash=build_result_fingerprint(science),
             )
         if force_skip:
+            # Alternative A: force_skip não incrementa reruns.
             return _ExpectedEffect(
                 final_status=MoleculeStatus.SKIP.value,
-                reruns=previous_reruns + 1,
+                reruns=previous_reruns,
                 science_hash=None,
             )
         max_reruns = self._state_manager.max_reruns

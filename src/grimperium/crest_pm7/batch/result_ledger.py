@@ -296,6 +296,23 @@ class ResultLedger:
                 if entry.txn_status is JournalTxnStatus.PREPARED
             ]
 
+    def find_committed_by_attempt(self, attempt_id: str) -> JournalEntry | None:
+        """Return the committed journal entry for ``attempt_id``, if any.
+
+        Scans the in-memory journal (loaded from durable JSONL). One attempt
+        may have at most one terminal committed result.
+        """
+        if not attempt_id:
+            return None
+        with self._lock:
+            for entry in self._journal.values():
+                if (
+                    entry.txn_status is JournalTxnStatus.COMMITTED
+                    and entry.attempt_id == attempt_id
+                ):
+                    return entry
+        return None
+
     def recover_incomplete(
         self,
         *,

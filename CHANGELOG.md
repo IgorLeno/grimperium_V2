@@ -8,6 +8,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- **Final lease and recovery edge cases** (2026-07-12)
+  - `BatchStateManager.reset_all_or_nothing` clears the full lease via
+    `_clear_assignment_fields` (including `attempt_id`); late results after AoN
+    invalidation are rejected as `stale_attempt`.
+  - One `attempt_id` yields at most one terminal result; a new `result_id` after
+    OK/Skip without a matching lease returns `stale_attempt` (same `result_id`
+    remains `duplicate`).
+  - PREPARED/FAILED resume requires journal/payload/state lease triple match;
+    active statuses use `MoleculeStatus` (`Assigned`/`Running`/`Selected`).
+  - `force_skip` is administrative: status → Skip with **unchanged** `reruns`
+    (`expected_reruns = previous_reruns`); crash recovery commits without
+    re-applying.
+  - Worker `conflict`/`stale_attempt` are archived to a durable dead-letter JSONL
+    before leaving the offline queue; dead-letter write failure keeps the item.
+  - `PUT /heartbeat/{mol_id}` validates owner `worker_id` and `attempt_id`;
+    legacy bodies without `attempt_id` are rejected when an active lease exists.
+  - `BatchView` writes scientific outputs under `runs/<run_id>/` (portable
+    relative manifest paths), matching DatabasesView.
+  - WorkerRegistry metrics remain best-effort after commit.
+  - Verification: integration scenarios A–F plus domain suites; full quality
+    gates before commit.
 - **Transactional concurrency closure** (2026-07-12)
   - `ResultLedger` reserves `result_id` from the first `prepare`: mismatched
     fingerprints while `prepared`/`failed` conflict; same fingerprint resumes

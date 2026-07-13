@@ -207,8 +207,101 @@ class TestHeartbeat:
         assert mol_id is not None
         attempt_id = r.json()["attempt_id"]
         assert attempt_id is not None
-        hb = await client.put(f"/heartbeat/{mol_id}", json={"worker_id": "w1"})
+        hb = await client.put(
+            f"/heartbeat/{mol_id}",
+            json={"worker_id": "w1", "attempt_id": attempt_id},
+        )
         assert hb.status_code == 200
+
+    async def test_heartbeat_correct_updates_last_seen(
+        self, client: AsyncClient, server_config: ServerConfig
+    ) -> None:
+        from datetime import datetime, timedelta, timezone
+
+        await client.post("/register", json={"worker_id": "w1", "hostname": "lab-01"})
+        await client.post("/dispatch/start")
+        r = await client.post("/claim", json={"worker_id": "w1"})
+        mol_id = r.json()["mol_id"]
+        attempt_id = r.json()["attempt_id"]
+        assert mol_id is not None and attempt_id is not None
+
+        app = client._transport.app  # type: ignore[attr-defined]
+        old = datetime.now(timezone.utc) - timedelta(seconds=120)
+        hostname, _ = app.state.heartbeat_registry["w1"]
+        app.state.heartbeat_registry["w1"] = (hostname, old)
+
+        hb = await client.put(
+            f"/heartbeat/{mol_id}",
+            json={"worker_id": "w1", "attempt_id": attempt_id},
+        )
+        assert hb.status_code == 200
+        _, last_seen = app.state.heartbeat_registry["w1"]
+        assert last_seen > old
+
+    async def test_heartbeat_wrong_worker_returns_409(
+        self, client: AsyncClient
+    ) -> None:
+        await client.post("/register", json={"worker_id": "w1", "hostname": "lab-01"})
+        await client.post("/register", json={"worker_id": "w2", "hostname": "lab-02"})
+        await client.post("/dispatch/start")
+        r = await client.post("/claim", json={"worker_id": "w1"})
+        mol_id = r.json()["mol_id"]
+        attempt_id = r.json()["attempt_id"]
+        assert mol_id is not None and attempt_id is not None
+        hb = await client.put(
+            f"/heartbeat/{mol_id}",
+            json={"worker_id": "w2", "attempt_id": attempt_id},
+        )
+        assert hb.status_code == 409
+
+    async def test_heartbeat_old_attempt_returns_409(self, client: AsyncClient) -> None:
+        await client.post("/register", json={"worker_id": "w1", "hostname": "lab-01"})
+        await client.post("/dispatch/start")
+        r = await client.post("/claim", json={"worker_id": "w1"})
+        mol_id = r.json()["mol_id"]
+        assert mol_id is not None
+        hb = await client.put(
+            f"/heartbeat/{mol_id}",
+            json={"worker_id": "w1", "attempt_id": "stale-attempt-id"},
+        )
+        assert hb.status_code == 409
+
+    async def test_heartbeat_attempt_a_does_not_prolong_b(
+        self, client: AsyncClient
+    ) -> None:
+        from datetime import datetime, timedelta, timezone
+
+        await client.post("/register", json={"worker_id": "w1", "hostname": "lab-01"})
+        await client.post("/dispatch/start")
+        r = await client.post("/claim", json={"worker_id": "w1"})
+        mol_id = r.json()["mol_id"]
+        attempt_b = r.json()["attempt_id"]
+        assert mol_id is not None and attempt_b is not None
+
+        app = client._transport.app  # type: ignore[attr-defined]
+        old = datetime.now(timezone.utc) - timedelta(seconds=120)
+        hostname, _ = app.state.heartbeat_registry["w1"]
+        app.state.heartbeat_registry["w1"] = (hostname, old)
+
+        hb = await client.put(
+            f"/heartbeat/{mol_id}",
+            json={"worker_id": "w1", "attempt_id": "attempt-A"},
+        )
+        assert hb.status_code == 409
+        _, last_seen = app.state.heartbeat_registry["w1"]
+        assert last_seen == old
+
+    async def test_heartbeat_legacy_without_attempt_rejected_when_lease_active(
+        self, client: AsyncClient
+    ) -> None:
+        await client.post("/register", json={"worker_id": "w1", "hostname": "lab-01"})
+        await client.post("/dispatch/start")
+        r = await client.post("/claim", json={"worker_id": "w1"})
+        mol_id = r.json()["mol_id"]
+        assert mol_id is not None
+        assert r.json()["attempt_id"] is not None
+        hb = await client.put(f"/heartbeat/{mol_id}", json={"worker_id": "w1"})
+        assert hb.status_code == 409
 
     async def test_heartbeat_unknown_mol_returns_404(self, client: AsyncClient) -> None:
         await client.post("/register", json={"worker_id": "w1", "hostname": "lab-01"})

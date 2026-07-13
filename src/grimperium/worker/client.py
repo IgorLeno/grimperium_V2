@@ -118,10 +118,13 @@ class WorkerClient:
         attempt_id = data.get("attempt_id")
         return mol_id, smiles, str(attempt_id) if attempt_id else None
 
-    def heartbeat(self, mol_id: str) -> None:
+    def heartbeat(self, mol_id: str, attempt_id: str | None = None) -> None:
+        body: dict[str, Any] = {"worker_id": self._config.worker_id}
+        if attempt_id is not None:
+            body["attempt_id"] = attempt_id
         r = self._http.put(
             f"/heartbeat/{mol_id}",
-            json={"worker_id": self._config.worker_id},
+            json=body,
         )
         if r.status_code not in (200, 404):
             raise ServerError(f"PUT /heartbeat/{mol_id} → {r.status_code}: {r.text}")

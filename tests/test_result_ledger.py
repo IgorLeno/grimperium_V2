@@ -3,6 +3,7 @@ from pathlib import Path
 import pytest
 
 from grimperium.crest_pm7.batch.result_ledger import (
+    JournalTxnStatus,
     LedgerStatus,
     ResultLedger,
 )
@@ -115,3 +116,47 @@ def test_prepare_rejects_fingerprint_mismatch_while_prepared(tmp_path: Path) -> 
             fingerprint="fingerprint-b",
             desired_success=True,
         )
+
+
+def test_find_committed_by_attempt_returns_committed_entry(tmp_path: Path) -> None:
+    ledger = ResultLedger(tmp_path / "result_ledger.jsonl")
+    ledger.prepare(
+        result_id="result-1",
+        mol_id="mol_001",
+        fingerprint="fingerprint-a",
+        desired_success=True,
+        attempt_id="attempt-a",
+    )
+    ledger.commit("result-1", final_status="OK")
+
+    found = ledger.find_committed_by_attempt("attempt-a")
+
+    assert found is not None
+    assert found.result_id == "result-1"
+    assert found.txn_status is JournalTxnStatus.COMMITTED
+    assert found.attempt_id == "attempt-a"
+
+
+def test_find_committed_by_attempt_ignores_prepared_and_other_attempts(
+    tmp_path: Path,
+) -> None:
+    ledger = ResultLedger(tmp_path / "result_ledger.jsonl")
+    ledger.prepare(
+        result_id="result-prepared",
+        mol_id="mol_001",
+        fingerprint="fingerprint-a",
+        desired_success=True,
+        attempt_id="attempt-a",
+    )
+    ledger.prepare(
+        result_id="result-other",
+        mol_id="mol_002",
+        fingerprint="fingerprint-b",
+        desired_success=True,
+        attempt_id="attempt-b",
+    )
+    ledger.commit("result-other", final_status="OK")
+
+    assert ledger.find_committed_by_attempt("attempt-a") is None
+    assert ledger.find_committed_by_attempt("attempt-b") is not None
+    assert ledger.find_committed_by_attempt("") is None

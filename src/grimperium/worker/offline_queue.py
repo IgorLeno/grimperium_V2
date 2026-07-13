@@ -126,21 +126,121 @@ class OfflineResultQueue:
             for entry in self._entries.values()
         ]
         content = ("\n".join(lines) + "\n") if lines else ""
-        temp_path: Path | None = None
-        try:
-            with tempfile.NamedTemporaryFile(
-                "w",
-                encoding="utf-8",
-                dir=self.path.parent,
-                prefix=f".{self.path.name}.",
-                suffix=".tmp",
-                delete=False,
-            ) as handle:
-                temp_path = Path(handle.name)
-                handle.write(content)
-                handle.flush()
-                os.fsync(handle.fileno())
-            os.replace(temp_path, self.path)
-        finally:
-            if temp_path is not None and temp_path.exists():
-                temp_path.unlink(missing_ok=True)
+        _atomic_write_text(self.path, content)
+
+
+def dead_letter_path_for(queue_path: Path) -> Path:
+    """Derive the durable dead-letter sibling path from the offline queue path."""
+    path = Path(queue_path)
+    return path.with_name(f"{path.stem}_dead_letter{path.suffix}")
+
+
+def _atomic_write_text(path: Path, content: str) -> None:
+    """Persist ``content`` atomically via NamedTemporaryFile + fsync + replace."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temp_path: Path | None = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            "w",
+            encoding="utf-8",
+            dir=path.parent,
+            prefix=f".{path.name}.",
+            suffix=".tmp",
+            delete=False,
+        ) as handle:
+            temp_path = Path(handle.name)
+            handle.write(content)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temp_path, path)
+    finally:
+        if temp_path is not None and temp_path.exists():
+            temp_path.unlink(missing_ok=True)
+
+
+@dataclass(frozen=True)
+class DeadLetterRecord:
+    """Registro durável de rejeição terminal (conflict / stale_attempt)."""
+
+    result_id: str
+    mol_id: str
+    attempt_id: str | None
+    original_payload: dict[str, Any]
+    returned_status: str
+    detail: str | None
+    worker_id: str
+    rejected_at: str
+    rejection_origin: str
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "result_id": self.result_id,
+            "mol_id": self.mol_id,
+            "attempt_id": self.attempt_id,
+            "original_payload": self.original_payload,
+            "returned_status": self.returned_status,
+            "detail": self.detail,
+            "worker_id": self.worker_id,
+            "rejected_at": self.rejected_at,
+            "rejection_origin": self.rejection_origin,
+        }
+
+    @classmethod
+    def from_dict(cls, payload: dict[str, Any]) -> DeadLetterRecord:
+        original = payload.get("original_payload")
+        return cls(
+            result_id=str(payload["result_id"]),
+            mol_id=str(payload["mol_id"]),
+            attempt_id=(
+                str(payload["attempt_id"])
+                if payload.get("attempt_id") is not None
+                else None
+            ),
+            original_payload=dict(original) if isinstance(original, dict) else {},
+            returned_status=str(payload["returned_status"]),
+            detail=(
+                str(payload["detail"]) if payload.get("detail") is not None else None
+            ),
+            worker_id=str(payload["worker_id"]),
+            rejected_at=str(payload["rejected_at"]),
+            rejection_origin=str(payload["rejection_origin"]),
+        )
+
+
+class DeadLetterQueue:
+    """JSONL append-only para rejeições terminais do sync (auditoria local)."""
+
+    def __init__(self, path: Path) -> None:
+        self.path = Path(path)
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        self._entries: list[DeadLetterRecord] = []
+        self._load()
+
+    def append(self, record: DeadLetterRecord) -> None:
+        """Gravar um registro de dead-letter de forma atômica."""
+        self._entries.append(record)
+        self._persist()
+
+    def entries(self) -> list[DeadLetterRecord]:
+        return list(self._entries)
+
+    def _load(self) -> None:
+        if not self.path.exists():
+            return
+        loaded: list[DeadLetterRecord] = []
+        for line in self.path.read_text(encoding="utf-8").splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            payload = json.loads(line)
+            if isinstance(payload, dict) and payload.get("result_id"):
+                loaded.append(DeadLetterRecord.from_dict(payload))
+        self._entries = loaded
+
+    def _persist(self) -> None:
+        lines = [
+            json.dumps(entry.to_dict(), ensure_ascii=False, sort_keys=True)
+            for entry in self._entries
+        ]
+        content = ("\n".join(lines) + "\n") if lines else ""
+        _atomic_write_text(self.path, content)

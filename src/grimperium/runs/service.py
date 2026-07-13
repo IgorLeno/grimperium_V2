@@ -33,6 +33,10 @@ class RunService:
         """Build a service from ``GRIMPERIUM_RUNS_DIR`` or cwd/runs."""
         return cls(Path(os.environ.get(RUNS_DIR_ENV, "runs")))
 
+    def run_dir(self, run_id: str) -> Path:
+        """Return the filesystem directory for one run under ``runs_root``."""
+        return self.runs_root / run_id
+
     def create_run(
         self,
         *,

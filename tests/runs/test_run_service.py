@@ -14,6 +14,14 @@ def _service(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> RunService:
     return RunService.from_environment()
 
 
+def test_run_dir_returns_runs_root_child(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    service = _service(tmp_path, monkeypatch)
+    assert service.run_dir("run_abc") == service.runs_root / "run_abc"
+
+
 def test_run_service_creates_starts_and_completes_run(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

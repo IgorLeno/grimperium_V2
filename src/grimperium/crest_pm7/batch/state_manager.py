@@ -598,9 +598,7 @@ class BatchStateManager:
             df.at[row_idx, "mopac_status"] = MOPAC_STATUS_NOT_ATTEMPTED
             df.at[row_idx, "assigned_crest_timeout"] = ""
             df.at[row_idx, "assigned_mopac_timeout"] = ""
-            df.at[row_idx, "assigned_worker"] = ""
-            df.at[row_idx, "worker_status"] = WorkerStatus.UNASSIGNED.value
-            df.at[row_idx, "assigned_at"] = ""
+            self._clear_assignment_fields(row_idx)
             reset_count += 1
 
         self._save_csv()

@@ -26,6 +26,7 @@ class AssignPayload(BaseModel):
 
 class HeartbeatRequest(BaseModel):
     worker_id: str
+    attempt_id: str | None = None
 
 
 class ReportSuccessRequest(BaseModel):

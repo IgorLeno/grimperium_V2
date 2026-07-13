@@ -1,6 +1,8 @@
 """Tests for worker/runner.py — WorkerRunner main processing loop."""
 
+import json
 import tempfile
+import time
 from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock, patch
@@ -9,6 +11,7 @@ import pandas as pd
 
 from grimperium.crest_pm7.batch.csv_manager import BatchCSVManager
 from grimperium.worker.client import WorkerClient
+from grimperium.worker.offline_queue import dead_letter_path_for
 from grimperium.worker.runner import WorkerConfig, WorkerRunner
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -552,3 +555,336 @@ class TestPm7ResultToUpdate:
         update = _pm7result_to_update(result, "w1", 45.0, 15.0)
         assert update.get("assigned_crest_timeout") == 45.0
         assert update.get("assigned_mopac_timeout") == 15.0
+
+
+# ── Dead-letter (conflict / stale_attempt) ───────────────────────────────────
+
+
+def _read_dead_letter(queue_path: Path) -> list[dict[str, Any]]:
+    path = dead_letter_path_for(queue_path)
+    if not path.exists():
+        return []
+    records: list[dict[str, Any]] = []
+    for line in path.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if line:
+            records.append(json.loads(line))
+    return records
+
+
+class TestDeadLetterFlush:
+    def test_conflict_writes_dead_letter_with_full_payload(
+        self, tmp_path: Path
+    ) -> None:
+        queue_path = tmp_path / "w1_offline_results.jsonl"
+        client = MagicMock(spec=WorkerClient)
+        runner = WorkerRunner(
+            _make_config(offline_queue_path=str(queue_path), worker_id="w1"),
+            pipeline=_mock_pipeline(),
+            client=client,
+        )
+        entry = runner._offline_queue.enqueue(
+            mol_id="m1",
+            success=True,
+            result_update={"H298_pm7": -1.0},
+            result_id="rid-conflict",
+            attempt_id="att-1",
+            completed_at="2026-07-12T10:00:00Z",
+        )
+        original = entry.to_sync_dict()
+
+        def sync_side_effect(results: list[dict[str, Any]]) -> dict[str, Any]:
+            return {
+                "accepted": 0,
+                "rejected": 1,
+                "items": [
+                    {
+                        "result_id": "rid-conflict",
+                        "mol_id": "m1",
+                        "status": "conflict",
+                        "detail": "fingerprint mismatch",
+                    }
+                ],
+            }
+
+        client.sync_results.side_effect = sync_side_effect
+        runner.flush_offline_queue()
+
+        assert runner._offline_queue.pending() == []
+        dl = _read_dead_letter(queue_path)
+        assert len(dl) == 1
+        rec = dl[0]
+        assert rec["result_id"] == "rid-conflict"
+        assert rec["mol_id"] == "m1"
+        assert rec["attempt_id"] == "att-1"
+        assert rec["original_payload"] == original
+        assert rec["returned_status"] == "conflict"
+        assert rec["detail"] == "fingerprint mismatch"
+        assert rec["worker_id"] == "w1"
+        assert rec["rejected_at"]
+        assert rec["rejection_origin"]
+
+    def test_stale_attempt_writes_dead_letter(self, tmp_path: Path) -> None:
+        queue_path = tmp_path / "w1_offline_results.jsonl"
+        client = MagicMock(spec=WorkerClient)
+        runner = WorkerRunner(
+            _make_config(offline_queue_path=str(queue_path), worker_id="w1"),
+            pipeline=_mock_pipeline(),
+            client=client,
+        )
+        runner._offline_queue.enqueue(
+            mol_id="m1",
+            success=False,
+            error="late",
+            result_id="rid-stale",
+            attempt_id="att-old",
+            completed_at="2026-07-12T10:00:00Z",
+        )
+        client.sync_results.side_effect = lambda results: {
+            "accepted": 0,
+            "rejected": 1,
+            "items": [
+                {
+                    "result_id": "rid-stale",
+                    "mol_id": "m1",
+                    "status": "stale_attempt",
+                    "detail": "lease reclaimed",
+                }
+            ],
+        }
+        runner.flush_offline_queue()
+        assert runner._offline_queue.pending() == []
+        dl = _read_dead_letter(queue_path)
+        assert len(dl) == 1
+        assert dl[0]["returned_status"] == "stale_attempt"
+        assert dl[0]["result_id"] == "rid-stale"
+
+    def test_restart_keeps_dead_letter(self, tmp_path: Path) -> None:
+        queue_path = tmp_path / "w1_offline_results.jsonl"
+        client = MagicMock(spec=WorkerClient)
+        runner = WorkerRunner(
+            _make_config(offline_queue_path=str(queue_path), worker_id="w1"),
+            pipeline=_mock_pipeline(),
+            client=client,
+        )
+        runner._offline_queue.enqueue(
+            mol_id="m1",
+            success=True,
+            result_update={},
+            result_id="rid-1",
+            attempt_id="att-1",
+            completed_at="2026-07-12T10:00:00Z",
+        )
+        client.sync_results.side_effect = lambda results: {
+            "accepted": 0,
+            "rejected": 1,
+            "items": [
+                {
+                    "result_id": "rid-1",
+                    "mol_id": "m1",
+                    "status": "conflict",
+                    "detail": "x",
+                }
+            ],
+        }
+        runner.flush_offline_queue()
+        assert len(_read_dead_letter(queue_path)) == 1
+
+        restarted = WorkerRunner(
+            _make_config(offline_queue_path=str(queue_path), worker_id="w1"),
+            pipeline=_mock_pipeline(),
+            client=client,
+        )
+        assert restarted._offline_queue.pending() == []
+        assert len(_read_dead_letter(queue_path)) == 1
+
+    def test_dead_letter_write_failure_keeps_item_in_queue(
+        self, tmp_path: Path
+    ) -> None:
+        queue_path = tmp_path / "w1_offline_results.jsonl"
+        client = MagicMock(spec=WorkerClient)
+        runner = WorkerRunner(
+            _make_config(offline_queue_path=str(queue_path), worker_id="w1"),
+            pipeline=_mock_pipeline(),
+            client=client,
+        )
+        runner._offline_queue.enqueue(
+            mol_id="m1",
+            success=True,
+            result_update={},
+            result_id="rid-fail-dl",
+            attempt_id="att-1",
+            completed_at="2026-07-12T10:00:00Z",
+        )
+        client.sync_results.side_effect = lambda results: {
+            "accepted": 0,
+            "rejected": 1,
+            "items": [
+                {
+                    "result_id": "rid-fail-dl",
+                    "mol_id": "m1",
+                    "status": "conflict",
+                    "detail": "x",
+                }
+            ],
+        }
+        with patch.object(
+            runner._dead_letter,
+            "append",
+            side_effect=OSError("disk full"),
+        ):
+            runner.flush_offline_queue()
+        pending = runner._offline_queue.pending()
+        assert len(pending) == 1
+        assert pending[0].result_id == "rid-fail-dl"
+        assert _read_dead_letter(queue_path) == []
+
+    def test_applied_and_duplicate_not_in_dead_letter(self, tmp_path: Path) -> None:
+        queue_path = tmp_path / "w1_offline_results.jsonl"
+        client = MagicMock(spec=WorkerClient)
+        runner = WorkerRunner(
+            _make_config(offline_queue_path=str(queue_path), worker_id="w1"),
+            pipeline=_mock_pipeline(),
+            client=client,
+        )
+        runner._offline_queue.enqueue(
+            mol_id="m1",
+            success=True,
+            result_update={},
+            result_id="rid-applied",
+            completed_at="2026-07-12T10:00:00Z",
+        )
+        runner._offline_queue.enqueue(
+            mol_id="m2",
+            success=True,
+            result_update={},
+            result_id="rid-dup",
+            completed_at="2026-07-12T10:00:00Z",
+        )
+        client.sync_results.side_effect = lambda results: {
+            "accepted": 2,
+            "rejected": 0,
+            "items": [
+                {"result_id": "rid-applied", "mol_id": "m1", "status": "applied"},
+                {"result_id": "rid-dup", "mol_id": "m2", "status": "duplicate"},
+            ],
+        }
+        runner.flush_offline_queue()
+        assert runner._offline_queue.pending() == []
+        assert _read_dead_letter(queue_path) == []
+
+    def test_poison_does_not_block_others(self, tmp_path: Path) -> None:
+        queue_path = tmp_path / "w1_offline_results.jsonl"
+        client = MagicMock(spec=WorkerClient)
+        runner = WorkerRunner(
+            _make_config(offline_queue_path=str(queue_path), worker_id="w1"),
+            pipeline=_mock_pipeline(),
+            client=client,
+        )
+        runner._offline_queue.enqueue(
+            mol_id="m-poison",
+            success=True,
+            result_update={"x": 1},
+            result_id="rid-poison",
+            attempt_id="att-p",
+            completed_at="2026-07-12T10:00:00Z",
+        )
+        runner._offline_queue.enqueue(
+            mol_id="m-ok",
+            success=True,
+            result_update={"x": 2},
+            result_id="rid-ok",
+            attempt_id="att-ok",
+            completed_at="2026-07-12T10:00:01Z",
+        )
+        client.sync_results.side_effect = lambda results: {
+            "accepted": 1,
+            "rejected": 1,
+            "items": [
+                {
+                    "result_id": "rid-poison",
+                    "mol_id": "m-poison",
+                    "status": "conflict",
+                    "detail": "poison",
+                },
+                {"result_id": "rid-ok", "mol_id": "m-ok", "status": "applied"},
+            ],
+        }
+        runner.flush_offline_queue()
+        assert runner._offline_queue.pending() == []
+        dl = _read_dead_letter(queue_path)
+        assert len(dl) == 1
+        assert dl[0]["result_id"] == "rid-poison"
+
+    def test_temporary_rejected_keeps_item_in_queue(self, tmp_path: Path) -> None:
+        queue_path = tmp_path / "w1_offline_results.jsonl"
+        client = MagicMock(spec=WorkerClient)
+        runner = WorkerRunner(
+            _make_config(offline_queue_path=str(queue_path), worker_id="w1"),
+            pipeline=_mock_pipeline(),
+            client=client,
+        )
+        runner._offline_queue.enqueue(
+            mol_id="m1",
+            success=True,
+            result_update={},
+            result_id="rid-rej",
+            completed_at="2026-07-12T10:00:00Z",
+        )
+        client.sync_results.side_effect = lambda results: {
+            "accepted": 0,
+            "rejected": 1,
+            "items": [
+                {
+                    "result_id": "rid-rej",
+                    "mol_id": "m1",
+                    "status": "rejected",
+                    "detail": "temporary",
+                }
+            ],
+        }
+        runner.flush_offline_queue()
+        pending = runner._offline_queue.pending()
+        assert len(pending) == 1
+        assert pending[0].result_id == "rid-rej"
+        assert _read_dead_letter(queue_path) == []
+
+
+class TestHeartbeatAttemptWiring:
+    @patch(
+        "grimperium.worker.runner._pm7result_to_update",
+        return_value={"H298_pm7": -42.0},
+    )
+    def test_runner_heartbeat_passes_attempt_id(self, _mock_update: MagicMock) -> None:
+        import threading
+
+        client = _mock_client(claim_returns=("m1", "CCO", "att-hb-1"))
+        pipeline = _mock_pipeline(success=True)
+        hb_seen: list[tuple[Any, ...]] = []
+        release = threading.Event()
+
+        def slow_process(mol_id: str, smiles: str) -> MagicMock:
+            release.wait(timeout=2.0)
+            return pipeline.process_molecule.return_value
+
+        pipeline.process_molecule.side_effect = slow_process
+
+        def capture_hb(mol_id: str, attempt_id: str | None = None) -> None:
+            hb_seen.append((mol_id, attempt_id))
+
+        client.heartbeat.side_effect = capture_hb
+        runner = WorkerRunner(
+            _make_config(heartbeat_interval_s=0.05),
+            pipeline=pipeline,
+            client=client,
+        )
+        thread = threading.Thread(target=runner.run_one, daemon=True)
+        thread.start()
+        for _ in range(50):
+            if hb_seen:
+                break
+            time.sleep(0.05)
+        release.set()
+        thread.join(timeout=5.0)
+        assert hb_seen, "expected at least one heartbeat"
+        assert hb_seen[0] == ("m1", "att-hb-1")
