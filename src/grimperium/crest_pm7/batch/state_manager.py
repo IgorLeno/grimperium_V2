@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import threading
+import uuid
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, cast
@@ -50,6 +51,7 @@ class BatchStateManager:
         "assigned_worker": str,
         "worker_status": str,
         "assigned_at": str,
+        "attempt_id": str,
         "method_id": str,
         "method_version": str,
         "method_definition_snapshot": str,
@@ -76,14 +78,15 @@ class BatchStateManager:
         self.df: pd.DataFrame | None = None
         self._claim_lock = threading.Lock()
 
-    def claim_single_molecule(self, worker_id: str) -> tuple[str, str] | None:
+    def claim_single_molecule(self, worker_id: str) -> tuple[str, str, str] | None:
         """Atomically mark one pending or rerun molecule as assigned to a worker.
 
         Args:
             worker_id: Identifier of the worker claiming the molecule.
 
         Returns:
-            ``(mol_id, smiles)`` if a molecule was available, else ``None``.
+            ``(mol_id, smiles, attempt_id)`` if a molecule was available, else
+            ``None``.
         """
         with self._claim_lock:
             df = self._ensure_loaded()
@@ -99,10 +102,12 @@ class BatchStateManager:
             idx = row.name
             mol_id = str(row["mol_id"])
             smiles = str(row["smiles"])
-            self._assign_index(cast(int, idx), worker_id)
+            attempt_id = self._assign_index(cast(int, idx), worker_id)
             self._save_csv()
-            LOG.debug("Assigned %s to worker %s", mol_id, worker_id)
-            return (mol_id, smiles)
+            LOG.debug(
+                "Assigned %s to worker %s (attempt=%s)", mol_id, worker_id, attempt_id
+            )
+            return (mol_id, smiles, attempt_id)
 
     def distribute_molecules(
         self, molecule_names: list[str], worker_ids: list[str]
@@ -632,13 +637,16 @@ class BatchStateManager:
             raise RuntimeError("No batch state has been loaded")
         atomic_to_csv(self.state_csv_path, self.df.reindex(columns=BATCH_STATE_COLUMNS))
 
-    def _assign_index(self, idx: int, worker_id: str) -> None:
-        """Assign a loaded DataFrame row to a worker."""
+    def _assign_index(self, idx: int, worker_id: str) -> str:
+        """Assign a loaded DataFrame row to a worker and return the attempt_id."""
         df = self._ensure_loaded()
+        attempt_id = str(uuid.uuid4())
         df.at[idx, "status"] = MoleculeStatus.ASSIGNED.value
         df.at[idx, "assigned_worker"] = worker_id
         df.at[idx, "worker_status"] = WorkerStatus.ONLINE.value
         df.at[idx, "assigned_at"] = datetime.now(timezone.utc).isoformat()
+        df.at[idx, "attempt_id"] = attempt_id
+        return attempt_id
 
     def _clear_assignment(self, idx: int) -> None:
         """Clear assignment fields and return a row to pending state."""
@@ -652,6 +660,18 @@ class BatchStateManager:
         df.at[idx, "assigned_worker"] = ""
         df.at[idx, "worker_status"] = WorkerStatus.UNASSIGNED.value
         df.at[idx, "assigned_at"] = ""
+        df.at[idx, "attempt_id"] = ""
+
+    def get_attempt_id(self, mol_id: str) -> str | None:
+        """Return the current assignment attempt_id, or None if unset."""
+        df = self._ensure_loaded()
+        try:
+            idx = self._find_molecule_index(df, mol_id)
+        except KeyError:
+            return None
+        raw = df.at[idx, "attempt_id"]
+        value = str(raw).strip() if raw is not None else ""
+        return value or None
 
     def _completion_statuses(self) -> set[str]:
         """Statuses that should not retain worker assignment fields."""

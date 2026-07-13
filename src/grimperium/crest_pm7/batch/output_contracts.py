@@ -37,6 +37,7 @@ BATCH_STATE_COLUMNS = [
     "assigned_worker",
     "worker_status",
     "assigned_at",
+    "attempt_id",
     "method_id",
     "method_version",
     "method_definition_snapshot",

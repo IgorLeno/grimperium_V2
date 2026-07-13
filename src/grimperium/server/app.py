@@ -153,6 +153,7 @@ def _report_as_sync_result(
     error: str | None,
     result_id: str | None,
     completed_at: str | None,
+    attempt_id: str | None = None,
 ) -> SyncResult:
     """Adaptar endpoints legados /report/* para o protocolo /sync_results."""
     stamp = completed_at or datetime.now(timezone.utc).isoformat().replace(
@@ -165,6 +166,7 @@ def _report_as_sync_result(
         result_update=result_update,
         error=error,
         completed_at=stamp,
+        attempt_id=attempt_id,
     )
 
 
@@ -293,19 +295,19 @@ def _register_routes(app: FastAPI) -> None:
         worker_reg: WorkerRegistry = request.app.state.worker_registry
 
         if not request.app.state.dispatch_enabled:
-            return ClaimResponse(mol_id=None, smiles=None)
+            return ClaimResponse(mol_id=None, smiles=None, attempt_id=None)
 
         async with lock:
             result = await asyncio.to_thread(sm.claim_single_molecule, req.worker_id)
 
         if result is None:
-            return ClaimResponse(mol_id=None, smiles=None)
+            return ClaimResponse(mol_id=None, smiles=None, attempt_id=None)
 
-        mol_id, smiles = result
+        mol_id, smiles, attempt_id = result
         running_molecules[mol_id] = req.worker_id
         worker_reg.set_current_mol(req.worker_id, mol_id)
-        LOG.info("Worker %r claimed %s", req.worker_id, mol_id)
-        return ClaimResponse(mol_id=mol_id, smiles=smiles)
+        LOG.info("Worker %r claimed %s (attempt=%s)", req.worker_id, mol_id, attempt_id)
+        return ClaimResponse(mol_id=mol_id, smiles=smiles, attempt_id=attempt_id)
 
     @app.put("/heartbeat/{mol_id}")
     async def heartbeat(
@@ -336,6 +338,7 @@ def _register_routes(app: FastAPI) -> None:
             error=None,
             result_id=req.result_id,
             completed_at=req.completed_at,
+            attempt_id=req.attempt_id,
         )
         try:
             async with lock:
@@ -351,7 +354,10 @@ def _register_routes(app: FastAPI) -> None:
         except Exception as exc:
             raise HTTPException(status_code=500, detail=str(exc)) from exc
 
-        if outcome.item.status is SyncItemOutcome.REJECTED:
+        if outcome.item.status in {
+            SyncItemOutcome.REJECTED,
+            SyncItemOutcome.STALE_ATTEMPT,
+        }:
             raise HTTPException(
                 status_code=409,
                 detail=outcome.item.detail or "result rejected",
@@ -376,6 +382,7 @@ def _register_routes(app: FastAPI) -> None:
             error=req.error,
             result_id=req.result_id,
             completed_at=req.completed_at,
+            attempt_id=req.attempt_id,
         )
         try:
             async with lock:
@@ -399,7 +406,10 @@ def _register_routes(app: FastAPI) -> None:
         except Exception as exc:
             raise HTTPException(status_code=500, detail=str(exc)) from exc
 
-        if outcome.item.status is SyncItemOutcome.REJECTED:
+        if outcome.item.status in {
+            SyncItemOutcome.REJECTED,
+            SyncItemOutcome.STALE_ATTEMPT,
+        }:
             raise HTTPException(
                 status_code=409,
                 detail=outcome.item.detail or "result rejected",
@@ -438,6 +448,7 @@ def _register_routes(app: FastAPI) -> None:
                 elif outcome.item.status in {
                     SyncItemOutcome.REJECTED,
                     SyncItemOutcome.CONFLICT,
+                    SyncItemOutcome.STALE_ATTEMPT,
                 }:
                     rejected += 1
             except SyncConflictError as exc:
@@ -450,12 +461,7 @@ def _register_routes(app: FastAPI) -> None:
                         detail=str(exc),
                     )
                 )
-                # Compat: lote com conflito explícito ainda retorna 409
-                # quando o único (ou qualquer) item conflita e não há applied.
-                raise HTTPException(
-                    status_code=409,
-                    detail=f"Conflicting sync result_id: {conflict_id}",
-                ) from exc
+                rejected += 1
             except Exception as exc:
                 LOG.warning("sync_results rejected %s: %s", result.mol_id, exc)
                 try:

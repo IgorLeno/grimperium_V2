@@ -8,6 +8,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- **Transactional concurrency closure** (2026-07-12)
+  - `ResultLedger` reserves `result_id` from the first `prepare`: mismatched
+    fingerprints while `prepared`/`failed` conflict; same fingerprint resumes
+    or retries.
+  - `/claim` returns `attempt_id` persisted in `batch_state.csv`; delayed results
+    from prior assignments are rejected as `stale_attempt` without clearing the
+    current lease.
+  - `POST /sync_results` always returns HTTP 200 with per-item statuses
+    (including partial conflicts); workers drop terminal `conflict` /
+    `stale_attempt` queue entries so poison items cannot block the rest.
+  - `RunService` rejects empty `molecule_count <= 0` completions; legacy
+    `BatchView` always records `crest_pm7` provenance; registry metrics after
+    commit remain best-effort in-memory observability.
+  - Verification: targeted pytest (303 related tests), black/ruff on touched
+    paths, mypy `--strict` on changed modules.
 - **Transactional contracts and run identity finalization** (2026-07-12)
   - Worker online and offline delivery share one idempotent protocol via
     `POST /sync_results` (`SyncResultApplicationService`); `/report/*` are

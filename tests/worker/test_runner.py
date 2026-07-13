@@ -52,7 +52,7 @@ def _echo_sync_results(results: list[dict[str, Any]]) -> dict[str, Any]:
 
 
 def _mock_client(
-    claim_returns: tuple[str, str] | None = None,
+    claim_returns: tuple[str, str, str | None] | None = None,
 ) -> MagicMock:
     client = MagicMock(spec=WorkerClient)
     client.claim.return_value = claim_returns
@@ -105,7 +105,7 @@ class TestRunOne:
         return_value={"H298_pm7": -42.0},
     )
     def test_returns_true_on_success(self, _mock_update: MagicMock) -> None:
-        client = _mock_client(claim_returns=("m1", "CCO"))
+        client = _mock_client(claim_returns=("m1", "CCO", "att-1"))
         pipeline = _mock_pipeline(success=True)
         runner = WorkerRunner(_make_config(), pipeline=pipeline, client=client)
         assert runner.run_one() is True
@@ -117,7 +117,7 @@ class TestRunOne:
     def test_calls_process_molecule_with_claimed_args(
         self, _mock_update: MagicMock
     ) -> None:
-        client = _mock_client(claim_returns=("m1", "CCO"))
+        client = _mock_client(claim_returns=("m1", "CCO", "att-1"))
         pipeline = _mock_pipeline(success=True)
         runner = WorkerRunner(_make_config(), pipeline=pipeline, client=client)
         runner.run_one()
@@ -128,7 +128,7 @@ class TestRunOne:
         return_value={"H298_pm7": -42.0},
     )
     def test_syncs_success_to_server(self, _mock_update: MagicMock) -> None:
-        client = _mock_client(claim_returns=("m1", "CCO"))
+        client = _mock_client(claim_returns=("m1", "CCO", "att-1"))
         pipeline = _mock_pipeline(success=True)
         runner = WorkerRunner(_make_config(), pipeline=pipeline, client=client)
         runner.run_one()
@@ -137,7 +137,7 @@ class TestRunOne:
         client.report_failure.assert_not_called()
 
     def test_syncs_failure_when_pipeline_result_not_success(self) -> None:
-        client = _mock_client(claim_returns=("m1", "CCO"))
+        client = _mock_client(claim_returns=("m1", "CCO", "att-1"))
         pipeline = _mock_pipeline(success=False, error_msg="CREST timeout")
         runner = WorkerRunner(_make_config(), pipeline=pipeline, client=client)
         runner.run_one()
@@ -149,7 +149,7 @@ class TestRunOne:
         client.report_success.assert_not_called()
 
     def test_syncs_failure_with_fallback_message_when_no_error(self) -> None:
-        client = _mock_client(claim_returns=("m1", "CCO"))
+        client = _mock_client(claim_returns=("m1", "CCO", "att-1"))
         pipeline = _mock_pipeline(success=False, error_msg=None)
         runner = WorkerRunner(_make_config(), pipeline=pipeline, client=client)
         runner.run_one()
@@ -158,7 +158,7 @@ class TestRunOne:
         assert isinstance(payload["error"], str) and len(payload["error"]) > 0
 
     def test_syncs_failure_when_pipeline_raises(self) -> None:
-        client = _mock_client(claim_returns=("m1", "CCO"))
+        client = _mock_client(claim_returns=("m1", "CCO", "att-1"))
         pipeline = MagicMock()
         pipeline.process_molecule.side_effect = RuntimeError("MOPAC crashed")
         runner = WorkerRunner(_make_config(), pipeline=pipeline, client=client)
@@ -170,14 +170,14 @@ class TestRunOne:
 
     @patch("grimperium.worker.runner._pm7result_to_update", return_value={})
     def test_store_cleared_after_success(self, _mock_update: MagicMock) -> None:
-        client = _mock_client(claim_returns=("m1", "CCO"))
+        client = _mock_client(claim_returns=("m1", "CCO", "att-1"))
         pipeline = _mock_pipeline(success=True)
         runner = WorkerRunner(_make_config(), pipeline=pipeline, client=client)
         runner.run_one()
         assert len(runner._store) == 0
 
     def test_store_cleared_after_failure(self) -> None:
-        client = _mock_client(claim_returns=("m1", "CCO"))
+        client = _mock_client(claim_returns=("m1", "CCO", "att-1"))
         pipeline = _mock_pipeline(success=False, error_msg="err")
         runner = WorkerRunner(_make_config(), pipeline=pipeline, client=client)
         runner.run_one()
@@ -214,7 +214,7 @@ class TestRunOne:
         self, _mock_update: MagicMock
     ) -> None:
         events: list[str] = []
-        client = _mock_client(claim_returns=("m1", "CCO"))
+        client = _mock_client(claim_returns=("m1", "CCO", "att-1"))
         pipeline = _mock_pipeline(success=True)
 
         def process_molecule(_mol_id: str, _smiles: str) -> MagicMock:
@@ -244,8 +244,8 @@ class TestRun:
         client = MagicMock(spec=WorkerClient)
         client.sync_results.side_effect = _echo_sync_results
         client.claim.side_effect = [
-            ("m1", "CCO"),
-            ("m2", "CCC"),
+            ("m1", "CCO", "att-1"),
+            ("m2", "CCC", "att-2"),
             None,
             None,
             None,  # 3 empty to trigger idle stop
@@ -261,7 +261,7 @@ class TestRun:
     def test_run_respects_max_molecules(self, _mock_update: MagicMock) -> None:
         client = MagicMock(spec=WorkerClient)
         client.sync_results.side_effect = _echo_sync_results
-        client.claim.return_value = ("m1", "CCO")
+        client.claim.return_value = ("m1", "CCO", "att-1")
         pipeline = _mock_pipeline(success=True)
         runner = WorkerRunner(_make_config(), pipeline=pipeline, client=client)
         count = runner.run(max_molecules=2)
@@ -302,12 +302,12 @@ class TestRun:
 
         call_count = 0
 
-        def side_effect() -> tuple[str, str] | None:
+        def side_effect() -> tuple[str, str, str | None] | None:
             nonlocal call_count
             call_count += 1
             if call_count == 2:
                 runner.stop()
-            return ("m1", "CCO")
+            return ("m1", "CCO", "att-1")
 
         client.claim.side_effect = side_effect
         count = runner.run()
@@ -320,7 +320,7 @@ class TestRun:
 class TestConsecutiveFailureStop:
     @patch("grimperium.worker.runner._pm7result_to_update", return_value={})
     def test_counter_resets_after_success(self, _mock_update: MagicMock) -> None:
-        client = _mock_client(claim_returns=("m1", "CCO"))
+        client = _mock_client(claim_returns=("m1", "CCO", "att-1"))
         fail_pipeline = _mock_pipeline(success=False, error_msg="err")
         ok_pipeline = _mock_pipeline(success=True)
         runner = WorkerRunner(_make_config(), pipeline=fail_pipeline, client=client)
@@ -333,7 +333,7 @@ class TestConsecutiveFailureStop:
         assert runner._consecutive_failures == 0
 
     def test_counter_increments_after_pipeline_failure(self) -> None:
-        client = _mock_client(claim_returns=("m1", "CCO"))
+        client = _mock_client(claim_returns=("m1", "CCO", "att-1"))
         pipeline = _mock_pipeline(success=False, error_msg="err")
         runner = WorkerRunner(_make_config(), pipeline=pipeline, client=client)
 
@@ -344,7 +344,7 @@ class TestConsecutiveFailureStop:
         assert runner._consecutive_failures == 3
 
     def test_counter_increments_after_exception(self) -> None:
-        client = _mock_client(claim_returns=("m1", "CCO"))
+        client = _mock_client(claim_returns=("m1", "CCO", "att-1"))
         pipeline = MagicMock()
         pipeline.process_molecule.side_effect = RuntimeError("MOPAC crashed")
         runner = WorkerRunner(_make_config(), pipeline=pipeline, client=client)
@@ -370,7 +370,7 @@ class TestConsecutiveFailureStop:
     def test_run_stops_after_max_consecutive_failures(self) -> None:
         client = MagicMock(spec=WorkerClient)
         client.sync_results.side_effect = _echo_sync_results
-        client.claim.return_value = ("m1", "CCO")
+        client.claim.return_value = ("m1", "CCO", "att-1")
         pipeline = _mock_pipeline(success=False, error_msg="boom")
         cfg = _make_config(
             consecutive_failure_stop=True,
@@ -386,7 +386,7 @@ class TestConsecutiveFailureStop:
     def test_consecutive_failure_stop_false_disables_stop(self) -> None:
         client = MagicMock(spec=WorkerClient)
         client.sync_results.side_effect = _echo_sync_results
-        client.claim.return_value = ("m1", "CCO")
+        client.claim.return_value = ("m1", "CCO", "att-1")
         pipeline = _mock_pipeline(success=False, error_msg="boom")
         cfg = _make_config(
             consecutive_failure_stop=False,
@@ -405,7 +405,7 @@ class TestConsecutiveFailureStop:
     ) -> None:
         client = MagicMock(spec=WorkerClient)
         client.sync_results.side_effect = _echo_sync_results
-        client.claim.return_value = ("m1", "CCO")
+        client.claim.return_value = ("m1", "CCO", "att-1")
         cfg = _make_config(max_consecutive_failures=3)
         runner = WorkerRunner(cfg, pipeline=_mock_pipeline(), client=client)
         outcomes = [False, True, False, False, False]
@@ -435,7 +435,7 @@ class TestConsecutiveFailureStop:
         """F, S, S, S -> processed deve ser 3, nao 1."""
         client = MagicMock(spec=WorkerClient)
         client.sync_results.side_effect = _echo_sync_results
-        client.claim.return_value = ("m1", "CCO")
+        client.claim.return_value = ("m1", "CCO", "att-1")
         cfg = _make_config(max_consecutive_failures=10)
         runner = WorkerRunner(cfg, pipeline=_mock_pipeline(), client=client)
         outcomes = [False, True, True, True]

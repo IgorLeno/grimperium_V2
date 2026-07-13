@@ -196,8 +196,8 @@ class WorkerRunner:
         if claimed is None:
             return False
 
-        mol_id, smiles = claimed
-        self._store.add(mol_id, smiles)
+        mol_id, smiles, attempt_id = claimed
+        self._store.add(mol_id, smiles, attempt_id=attempt_id)
         self._update_csv(
             mol_id,
             {
@@ -308,12 +308,14 @@ class WorkerRunner:
         """Persistir na fila e tentar esvaziar imediatamente via /sync_results."""
         record = self._store.get(mol_id)
         result_id = record.result_id if record is not None else None
+        attempt_id = record.attempt_id if record is not None else None
         entry = self._offline_queue.enqueue(
             mol_id=mol_id,
             success=success,
             result_update=result_update,
             error=error,
             result_id=result_id,
+            attempt_id=attempt_id,
             completed_at=(
                 record.completed_at.isoformat().replace("+00:00", "Z")
                 if record is not None and record.completed_at is not None
@@ -344,20 +346,28 @@ class WorkerRunner:
 
         items = response.get("items")
         confirmed: set[str] = set()
+        terminal_statuses = {
+            "applied",
+            "duplicate",
+            "conflict",
+            "stale_attempt",
+        }
         if isinstance(items, list) and items:
             for item in items:
                 if not isinstance(item, dict):
                     continue
                 status = str(item.get("status", ""))
                 result_id = str(item.get("result_id", ""))
-                if result_id and status in {"applied", "duplicate"}:
+                if result_id and status in terminal_statuses:
+                    if status in {"conflict", "stale_attempt"}:
+                        LOG.error(
+                            "Terminal sync rejection for result_id=%s status=%s — "
+                            "removing from offline queue",
+                            result_id,
+                            status,
+                        )
                     confirmed.add(result_id)
                     self._offline_queue.confirm(result_id)
-                elif status == "conflict":
-                    LOG.error(
-                        "Conflict for result_id=%s — keeping in offline queue",
-                        result_id,
-                    )
         else:
             # Compat com servidores sem items: só confirmar se rejected==0.
             rejected = int(response.get("rejected", 0))

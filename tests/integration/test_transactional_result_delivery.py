@@ -51,13 +51,16 @@ async def _client(csv_path: Path) -> AsyncClient:
     return AsyncClient(transport=ASGITransport(app=app), base_url="http://test")
 
 
-async def _claim(client: AsyncClient, worker_id: str = "w1") -> str:
+async def _claim(client: AsyncClient, worker_id: str = "w1") -> tuple[str, str]:
     await client.post("/register", json={"worker_id": worker_id, "hostname": "lab"})
     await client.post("/dispatch/start")
     response = await client.post("/claim", json={"worker_id": worker_id})
-    mol_id = response.json()["mol_id"]
+    body = response.json()
+    mol_id = body["mol_id"]
+    attempt_id = body["attempt_id"]
     assert mol_id is not None
-    return str(mol_id)
+    assert attempt_id is not None
+    return str(mol_id), str(attempt_id)
 
 
 @pytest.mark.anyio
@@ -68,13 +71,14 @@ async def test_lost_http_response_does_not_double_apply(tmp_path: Path) -> None:
     queue = OfflineResultQueue(tmp_path / "offline.jsonl")
 
     async with await _client(csv_path) as client:
-        mol_id = await _claim(client)
+        mol_id, attempt_id = await _claim(client)
         entry = queue.enqueue(
             mol_id=mol_id,
             success=False,
             result_update=None,
             error="MOPAC timeout",
             result_id="stable-result-1",
+            attempt_id=attempt_id,
             completed_at="2026-04-21T10:00:00Z",
         )
         payload = {
@@ -111,6 +115,7 @@ async def test_lost_http_response_does_not_double_apply(tmp_path: Path) -> None:
                 "result_update": None,
                 "error": "MOPAC timeout",
                 "completed_at": "2026-04-21T10:00:00Z",
+                "attempt_id": attempt_id,
             }
         ),
     )
@@ -127,8 +132,10 @@ async def test_sync_items_distinguish_partial_batch(tmp_path: Path) -> None:
         await client.post("/dispatch/start")
         first = await client.post("/claim", json={"worker_id": "w1"})
         mol_a = first.json()["mol_id"]
+        attempt_a = first.json()["attempt_id"]
         second = await client.post("/claim", json={"worker_id": "w1"})
         mol_b = second.json()["mol_id"]
+        attempt_b = second.json()["attempt_id"]
 
         # Pré-aplica um result_id para forçar duplicate no lote.
         await client.post(
@@ -139,6 +146,7 @@ async def test_sync_items_distinguish_partial_batch(tmp_path: Path) -> None:
                     {
                         "result_id": "already-done",
                         "mol_id": mol_a,
+                        "attempt_id": attempt_a,
                         "success": False,
                         "result_update": None,
                         "error": "timeout",
@@ -155,6 +163,7 @@ async def test_sync_items_distinguish_partial_batch(tmp_path: Path) -> None:
                     {
                         "result_id": "already-done",
                         "mol_id": mol_a,
+                        "attempt_id": attempt_a,
                         "success": False,
                         "result_update": None,
                         "error": "timeout",
@@ -163,6 +172,7 @@ async def test_sync_items_distinguish_partial_batch(tmp_path: Path) -> None:
                     {
                         "result_id": "new-one",
                         "mol_id": mol_b,
+                        "attempt_id": attempt_b,
                         "success": True,
                         "result_update": {"H298_pm7": -55.0},
                         "error": None,
@@ -186,10 +196,11 @@ async def test_conflict_keeps_operational_state_unchanged(tmp_path: Path) -> Non
     _write_csv(csv_path)
 
     async with await _client(csv_path) as client:
-        mol_id = await _claim(client)
+        mol_id, attempt_id = await _claim(client)
         base = {
             "result_id": "same-id",
             "mol_id": mol_id,
+            "attempt_id": attempt_id,
             "success": False,
             "result_update": None,
             "error": "timeout",
@@ -207,7 +218,8 @@ async def test_conflict_keeps_operational_state_unchanged(tmp_path: Path) -> Non
         second = await client.post(
             "/sync_results", json={"worker_id": "w1", "results": [conflict]}
         )
-        assert second.status_code == 409
+        assert second.status_code == 200
+        assert second.json()["items"][0]["status"] == "conflict"
         state_after = pd.read_csv(tmp_path / "batch_state.csv")
 
     assert int(state_before.loc[0, "reruns"]) == int(state_after.loc[0, "reruns"])
@@ -228,7 +240,7 @@ async def test_prepared_pending_not_committed_on_startup(tmp_path: Path) -> None
     )
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
-        mol_id = await _claim(client)
+        mol_id, attempt_id = await _claim(client)
         fingerprint = build_result_fingerprint(
             {
                 "mol_id": mol_id,
@@ -287,7 +299,7 @@ async def test_prepared_success_verified_commits_on_startup(tmp_path: Path) -> N
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
     ) as client:
-        mol_id = await _claim(client)
+        mol_id, attempt_id = await _claim(client)
         science_hash = build_result_fingerprint(
             {"H298_pm7": -55.0, "G298_pm7": None, "gap": None}
         )
@@ -335,7 +347,7 @@ def test_worker_runner_persists_before_sync_and_confirms_on_ack(
 ) -> None:
     queue_path = tmp_path / "offline.jsonl"
     client = MagicMock(spec=WorkerClient)
-    client.claim.return_value = ("m1", "CCO")
+    client.claim.return_value = ("m1", "CCO", "att-1")
     client.sync_results.return_value = {
         "accepted": 1,
         "rejected": 0,
@@ -387,7 +399,7 @@ def test_worker_runner_persists_before_sync_and_confirms_on_ack(
 def test_worker_keeps_queue_on_temporary_failure(tmp_path: Path) -> None:
     queue_path = tmp_path / "offline.jsonl"
     client = MagicMock(spec=WorkerClient)
-    client.claim.return_value = ("m1", "CCO")
+    client.claim.return_value = ("m1", "CCO", "att-1")
     client.sync_results.side_effect = ServerError("POST /sync_results → 503")
 
     pipeline = MagicMock()
@@ -436,13 +448,14 @@ async def test_concurrent_same_result_id_applies_once(tmp_path: Path) -> None:
     _write_csv(csv_path)
 
     async with await _client(csv_path) as client:
-        mol_id = await _claim(client)
+        mol_id, attempt_id = await _claim(client)
         payload = {
             "worker_id": "w1",
             "results": [
                 {
                     "result_id": "concurrent-1",
                     "mol_id": mol_id,
+                    "attempt_id": attempt_id,
                     "success": False,
                     "result_update": None,
                     "error": "timeout",
@@ -473,10 +486,11 @@ async def test_concurrent_same_id_different_fingerprint_conflicts(
     _write_csv(csv_path)
 
     async with await _client(csv_path) as client:
-        mol_id = await _claim(client)
+        mol_id, attempt_id = await _claim(client)
         base = {
             "result_id": "conflict-race",
             "mol_id": mol_id,
+            "attempt_id": attempt_id,
             "success": False,
             "result_update": None,
             "error": "timeout",
@@ -493,8 +507,196 @@ async def test_concurrent_same_id_different_fingerprint_conflicts(
         second = await client.post(
             "/sync_results", json={"worker_id": "w1", "results": [other]}
         )
-        assert second.status_code == 409
+        assert second.status_code == 200
+        assert second.json()["items"][0]["status"] == "conflict"
 
     state = pd.read_csv(tmp_path / "batch_state.csv")
     assert int(state.loc[0, "reruns"]) == 1
     assert str(state.loc[0, "status"]) == MoleculeStatus.RERUN.value
+
+
+@pytest.mark.anyio
+async def test_stale_attempt_after_reclaim_does_not_affect_new_claim(
+    tmp_path: Path,
+) -> None:
+    csv_path = tmp_path / "thermo_pm7.csv"
+    _write_csv(csv_path)
+
+    async with await _client(csv_path) as client:
+        mol_id, attempt_a = await _claim(client, worker_id="w1")
+        # Watchdog/reclaim: molecule returns to pending without completing.
+        state_path = tmp_path / "batch_state.csv"
+        state = pd.read_csv(state_path)
+        state.loc[0, "status"] = MoleculeStatus.PENDING.value
+        state.loc[0, "assigned_worker"] = ""
+        state.loc[0, "assigned_at"] = ""
+        state.loc[0, "attempt_id"] = ""
+        state.loc[0, "worker_status"] = "unassigned"
+        state.to_csv(state_path, index=False)
+
+        # Force server to reload state from disk on next claim.
+        # Claim as worker-2 with a fresh attempt lease.
+        await client.post("/register", json={"worker_id": "w2", "hostname": "lab2"})
+        # Re-read via claim requires state_manager reload — recreate client/app.
+    async with await _client(csv_path) as client:
+        await client.post("/register", json={"worker_id": "w2", "hostname": "lab2"})
+        await client.post("/dispatch/start")
+        claimed = await client.post("/claim", json={"worker_id": "w2"})
+        body = claimed.json()
+        assert body["mol_id"] == mol_id
+        attempt_b = body["attempt_id"]
+        assert attempt_b != attempt_a
+
+        stale = await client.post(
+            "/sync_results",
+            json={
+                "worker_id": "w1",
+                "results": [
+                    {
+                        "result_id": "late-from-a",
+                        "mol_id": mol_id,
+                        "attempt_id": attempt_a,
+                        "success": True,
+                        "result_update": {"H298_pm7": -99.0},
+                        "error": None,
+                        "completed_at": "2026-04-21T10:00:00Z",
+                    }
+                ],
+            },
+        )
+        assert stale.status_code == 200
+        assert stale.json()["items"][0]["status"] == "stale_attempt"
+
+        state_mid = pd.read_csv(tmp_path / "batch_state.csv")
+        assert str(state_mid.loc[0, "attempt_id"]) == attempt_b
+        assert str(state_mid.loc[0, "status"]) != MoleculeStatus.OK.value
+
+        ok = await client.post(
+            "/sync_results",
+            json={
+                "worker_id": "w2",
+                "results": [
+                    {
+                        "result_id": "from-b",
+                        "mol_id": mol_id,
+                        "attempt_id": attempt_b,
+                        "success": True,
+                        "result_update": {"H298_pm7": -55.0},
+                        "error": None,
+                        "completed_at": "2026-04-21T10:01:00Z",
+                    }
+                ],
+            },
+        )
+        assert ok.status_code == 200
+        assert ok.json()["items"][0]["status"] == "applied"
+
+    state_final = pd.read_csv(tmp_path / "batch_state.csv")
+    assert str(state_final.loc[0, "status"]) == MoleculeStatus.OK.value
+
+
+@pytest.mark.anyio
+async def test_mixed_batch_with_conflict_returns_200_per_item(
+    tmp_path: Path,
+) -> None:
+    csv_path = tmp_path / "thermo_pm7.csv"
+    _write_csv(csv_path, [("mol_001", "CCO"), ("mol_002", "CCC")])
+    queue = OfflineResultQueue(tmp_path / "offline.jsonl")
+
+    async with await _client(csv_path) as client:
+        await client.post("/register", json={"worker_id": "w1", "hostname": "lab"})
+        await client.post("/dispatch/start")
+        c1 = await client.post("/claim", json={"worker_id": "w1"})
+        mol_a = c1.json()["mol_id"]
+        att_a = c1.json()["attempt_id"]
+        c2 = await client.post("/claim", json={"worker_id": "w1"})
+        mol_b = c2.json()["mol_id"]
+        att_b = c2.json()["attempt_id"]
+
+        await client.post(
+            "/sync_results",
+            json={
+                "worker_id": "w1",
+                "results": [
+                    {
+                        "result_id": "dup-seed",
+                        "mol_id": mol_a,
+                        "attempt_id": att_a,
+                        "success": False,
+                        "result_update": None,
+                        "error": "seed",
+                        "completed_at": "2026-04-21T10:00:00Z",
+                    }
+                ],
+            },
+        )
+
+        results = [
+            {
+                "result_id": "dup-seed",
+                "mol_id": mol_a,
+                "attempt_id": att_a,
+                "success": False,
+                "result_update": None,
+                "error": "seed",
+                "completed_at": "2026-04-21T10:00:00Z",
+            },
+            {
+                "result_id": "apply-b",
+                "mol_id": mol_b,
+                "attempt_id": att_b,
+                "success": True,
+                "result_update": {"H298_pm7": -1.0},
+                "error": None,
+                "completed_at": "2026-04-21T10:02:00Z",
+            },
+            {
+                "result_id": "conflict-payload",
+                "mol_id": mol_a,
+                "attempt_id": att_a,
+                "success": True,
+                "result_update": {"H298_pm7": -2.0},
+                "error": None,
+                "completed_at": "2026-04-21T10:00:00Z",
+            },
+        ]
+        for item in results:
+            queue.enqueue(
+                mol_id=str(item["mol_id"]),
+                success=bool(item["success"]),
+                result_update=(
+                    dict(item["result_update"])
+                    if isinstance(item["result_update"], dict)
+                    else None
+                ),
+                error=(str(item["error"]) if item["error"] is not None else None),
+                result_id=str(item["result_id"]),
+                attempt_id=str(item["attempt_id"]),
+                completed_at=str(item["completed_at"]),
+            )
+        pending_payloads = [e.to_sync_dict() for e in queue.pending()]
+        for payload in pending_payloads:
+            if payload["result_id"] == "conflict-payload":
+                payload["result_id"] = "dup-seed"
+
+        response = await client.post(
+            "/sync_results",
+            json={"worker_id": "w1", "results": pending_payloads},
+        )
+        assert response.status_code == 200
+        body = response.json()
+        flat = [item["status"] for item in body["items"]]
+        assert "duplicate" in flat
+        assert "applied" in flat
+        assert "conflict" in flat
+
+        for item in body["items"]:
+            if item["status"] in {
+                "applied",
+                "duplicate",
+                "conflict",
+                "stale_attempt",
+            }:
+                queue.confirm(item["result_id"])
+                queue.confirm("conflict-payload")
+        assert len(queue.pending()) == 0

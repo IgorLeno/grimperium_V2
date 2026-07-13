@@ -59,7 +59,7 @@ def test_claim_single_molecule_assigns_first_pending_molecule(tmp_path: Path) ->
     result = _manager(state_path).claim_single_molecule("worker-a")
 
     assert result is not None
-    mol_id, smiles = result
+    mol_id, smiles, attempt_id = result
     assert mol_id == "mol-001"
     assert smiles == "CCO"
     rows = _read_state_csv(state_path)
@@ -69,6 +69,8 @@ def test_claim_single_molecule_assigns_first_pending_molecule(tmp_path: Path) ->
     assert first["assigned_worker"] == "worker-a"
     assert first["worker_status"] == WorkerStatus.ONLINE.value
     assert first["assigned_at"]
+    assert first["attempt_id"]
+    assert attempt_id == first["attempt_id"]
     assert second["status"] == MoleculeStatus.PENDING.value
 
 
@@ -82,7 +84,7 @@ def test_claim_single_molecule_also_claims_rerun_molecules(tmp_path: Path) -> No
     result = _manager(state_path).claim_single_molecule("worker-a")
 
     assert result is not None
-    mol_id, _ = result
+    mol_id, _, attempt_id = result
     assert mol_id == "mol-001"
     rows = _read_state_csv(state_path)
     assert rows.iloc[0]["status"] == MoleculeStatus.ASSIGNED.value
@@ -215,7 +217,7 @@ def test_state_manager_uses_batch_state_csv_not_thermo_pm7(tmp_path: Path) -> No
     result = _manager(state_path).claim_single_molecule("worker-a")
 
     assert result is not None
-    mol_id, _ = result
+    mol_id, _, attempt_id = result
     assert mol_id == "state-mol"
     assert legacy_path.read_text(encoding="utf-8") == before_legacy
     assert "state-mol" in state_path.read_text(encoding="utf-8")
@@ -261,7 +263,7 @@ def test_concurrent_claim_allows_only_one_worker_per_pending_molecule(
     state_path = tmp_path / "batch_state.csv"
     _write_state_csv(state_path, [_row("mol-001")])
     manager = _manager(state_path)
-    results: list[tuple[str, str] | None] = []
+    results: list[tuple[str, str, str] | None] = []
 
     def claim(worker_id: str) -> None:
         results.append(manager.claim_single_molecule(worker_id))
@@ -273,11 +275,13 @@ def test_concurrent_claim_allows_only_one_worker_per_pending_molecule(
     assert results.count(None) == 1
     claimed = [r for r in results if r is not None]
     assert len(claimed) == 1
-    mol_id, _ = claimed[0]
+    mol_id, _, attempt_id = claimed[0]
     assert mol_id == "mol-001"
+    assert attempt_id
     row = _read_state_csv(state_path).iloc[0]
     assert row["status"] == MoleculeStatus.ASSIGNED.value
     assert row["assigned_worker"] in {"a", "b"}
+    assert row["attempt_id"] == attempt_id
 
 
 def _run_threads(threads: list[Thread]) -> None:

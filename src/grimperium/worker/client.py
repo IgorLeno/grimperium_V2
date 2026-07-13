@@ -109,13 +109,14 @@ class WorkerClient:
         LOG.warning("GET /configure/%s → %d", self._config.worker_id, r.status_code)
         return {}
 
-    def claim(self) -> tuple[str, str] | None:
+    def claim(self) -> tuple[str, str, str | None] | None:
         data = self._post("/claim", {"worker_id": self._config.worker_id})
         mol_id = data.get("mol_id")
         if mol_id is None:
             return None
         smiles = data.get("smiles") or ""
-        return mol_id, smiles
+        attempt_id = data.get("attempt_id")
+        return mol_id, smiles, str(attempt_id) if attempt_id else None
 
     def heartbeat(self, mol_id: str) -> None:
         r = self._http.put(

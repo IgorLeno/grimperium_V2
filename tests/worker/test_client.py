@@ -107,10 +107,16 @@ class TestRegister:
 class TestClaim:
     def test_claim_returns_mol_id_and_smiles(self) -> None:
         t = _MockTransport()
-        t.add("POST", "/claim", _json_response(200, {"mol_id": "m1", "smiles": "CCO"}))
+        t.add(
+            "POST",
+            "/claim",
+            _json_response(
+                200, {"mol_id": "m1", "smiles": "CCO", "attempt_id": "att-1"}
+            ),
+        )
         client = _make_client(t)
         result = client.claim()
-        assert result == ("m1", "CCO")
+        assert result == ("m1", "CCO", "att-1")
 
     def test_claim_returns_none_when_queue_empty(self) -> None:
         t = _MockTransport()

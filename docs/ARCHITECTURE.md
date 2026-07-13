@@ -756,22 +756,39 @@ rejects runs with incompatible `property_id`, reference label, or analysis mode.
 ### PM7 batch provenance
 
 `DatabasesView._run_pm7_batch` always labels `crest_pm7` regardless of the active
-session method. Session Delta Learning does not silently relabel a CREST+PM7
-baseline batch.
+session method. The legacy `BatchView` also forces `crest_pm7` because
+`BatchExecutionManager` is PM7-only. Session Delta Learning does not silently
+relabel a CREST+PM7 baseline batch.
+
+Empty runs (`molecule_count <= 0`) cannot be marked `completed` by
+`RunService.complete_run`; callers must cancel empty batches instead.
 
 ### `/sync_results` journal
 
 Ledger transaction states: `prepared` → `committed` | `failed`.
-Invariant: the same `result_id` + fingerprint applies operational effect at most once.
-Workers mint an explicit `result_id` and persist it in an offline JSONL queue for
-retries. Legacy clients without `result_id` get a content-stable fingerprint ID
-that does **not** include mutable `reruns`.
+Invariant: the same `result_id` is reserved from the first `prepare` onward —
+mismatched fingerprints while `prepared`/`failed`/`committed` are conflicts;
+same fingerprint resumes (`prepared`) or retries (`failed`) or duplicates
+(`committed`).
+
+Workers mint an explicit `result_id` and receive an `attempt_id` lease on
+`/claim`. Both travel in the offline JSONL queue and `SyncResult` payload.
+A result whose `attempt_id` does not match the current assignment is rejected
+as `stale_attempt` and must not clear a newer lease. Legacy clients without
+`attempt_id` are accepted only when no active lease exists.
 
 The unique delivery protocol is shared by online and offline paths:
-`check -> prepare -> dual-write -> commit -> metrics -> cleanup`. Workers enqueue
-results before the immediate online attempt, resend the same `result_id` until
-the server returns `applied` or `duplicate`, and keep conflicts/rejections queued
-for operator inspection.
+`check -> prepare -> dual-write -> commit -> metrics -> cleanup`.
+`WorkerRegistry` metrics after commit are **best-effort** in-memory
+observability; they are not journaled and duplicate retries do not reconcile
+counters. Scientific/operational authority remains CSV + ledger.
+
+Workers enqueue results before the immediate online attempt, resend the same
+`result_id` until the server returns a terminal per-item status
+(`applied` / `duplicate` / `conflict` / `stale_attempt`), and `/sync_results`
+always finishes the batch with HTTP 200 and `items[]` (never aborts the whole
+response on a single conflict). Unit wrappers `/report/*` still map individual
+conflicts to HTTP 409.
 
 Journal recovery is conservative. A `committed` entry indexes the fingerprint and
 turns later deliveries into duplicates. A `prepared` entry is resumed only when

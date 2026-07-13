@@ -13,6 +13,7 @@ class LocalRecord:
 
     mol_id: str
     smiles: str
+    attempt_id: str | None = None
     claimed_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     completed: bool = False
     success: bool | None = None
@@ -32,10 +33,12 @@ class LocalStore:
     def __init__(self) -> None:
         self._records: dict[str, LocalRecord] = {}
 
-    def add(self, mol_id: str, smiles: str) -> LocalRecord:
+    def add(
+        self, mol_id: str, smiles: str, *, attempt_id: str | None = None
+    ) -> LocalRecord:
         if mol_id in self._records:
             raise ValueError(f"mol_id {mol_id!r} already in store")
-        record = LocalRecord(mol_id=mol_id, smiles=smiles)
+        record = LocalRecord(mol_id=mol_id, smiles=smiles, attempt_id=attempt_id)
         self._records[mol_id] = record
         return record
 

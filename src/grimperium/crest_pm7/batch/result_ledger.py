@@ -68,6 +68,7 @@ class JournalEntry:
     expected_reruns: int | None = None
     expected_science_hash: str | None = None
     worker_id: str | None = None
+    attempt_id: str | None = None
     final_status: str | None = None
     prepared_at: str | None = None
     committed_at: str | None = None
@@ -91,20 +92,40 @@ class ResultLedger:
         self._load_journal()
 
     def check(self, result_id: str, fingerprint: str) -> LedgerDecision:
-        """Check a result ID without writing a ledger entry."""
+        """Check a result ID without writing a ledger entry.
+
+        ``result_id`` is reserved from the first journal preparation onward:
+        PREPARED/FAILED with the same fingerprint allow resume/retry (APPLIED);
+        COMMITTED with the same fingerprint is DUPLICATE; any mismatched
+        fingerprint is CONFLICT.
+        """
         if not result_id:
             raise ValueError("result_id must not be blank")
         if not fingerprint:
             raise ValueError("fingerprint must not be blank")
         with self._lock:
+            journal = self._journal.get(result_id)
+            if journal is not None:
+                if journal.fingerprint != fingerprint:
+                    return LedgerDecision(
+                        status=LedgerStatus.CONFLICT,
+                        result_id=result_id,
+                        fingerprint=fingerprint,
+                    )
+                if journal.txn_status is JournalTxnStatus.COMMITTED:
+                    return LedgerDecision(
+                        status=LedgerStatus.DUPLICATE,
+                        result_id=result_id,
+                        fingerprint=fingerprint,
+                    )
+                # PREPARED resume or FAILED controlled retry.
+                return LedgerDecision(
+                    status=LedgerStatus.APPLIED,
+                    result_id=result_id,
+                    fingerprint=fingerprint,
+                )
+
             existing = self._index.get(result_id)
-            if existing is None:
-                journal = self._journal.get(result_id)
-                if (
-                    journal is not None
-                    and journal.txn_status is JournalTxnStatus.COMMITTED
-                ):
-                    existing = journal.fingerprint
             if existing is None:
                 return LedgerDecision(
                     status=LedgerStatus.APPLIED,
@@ -159,6 +180,7 @@ class ResultLedger:
         expected_reruns: int | None = None,
         expected_science_hash: str | None = None,
         worker_id: str | None = None,
+        attempt_id: str | None = None,
     ) -> JournalEntry:
         """Durably mark a sync transaction as prepared before dual-write."""
         if not result_id or not fingerprint:
@@ -166,13 +188,20 @@ class ResultLedger:
         now = datetime.now(timezone.utc).isoformat()
         with self._lock:
             previous = self._journal.get(result_id)
-            if (
-                previous is not None
-                and previous.txn_status is JournalTxnStatus.PREPARED
-                and previous.fingerprint == fingerprint
-            ):
-                # Retomar a mesma preparação sem sobrescrever o histórico.
-                return previous
+            if previous is not None:
+                if previous.fingerprint != fingerprint:
+                    raise ValueError(
+                        f"Conflicting prepare for result_id={result_id}: "
+                        "fingerprint mismatch while journal entry exists"
+                    )
+                if previous.txn_status is JournalTxnStatus.PREPARED:
+                    # Retomar a mesma preparação sem sobrescrever o histórico.
+                    return previous
+                if previous.txn_status is JournalTxnStatus.COMMITTED:
+                    raise ValueError(
+                        f"Cannot prepare already-committed result_id={result_id}"
+                    )
+                # FAILED + same fingerprint → controlled retry below.
             entry = JournalEntry(
                 result_id=result_id,
                 fingerprint=fingerprint,
@@ -185,6 +214,11 @@ class ResultLedger:
                 expected_reruns=expected_reruns,
                 expected_science_hash=expected_science_hash,
                 worker_id=worker_id,
+                attempt_id=(
+                    attempt_id
+                    if attempt_id is not None
+                    else (previous.attempt_id if previous is not None else None)
+                ),
                 prepared_at=now,
             )
             self._append_journal(entry)
@@ -213,6 +247,7 @@ class ResultLedger:
                 expected_reruns=previous.expected_reruns,
                 expected_science_hash=previous.expected_science_hash,
                 worker_id=previous.worker_id,
+                attempt_id=previous.attempt_id,
                 final_status=final_status or previous.final_status,
                 prepared_at=previous.prepared_at,
                 committed_at=datetime.now(timezone.utc).isoformat(),
@@ -242,6 +277,7 @@ class ResultLedger:
                 expected_reruns=previous.expected_reruns,
                 expected_science_hash=previous.expected_science_hash,
                 worker_id=previous.worker_id,
+                attempt_id=previous.attempt_id,
                 final_status=previous.final_status,
                 prepared_at=previous.prepared_at,
                 committed_at=None,
@@ -347,6 +383,11 @@ class ResultLedger:
                         if payload.get("worker_id") is not None
                         else None
                     ),
+                    attempt_id=(
+                        str(payload["attempt_id"])
+                        if payload.get("attempt_id") is not None
+                        else None
+                    ),
                     final_status=(
                         str(payload["final_status"])
                         if payload.get("final_status") is not None
@@ -388,6 +429,7 @@ class ResultLedger:
             "expected_reruns": entry.expected_reruns,
             "expected_science_hash": entry.expected_science_hash,
             "worker_id": entry.worker_id,
+            "attempt_id": entry.attempt_id,
             "final_status": entry.final_status,
             "prepared_at": entry.prepared_at,
             "committed_at": entry.committed_at,

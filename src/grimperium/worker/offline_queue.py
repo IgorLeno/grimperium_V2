@@ -27,10 +27,11 @@ class OfflineResult:
     result_update: dict[str, Any] | None
     error: str | None
     completed_at: str
+    attempt_id: str | None = None
 
     def to_sync_dict(self) -> dict[str, Any]:
         """Payload compatível com SyncResult / POST /sync_results."""
-        return {
+        payload: dict[str, Any] = {
             "result_id": self.result_id,
             "mol_id": self.mol_id,
             "success": self.success,
@@ -38,6 +39,9 @@ class OfflineResult:
             "error": self.error,
             "completed_at": self.completed_at,
         }
+        if self.attempt_id is not None:
+            payload["attempt_id"] = self.attempt_id
+        return payload
 
     @classmethod
     def from_dict(cls, payload: dict[str, Any]) -> OfflineResult:
@@ -52,6 +56,11 @@ class OfflineResult:
             ),
             error=(str(payload["error"]) if payload.get("error") is not None else None),
             completed_at=str(payload["completed_at"]),
+            attempt_id=(
+                str(payload["attempt_id"])
+                if payload.get("attempt_id") is not None
+                else None
+            ),
         )
 
 
@@ -73,6 +82,7 @@ class OfflineResultQueue:
         error: str | None = None,
         result_id: str | None = None,
         completed_at: str | None = None,
+        attempt_id: str | None = None,
     ) -> OfflineResult:
         """Persistir um resultado com ID estável (gera um se omitido)."""
         entry = OfflineResult(
@@ -83,6 +93,7 @@ class OfflineResultQueue:
             error=error,
             completed_at=completed_at
             or datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+            attempt_id=attempt_id,
         )
         self._entries[entry.result_id] = entry
         self._persist()

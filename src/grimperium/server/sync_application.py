@@ -2,6 +2,10 @@
 
 Online e offline compartilham o mesmo fluxo:
 check → prepare → dual-write → commit → métricas → cleanup.
+
+Métricas do ``WorkerRegistry`` são best-effort / observabilidade em memória:
+não entram no journal e um retry ``duplicate`` não as reconcilia. O estado
+científico e operacional (CSV + ledger) permanece a autoridade transacional.
 """
 
 from __future__ import annotations
@@ -70,7 +74,7 @@ class SyncResultApplicationService:
 
         decision = self._ledger.check(result_id, fingerprint)
         if decision.status is LedgerStatus.DUPLICATE:
-            self._cleanup_assignment(worker_id, result.mol_id)
+            self._cleanup_assignment(worker_id, result.mol_id, result.attempt_id)
             return SyncApplyOutcome(
                 item=SyncItemResult(
                     result_id=result_id,
@@ -90,7 +94,7 @@ class SyncResultApplicationService:
                     final_status=prepared.expected_final_status
                     or self._state_manager.get_status(result.mol_id),
                 )
-                self._cleanup_assignment(worker_id, result.mol_id)
+                self._cleanup_assignment(worker_id, result.mol_id, result.attempt_id)
                 return SyncApplyOutcome(
                     item=SyncItemResult(
                         result_id=result_id,
@@ -134,6 +138,10 @@ class SyncResultApplicationService:
                 )
             )
 
+        stale = self._stale_attempt_outcome(result_id, result)
+        if stale is not None:
+            return stale
+
         previous_status = self._state_manager.get_status(result.mol_id)
         previous_reruns = self._state_manager.get_reruns(result.mol_id)
         expected = self._expected_effect(
@@ -154,6 +162,7 @@ class SyncResultApplicationService:
             expected_reruns=expected.reruns,
             expected_science_hash=expected.science_hash,
             worker_id=worker_id,
+            attempt_id=result.attempt_id,
         )
         try:
             final_status = apply_worker_result(
@@ -170,7 +179,7 @@ class SyncResultApplicationService:
 
         self._ledger.commit(result_id, final_status=final_status)
         self._record_metrics(worker_id, final_status=final_status)
-        self._cleanup_assignment(worker_id, result.mol_id)
+        self._cleanup_assignment(worker_id, result.mol_id, result.attempt_id)
         return SyncApplyOutcome(
             item=SyncItemResult(
                 result_id=result_id,
@@ -179,6 +188,56 @@ class SyncResultApplicationService:
             ),
             final_status=final_status,
         )
+
+    def _stale_attempt_outcome(
+        self, result_id: str, result: SyncResult
+    ) -> SyncApplyOutcome | None:
+        """Reject results that do not match the current assignment lease."""
+        current_attempt = self._state_manager.get_attempt_id(result.mol_id)
+        if result.attempt_id is None:
+            if current_attempt:
+                return SyncApplyOutcome(
+                    item=SyncItemResult(
+                        result_id=result_id,
+                        mol_id=result.mol_id,
+                        status=SyncItemOutcome.STALE_ATTEMPT,
+                        detail="missing attempt_id for active assignment",
+                    )
+                )
+            # CSV/payload legado sem lease: aceitar como antes.
+            return None
+        if current_attempt is None:
+            try:
+                status = str(self._state_manager.get_status(result.mol_id)).lower()
+            except Exception:
+                status = ""
+            # Molécula terminal: deferir ao ledger (duplicate/recovery).
+            if status in {"ok", "skip"}:
+                return None
+            return SyncApplyOutcome(
+                item=SyncItemResult(
+                    result_id=result_id,
+                    mol_id=result.mol_id,
+                    status=SyncItemOutcome.STALE_ATTEMPT,
+                    detail=(
+                        f"attempt_id={result.attempt_id!r} no longer assigned "
+                        f"(status={status!r})"
+                    ),
+                )
+            )
+        if result.attempt_id != current_attempt:
+            return SyncApplyOutcome(
+                item=SyncItemResult(
+                    result_id=result_id,
+                    mol_id=result.mol_id,
+                    status=SyncItemOutcome.STALE_ATTEMPT,
+                    detail=(
+                        f"attempt_id mismatch: got={result.attempt_id!r} "
+                        f"current={current_attempt!r}"
+                    ),
+                )
+            )
+        return None
 
     def _resume_prepared(
         self,
@@ -202,7 +261,7 @@ class SyncResultApplicationService:
             raise
         self._ledger.commit(result_id, final_status=final_status)
         self._record_metrics(worker_id, final_status=final_status)
-        self._cleanup_assignment(worker_id, result.mol_id)
+        self._cleanup_assignment(worker_id, result.mol_id, result.attempt_id)
         return SyncApplyOutcome(
             item=SyncItemResult(
                 result_id=result_id,
@@ -222,7 +281,7 @@ class SyncResultApplicationService:
         fingerprint = build_result_fingerprint(payload)
         decision = self._ledger.check(result_id, fingerprint)
         if decision.status is LedgerStatus.DUPLICATE:
-            self._cleanup_assignment(worker_id, result.mol_id)
+            self._cleanup_assignment(worker_id, result.mol_id, result.attempt_id)
             return SyncApplyOutcome(
                 item=SyncItemResult(
                     result_id=result_id,
@@ -232,6 +291,10 @@ class SyncResultApplicationService:
             )
         if decision.status is LedgerStatus.CONFLICT:
             raise SyncConflictError(result_id)
+
+        stale = self._stale_attempt_outcome(result_id, result)
+        if stale is not None:
+            return stale
 
         previous_status = self._state_manager.get_status(result.mol_id)
         previous_reruns = self._state_manager.get_reruns(result.mol_id)
@@ -246,6 +309,7 @@ class SyncResultApplicationService:
             expected_reruns=previous_reruns + 1,
             expected_science_hash=None,
             worker_id=worker_id,
+            attempt_id=result.attempt_id,
         )
         try:
             final_status = apply_worker_result(
@@ -261,7 +325,7 @@ class SyncResultApplicationService:
             raise
         self._ledger.commit(result_id, final_status=final_status)
         self._record_metrics(worker_id, final_status=final_status)
-        self._cleanup_assignment(worker_id, result.mol_id)
+        self._cleanup_assignment(worker_id, result.mol_id, result.attempt_id)
         return SyncApplyOutcome(
             item=SyncItemResult(
                 result_id=result_id,
@@ -376,11 +440,21 @@ class SyncResultApplicationService:
             science_hash=None,
         )
 
-    def _cleanup_assignment(self, worker_id: str, mol_id: str) -> None:
+    def _cleanup_assignment(
+        self,
+        worker_id: str,
+        mol_id: str,
+        attempt_id: str | None,
+    ) -> None:
+        """Clear assignment only when the result still matches the current lease."""
+        current_attempt = self._state_manager.get_attempt_id(mol_id)
+        if current_attempt and attempt_id and attempt_id != current_attempt:
+            return
         self._running_molecules.pop(mol_id, None)
         self._worker_registry.clear_current_mol(worker_id)
 
     def _record_metrics(self, worker_id: str, *, final_status: str) -> None:
+        # Best-effort: registry is in-memory observability, not transactional.
         if final_status == MoleculeStatus.OK.value:
             self._worker_registry.record_success(worker_id)
         elif final_status == MoleculeStatus.SKIP.value:
@@ -398,13 +472,16 @@ class _ExpectedEffect:
 
 def sync_result_payload(result: SyncResult) -> dict[str, Any]:
     """Payload estável usado no fingerprint do ledger."""
-    return {
+    payload: dict[str, Any] = {
         "mol_id": result.mol_id,
         "success": result.success,
         "result_update": result.result_update,
         "error": result.error,
         "completed_at": result.completed_at,
     }
+    if result.attempt_id is not None:
+        payload["attempt_id"] = result.attempt_id
+    return payload
 
 
 def apply_worker_result(

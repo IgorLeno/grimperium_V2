@@ -246,10 +246,30 @@ def test_counts_exceeding_molecule_count_rejected(
         service.complete_run(manifest.run_id, success_count=2, failure_count=0)
 
 
-def test_completed_run_requires_counts_match_molecule_count(
+def test_complete_run_rejects_empty_molecule_count(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    service = _service(tmp_path, monkeypatch)
+    manifest = service.create_run(
+        property_id="standard_enthalpy_of_formation",
+        method_id="crest_pm7",
+        method_version="1.0",
+        method_snapshot={},
+        execution_overrides={},
+        dataset_ref=None,
+        model_ref=None,
+        molecule_count=0,
+    )
+    output_path = service.runs_root / manifest.run_id / "out.csv"
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text("x\n", encoding="utf-8")
+    service.start_run(manifest.run_id)
+    service.attach_output_paths(manifest.run_id, {"results_csv": output_path})
+
+    with pytest.raises(ValueError, match="molecule_count <= 0"):
+        service.complete_run(manifest.run_id, success_count=0, failure_count=0)
+
     service = _service(tmp_path, monkeypatch)
     manifest = service.create_run(
         property_id="standard_enthalpy_of_formation",

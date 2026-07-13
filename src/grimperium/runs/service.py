@@ -104,10 +104,6 @@ class RunService:
         if success_count < 0 or failure_count < 0:
             raise ValueError("success_count and failure_count must be >= 0")
         status = RunStatus.COMPLETED if failure_count == 0 else RunStatus.PARTIAL
-        if status is RunStatus.COMPLETED and success_count <= 0 and failure_count == 0:
-            # Zero-failure completion with zero successes is allowed only when
-            # molecule_count is also zero (empty batch cancelled elsewhere).
-            pass
         if status is RunStatus.PARTIAL and (success_count < 1 or failure_count < 1):
             raise ValueError(
                 "partial runs require at least one success and one failure"
@@ -117,6 +113,8 @@ class RunService:
         manifest = self._load_for_transition(run_id, status)
         self._validate_completion_outputs(manifest)
         self._validate_counts(manifest, success_count, failure_count)
+        if status is RunStatus.COMPLETED and success_count <= 0:
+            raise ValueError("completed runs require success_count >= 1")
         return self._write(
             manifest.with_updates(
                 status=status,
@@ -224,9 +222,12 @@ class RunService:
     def _validate_counts(
         manifest: RunManifest, success_count: int, failure_count: int
     ) -> None:
-        total = success_count + failure_count
         if manifest.molecule_count <= 0:
-            return
+            raise ValueError(
+                "cannot complete a run with molecule_count <= 0 "
+                f"(got {manifest.molecule_count})"
+            )
+        total = success_count + failure_count
         if total != manifest.molecule_count:
             raise ValueError(
                 "success_count + failure_count must equal molecule_count "

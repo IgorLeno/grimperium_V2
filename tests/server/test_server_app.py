@@ -205,6 +205,8 @@ class TestHeartbeat:
         r = await client.post("/claim", json={"worker_id": "w1"})
         mol_id = r.json()["mol_id"]
         assert mol_id is not None
+        attempt_id = r.json()["attempt_id"]
+        assert attempt_id is not None
         hb = await client.put(f"/heartbeat/{mol_id}", json={"worker_id": "w1"})
         assert hb.status_code == 200
 
@@ -224,9 +226,16 @@ class TestReportSuccess:
         r = await client.post("/claim", json={"worker_id": "w1"})
         mol_id = r.json()["mol_id"]
         assert mol_id is not None
+        attempt_id = r.json()["attempt_id"]
+        assert attempt_id is not None
         rep = await client.post(
             "/report/success",
-            json={"worker_id": "w1", "mol_id": mol_id, "result_update": {}},
+            json={
+                "worker_id": "w1",
+                "mol_id": mol_id,
+                "attempt_id": attempt_id,
+                "result_update": {},
+            },
         )
         assert rep.status_code == 200
 
@@ -249,9 +258,16 @@ class TestReportFailure:
         r = await client.post("/claim", json={"worker_id": "w1"})
         mol_id = r.json()["mol_id"]
         assert mol_id is not None
+        attempt_id = r.json()["attempt_id"]
+        assert attempt_id is not None
         rep = await client.post(
             "/report/failure",
-            json={"worker_id": "w1", "mol_id": mol_id, "error": "CREST failed"},
+            json={
+                "worker_id": "w1",
+                "mol_id": mol_id,
+                "attempt_id": attempt_id,
+                "error": "CREST failed",
+            },
         )
         assert rep.status_code == 200
 
@@ -261,11 +277,14 @@ class TestReportFailure:
         r = await client.post("/claim", json={"worker_id": "w1"})
         mol_id = r.json()["mol_id"]
         assert mol_id is not None
+        attempt_id = r.json()["attempt_id"]
+        assert attempt_id is not None
         rep = await client.post(
             "/report/failure",
             json={
                 "worker_id": "w1",
                 "mol_id": mol_id,
+                "attempt_id": attempt_id,
                 "error": "permanent failure",
                 "force_skip": True,
             },
@@ -283,6 +302,8 @@ class TestSyncResults:
         r = await client.post("/claim", json={"worker_id": "w1"})
         mol_id = r.json()["mol_id"]
         assert mol_id is not None
+        attempt_id = r.json()["attempt_id"]
+        assert attempt_id is not None
         resp = await client.post(
             "/sync_results",
             json={
@@ -290,6 +311,7 @@ class TestSyncResults:
                 "results": [
                     {
                         "mol_id": mol_id,
+                        "attempt_id": attempt_id,
                         "success": True,
                         "result_update": {},
                         "error": None,
@@ -424,9 +446,16 @@ class TestWorkers:
         r = await client.post("/claim", json={"worker_id": "w1"})
         mol_id = r.json()["mol_id"]
         assert mol_id is not None
+        attempt_id = r.json()["attempt_id"]
+        assert attempt_id is not None
         await client.post(
             "/report/success",
-            json={"worker_id": "w1", "mol_id": mol_id, "result_update": {}},
+            json={
+                "worker_id": "w1",
+                "mol_id": mol_id,
+                "attempt_id": attempt_id,
+                "result_update": {},
+            },
         )
         r2 = await client.get("/workers/status")
         w = r2.json()[0]
@@ -600,20 +629,22 @@ async def _client_for(app: object) -> AsyncClient:
 
 
 class TestOperationalStateAuthority:
-    async def _claim_one(self, c: AsyncClient) -> str:
+    async def _claim_one(self, c: AsyncClient) -> tuple[str, str]:
         await c.post("/register", json={"worker_id": "w1", "hostname": "lab-01"})
         await c.post("/dispatch/start")
         r = await c.post("/claim", json={"worker_id": "w1"})
         mol_id = r.json()["mol_id"]
+        attempt_id = r.json()["attempt_id"]
         assert mol_id is not None
-        return str(mol_id)
+        assert attempt_id is not None
+        return str(mol_id), str(attempt_id)
 
     async def test_status_counts_come_from_operational_state(
         self, csv_path: Path
     ) -> None:
         app = create_app(_make_config(csv_path))
         async with await _client_for(app) as c:
-            mol_id = await self._claim_one(c)
+            mol_id, _attempt_id = await self._claim_one(c)
             counts = (await c.get("/status")).json()["counts"]
 
         # Claim moved the molecule to Assigned in batch_state.csv; /status must
@@ -629,10 +660,15 @@ class TestOperationalStateAuthority:
         app = create_app(_make_config(csv_path))
         state_path = csv_path.parent / "batch_state.csv"
         async with await _client_for(app) as c:
-            mol_id = await self._claim_one(c)
+            mol_id, attempt_id = await self._claim_one(c)
             rep = await c.post(
                 "/report/failure",
-                json={"worker_id": "w1", "mol_id": mol_id, "error": "boom"},
+                json={
+                    "worker_id": "w1",
+                    "mol_id": mol_id,
+                    "attempt_id": attempt_id,
+                    "error": "boom",
+                },
             )
             assert rep.status_code == 200
 
@@ -650,10 +686,15 @@ class TestOperationalStateAuthority:
         app = create_app(_make_config(csv_path, max_reruns=1))
         state_path = csv_path.parent / "batch_state.csv"
         async with await _client_for(app) as c:
-            mol_id = await self._claim_one(c)
+            mol_id, attempt_id = await self._claim_one(c)
             await c.post(
                 "/report/failure",
-                json={"worker_id": "w1", "mol_id": mol_id, "error": "boom"},
+                json={
+                    "worker_id": "w1",
+                    "mol_id": mol_id,
+                    "attempt_id": attempt_id,
+                    "error": "boom",
+                },
             )
 
         state = _read_csv(state_path)
@@ -667,10 +708,15 @@ class TestOperationalStateAuthority:
         app = create_app(_make_config(csv_path))
         state_path = csv_path.parent / "batch_state.csv"
         async with await _client_for(app) as c:
-            mol_id = await self._claim_one(c)
+            mol_id, attempt_id = await self._claim_one(c)
             await c.post(
                 "/report/success",
-                json={"worker_id": "w1", "mol_id": mol_id, "result_update": {}},
+                json={
+                    "worker_id": "w1",
+                    "mol_id": mol_id,
+                    "attempt_id": attempt_id,
+                    "result_update": {},
+                },
             )
             # Accepted molecule is no longer running.
             assert mol_id not in app.state.running_molecules  # type: ignore[attr-defined]
@@ -692,7 +738,7 @@ class TestOperationalStateAuthority:
         app.state.state_manager.mark_success = _boom  # type: ignore[attr-defined]
 
         async with await _client_for(app) as c:
-            mol_id = await self._claim_one(c)
+            mol_id, attempt_id = await self._claim_one(c)
             resp = await c.post(
                 "/sync_results",
                 json={
@@ -700,6 +746,7 @@ class TestOperationalStateAuthority:
                     "results": [
                         {
                             "mol_id": mol_id,
+                            "attempt_id": attempt_id,
                             "success": True,
                             "result_update": {},
                             "error": None,

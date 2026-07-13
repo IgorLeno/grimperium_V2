@@ -90,10 +90,9 @@ class BatchView(BaseView):
         )
 
     def _method_run_fields(self) -> tuple[str, str, dict[str, Any]]:
-        method = getattr(self.controller, "current_method_definition", None)
-        if method is None:
-            return "crest_pm7", "1.0.0", {"method_id": "crest_pm7"}
-        return method.method_id, method.version, asdict(method)
+        # BatchExecutionManager executa exclusivamente crest_pm7 (PM7-only).
+        # Não herdar o método da sessão (ex.: pm7_delta_learning).
+        return "crest_pm7", "1.0.0", {"method_id": "crest_pm7"}
 
     def _execution_overrides_snapshot(self, batch_size: int) -> dict[str, Any]:
         session = getattr(self.controller, "session", None)

@@ -59,5 +59,8 @@ retry could double-apply (especially `reruns`). Startup recovery also treated
 any non-RUNNING status as proof of apply.
 
 **Current contract:** one transactional path (`SyncResultApplicationService`),
-per-item sync outcomes, exact journal proof before commit, and offline queue
-confirmation only for `applied`/`duplicate` `result_id`s.
+per-item sync outcomes (including `conflict` / `stale_attempt` without aborting
+the batch HTTP response), `attempt_id` leases on claim, immutable `result_id`
+reservation from first prepare, exact journal proof before commit, and offline
+queue confirmation for terminal statuses (`applied` / `duplicate` / `conflict` /
+`stale_attempt`).

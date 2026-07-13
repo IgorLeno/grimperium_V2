@@ -34,6 +34,7 @@ class ReportSuccessRequest(BaseModel):
     result_update: dict[str, Any]
     result_id: str | None = None
     completed_at: str | None = None
+    attempt_id: str | None = None
 
 
 class ReportFailureRequest(BaseModel):
@@ -43,6 +44,7 @@ class ReportFailureRequest(BaseModel):
     force_skip: bool = False
     result_id: str | None = None
     completed_at: str | None = None
+    attempt_id: str | None = None
 
 
 class SyncResult(BaseModel):
@@ -52,6 +54,7 @@ class SyncResult(BaseModel):
     result_update: dict[str, Any] | None
     error: str | None
     completed_at: str
+    attempt_id: str | None = None
 
 
 class SyncResultsRequest(BaseModel):
@@ -62,6 +65,7 @@ class SyncResultsRequest(BaseModel):
 class ClaimResponse(BaseModel):
     mol_id: str | None
     smiles: str | None
+    attempt_id: str | None = None
 
 
 class WorkerInfo(BaseModel):
@@ -83,6 +87,7 @@ class SyncItemOutcome(str, Enum):
     DUPLICATE = "duplicate"
     REJECTED = "rejected"
     CONFLICT = "conflict"
+    STALE_ATTEMPT = "stale_attempt"
 
 
 class SyncItemResult(BaseModel):

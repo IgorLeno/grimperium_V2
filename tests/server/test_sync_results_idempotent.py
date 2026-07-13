@@ -36,13 +36,16 @@ async def _client(csv_path: Path) -> AsyncClient:
     return AsyncClient(transport=ASGITransport(app=app), base_url="http://test")
 
 
-async def _claim(client: AsyncClient) -> str:
+async def _claim(client: AsyncClient) -> tuple[str, str]:
     await client.post("/register", json={"worker_id": "w1", "hostname": "lab"})
     await client.post("/dispatch/start")
     response = await client.post("/claim", json={"worker_id": "w1"})
-    mol_id = response.json()["mol_id"]
+    body = response.json()
+    mol_id = body["mol_id"]
+    attempt_id = body["attempt_id"]
     assert mol_id is not None
-    return str(mol_id)
+    assert attempt_id is not None
+    return str(mol_id), str(attempt_id)
 
 
 @pytest.mark.anyio
@@ -53,13 +56,14 @@ async def test_sync_results_duplicate_result_id_is_not_applied_twice(
     _write_csv(csv_path)
 
     async with await _client(csv_path) as client:
-        mol_id = await _claim(client)
+        mol_id, attempt_id = await _claim(client)
         payload = {
             "worker_id": "w1",
             "results": [
                 {
                     "result_id": "result-1",
                     "mol_id": mol_id,
+                    "attempt_id": attempt_id,
                     "success": False,
                     "result_update": None,
                     "error": "MOPAC timeout",
@@ -87,12 +91,13 @@ async def test_sync_results_legacy_fallback_without_result_id_is_stable(
     _write_csv(csv_path)
 
     async with await _client(csv_path) as client:
-        mol_id = await _claim(client)
+        mol_id, attempt_id = await _claim(client)
         payload = {
             "worker_id": "w1",
             "results": [
                 {
                     "mol_id": mol_id,
+                    "attempt_id": attempt_id,
                     "success": False,
                     "result_update": None,
                     "error": "MOPAC timeout",
@@ -112,15 +117,18 @@ async def test_sync_results_legacy_fallback_without_result_id_is_stable(
 
 
 @pytest.mark.anyio
-async def test_sync_results_conflicting_result_id_returns_409(tmp_path: Path) -> None:
+async def test_sync_results_conflicting_result_id_returns_conflict_item(
+    tmp_path: Path,
+) -> None:
     csv_path = tmp_path / "thermo_pm7.csv"
     _write_csv(csv_path)
 
     async with await _client(csv_path) as client:
-        mol_id = await _claim(client)
+        mol_id, attempt_id = await _claim(client)
         base_result = {
             "result_id": "result-1",
             "mol_id": mol_id,
+            "attempt_id": attempt_id,
             "success": False,
             "result_update": None,
             "error": "MOPAC timeout",
@@ -138,7 +146,9 @@ async def test_sync_results_conflicting_result_id_returns_409(tmp_path: Path) ->
         )
 
     assert first.status_code == 200
-    assert second.status_code == 409
+    assert second.status_code == 200
+    assert second.json()["items"][0]["status"] == "conflict"
+    assert second.json()["rejected"] == 1
 
 
 @pytest.mark.anyio
@@ -147,13 +157,14 @@ async def test_sync_results_updates_worker_registry_once(tmp_path: Path) -> None
     _write_csv(csv_path)
 
     async with await _client(csv_path) as client:
-        mol_id = await _claim(client)
+        mol_id, attempt_id = await _claim(client)
         payload = {
             "worker_id": "w1",
             "results": [
                 {
                     "result_id": "result-success",
                     "mol_id": mol_id,
+                    "attempt_id": attempt_id,
                     "success": True,
                     "result_update": {"H298_pm7": -55.0},
                     "error": None,
@@ -190,10 +201,11 @@ async def test_sync_results_recovers_prepared_without_duplicating(
     )
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
-        mol_id = await _claim(client)
+        mol_id, attempt_id = await _claim(client)
         result_id = "result-crash"
         fingerprint_payload = {
             "mol_id": mol_id,
+            "attempt_id": attempt_id,
             "success": False,
             "result_update": None,
             "error": "MOPAC timeout",
@@ -250,6 +262,7 @@ async def test_sync_results_failure_and_skip_update_registry(tmp_path: Path) -> 
         await client.post("/dispatch/start")
         first = await client.post("/claim", json={"worker_id": "w1"})
         mol_fail = first.json()["mol_id"]
+        attempt_fail = first.json()["attempt_id"]
         await client.post(
             "/sync_results",
             json={
@@ -258,6 +271,7 @@ async def test_sync_results_failure_and_skip_update_registry(tmp_path: Path) -> 
                     {
                         "result_id": "fail-1",
                         "mol_id": mol_fail,
+                        "attempt_id": attempt_fail,
                         "success": False,
                         "result_update": None,
                         "error": "timeout",
@@ -268,6 +282,7 @@ async def test_sync_results_failure_and_skip_update_registry(tmp_path: Path) -> 
         )
         second = await client.post("/claim", json={"worker_id": "w1"})
         mol_skip = second.json()["mol_id"]
+        attempt_skip = second.json()["attempt_id"]
         # force skip via apply_failure semantics: success=False with special update
         await client.post(
             "/report/failure",
@@ -276,6 +291,7 @@ async def test_sync_results_failure_and_skip_update_registry(tmp_path: Path) -> 
                 "mol_id": mol_skip,
                 "error": "skip",
                 "force_skip": True,
+                "attempt_id": attempt_skip,
             },
         )
         status = await client.get("/workers/status")
@@ -300,7 +316,7 @@ async def test_sync_results_marks_failed_when_apply_raises(tmp_path: Path) -> No
     )
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
-        mol_id = await _claim(client)
+        mol_id, attempt_id = await _claim(client)
         original = app.state.csv_manager
 
         class Boom:
@@ -314,6 +330,7 @@ async def test_sync_results_marks_failed_when_apply_raises(tmp_path: Path) -> No
                 {
                     "result_id": "prepared-fail",
                     "mol_id": mol_id,
+                    "attempt_id": attempt_id,
                     "success": True,
                     "result_update": {"H298_pm7": -1.0},
                     "error": None,
