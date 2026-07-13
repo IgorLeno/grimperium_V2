@@ -203,6 +203,30 @@ class SyncResultApplicationService:
         if prepared is None or prepared.fingerprint != fingerprint:
             return None
 
+        if prepared.operation_kind == OperationKind.AMBIGUOUS.value:
+            LOG.warning(
+                "Ambiguous legacy journal; refusing automatic resume "
+                "(result_id=%s mol_id=%s)",
+                result_id,
+                result.mol_id,
+            )
+            return SyncApplyOutcome(
+                item=SyncItemResult(
+                    result_id=result_id,
+                    mol_id=result.mol_id,
+                    status=SyncItemOutcome.REJECTED,
+                    detail="ambiguous legacy operation_kind",
+                )
+            )
+
+        journal_force_skip = prepared.operation_kind == OperationKind.FORCE_SKIP.value
+        if force_skip != journal_force_skip:
+            LOG.debug(
+                "Resume uses journal operation_kind (force_skip=%s caller=%s)",
+                journal_force_skip,
+                force_skip,
+            )
+
         if self.verify_applied(prepared):
             self._ledger.commit(
                 result_id,
@@ -229,8 +253,8 @@ class SyncResultApplicationService:
                 worker_id=worker_id,
                 result=result,
                 result_id=result_id,
-                force_skip=force_skip,
-                error=error,
+                force_skip=journal_force_skip,
+                error=error if journal_force_skip else result.error,
             )
         # Prepare sem apply + reclaim para Pending: retomar com segurança.
         prev = prepared.previous_status
@@ -243,8 +267,8 @@ class SyncResultApplicationService:
                 worker_id=worker_id,
                 result=result,
                 result_id=result_id,
-                force_skip=force_skip,
-                error=error,
+                force_skip=journal_force_skip,
+                error=error if journal_force_skip else result.error,
             )
         LOG.warning(
             "Prepared journal without exact proof; refusing blind reapply "

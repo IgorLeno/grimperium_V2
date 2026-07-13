@@ -8,6 +8,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- **Legacy journal recovery and dead-letter durability** (2026-07-13)
+  - Infer `OperationKind` on load for legacy journals without the field; ambiguous
+    PREPARED lines are rejected instead of resumed as normal failure.
+  - PREPARED resume uses journal `operation_kind` (force_skip vs normal), not the
+    caller endpoint flag.
+  - `DeadLetterQueue.append` is copy-on-write: failed persist leaves memory/disk
+    consistent; same-process retry can succeed.
+  - Lease-loss aborts stage in durable `*_pending_aborts.jsonl` until dead-letter
+    write succeeds; restart retries pending archives.
 - **Transactional terminal-state safeguards** (2026-07-13)
   - Legacy payloads without `attempt_id` are rejected on terminal OK/Skip and on
     non-active statuses; accepted only on Assigned/Running/Selected without a

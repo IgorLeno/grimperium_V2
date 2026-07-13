@@ -14,7 +14,7 @@ from enum import Enum
 from pathlib import Path
 from typing import Any
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 LOG = logging.getLogger(__name__)
 
 
@@ -39,11 +39,13 @@ class OperationKind(str, Enum):
 
     Participa da identidade (fingerprint) para que o mesmo ``result_id``
     preparado como falha normal não possa ser retomado como ``force_skip``
-    (e vice-versa). Journals legados sem o campo recebem ``NORMAL_RESULT``.
+    (e vice-versa). Journals legados sem o campo são inferidos no load
+    (``infer_operation_kind``); ambíguos recebem ``AMBIGUOUS``.
     """
 
     NORMAL_RESULT = "normal_result"
     FORCE_SKIP = "force_skip"
+    AMBIGUOUS = "ambiguous"
 
 
 @dataclass(frozen=True)
@@ -432,11 +434,7 @@ class ResultLedger:
                         if payload.get("attempt_id") is not None
                         else None
                     ),
-                    operation_kind=(
-                        str(payload["operation_kind"])
-                        if payload.get("operation_kind") is not None
-                        else OperationKind.NORMAL_RESULT.value
-                    ),
+                    operation_kind=infer_operation_kind(payload).value,
                     final_status=(
                         str(payload["final_status"])
                         if payload.get("final_status") is not None
@@ -499,6 +497,67 @@ class ResultLedger:
         _append_jsonl_fsync(self.path, record)
 
 
+def infer_operation_kind(payload: dict[str, Any]) -> OperationKind:
+    """Inferir ``OperationKind`` para journals legados sem o campo.
+
+    Journals com ``operation_kind`` explícito usam o valor persistido.
+    Legados inferíveis como ``force_skip`` (Alternative A: Skip sem incremento
+    de reruns) recebem ``FORCE_SKIP``. Casos contraditórios ou insuficientes
+    recebem ``AMBIGUOUS`` — não devem ser retomados automaticamente.
+    """
+    raw = payload.get("operation_kind")
+    if raw is not None:
+        try:
+            return OperationKind(str(raw))
+        except ValueError:
+            return OperationKind.AMBIGUOUS
+
+    desired_success = payload.get("desired_success")
+    expected_final = payload.get("expected_final_status")
+    expected_reruns = payload.get("expected_reruns")
+    previous_reruns = payload.get("previous_reruns")
+
+    if desired_success is True:
+        return OperationKind.NORMAL_RESULT
+
+    if desired_success is False:
+        if (
+            expected_final is not None
+            and str(expected_final) == "Skip"
+            and expected_reruns is not None
+            and previous_reruns is not None
+            and int(expected_reruns) == int(previous_reruns)
+        ):
+            return OperationKind.FORCE_SKIP
+        if expected_final is None and expected_reruns is None:
+            return OperationKind.AMBIGUOUS
+        if (
+            expected_final is not None
+            and str(expected_final) == "Rerun"
+            and expected_reruns is not None
+            and previous_reruns is not None
+            and int(expected_reruns) == int(previous_reruns) + 1
+        ):
+            return OperationKind.NORMAL_RESULT
+        if (
+            expected_final is not None
+            and str(expected_final) == "Skip"
+            and expected_reruns is not None
+            and previous_reruns is not None
+            and int(expected_reruns) == int(previous_reruns) + 1
+        ):
+            return OperationKind.NORMAL_RESULT
+        if (
+            expected_reruns is not None
+            and previous_reruns is not None
+            and int(expected_reruns) == int(previous_reruns) + 1
+        ):
+            return OperationKind.NORMAL_RESULT
+        return OperationKind.AMBIGUOUS
+
+    return OperationKind.AMBIGUOUS
+
+
 def build_result_fingerprint(payload: dict[str, Any]) -> str:
     """Return a stable SHA-256 fingerprint for a synced result payload."""
     encoded = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
@@ -546,11 +605,19 @@ def resolve_compatible_fingerprint(
         if isinstance(operation_kind, OperationKind)
         else OperationKind(str(operation_kind))
     )
+    entry = ledger.get_entry(result_id)
+    journal_is_legacy_force_skip = (
+        entry is not None and entry.operation_kind == OperationKind.FORCE_SKIP.value
+    )
     candidates: list[str] = [
         build_result_fingerprint(with_operation_kind(payload, kind))
     ]
+    if kind is OperationKind.FORCE_SKIP and journal_is_legacy_force_skip:
+        legacy_payload = dict(payload)
+        legacy_fp = build_result_fingerprint(legacy_payload)
+        if legacy_fp not in candidates:
+            candidates.append(legacy_fp)
     attempt_candidates = {value for value in (attempt_id, None) if value}
-    entry = ledger.get_entry(result_id)
     if entry is not None and entry.attempt_id:
         attempt_candidates.add(entry.attempt_id)
     for candidate_attempt in attempt_candidates:
@@ -559,6 +626,12 @@ def resolve_compatible_fingerprint(
         legacy_fp = build_result_fingerprint(with_operation_kind(legacy_payload, kind))
         if legacy_fp not in candidates:
             candidates.append(legacy_fp)
+        if kind is OperationKind.FORCE_SKIP and journal_is_legacy_force_skip:
+            legacy_no_kind = dict(legacy_payload)
+            legacy_no_kind.pop("operation_kind", None)
+            legacy_plain_fp = build_result_fingerprint(legacy_no_kind)
+            if legacy_plain_fp not in candidates:
+                candidates.append(legacy_plain_fp)
 
     primary = candidates[0]
     for fingerprint in candidates:

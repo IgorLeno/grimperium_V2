@@ -9,6 +9,7 @@ from grimperium.crest_pm7.batch.result_ledger import (
     OperationKind,
     ResultLedger,
     build_result_fingerprint,
+    infer_operation_kind,
     resolve_compatible_fingerprint,
     with_operation_kind,
 )
@@ -208,6 +209,128 @@ def test_journal_preserves_operation_kind_and_legacy_default(tmp_path: Path) -> 
     legacy = reloaded2.get_incomplete()
     by_id = {e.result_id: e for e in legacy}
     assert by_id["legacy-r"].operation_kind == OperationKind.NORMAL_RESULT.value
+
+
+def test_infer_operation_kind_legacy_force_skip_signature() -> None:
+    payload = {
+        "desired_success": False,
+        "expected_final_status": "Skip",
+        "expected_reruns": 2,
+        "previous_reruns": 2,
+    }
+    assert infer_operation_kind(payload) is OperationKind.FORCE_SKIP
+
+
+def test_infer_operation_kind_legacy_normal_failure() -> None:
+    payload = {
+        "desired_success": False,
+        "expected_final_status": "Rerun",
+        "expected_reruns": 3,
+        "previous_reruns": 2,
+    }
+    assert infer_operation_kind(payload) is OperationKind.NORMAL_RESULT
+
+
+def test_infer_operation_kind_ambiguous_when_insufficient() -> None:
+    payload = {"desired_success": False}
+    assert infer_operation_kind(payload) is OperationKind.AMBIGUOUS
+
+
+def test_load_journal_infers_legacy_force_skip_prepared(tmp_path: Path) -> None:
+    path = tmp_path / "result_ledger.jsonl"
+    journal = path.with_name("result_ledger_journal.jsonl")
+    journal.parent.mkdir(parents=True, exist_ok=True)
+    legacy_line = {
+        "schema_version": 1,
+        "result_id": "legacy-force-skip",
+        "fingerprint": "fp-legacy-fs",
+        "mol_id": "mol_fs",
+        "txn_status": JournalTxnStatus.PREPARED.value,
+        "desired_success": False,
+        "previous_reruns": 1,
+        "expected_final_status": "Skip",
+        "expected_reruns": 1,
+    }
+    journal.write_text(json.dumps(legacy_line) + "\n", encoding="utf-8")
+    ledger = ResultLedger(path)
+    entry = ledger.get_entry("legacy-force-skip")
+    assert entry is not None
+    assert entry.operation_kind == OperationKind.FORCE_SKIP.value
+
+
+def test_load_journal_infers_legacy_force_skip_after_reload(tmp_path: Path) -> None:
+    path = tmp_path / "result_ledger.jsonl"
+    journal = path.with_name("result_ledger_journal.jsonl")
+    journal.parent.mkdir(parents=True, exist_ok=True)
+    legacy_line = {
+        "schema_version": 1,
+        "result_id": "legacy-reload",
+        "fingerprint": "fp-reload",
+        "mol_id": "mol_reload",
+        "txn_status": JournalTxnStatus.PREPARED.value,
+        "desired_success": False,
+        "previous_reruns": 0,
+        "expected_final_status": "Skip",
+        "expected_reruns": 0,
+    }
+    journal.write_text(json.dumps(legacy_line) + "\n", encoding="utf-8")
+    first = ResultLedger(path)
+    second = ResultLedger(path)
+    assert first.get_entry("legacy-reload") is not None
+    assert second.get_entry("legacy-reload") is not None
+    assert (
+        first.get_entry("legacy-reload").operation_kind  # type: ignore[union-attr]
+        == second.get_entry("legacy-reload").operation_kind  # type: ignore[union-attr]
+        == OperationKind.FORCE_SKIP.value
+    )
+
+
+def test_resolve_compatible_fingerprint_force_skip_matches_legacy_plain_hash(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "result_ledger.jsonl"
+    journal = path.with_name("result_ledger_journal.jsonl")
+    payload = {
+        "mol_id": "mol_001",
+        "success": False,
+        "result_update": None,
+        "error": "admin skip",
+        "completed_at": "2026-07-13T00:00:00Z",
+    }
+    legacy_fp = build_result_fingerprint(payload)
+    journal.parent.mkdir(parents=True, exist_ok=True)
+    journal.write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "result_id": "legacy-fs-r1",
+                "fingerprint": legacy_fp,
+                "mol_id": "mol_001",
+                "txn_status": JournalTxnStatus.PREPARED.value,
+                "desired_success": False,
+                "previous_reruns": 1,
+                "expected_final_status": "Skip",
+                "expected_reruns": 1,
+                "attempt_id": "att-1",
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    ledger = ResultLedger(path)
+    entry = ledger.get_entry("legacy-fs-r1")
+    assert entry is not None
+    assert entry.operation_kind == OperationKind.FORCE_SKIP.value
+
+    fingerprint, decision = resolve_compatible_fingerprint(
+        ledger,
+        result_id="legacy-fs-r1",
+        payload=payload,
+        operation_kind=OperationKind.FORCE_SKIP,
+        attempt_id="att-1",
+    )
+    assert decision.status is LedgerStatus.APPLIED
+    assert fingerprint == legacy_fp
 
 
 def test_resolve_compatible_fingerprint_accepts_pre_upgrade_attempt_id(

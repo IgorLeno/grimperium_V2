@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 
 import pandas as pd
@@ -967,3 +968,221 @@ async def test_prepared_normal_resume_via_force_skip_conflicts(
             MoleculeStatus.RUNNING.value,
             MoleculeStatus.ASSIGNED.value,
         }
+
+
+@pytest.mark.anyio
+async def test_legacy_prepared_force_skip_resumes_as_skip_not_rerun(
+    tmp_path: Path,
+) -> None:
+    """Journal legado PREPARED force_skip retoma como Skip sem incrementar reruns."""
+    csv_path = tmp_path / "thermo_pm7.csv"
+    _write_csv(csv_path)
+    app = create_app(
+        ServerConfig(
+            csv_path=str(csv_path),
+            api_token="",
+            startup_grace_s=0,
+            watchdog_interval_s=999,
+        )
+    )
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        mol_id, attempt_id = await _claim(client)
+        previous_reruns = app.state.state_manager.get_reruns(mol_id)
+        result = SyncResult(
+            result_id="legacy-fs-resume",
+            mol_id=mol_id,
+            success=False,
+            result_update=None,
+            error="admin skip",
+            completed_at="2026-04-21T10:00:00Z",
+            attempt_id=attempt_id,
+        )
+        payload = sync_result_payload(result)
+        legacy_fp = build_result_fingerprint(payload)
+        journal_path = app.state.result_ledger.journal_path
+        journal_path.write_text(
+            json.dumps(
+                {
+                    "schema_version": 1,
+                    "result_id": "legacy-fs-resume",
+                    "fingerprint": legacy_fp,
+                    "mol_id": mol_id,
+                    "txn_status": "prepared",
+                    "desired_success": False,
+                    "previous_status": MoleculeStatus.RUNNING.value,
+                    "previous_reruns": previous_reruns,
+                    "expected_final_status": MoleculeStatus.SKIP.value,
+                    "expected_reruns": previous_reruns,
+                    "worker_id": "w1",
+                    "attempt_id": attempt_id,
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        app.state.result_ledger = type(app.state.result_ledger)(
+            app.state.result_ledger.path
+        )
+        entry = app.state.result_ledger.get_entry("legacy-fs-resume")
+        assert entry is not None
+        assert entry.operation_kind == OperationKind.FORCE_SKIP.value
+
+        response = await client.post(
+            "/sync_results",
+            json={
+                "worker_id": "w1",
+                "results": [
+                    {
+                        **payload,
+                        "result_id": result.result_id,
+                        "attempt_id": attempt_id,
+                    }
+                ],
+            },
+        )
+        assert response.status_code == 200
+        assert response.json()["items"][0]["status"] == "applied"
+        assert app.state.state_manager.get_status(mol_id) == MoleculeStatus.SKIP.value
+        assert app.state.state_manager.get_reruns(mol_id) == previous_reruns
+
+
+@pytest.mark.anyio
+async def test_legacy_prepared_force_skip_resume_via_force_skip_endpoint(
+    tmp_path: Path,
+) -> None:
+    csv_path = tmp_path / "thermo_pm7.csv"
+    _write_csv(csv_path)
+    app = create_app(
+        ServerConfig(
+            csv_path=str(csv_path),
+            api_token="",
+            startup_grace_s=0,
+            watchdog_interval_s=999,
+        )
+    )
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        mol_id, attempt_id = await _claim(client)
+        previous_reruns = app.state.state_manager.get_reruns(mol_id)
+        result = SyncResult(
+            result_id="legacy-fs-endpoint",
+            mol_id=mol_id,
+            success=False,
+            result_update=None,
+            error="admin skip",
+            completed_at="2026-04-21T10:00:00Z",
+            attempt_id=attempt_id,
+        )
+        payload = sync_result_payload(result)
+        legacy_fp = build_result_fingerprint(payload)
+        journal_path = app.state.result_ledger.journal_path
+        journal_path.write_text(
+            json.dumps(
+                {
+                    "schema_version": 1,
+                    "result_id": "legacy-fs-endpoint",
+                    "fingerprint": legacy_fp,
+                    "mol_id": mol_id,
+                    "txn_status": "prepared",
+                    "desired_success": False,
+                    "previous_status": MoleculeStatus.RUNNING.value,
+                    "previous_reruns": previous_reruns,
+                    "expected_final_status": MoleculeStatus.SKIP.value,
+                    "expected_reruns": previous_reruns,
+                    "worker_id": "w1",
+                    "attempt_id": attempt_id,
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        app.state.result_ledger = type(app.state.result_ledger)(
+            app.state.result_ledger.path
+        )
+        sync_service = SyncResultApplicationService(
+            csv_manager=app.state.csv_manager,
+            state_manager=app.state.state_manager,
+            ledger=app.state.result_ledger,
+            worker_registry=app.state.worker_registry,
+            running_molecules=app.state.running_molecules,
+        )
+        outcome = sync_service.apply_force_skip("w1", result, "admin skip")
+        assert outcome.item.status.value == "applied"
+        assert app.state.state_manager.get_status(mol_id) == MoleculeStatus.SKIP.value
+        assert app.state.state_manager.get_reruns(mol_id) == previous_reruns
+
+
+@pytest.mark.anyio
+async def test_ambiguous_legacy_prepared_not_auto_resumed(tmp_path: Path) -> None:
+    csv_path = tmp_path / "thermo_pm7.csv"
+    _write_csv(csv_path)
+    app = create_app(
+        ServerConfig(
+            csv_path=str(csv_path),
+            api_token="",
+            startup_grace_s=0,
+            watchdog_interval_s=999,
+        )
+    )
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        mol_id, attempt_id = await _claim(client)
+        result = SyncResult(
+            result_id="legacy-ambiguous",
+            mol_id=mol_id,
+            success=False,
+            result_update=None,
+            error="unknown",
+            completed_at="2026-04-21T10:00:00Z",
+            attempt_id=attempt_id,
+        )
+        payload = sync_result_payload(result)
+        legacy_fp = build_result_fingerprint(payload)
+        journal_path = app.state.result_ledger.journal_path
+        journal_path.write_text(
+            json.dumps(
+                {
+                    "schema_version": 1,
+                    "result_id": "legacy-ambiguous",
+                    "fingerprint": legacy_fp,
+                    "mol_id": mol_id,
+                    "txn_status": "prepared",
+                    "desired_success": False,
+                    "worker_id": "w1",
+                    "attempt_id": attempt_id,
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        app.state.result_ledger = type(app.state.result_ledger)(
+            app.state.result_ledger.path
+        )
+        entry = app.state.result_ledger.get_entry("legacy-ambiguous")
+        assert entry is not None
+        assert entry.operation_kind == OperationKind.AMBIGUOUS.value
+
+        status_before = app.state.state_manager.get_status(mol_id)
+        reruns_before = app.state.state_manager.get_reruns(mol_id)
+
+        response = await client.post(
+            "/sync_results",
+            json={
+                "worker_id": "w1",
+                "results": [
+                    {
+                        **payload,
+                        "result_id": result.result_id,
+                        "attempt_id": attempt_id,
+                    }
+                ],
+            },
+        )
+        assert response.status_code == 200
+        assert response.json()["items"][0]["status"] == "rejected"
+        assert app.state.state_manager.get_status(mol_id) == status_before
+        assert app.state.state_manager.get_reruns(mol_id) == reruns_before

@@ -76,3 +76,5 @@ finalization and selection compensation.
   mid-calculation; the worker gates publication after the pipeline returns.
 - Corrupt/truncated JSONL lines in dead-letter or journal may still abort load
   for that line (skipped for dead-letter; journal still fails hard on bad JSON).
+- `OfflineResultQueue` still mutates before persist (same class of risk as the
+  former dead-letter bug); dead-letter and pending-abort queues use copy-on-write.

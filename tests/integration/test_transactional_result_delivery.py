@@ -1465,3 +1465,84 @@ def test_cenario_6_lease_lost_does_not_publish_valid_result(tmp_path: Path) -> N
     assert any(
         e.rejection_origin == "lease_lost" for e in runner._dead_letter.entries()
     )
+
+
+def test_cenario_6b_lease_lost_pending_survives_dl_failure_and_restart(
+    tmp_path: Path,
+) -> None:
+    import threading
+    import time
+    from unittest.mock import patch
+
+    queue_path = tmp_path / "offline.jsonl"
+    client = MagicMock(spec=WorkerClient)
+    client.claim.return_value = ("mol_001", "CCO", "att-1")
+    pipeline = MagicMock()
+    release = threading.Event()
+
+    def slow(_mol: str, _smiles: str) -> MagicMock:
+        release.wait(timeout=2.0)
+        out = MagicMock()
+        out.mol_id = "mol_001"
+        out.success = True
+        out.error_message = None
+        out.most_stable_hof = -1.0
+        return out
+
+    pipeline.process_molecule.side_effect = slow
+    client.heartbeat.side_effect = LeaseLostError("mol_001", 409, "lost")
+    runner = WorkerRunner(
+        WorkerConfig(
+            server_url="http://test",
+            worker_id="w1",
+            offline_queue_path=str(queue_path),
+            heartbeat_interval_s=0.05,
+        ),
+        pipeline=pipeline,
+        client=client,
+    )
+    real_write = __import__(
+        "grimperium.worker.offline_queue", fromlist=["_atomic_write_text"]
+    )._atomic_write_text
+
+    def fail_dead_letter_only(target_path: Path, content: str) -> None:
+        if "pending_aborts" in target_path.name:
+            real_write(target_path, content)
+            return
+        if "dead_letter" in target_path.name:
+            raise OSError("disk full")
+        real_write(target_path, content)
+
+    with (
+        patch(
+            "grimperium.worker.runner._pm7result_to_update",
+            return_value={"H298_pm7": -1.0},
+        ),
+        patch(
+            "grimperium.worker.offline_queue._atomic_write_text",
+            side_effect=fail_dead_letter_only,
+        ),
+    ):
+        thread = threading.Thread(target=runner.run_one, daemon=True)
+        thread.start()
+        time.sleep(0.2)
+        release.set()
+        thread.join(timeout=5.0)
+    client.sync_results.assert_not_called()
+    assert len(runner._pending_aborts.entries()) >= 1
+
+    restarted = WorkerRunner(
+        WorkerConfig(
+            server_url="http://test",
+            worker_id="w1",
+            offline_queue_path=str(queue_path),
+            heartbeat_interval_s=999.0,
+        ),
+        pipeline=MagicMock(),
+        client=client,
+    )
+    restarted._flush_pending_aborts()
+    assert any(
+        e.rejection_origin == "lease_lost" for e in restarted._dead_letter.entries()
+    )
+    assert restarted._pending_aborts.entries() == []

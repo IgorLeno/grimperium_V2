@@ -11,7 +11,10 @@ import pandas as pd
 
 from grimperium.crest_pm7.batch.csv_manager import BatchCSVManager
 from grimperium.worker.client import WorkerClient
-from grimperium.worker.offline_queue import DeadLetterRecord, dead_letter_path_for
+from grimperium.worker.offline_queue import (
+    DeadLetterRecord,
+    dead_letter_path_for,
+)
 from grimperium.worker.runner import WorkerConfig, WorkerRunner
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -728,9 +731,8 @@ class TestDeadLetterFlush:
                 }
             ],
         }
-        with patch.object(
-            runner._dead_letter,
-            "append",
+        with patch(
+            "grimperium.worker.offline_queue._atomic_write_text",
             side_effect=OSError("disk full"),
         ):
             runner.flush_offline_queue()
@@ -1025,3 +1027,179 @@ class TestLeaseLostDuringProcessing:
         assert any(
             e.rejection_origin == "lease_lost" for e in runner._dead_letter.entries()
         )
+
+    @patch(
+        "grimperium.worker.runner._pm7result_to_update",
+        return_value={"H298_pm7": -42.0},
+    )
+    def test_lease_lost_dead_letter_failure_keeps_pending_and_local(
+        self, _mock_update: MagicMock, tmp_path: Path
+    ) -> None:
+        import threading
+
+        from grimperium.worker.client import LeaseLostError
+
+        queue_path = tmp_path / "w1_offline_results.jsonl"
+        client = _mock_client(claim_returns=("m1", "CCO", "att-lost"))
+        pipeline = _mock_pipeline(success=True)
+        release = threading.Event()
+
+        def slow_process(mol_id: str, smiles: str) -> MagicMock:
+            release.wait(timeout=2.0)
+            return pipeline.process_molecule.return_value
+
+        pipeline.process_molecule.side_effect = slow_process
+
+        def hb_lost(mol_id: str, attempt_id: str | None = None) -> None:
+            raise LeaseLostError(mol_id, 409, "owner mismatch")
+
+        client.heartbeat.side_effect = hb_lost
+        runner = WorkerRunner(
+            _make_config(heartbeat_interval_s=0.05, offline_queue_path=str(queue_path)),
+            pipeline=pipeline,
+            client=client,
+        )
+        real_write = __import__(
+            "grimperium.worker.offline_queue", fromlist=["_atomic_write_text"]
+        )._atomic_write_text
+
+        def fail_dead_letter_only(target_path: Path, content: str) -> None:
+            if "pending_aborts" in target_path.name:
+                real_write(target_path, content)
+                return
+            if "dead_letter" in target_path.name:
+                raise OSError("disk full")
+            real_write(target_path, content)
+
+        with patch(
+            "grimperium.worker.offline_queue._atomic_write_text",
+            side_effect=fail_dead_letter_only,
+        ):
+            thread = threading.Thread(target=runner.run_one, daemon=True)
+            thread.start()
+            time.sleep(0.2)
+            release.set()
+            thread.join(timeout=5.0)
+        client.sync_results.assert_not_called()
+        assert runner._store.get("m1") is not None
+        assert runner._store.get("m1").completed is False  # type: ignore[union-attr]
+        assert len(runner._pending_aborts.entries()) >= 1
+        assert _read_dead_letter(queue_path) == []
+        # clear_completed must not wipe unfinished lease-loss evidence
+        cleared = runner._store.clear_completed()
+        assert cleared == 0
+        assert runner._store.get("m1") is not None
+
+    @patch(
+        "grimperium.worker.runner._pm7result_to_update",
+        return_value={"H298_pm7": -42.0},
+    )
+    def test_lease_lost_pending_recovers_after_restart(
+        self, _mock_update: MagicMock, tmp_path: Path
+    ) -> None:
+        import threading
+
+        from grimperium.worker.client import LeaseLostError
+
+        queue_path = tmp_path / "w1_offline_results.jsonl"
+        client = _mock_client(claim_returns=("m1", "CCO", "att-lost"))
+        pipeline = _mock_pipeline(success=True)
+        release = threading.Event()
+
+        def slow_process(mol_id: str, smiles: str) -> MagicMock:
+            release.wait(timeout=2.0)
+            return pipeline.process_molecule.return_value
+
+        pipeline.process_molecule.side_effect = slow_process
+
+        def hb_lost(mol_id: str, attempt_id: str | None = None) -> None:
+            raise LeaseLostError(mol_id, 409, "owner mismatch")
+
+        client.heartbeat.side_effect = hb_lost
+        runner = WorkerRunner(
+            _make_config(heartbeat_interval_s=0.05, offline_queue_path=str(queue_path)),
+            pipeline=pipeline,
+            client=client,
+        )
+        real_write = __import__(
+            "grimperium.worker.offline_queue", fromlist=["_atomic_write_text"]
+        )._atomic_write_text
+
+        def fail_dead_letter_only(target_path: Path, content: str) -> None:
+            if "pending_aborts" in target_path.name:
+                real_write(target_path, content)
+                return
+            if "dead_letter" in target_path.name:
+                raise OSError("disk full")
+            real_write(target_path, content)
+
+        with patch(
+            "grimperium.worker.offline_queue._atomic_write_text",
+            side_effect=fail_dead_letter_only,
+        ):
+            thread = threading.Thread(target=runner.run_one, daemon=True)
+            thread.start()
+            time.sleep(0.2)
+            release.set()
+            thread.join(timeout=5.0)
+        assert len(runner._pending_aborts.entries()) >= 1
+
+        restarted = WorkerRunner(
+            _make_config(offline_queue_path=str(queue_path)),
+            pipeline=_mock_pipeline(success=True),
+            client=client,
+        )
+        restarted._flush_pending_aborts()
+        assert len(_read_dead_letter(queue_path)) == 1
+        assert restarted._pending_aborts.entries() == []
+
+    def test_flush_after_dl_persist_failure_does_not_confirm_same_process(
+        self, tmp_path: Path
+    ) -> None:
+        queue_path = tmp_path / "w1_offline_results.jsonl"
+        client = MagicMock(spec=WorkerClient)
+        runner = WorkerRunner(
+            _make_config(offline_queue_path=str(queue_path), worker_id="w1"),
+            pipeline=_mock_pipeline(),
+            client=client,
+        )
+        runner._offline_queue.enqueue(
+            mol_id="m1",
+            success=True,
+            result_update={},
+            result_id="rid-dl-cow",
+            attempt_id="att-1",
+            completed_at="2026-07-12T10:00:00Z",
+        )
+        client.sync_results.side_effect = lambda results: {
+            "accepted": 0,
+            "rejected": 1,
+            "items": [
+                {
+                    "result_id": "rid-dl-cow",
+                    "mol_id": "m1",
+                    "status": "conflict",
+                    "detail": "x",
+                }
+            ],
+        }
+        attempts = {"count": 0}
+        real_write = __import__(
+            "grimperium.worker.offline_queue", fromlist=["_atomic_write_text"]
+        )._atomic_write_text
+
+        def flaky_write(target_path: Path, content: str) -> None:
+            attempts["count"] += 1
+            if attempts["count"] <= 1:
+                raise OSError("disk full")
+            real_write(target_path, content)
+
+        with patch(
+            "grimperium.worker.offline_queue._atomic_write_text",
+            side_effect=flaky_write,
+        ):
+            runner.flush_offline_queue()
+            assert len(runner._offline_queue.pending()) == 1
+            runner.flush_offline_queue()
+        assert len(runner._offline_queue.pending()) == 0
+        assert len(_read_dead_letter(queue_path)) == 1

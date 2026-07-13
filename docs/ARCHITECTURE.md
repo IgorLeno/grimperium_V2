@@ -806,7 +806,11 @@ recovery can verify without a second apply. Operation identity includes
 and participates in the fingerprint for `force_skip` (normal fingerprints omit
 the field for backward compatibility). The same `result_id` prepared under one
 kind cannot resume under the other (`conflict`). Legacy journal lines without
-`operation_kind` default to `normal_result`.
+`operation_kind` are inferred on load (schema v2): force_skip when
+`desired_success=false`, `expected_final_status=Skip`, and
+`expected_reruns=previous_reruns`; otherwise normal when unambiguous; ambiguous
+lines are not auto-resumed (`rejected`). PREPARED resume uses journal
+`operation_kind`, not the caller endpoint.
 
 Workers enqueue results before the immediate online attempt, resend the same
 `result_id` until the server returns a terminal per-item status
@@ -817,7 +821,12 @@ conflicts to HTTP 409. Terminal `conflict`/`stale_attempt` are written to a
 durable worker dead-letter JSONL before leaving the offline queue; applied and
 duplicate are confirmed without dead-letter. Dead-letter identity is
 `dead_letter_id = sha256(result_id | returned_status | original_payload)` so a
-crash between append and confirm does not duplicate on restart.
+crash between append and confirm does not duplicate on restart. `append` is
+copy-on-write: memory and index update only after durable disk write.
+
+Lease-loss aborts are staged in a sibling `*_pending_aborts.jsonl` until
+dead-letter append succeeds; failed DL writes retain pending evidence for retry
+on restart.
 
 `PUT /heartbeat/{mol_id}` requires the current owner `worker_id` and matching
 `attempt_id` when a lease is active. Legacy heartbeats without `attempt_id` are

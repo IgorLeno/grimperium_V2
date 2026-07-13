@@ -136,6 +136,12 @@ def dead_letter_path_for(queue_path: Path) -> Path:
     return path.with_name(f"{path.stem}_dead_letter{path.suffix}")
 
 
+def pending_abort_path_for(queue_path: Path) -> Path:
+    """Derive the durable pending-abort sibling path from the offline queue path."""
+    path = Path(queue_path)
+    return path.with_name(f"{path.stem}_pending_aborts{path.suffix}")
+
+
 def _atomic_write_text(path: Path, content: str) -> None:
     """Persist ``content`` atomically via NamedTemporaryFile + fsync + replace."""
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -280,9 +286,10 @@ class DeadLetterQueue:
             rejection_origin=record.rejection_origin,
             dead_letter_id=dead_letter_id,
         )
-        self._entries.append(normalized)
+        new_entries = [*self._entries, normalized]
+        self._persist_entries(new_entries)
+        self._entries = new_entries
         self._index.add(dead_letter_id)
-        self._persist()
 
     def entries(self) -> list[DeadLetterRecord]:
         return list(self._entries)
@@ -328,9 +335,121 @@ class DeadLetterQueue:
         self._index = index
 
     def _persist(self) -> None:
+        self._persist_entries(self._entries)
+
+    def _persist_entries(self, entries: list[DeadLetterRecord]) -> None:
         lines = [
             json.dumps(entry.to_dict(), ensure_ascii=False, sort_keys=True)
+            for entry in entries
+        ]
+        content = ("\n".join(lines) + "\n") if lines else ""
+        _atomic_write_text(self.path, content)
+
+
+class PendingAbortQueue:
+    """JSONL durável para aborts de lease-loss pendentes de confirmação no DL."""
+
+    def __init__(self, path: Path) -> None:
+        self.path = Path(path)
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        self._entries: list[DeadLetterRecord] = []
+        self._index: set[str] = set()
+        self._load()
+
+    def append(self, record: DeadLetterRecord) -> None:
+        """Persistir abort pendente antes de tentar gravar no dead-letter."""
+        dead_letter_id = record.dead_letter_id or compute_dead_letter_id(
+            result_id=record.result_id,
+            returned_status=record.returned_status,
+            original_payload=record.original_payload,
+        )
+        if dead_letter_id in self._index:
+            return
+        normalized = DeadLetterRecord(
+            result_id=record.result_id,
+            mol_id=record.mol_id,
+            attempt_id=record.attempt_id,
+            original_payload=record.original_payload,
+            returned_status=record.returned_status,
+            detail=record.detail,
+            worker_id=record.worker_id,
+            rejected_at=record.rejected_at,
+            rejection_origin=record.rejection_origin,
+            dead_letter_id=dead_letter_id,
+        )
+        new_entries = [*self._entries, normalized]
+        self._persist_entries(new_entries)
+        self._entries = new_entries
+        self._index.add(dead_letter_id)
+
+    def remove(self, dead_letter_id: str) -> None:
+        """Remover abort após confirmação durável no dead-letter."""
+        if dead_letter_id not in self._index:
+            return
+        new_entries = [
+            entry
             for entry in self._entries
+            if (
+                entry.dead_letter_id
+                or compute_dead_letter_id(
+                    result_id=entry.result_id,
+                    returned_status=entry.returned_status,
+                    original_payload=entry.original_payload,
+                )
+            )
+            != dead_letter_id
+        ]
+        self._persist_entries(new_entries)
+        self._entries = new_entries
+        self._index.discard(dead_letter_id)
+
+    def entries(self) -> list[DeadLetterRecord]:
+        return list(self._entries)
+
+    def _load(self) -> None:
+        if not self.path.exists():
+            return
+        loaded: list[DeadLetterRecord] = []
+        index: set[str] = set()
+        for line in self.path.read_text(encoding="utf-8").splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                payload = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if isinstance(payload, dict) and payload.get("result_id"):
+                record = DeadLetterRecord.from_dict(payload)
+                dead_letter_id = record.dead_letter_id or compute_dead_letter_id(
+                    result_id=record.result_id,
+                    returned_status=record.returned_status,
+                    original_payload=record.original_payload,
+                )
+                if dead_letter_id in index:
+                    continue
+                index.add(dead_letter_id)
+                loaded.append(
+                    DeadLetterRecord(
+                        result_id=record.result_id,
+                        mol_id=record.mol_id,
+                        attempt_id=record.attempt_id,
+                        original_payload=record.original_payload,
+                        returned_status=record.returned_status,
+                        detail=record.detail,
+                        worker_id=record.worker_id,
+                        rejected_at=record.rejected_at,
+                        rejection_origin=record.rejection_origin,
+                        dead_letter_id=dead_letter_id,
+                    )
+                )
+        self._entries = loaded
+        self._index = index
+
+    def _persist_entries(self, entries: list[DeadLetterRecord]) -> None:
+        lines = [
+            json.dumps(entry.to_dict(), ensure_ascii=False, sort_keys=True)
+            for entry in entries
         ]
         content = ("\n".join(lines) + "\n") if lines else ""
         _atomic_write_text(self.path, content)

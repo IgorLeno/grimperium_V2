@@ -27,7 +27,11 @@ from grimperium.worker.offline_queue import (
     DeadLetterRecord,
     OfflineResult,
     OfflineResultQueue,
+    PendingAbortQueue,
+    compute_dead_letter_id,
     dead_letter_path_for,
+    new_result_id,
+    pending_abort_path_for,
 )
 
 LOG = logging.getLogger(__name__)
@@ -139,6 +143,7 @@ class WorkerRunner:
         )
         self._offline_queue = OfflineResultQueue(queue_path)
         self._dead_letter = DeadLetterQueue(dead_letter_path_for(queue_path))
+        self._pending_aborts = PendingAbortQueue(pending_abort_path_for(queue_path))
         self._stop_event = threading.Event()
         self._consecutive_failures: int = 0
         self._last_run_succeeded: bool = False
@@ -336,9 +341,57 @@ class WorkerRunner:
             _stop_hb.set()
             hb_thread.join(timeout=5.0)
 
+        self._flush_pending_aborts()
         self._store.clear_completed()
         self.flush_offline_queue()
         return True
+
+    def _flush_pending_aborts(self) -> None:
+        """Retry durable archive of lease-loss aborts still pending dead-letter."""
+        for record in list(self._pending_aborts.entries()):
+            dead_letter_id = record.dead_letter_id or compute_dead_letter_id(
+                result_id=record.result_id,
+                returned_status=record.returned_status,
+                original_payload=record.original_payload,
+            )
+            try:
+                self._dead_letter.append(record)
+            except Exception:
+                LOG.exception(
+                    "Pending lease-loss abort still not archived "
+                    "(dead_letter_id=%s mol_id=%s)",
+                    dead_letter_id,
+                    record.mol_id,
+                )
+                continue
+            try:
+                self._pending_aborts.remove(dead_letter_id)
+            except Exception:
+                LOG.exception(
+                    "Dead-letter archived but pending remove failed "
+                    "(dead_letter_id=%s)",
+                    dead_letter_id,
+                )
+            self._apply_local_lease_loss_side_effects(
+                mol_id=record.mol_id,
+                result_id=record.result_id,
+                error=record.detail or "lease lost",
+            )
+
+    def _apply_local_lease_loss_side_effects(
+        self,
+        *,
+        mol_id: str,
+        result_id: str,
+        error: str,
+    ) -> None:
+        """Atualizar CSV/local store após evidência de lease-loss estar durável."""
+        self._update_csv(mol_id, {"status": MoleculeStatus.RERUN.value})
+        record = self._store.get(mol_id)
+        if record is not None:
+            record.result_id = result_id
+            if not record.completed:
+                self._store.mark_failure(mol_id, error)
 
     def _archive_aborted_lease_loss(
         self,
@@ -346,12 +399,9 @@ class WorkerRunner:
         mol_id: str,
         attempt_id: str | None,
         error: str,
-    ) -> None:
+    ) -> bool:
         """Arquivar processamento abortado por perda de lease (não sync como válido)."""
-        self._update_csv(mol_id, {"status": MoleculeStatus.RERUN.value})
-        self._store.mark_failure(mol_id, error)
-        record = self._store.get(mol_id)
-        result_id = record.result_id if record is not None else None
+        result_id = new_result_id()
         payload = {
             "result_id": result_id,
             "mol_id": mol_id,
@@ -363,24 +413,49 @@ class WorkerRunner:
             .replace("+00:00", "Z"),
             "attempt_id": attempt_id,
         }
+        dl_record = DeadLetterRecord(
+            result_id=result_id,
+            mol_id=mol_id,
+            attempt_id=attempt_id,
+            original_payload=payload,
+            returned_status="stale_attempt",
+            detail=error,
+            worker_id=self._config.worker_id,
+            rejected_at=datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+            rejection_origin="lease_lost",
+        )
+        dead_letter_id = compute_dead_letter_id(
+            result_id=dl_record.result_id,
+            returned_status=dl_record.returned_status,
+            original_payload=dl_record.original_payload,
+        )
         try:
-            self._dead_letter.append(
-                DeadLetterRecord(
-                    result_id=str(result_id or f"aborted:{mol_id}"),
-                    mol_id=mol_id,
-                    attempt_id=attempt_id,
-                    original_payload=payload,
-                    returned_status="stale_attempt",
-                    detail=error,
-                    worker_id=self._config.worker_id,
-                    rejected_at=datetime.now(timezone.utc)
-                    .isoformat()
-                    .replace("+00:00", "Z"),
-                    rejection_origin="lease_lost",
-                )
-            )
+            self._pending_aborts.append(dl_record)
+        except Exception:
+            LOG.exception("Failed to persist pending lease-loss abort for %s", mol_id)
+            return False
+        # Evidência pendente durável: refletir Rerun local sem marcar completed
+        # (clear_completed não apaga até o dead-letter confirmar).
+        self._update_csv(mol_id, {"status": MoleculeStatus.RERUN.value})
+        local = self._store.get(mol_id)
+        if local is not None:
+            local.result_id = result_id
+            local.error = error
+        try:
+            self._dead_letter.append(dl_record)
         except Exception:
             LOG.exception("Failed to archive lease-lost abort for %s", mol_id)
+            return False
+        try:
+            self._pending_aborts.remove(dead_letter_id)
+        except Exception:
+            LOG.exception(
+                "Lease-loss archived but pending remove failed for %s", mol_id
+            )
+        self._apply_local_lease_loss_side_effects(
+            mol_id=mol_id, result_id=result_id, error=error
+        )
+        return True
 
     def _report_or_enqueue(
         self,
@@ -511,6 +586,7 @@ class WorkerRunner:
             Number of molecules successfully processed.
         """
         self._client.register()
+        self._flush_pending_aborts()
         self.flush_offline_queue()
         processed = 0
         attempted = 0
