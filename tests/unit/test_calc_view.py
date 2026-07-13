@@ -204,6 +204,55 @@ def test_do_prediction_sucesso_completo(
     assert not hasattr(pred, "molecule_name")
 
 
+@patch("grimperium.cli.views.calc_view.text_input", return_value="CCO")
+def test_do_prediction_clears_stale_results_before_current_run(
+    mock_input: MagicMock,
+    calc_view: CalcView,
+) -> None:
+    """A failed current execution must not finalize with a stale canonical result."""
+    mock_method = _mock_pm7_delta_method()
+    calc_view.controller.current_method_definition = mock_method
+    calc_view._select_units = MagicMock(return_value="both")
+    calc_view._resolve_required_model = MagicMock(  # type: ignore[method-assign]
+        return_value=Path("/fake/model.joblib"),
+    )
+    calc_view.render = MagicMock()
+    calc_view.render_result = MagicMock()
+    calc_view.last_result = PredictionResult(
+        smiles="old",
+        h298_pm7=-1.0,
+        delta_correction=0.0,
+        h298_corrected=-1.0,
+        model_name="old",
+        model_version="old",
+        execution_time=1.0,
+        n_conformers=1,
+    )
+    calc_view.last_calculation_result = MagicMock()
+    manifest = MagicMock(run_id="run_current")
+    calc_view._create_single_run = MagicMock(return_value=manifest)  # type: ignore[method-assign]
+    calc_view._complete_single_run = MagicMock()  # type: ignore[method-assign]
+    calc_view._fail_single_run = MagicMock()  # type: ignore[method-assign]
+
+    with patch(
+        "grimperium.cli.views.calc_view.run_single_molecule_prediction",
+        return_value=CalcPipelineResult(
+            h298_pm7=-45.32,
+            delta_correction=2.15,
+            h298_corrected=-43.17,
+            n_conformers=7,
+            execution_time=120.5,
+            model_version="v2.1",
+            canonical=None,
+        ),
+    ):
+        assert calc_view.do_prediction() is None
+
+    assert calc_view.last_calculation_result is None
+    calc_view._complete_single_run.assert_not_called()
+    calc_view._fail_single_run.assert_called_once()
+
+
 def test_run_single_molecule_prediction_delta_correction_scalar() -> None:
     """Pipeline extracts pure delta from the final H298 prediction."""
 

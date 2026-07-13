@@ -142,17 +142,45 @@ class ResultsService:
     def compare_runs(self, run_ids: list[str]) -> CompareRunsReport:
         """Return a basic MAE-sorted comparison for selected runs."""
         rows: list[RunComparisonRow] = []
+        expected_property_id: str | None = None
+        expected_reference_label: str | None = None
+        expected_analysis_mode: ResultsAnalysisMode | None = None
         for run_id in run_ids:
-            report = self.analyze_run(run_id)
+            manifest = self.run_service.get_run(run_id)
+            report = self.analyze_run(manifest)
             if not report.has_comparative_metrics:
                 raise ValueError(
                     f"Run {run_id} has no comparative metrics "
                     f"(mode={report.analysis_mode.value})"
                 )
+            reference_label = _reference_label(manifest.dataset_ref)
+            if expected_property_id is None:
+                expected_property_id = manifest.property_id
+                expected_reference_label = reference_label
+                expected_analysis_mode = report.analysis_mode
+            elif manifest.property_id != expected_property_id:
+                raise ValueError(
+                    "Cannot compare runs with incompatible property_id values: "
+                    f"{expected_property_id} != {manifest.property_id}"
+                )
+            elif reference_label != expected_reference_label:
+                raise ValueError(
+                    "Cannot compare runs with incompatible reference values: "
+                    f"{expected_reference_label} != {reference_label}"
+                )
+            elif report.analysis_mode is not expected_analysis_mode:
+                raise ValueError(
+                    "Cannot compare runs with incompatible analysis_mode values: "
+                    f"{expected_analysis_mode.value if expected_analysis_mode else None} "
+                    f"!= {report.analysis_mode.value}"
+                )
             summary = report.summary
             rows.append(
                 RunComparisonRow(
                     run_id=run_id,
+                    property_id=manifest.property_id,
+                    reference_label=reference_label,
+                    analysis_mode=report.analysis_mode.value,
                     method_label=report.method_label or "-",
                     model_label=report.model_label,
                     status=report.run_status or "-",
@@ -240,6 +268,16 @@ def _model_label(model_ref: dict[str, Any] | None) -> str | None:
     path = model_ref.get("path")
     if path:
         return Path(str(path)).stem
+    return None
+
+
+def _reference_label(dataset_ref: dict[str, Any] | None) -> str | None:
+    if not dataset_ref:
+        return None
+    for key in ("database_id", "alias", "name", "path"):
+        value = dataset_ref.get(key)
+        if value:
+            return str(value)
     return None
 
 

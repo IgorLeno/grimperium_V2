@@ -222,15 +222,31 @@ class TestReportFailure:
 
 
 class TestSyncResults:
-    def test_sync_results_returns_counts(self) -> None:
+    def test_sync_results_returns_response_dict(self) -> None:
         t = _MockTransport()
         t.add(
-            "POST", "/sync_results", _json_response(200, {"accepted": 3, "rejected": 1})
+            "POST",
+            "/sync_results",
+            _json_response(
+                200,
+                {
+                    "accepted": 3,
+                    "rejected": 1,
+                    "items": [
+                        {
+                            "result_id": "a",
+                            "mol_id": "m1",
+                            "status": "applied",
+                        }
+                    ],
+                },
+            ),
         )
         client = _make_client(t)
-        accepted, rejected = client.sync_results([])
-        assert accepted == 3
-        assert rejected == 1
+        data = client.sync_results([])
+        assert data["accepted"] == 3
+        assert data["rejected"] == 1
+        assert data["items"][0]["status"] == "applied"
 
     def test_sync_results_sends_worker_id(self) -> None:
         t = _MockTransport()

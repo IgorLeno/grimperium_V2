@@ -225,10 +225,17 @@ class RunService:
         manifest: RunManifest, success_count: int, failure_count: int
     ) -> None:
         total = success_count + failure_count
-        if manifest.molecule_count > 0 and total > manifest.molecule_count:
+        if manifest.molecule_count <= 0:
+            return
+        if total != manifest.molecule_count:
             raise ValueError(
-                "success_count + failure_count exceeds molecule_count "
-                f"({total} > {manifest.molecule_count})"
+                "success_count + failure_count must equal molecule_count "
+                f"({total} != {manifest.molecule_count})"
+            )
+        if failure_count == 0 and success_count != manifest.molecule_count:
+            raise ValueError(
+                "completed runs require success_count == molecule_count "
+                f"({success_count} != {manifest.molecule_count})"
             )
 
     @staticmethod

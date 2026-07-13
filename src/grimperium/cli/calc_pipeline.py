@@ -66,6 +66,8 @@ def run_single_molecule_prediction(
     model_path: Path,
     config: PM7Config,
     progress_callback: Callable[[str], None] | None = None,
+    *,
+    canonical_run_id: str | None = None,
 ) -> CalcPipelineResult:
     """Run the canonical PM7 + Delta Learning runner and adapt its result.
 
@@ -108,6 +110,7 @@ def run_single_molecule_prediction(
             molecule_id=mol_id,
             model_path=model_path,
             progress_callback=progress_callback,
+            run_id=canonical_run_id,
         )
     except (PM7DeltaRunnerError, ModelCompatibilityError) as exc:
         raise CalcPipelineError(str(exc)) from exc

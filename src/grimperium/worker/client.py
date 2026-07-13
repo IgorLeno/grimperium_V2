@@ -126,6 +126,7 @@ class WorkerClient:
             raise ServerError(f"PUT /heartbeat/{mol_id} → {r.status_code}: {r.text}")
 
     def report_success(self, mol_id: str, result_update: dict[str, Any]) -> None:
+        """Legado: preferir sync_results. Mantido para clientes antigos/testes."""
         self._post(
             "/report/success",
             {
@@ -136,6 +137,7 @@ class WorkerClient:
         )
 
     def report_failure(self, mol_id: str, error: str, force_skip: bool = False) -> None:
+        """Legado: preferir sync_results. Mantido para clientes antigos/testes."""
         self._post(
             "/report/failure",
             {
@@ -146,9 +148,14 @@ class WorkerClient:
             },
         )
 
-    def sync_results(self, results: list[dict[str, Any]]) -> tuple[int, int]:
+    def sync_results(self, results: list[dict[str, Any]]) -> dict[str, Any]:
+        """Enviar resultados pelo protocolo canônico idempotente.
+
+        Returns:
+            Resposta completa do servidor, incluindo ``items`` por result_id.
+        """
         data = self._post(
             "/sync_results",
             {"worker_id": self._config.worker_id, "results": results},
         )
-        return int(data["accepted"]), int(data["rejected"])
+        return dict(data)

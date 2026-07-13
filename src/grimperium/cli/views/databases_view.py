@@ -1398,6 +1398,7 @@ class DatabasesView(BaseView):
                 pm7_config=pm7_config,
                 processor_adapter=processor,
                 output_layout=output_layout,
+                canonical_run_id=manifest.run_id,
             )
 
             if batch.is_empty:
@@ -1518,8 +1519,9 @@ class DatabasesView(BaseView):
             )
             if manifest is not None and result is not None:
                 manifest = self._attach_existing_outputs(manifest, output_layout)
-                failure_count = (
-                    result.failed_count + result.rerun_count + result.skip_count
+                failure_count = min(
+                    result.failed_count + result.rerun_count + result.skip_count,
+                    max(result.total_count - result.success_count, 0),
                 )
                 if result.invalidated:
                     finalized = self._run_service().invalidate_run(

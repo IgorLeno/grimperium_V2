@@ -186,6 +186,7 @@ class SemiempiricalFormationEnthalpyRunner:
         name: str | None = None,
         charge: int = 0,
         multiplicity: int = 1,
+        run_id: str | None = None,
     ) -> MoleculeCalculationResult:
         """Calculate AM1, PM3, and PM7 formation enthalpy estimates."""
         started_at = datetime.now(timezone.utc)
@@ -268,6 +269,7 @@ class SemiempiricalFormationEnthalpyRunner:
                 name=name,
                 charge=charge,
                 multiplicity=multiplicity,
+                run_id=run_id,
                 started_at=started_at,
                 stage_executions=[
                     *stage_executions,
@@ -395,7 +397,7 @@ class SemiempiricalFormationEnthalpyRunner:
                 multiplicity=multiplicity,
             ),
             run=RunMetadata(
-                run_id=molecule_id,
+                run_id=run_id or molecule_id,
                 execution_phase=str(self.config.phase.value),
                 method_ref=CalculationMethodReference(
                     method_id=METHOD_ID,
@@ -428,6 +430,7 @@ class SemiempiricalFormationEnthalpyRunner:
         name: str | None,
         charge: int,
         multiplicity: int,
+        run_id: str | None,
         started_at: datetime,
         stage_executions: list[StageExecutionRecord],
         error_message: str,
@@ -440,7 +443,7 @@ class SemiempiricalFormationEnthalpyRunner:
                 multiplicity=multiplicity,
             ),
             run=RunMetadata(
-                run_id="",
+                run_id=run_id or "",
                 execution_phase=str(self.config.phase.value),
                 method_ref=CalculationMethodReference(
                     method_id=METHOD_ID,

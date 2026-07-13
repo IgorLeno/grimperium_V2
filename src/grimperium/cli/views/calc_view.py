@@ -7,7 +7,7 @@ Handles molecular property predictions.
 import hashlib
 import json
 import os
-from dataclasses import asdict, is_dataclass
+from dataclasses import asdict, is_dataclass, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -446,6 +446,13 @@ class CalcView(BaseView):
         manifest: RunManifest,
         result: PredictionResult,
     ) -> None:
+        self._finalize_single_run_safely(manifest, result)
+
+    def _finalize_single_run_safely(
+        self,
+        manifest: RunManifest,
+        result: PredictionResult,
+    ) -> None:
         service = self._run_service()
         run_dir = service.runs_root / manifest.run_id
         run_dir.mkdir(parents=True, exist_ok=True)
@@ -457,44 +464,74 @@ class CalcView(BaseView):
                 "got only a PredictionResult view model"
             )
 
-        csv_path = run_dir / "calculation_results.csv"
-        write_canonical_csv([canonical], csv_path)
+        try:
+            csv_path = run_dir / "calculation_results.csv"
+            write_canonical_csv([canonical], csv_path)
 
-        # Resumo visual de compatibilidade — não é a fonte científica autoritativa.
-        compat_path = run_dir / "single_result.json"
-        payload = {
-            "smiles": result.smiles,
-            "h298_pm7": result.h298_pm7,
-            "delta_correction": result.delta_correction,
-            "h298_corrected": result.h298_corrected,
-            "model_name": result.model_name,
-            "model_version": result.model_version,
-            "n_conformers": result.n_conformers,
-            "execution_time": result.execution_time,
-        }
-        compat_path.write_text(
-            json.dumps(payload, indent=2, sort_keys=True) + "\n",
-            encoding="utf-8",
-        )
-        service.attach_output_paths(
-            manifest.run_id,
-            {
-                "calculation_results_csv": csv_path,
-                "single_result": compat_path,
-            },
-        )
-        completed = service.complete_run(
-            manifest.run_id,
-            success_count=1,
-            failure_count=0,
-        )
-        self.controller.session.run = RunRef(
-            run_id=completed.run_id,
-            status=completed.status.value,
-        )
+            # Resumo visual de compatibilidade; a fonte científica é o CSV canônico.
+            compat_path = run_dir / "single_result.json"
+            payload = {
+                "smiles": result.smiles,
+                "h298_pm7": result.h298_pm7,
+                "delta_correction": result.delta_correction,
+                "h298_corrected": result.h298_corrected,
+                "model_name": result.model_name,
+                "model_version": result.model_version,
+                "n_conformers": result.n_conformers,
+                "execution_time": result.execution_time,
+            }
+            compat_path.write_text(
+                json.dumps(payload, indent=2, sort_keys=True) + "\n",
+                encoding="utf-8",
+            )
+            service.attach_output_paths(
+                manifest.run_id,
+                {
+                    "calculation_results_csv": csv_path,
+                    "single_result": compat_path,
+                },
+            )
+            completed = service.complete_run(
+                manifest.run_id,
+                success_count=1,
+                failure_count=0,
+            )
+            self.controller.session.run = RunRef(
+                run_id=completed.run_id,
+                status=completed.status.value,
+            )
+        except Exception as exc:
+            self._fail_single_run_if_mutable(manifest, str(exc))
+            raise
 
     def _fail_single_run(self, manifest: RunManifest, error: str) -> None:
         failed = self._run_service().fail_run(
+            manifest.run_id,
+            error=error,
+            success_count=0,
+            failure_count=1,
+        )
+        self.controller.session.run = RunRef(
+            run_id=failed.run_id,
+            status=failed.status.value,
+        )
+
+    def _fail_single_run_if_mutable(self, manifest: RunManifest, error: str) -> None:
+        service = self._run_service()
+        try:
+            current = service.get_run(manifest.run_id)
+        except FileNotFoundError:
+            return
+        terminal_statuses = {
+            "completed",
+            "partial",
+            "failed",
+            "cancelled",
+            "invalidated",
+        }
+        if current.status.value in terminal_statuses:
+            return
+        failed = service.fail_run(
             manifest.run_id,
             error=error,
             success_count=0,
@@ -557,6 +594,15 @@ class CalcView(BaseView):
             "state": state_value,
         }
 
+    @staticmethod
+    def _with_run_id(
+        result: MoleculeCalculationResult,
+        run_id: str | None,
+    ) -> MoleculeCalculationResult:
+        if run_id is None or result.run.run_id == run_id:
+            return result
+        return replace(result, run=replace(result.run, run_id=run_id))
+
     def render_method_a_result(
         self,
         result: MoleculeCalculationResult,
@@ -605,6 +651,8 @@ class CalcView(BaseView):
         smiles: str,
         method: CalculationMethodDefinition,
         units: str = "both",
+        *,
+        canonical_run_id: str | None = None,
     ) -> bool:
         mol_id = "calc_" + hashlib.sha1(smiles.encode()).hexdigest()[:6]
         runner = SemiempiricalFormationEnthalpyRunner(
@@ -616,11 +664,13 @@ class CalcView(BaseView):
                 smiles,
                 molecule_id=mol_id,
                 name=mol_id,
+                run_id=canonical_run_id,
             )
         except Exception as exc:
             self.show_error(f"Calculation failed: {exc}")
             return True
 
+        result = self._with_run_id(result, canonical_run_id)
         self.last_calculation_result = result
         self.last_result = self._method_a_prediction_summary(result, method)
         self.console.print(
@@ -727,6 +777,8 @@ class CalcView(BaseView):
         self,
         smiles: str,
         method: CalculationMethodDefinition,
+        *,
+        canonical_run_id: str | None = None,
     ) -> bool:
         model_path = self._resolve_required_model(method)
         if model_path is None:
@@ -743,6 +795,7 @@ class CalcView(BaseView):
                 model_path,
                 self._pm7_config_from_settings(),
                 progress_update,
+                canonical_run_id=canonical_run_id,
             )
         except CalcPipelineError as exc:
             self.show_error(str(exc))
@@ -753,6 +806,7 @@ class CalcView(BaseView):
 
         canonical = pipeline_result.canonical
         if canonical is not None:
+            canonical = self._with_run_id(canonical, canonical_run_id)
             self.last_calculation_result = canonical
             result = self._prediction_result_from_canonical(
                 smiles, canonical, pipeline_result
@@ -827,6 +881,8 @@ class CalcView(BaseView):
             ``"methods"`` when no method is selected (redirect),
             otherwise ``None`` to stay in the calc view.
         """
+        self.last_result = None
+        self.last_calculation_result = None
         self.render()
 
         method = self.controller.current_method_definition
@@ -857,17 +913,25 @@ class CalcView(BaseView):
         self.console.print()
 
         manifest = self._create_single_run(method)
-        previous_result = self.last_result
         try:
             if method.method_id == "semiempirical_am1_pm3_pm7":
-                self._run_method_a(smiles, method, units=units)
+                self._run_method_a(
+                    smiles,
+                    method,
+                    units=units,
+                    canonical_run_id=manifest.run_id,
+                )
             else:
-                self._run_method_b(smiles, method)
+                self._run_method_b(
+                    smiles,
+                    method,
+                    canonical_run_id=manifest.run_id,
+                )
         except Exception as exc:
             self._fail_single_run(manifest, str(exc))
             raise
 
-        if self.last_result is not None and self.last_result is not previous_result:
+        if self.last_result is not None:
             if self.last_calculation_result is None:
                 self._fail_single_run(
                     manifest,

@@ -89,6 +89,7 @@ class BatchExecutionManager:
         output_layout: BatchOutputLayout | None = None,
         result_writer: ResultWriter = write_batch_calculation_results,
         write_xlsx: bool = True,
+        canonical_run_id: str | None = None,
     ) -> None:
         """Initialize batch execution manager.
 
@@ -113,6 +114,7 @@ class BatchExecutionManager:
         self._output_layout = output_layout
         self._result_writer = result_writer
         self._write_xlsx = write_xlsx
+        self.canonical_run_id = canonical_run_id
         self._canonical_results: list[MoleculeCalculationResult] = []
         self.result_applier = BatchResultApplier(
             state_manager=state_manager,
@@ -448,6 +450,7 @@ class BatchExecutionManager:
                             cast(AdapterPM7Result, pm7_result),
                             method_id=canonical_pm7_method_id(method_id),
                             method_version=method_version,
+                            run_id=self.canonical_run_id,
                         )
                     )
 
@@ -625,6 +628,7 @@ def create_execution_manager(
     preserve_artifacts_on_failure: bool = True,
     output_dir: Path | None = None,
     write_xlsx: bool = True,
+    canonical_run_id: str | None = None,
 ) -> BatchExecutionManager:
     """Factory function to create BatchExecutionManager with defaults.
 
@@ -674,4 +678,5 @@ def create_execution_manager(
         artifact_manager=artifact_manager,
         output_layout=output_layout,
         write_xlsx=write_xlsx,
+        canonical_run_id=canonical_run_id,
     )

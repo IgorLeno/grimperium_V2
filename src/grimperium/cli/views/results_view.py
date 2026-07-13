@@ -142,6 +142,32 @@ class ResultsView(BaseView):
         table.add_column("R\u00b2", justify="right")
         table.add_column("Status")
 
+        report = self._load_analysis_report(show_errors=False)
+        if report is not None and report.model_label:
+            table.add_row(
+                report.model_label,
+                "run manifest",
+                "-",
+                "-",
+                StatusBadge(report.run_status or "Ready").text,
+            )
+            self.console.print(table)
+            self.console.print()
+            return
+        if report is not None:
+            method_id = report.scientific_summary.method_id
+            if method_id in {"crest_pm7", "semiempirical_am1_pm3_pm7"}:
+                table.add_row(
+                    "Not required",
+                    str(method_id),
+                    "-",
+                    "-",
+                    StatusBadge(report.run_status or "Ready").text,
+                )
+                self.console.print(table)
+                self.console.print()
+                return
+
         metadata = self.results_service.model_metadata(
             self._get_model_path(),
             model_name=self._session_model_name(),
@@ -266,6 +292,13 @@ class ResultsView(BaseView):
             (low_medium / total_molecules) * 100 if total_molecules > 0 else 0
         )
 
+        if report.analysis_mode is ResultsAnalysisMode.BASELINE_WITH_REFERENCE:
+            low_label = "PM7 baseline is close to the reference"
+            medium_label = "Moderate PM7 baseline deviation"
+        else:
+            low_label = "Predictions are accurate, small corrections needed"
+            medium_label = "Moderate corrections, ML performs well"
+
         summary = f"""
 [bold]Key Findings:[/bold]
 
@@ -275,8 +308,8 @@ class ResultsView(BaseView):
 
 [bold]Interpretation:[/bold]
 
-\u2022 [{COLORS['success']}]LOW (0-10%)[/{COLORS['success']}]: Predictions are accurate, small corrections needed
-\u2022 [{COLORS['warning']}]MEDIUM (10-25%)[/{COLORS['warning']}]: Moderate corrections, ML performs well
+\u2022 [{COLORS['success']}]LOW (0-10%)[/{COLORS['success']}]: {low_label}
+\u2022 [{COLORS['warning']}]MEDIUM (10-25%)[/{COLORS['warning']}]: {medium_label}
 \u2022 [{COLORS['high']}]HIGH (25-50%)[/{COLORS['high']}]: Significant corrections needed, challenging cases
 \u2022 [{COLORS['error']}]CRITICAL (>50%)[/{COLORS['error']}]: Large deviations, may require special handling
 """
@@ -628,15 +661,27 @@ class ResultsView(BaseView):
 
     def _handle_charts(self) -> None:
         """Generate visualization charts and display results."""
-        csv_path = self._get_csv_path()
-        if csv_path is None:
-            self.show_error(
-                "No analysis source selected. Choose a dataset, select a run, "
-                "or run a calculation first."
+        report = self._load_analysis_report(show_errors=True)
+        if report is None:
+            self.wait_for_enter()
+            return
+        if report.analysis_mode is ResultsAnalysisMode.SCIENTIFIC_SUMMARY_ONLY:
+            self.console.print(
+                f"[{COLORS['warning']}]Comparative charts are not available for "
+                "scientific_summary_only runs (no reference/prediction pair)."
+                f"[/{COLORS['warning']}]"
             )
             self.wait_for_enter()
             return
+        scored_df = report.scored_df
+        if scored_df.empty:
+            self.show_error("No comparative rows are available for chart generation.")
+            self.wait_for_enter()
+            return
         charts_dir = self._get_charts_dir()
+        charts_dir.mkdir(parents=True, exist_ok=True)
+        chart_input = charts_dir / "chart_input.csv"
+        scored_df.to_csv(chart_input, index=False)
 
         self.console.print()
         self.console.print(
@@ -646,7 +691,7 @@ class ResultsView(BaseView):
         self.console.print()
 
         try:
-            result = charts_module.generate_charts(csv_path, charts_dir)
+            result = charts_module.generate_charts(chart_input, charts_dir)
 
             result_text = f"""
 [bold]Charts Generated Successfully![/bold]

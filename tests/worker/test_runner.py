@@ -1,5 +1,6 @@
 """Tests for worker/runner.py — WorkerRunner main processing loop."""
 
+import tempfile
 from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock, patch
@@ -23,9 +24,31 @@ def _make_config(**kwargs: Any) -> WorkerConfig:
         "crest_timeout_minutes": 30,
         "mopac_timeout_minutes": 10,
         "batch_id": "test-batch",
+        # Isolar fila offline por teste para evitar contaminação entre casos.
+        "offline_queue_path": str(
+            Path(tempfile.mkdtemp(prefix="grimperium-worker-test-"))
+            / "offline_results.jsonl"
+        ),
     }
     defaults.update(kwargs)
     return WorkerConfig(**defaults)
+
+
+def _echo_sync_results(results: list[dict[str, Any]]) -> dict[str, Any]:
+    """Mock de sync que confirma exatamente os result_ids enviados."""
+    return {
+        "accepted": len(results),
+        "rejected": 0,
+        "duplicate": False,
+        "items": [
+            {
+                "result_id": str(item.get("result_id", "")),
+                "mol_id": str(item.get("mol_id", "")),
+                "status": "applied",
+            }
+            for item in results
+        ],
+    }
 
 
 def _mock_client(
@@ -33,6 +56,7 @@ def _mock_client(
 ) -> MagicMock:
     client = MagicMock(spec=WorkerClient)
     client.claim.return_value = claim_returns
+    client.sync_results.side_effect = _echo_sync_results
     return client
 
 
@@ -103,42 +127,46 @@ class TestRunOne:
         "grimperium.worker.runner._pm7result_to_update",
         return_value={"H298_pm7": -42.0},
     )
-    def test_reports_success_to_server(self, _mock_update: MagicMock) -> None:
+    def test_syncs_success_to_server(self, _mock_update: MagicMock) -> None:
         client = _mock_client(claim_returns=("m1", "CCO"))
         pipeline = _mock_pipeline(success=True)
         runner = WorkerRunner(_make_config(), pipeline=pipeline, client=client)
         runner.run_one()
-        client.report_success.assert_called_once_with("m1", {"H298_pm7": -42.0})
+        client.sync_results.assert_called()
+        client.report_success.assert_not_called()
         client.report_failure.assert_not_called()
 
-    def test_reports_failure_when_pipeline_result_not_success(self) -> None:
+    def test_syncs_failure_when_pipeline_result_not_success(self) -> None:
         client = _mock_client(claim_returns=("m1", "CCO"))
         pipeline = _mock_pipeline(success=False, error_msg="CREST timeout")
         runner = WorkerRunner(_make_config(), pipeline=pipeline, client=client)
         runner.run_one()
-        client.report_failure.assert_called_once_with("m1", "CREST timeout")
+        client.sync_results.assert_called()
+        payload = client.sync_results.call_args[0][0][0]
+        assert payload["success"] is False
+        assert payload["error"] == "CREST timeout"
+        client.report_failure.assert_not_called()
         client.report_success.assert_not_called()
 
-    def test_reports_failure_with_fallback_message_when_no_error(self) -> None:
+    def test_syncs_failure_with_fallback_message_when_no_error(self) -> None:
         client = _mock_client(claim_returns=("m1", "CCO"))
         pipeline = _mock_pipeline(success=False, error_msg=None)
         runner = WorkerRunner(_make_config(), pipeline=pipeline, client=client)
         runner.run_one()
-        args = client.report_failure.call_args
-        assert args is not None
-        assert args[0][0] == "m1"
-        assert isinstance(args[0][1], str) and len(args[0][1]) > 0
+        payload = client.sync_results.call_args[0][0][0]
+        assert payload["mol_id"] == "m1"
+        assert isinstance(payload["error"], str) and len(payload["error"]) > 0
 
-    def test_reports_failure_when_pipeline_raises(self) -> None:
+    def test_syncs_failure_when_pipeline_raises(self) -> None:
         client = _mock_client(claim_returns=("m1", "CCO"))
         pipeline = MagicMock()
         pipeline.process_molecule.side_effect = RuntimeError("MOPAC crashed")
         runner = WorkerRunner(_make_config(), pipeline=pipeline, client=client)
         runner.run_one()
-        client.report_failure.assert_called_once()
-        args = client.report_failure.call_args[0]
-        assert args[0] == "m1"
-        assert "MOPAC crashed" in args[1]
+        client.sync_results.assert_called()
+        payload = client.sync_results.call_args[0][0][0]
+        assert payload["mol_id"] == "m1"
+        assert "MOPAC crashed" in str(payload["error"])
 
     @patch("grimperium.worker.runner._pm7result_to_update", return_value={})
     def test_store_cleared_after_success(self, _mock_update: MagicMock) -> None:
@@ -214,6 +242,7 @@ class TestRun:
     @patch("grimperium.worker.runner._pm7result_to_update", return_value={})
     def test_run_returns_count_of_processed(self, _mock_update: MagicMock) -> None:
         client = MagicMock(spec=WorkerClient)
+        client.sync_results.side_effect = _echo_sync_results
         client.claim.side_effect = [
             ("m1", "CCO"),
             ("m2", "CCC"),
@@ -231,6 +260,7 @@ class TestRun:
     @patch("grimperium.worker.runner._pm7result_to_update", return_value={})
     def test_run_respects_max_molecules(self, _mock_update: MagicMock) -> None:
         client = MagicMock(spec=WorkerClient)
+        client.sync_results.side_effect = _echo_sync_results
         client.claim.return_value = ("m1", "CCO")
         pipeline = _mock_pipeline(success=True)
         runner = WorkerRunner(_make_config(), pipeline=pipeline, client=client)
@@ -240,6 +270,7 @@ class TestRun:
 
     def test_run_stops_after_max_idle_polls(self) -> None:
         client = MagicMock(spec=WorkerClient)
+        client.sync_results.side_effect = _echo_sync_results
         client.claim.return_value = None
         pipeline = _mock_pipeline()
         runner = WorkerRunner(
@@ -265,6 +296,7 @@ class TestRun:
         """stop() between run_one calls should terminate the loop."""
         config = _make_config(max_idle_polls=100)
         client = MagicMock(spec=WorkerClient)
+        client.sync_results.side_effect = _echo_sync_results
         pipeline = _mock_pipeline(success=True)
         runner = WorkerRunner(config, pipeline=pipeline, client=client)
 
@@ -324,6 +356,7 @@ class TestConsecutiveFailureStop:
 
     def test_empty_queue_does_not_increment_counter(self) -> None:
         client = MagicMock(spec=WorkerClient)
+        client.sync_results.side_effect = _echo_sync_results
         client.claim.return_value = None
         pipeline = _mock_pipeline()
         runner = WorkerRunner(
@@ -336,6 +369,7 @@ class TestConsecutiveFailureStop:
 
     def test_run_stops_after_max_consecutive_failures(self) -> None:
         client = MagicMock(spec=WorkerClient)
+        client.sync_results.side_effect = _echo_sync_results
         client.claim.return_value = ("m1", "CCO")
         pipeline = _mock_pipeline(success=False, error_msg="boom")
         cfg = _make_config(
@@ -351,6 +385,7 @@ class TestConsecutiveFailureStop:
 
     def test_consecutive_failure_stop_false_disables_stop(self) -> None:
         client = MagicMock(spec=WorkerClient)
+        client.sync_results.side_effect = _echo_sync_results
         client.claim.return_value = ("m1", "CCO")
         pipeline = _mock_pipeline(success=False, error_msg="boom")
         cfg = _make_config(
@@ -369,6 +404,7 @@ class TestConsecutiveFailureStop:
         self, _mock_update: MagicMock
     ) -> None:
         client = MagicMock(spec=WorkerClient)
+        client.sync_results.side_effect = _echo_sync_results
         client.claim.return_value = ("m1", "CCO")
         cfg = _make_config(max_consecutive_failures=3)
         runner = WorkerRunner(cfg, pipeline=_mock_pipeline(), client=client)
@@ -398,6 +434,7 @@ class TestConsecutiveFailureStop:
     ) -> None:
         """F, S, S, S -> processed deve ser 3, nao 1."""
         client = MagicMock(spec=WorkerClient)
+        client.sync_results.side_effect = _echo_sync_results
         client.claim.return_value = ("m1", "CCO")
         cfg = _make_config(max_consecutive_failures=10)
         runner = WorkerRunner(cfg, pipeline=_mock_pipeline(), client=client)

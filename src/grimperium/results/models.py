@@ -128,6 +128,9 @@ class RunComparisonRow:
     """One run summarized for comparison."""
 
     run_id: str
+    property_id: str
+    reference_label: str | None
+    analysis_mode: str
     method_label: str
     model_label: str | None
     status: str

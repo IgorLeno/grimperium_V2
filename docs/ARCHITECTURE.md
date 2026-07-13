@@ -742,6 +742,17 @@ to `runs_root` so relocating the runs directory keeps manifests portable.
 Authoritative scientific outputs for batch and individual calc live under
 `runs/<run_id>/` (e.g. `calculation_results.csv`).
 
+The run manifest owns identity for every scientific delivery. Callers create and
+start the run first, pass `manifest.run_id` into canonical writers, attach the
+generated artifacts to that same manifest, then finalize it. Canonical CSV rows
+must not mint unrelated run IDs or be copied into a separately created run.
+
+Lifecycle counts are part of the contract: `success_count + failure_count` must
+match `molecule_count`, completed runs require all successes, and missing
+canonical output turns individual calculations into failed runs instead of
+reusing stale results. `ResultsService.compare_runs` is intentionally strict and
+rejects runs with incompatible `property_id`, reference label, or analysis mode.
+
 ### PM7 batch provenance
 
 `DatabasesView._run_pm7_batch` always labels `crest_pm7` regardless of the active
@@ -755,3 +766,15 @@ Invariant: the same `result_id` + fingerprint applies operational effect at most
 Workers mint an explicit `result_id` and persist it in an offline JSONL queue for
 retries. Legacy clients without `result_id` get a content-stable fingerprint ID
 that does **not** include mutable `reruns`.
+
+The unique delivery protocol is shared by online and offline paths:
+`check -> prepare -> dual-write -> commit -> metrics -> cleanup`. Workers enqueue
+results before the immediate online attempt, resend the same `result_id` until
+the server returns `applied` or `duplicate`, and keep conflicts/rejections queued
+for operator inspection.
+
+Journal recovery is conservative. A `committed` entry indexes the fingerprint and
+turns later deliveries into duplicates. A `prepared` entry is resumed only when
+the current molecule state proves the effect is already applied or still safely
+in flight; otherwise the server refuses blind reapply. A failed dual-write marks
+the journal entry `failed` instead of pretending the result was delivered.

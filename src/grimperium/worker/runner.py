@@ -16,7 +16,7 @@ from grimperium.crest_pm7.progress import (
 )
 from grimperium.worker.client import ServerError, WorkerClient, WorkerClientConfig
 from grimperium.worker.local_store import LocalStore
-from grimperium.worker.offline_queue import OfflineResultQueue
+from grimperium.worker.offline_queue import OfflineResult, OfflineResultQueue
 
 LOG = logging.getLogger(__name__)
 
@@ -305,7 +305,7 @@ class WorkerRunner:
         result_update: dict[str, Any] | None,
         error: str | None,
     ) -> None:
-        """Persist result_id first, then report online; keep queue on failure."""
+        """Persistir na fila e tentar esvaziar imediatamente via /sync_results."""
         record = self._store.get(mol_id)
         result_id = record.result_id if record is not None else None
         entry = self._offline_queue.enqueue(
@@ -322,37 +322,52 @@ class WorkerRunner:
         )
         if record is not None:
             record.result_id = entry.result_id
-        try:
-            if success:
-                self._client.report_success(mol_id, result_update or {})
-            else:
-                self._client.report_failure(mol_id, error or "failure")
-            self._offline_queue.confirm(entry.result_id)
-        except ServerError:
-            LOG.warning(
-                "Online report failed for %s — keeping result_id=%s for sync_results",
-                mol_id,
-                entry.result_id,
-            )
+        # Tentativa online imediata = mesmo protocolo offline (fila persistida).
+        self._flush_entries([entry])
 
     def flush_offline_queue(self) -> tuple[int, int]:
         """Reenviar resultados pendentes via /sync_results com o mesmo result_id."""
         pending = self._offline_queue.pending()
         if not pending:
             return 0, 0
+        return self._flush_entries(pending)
+
+    def _flush_entries(self, pending: list[OfflineResult]) -> tuple[int, int]:
+        """Confirmar apenas itens applied/duplicate identificados por result_id."""
         try:
-            accepted, rejected = self._client.sync_results(
+            response = self._client.sync_results(
                 [entry.to_sync_dict() for entry in pending]
             )
         except ServerError as exc:
             LOG.warning("Offline queue flush failed: %s", exc)
             return 0, len(pending)
-        # Confirmar apenas os que o servidor aceitou ou já tinha (accepted + no raise).
-        # Em caso de partial reject, reter todos e deixar o próximo flush decidir —
-        # sync_results é idempotente por result_id.
-        if rejected == 0:
-            for entry in pending:
-                self._offline_queue.confirm(entry.result_id)
+
+        items = response.get("items")
+        confirmed: set[str] = set()
+        if isinstance(items, list) and items:
+            for item in items:
+                if not isinstance(item, dict):
+                    continue
+                status = str(item.get("status", ""))
+                result_id = str(item.get("result_id", ""))
+                if result_id and status in {"applied", "duplicate"}:
+                    confirmed.add(result_id)
+                    self._offline_queue.confirm(result_id)
+                elif status == "conflict":
+                    LOG.error(
+                        "Conflict for result_id=%s — keeping in offline queue",
+                        result_id,
+                    )
+        else:
+            # Compat com servidores sem items: só confirmar se rejected==0.
+            rejected = int(response.get("rejected", 0))
+            if rejected == 0:
+                for entry in pending:
+                    self._offline_queue.confirm(entry.result_id)
+                    confirmed.add(entry.result_id)
+
+        accepted = int(response.get("accepted", len(confirmed)))
+        rejected = int(response.get("rejected", max(0, len(pending) - len(confirmed))))
         return accepted, rejected
 
     def run(self, max_molecules: int | None = None) -> int:

@@ -1,5 +1,6 @@
 """Pydantic schemas for all server request/response bodies."""
 
+from enum import Enum
 from typing import Any
 
 from pydantic import BaseModel
@@ -31,6 +32,8 @@ class ReportSuccessRequest(BaseModel):
     worker_id: str
     mol_id: str
     result_update: dict[str, Any]
+    result_id: str | None = None
+    completed_at: str | None = None
 
 
 class ReportFailureRequest(BaseModel):
@@ -38,6 +41,8 @@ class ReportFailureRequest(BaseModel):
     mol_id: str
     error: str
     force_skip: bool = False
+    result_id: str | None = None
+    completed_at: str | None = None
 
 
 class SyncResult(BaseModel):
@@ -71,10 +76,27 @@ class StatusResponse(BaseModel):
     workers: list[WorkerInfo]
 
 
+class SyncItemOutcome(str, Enum):
+    """Per-item outcome for POST /sync_results."""
+
+    APPLIED = "applied"
+    DUPLICATE = "duplicate"
+    REJECTED = "rejected"
+    CONFLICT = "conflict"
+
+
+class SyncItemResult(BaseModel):
+    result_id: str
+    mol_id: str
+    status: SyncItemOutcome
+    detail: str | None = None
+
+
 class SyncResponse(BaseModel):
     accepted: int
     rejected: int
     duplicate: bool = False
+    items: list[SyncItemResult] = []
 
 
 class RegisterResponse(BaseModel):

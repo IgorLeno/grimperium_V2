@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import csv
+import os
 from pathlib import Path
 from typing import Literal
 
@@ -94,7 +95,15 @@ def write_canonical_csv(
     """Write canonical long-form estimates CSV."""
     output_path.parent.mkdir(parents=True, exist_ok=True)
     rows = estimate_rows(results, units=units)
-    with output_path.open("w", encoding="utf-8", newline="") as handle:
-        writer = csv.DictWriter(handle, fieldnames=CANONICAL_CSV_COLUMNS)
-        writer.writeheader()
-        writer.writerows(rows)
+    tmp_path = output_path.with_name(f".{output_path.name}.{os.getpid()}.tmp")
+    try:
+        with tmp_path.open("w", encoding="utf-8", newline="") as handle:
+            writer = csv.DictWriter(handle, fieldnames=CANONICAL_CSV_COLUMNS)
+            writer.writeheader()
+            writer.writerows(rows)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(tmp_path, output_path)
+    finally:
+        if tmp_path.exists():
+            tmp_path.unlink(missing_ok=True)

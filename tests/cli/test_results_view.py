@@ -6,10 +6,12 @@ import io
 from pathlib import Path
 from unittest.mock import MagicMock
 
+import pandas as pd
 from rich.console import Console
 
 from grimperium.cli.controller import CliController
 from grimperium.cli.views.results_view import ResultsView
+from grimperium.results.models import ResultsAnalysisMode
 
 
 def _create_results_view() -> tuple[ResultsView, io.StringIO, MagicMock]:
@@ -116,3 +118,61 @@ def test_select_run_with_empty_history_shows_empty_state() -> None:
 
     assert view.handle_action("select_run") is None
     assert "No saved runs found" in buf.getvalue()
+
+
+def test_handle_charts_uses_analysis_report_scored_dataframe(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    view, _, controller = _create_results_view()
+    canonical_long_form = tmp_path / "calculation_results.csv"
+    canonical_long_form.write_text(
+        "estimate_id,run_id,role,canonical_value\nbaseline,run_1,baseline,-55\n",
+        encoding="utf-8",
+    )
+    controller.current_csv_path = canonical_long_form
+    report = MagicMock()
+    report.analysis_mode = ResultsAnalysisMode.PREDICTION_WITH_REFERENCE
+    report.scored_df = pd.DataFrame(
+        {
+            "mol_id": ["m1"],
+            "H298_cbs": [-50.0],
+            "H298_predicted": [-51.0],
+        }
+    )
+    view._load_analysis_report = MagicMock(return_value=report)  # type: ignore[method-assign]
+    view._get_charts_dir = MagicMock(return_value=tmp_path / "charts")  # type: ignore[method-assign]
+    captured: dict[str, Path] = {}
+
+    def fake_generate_charts(csv_path: Path, output_dir: Path):
+        captured["csv_path"] = Path(csv_path)
+        assert Path(csv_path) != canonical_long_form
+        assert "H298_predicted" in pd.read_csv(csv_path).columns
+        return MagicMock(
+            n_points=1,
+            rmse=1.0,
+            r2=0.9,
+            parity_plot=output_dir / "parity.png",
+            delta_histogram=output_dir / "delta.png",
+            residuals_plot=output_dir / "residuals.png",
+        )
+
+    monkeypatch.setattr(
+        "grimperium.cli.views.results_view.charts_module.generate_charts",
+        fake_generate_charts,
+    )
+
+    view._handle_charts()
+
+    assert captured["csv_path"].parent == tmp_path / "charts"
+
+
+def test_handle_charts_skips_scientific_summary_only() -> None:
+    view, buf, _ = _create_results_view()
+    report = MagicMock()
+    report.analysis_mode = ResultsAnalysisMode.SCIENTIFIC_SUMMARY_ONLY
+    view._load_analysis_report = MagicMock(return_value=report)  # type: ignore[method-assign]
+
+    view._handle_charts()
+
+    assert "comparative charts" in buf.getvalue().lower()

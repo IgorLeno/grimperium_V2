@@ -50,3 +50,14 @@ suspects = df[df["cbs_quality_flag"] == "SUSPECT"][
 ]
 print(suspects)  # 13 rows
 ```
+
+## Sync delivery / journal recovery (resolved 2026-07-12)
+
+Previously, `/report/success|failure` applied results outside `ResultLedger`.
+A lost HTTP ACK left the worker offline queue intact; a later `/sync_results`
+retry could double-apply (especially `reruns`). Startup recovery also treated
+any non-RUNNING status as proof of apply.
+
+**Current contract:** one transactional path (`SyncResultApplicationService`),
+per-item sync outcomes, exact journal proof before commit, and offline queue
+confirmation only for `applied`/`duplicate` `result_id`s.

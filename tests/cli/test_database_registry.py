@@ -96,6 +96,26 @@ def test_add_user_database_persists_overlay(
     assert registry.reload()[-1].alias == "CUSTOM"
 
 
+def test_add_user_database_accepts_case_insensitive_schema(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    registry = _registry(tmp_path, monkeypatch)
+    csv_path = tmp_path / "custom.csv"
+    csv_path.write_text("SMILES,H298_cbs\nC,-10\n", encoding="utf-8")
+
+    entry = registry.add_user_database(
+        path=csv_path,
+        name="Custom",
+        alias="CUSTOM",
+        description="Custom analysis data",
+        role="analysis",
+        capabilities={"readable", "analysis_input"},
+    )
+
+    assert registry.get_by_id(entry.database_id) is not None
+
+
 def test_official_path_override_is_stored_in_overlay(
     tmp_path: Path,
     monkeypatch,
@@ -212,6 +232,76 @@ def test_reset_official_overrides_clears_path(
     assert pm7.path != override_path
 
 
+def test_update_user_database_rejects_duplicate_alias_and_path(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    registry = _registry(tmp_path, monkeypatch)
+    csv_a = tmp_path / "a.csv"
+    csv_b = tmp_path / "b.csv"
+    csv_c = tmp_path / "c.csv"
+    csv_a.write_text("smiles\nC\n", encoding="utf-8")
+    csv_b.write_text("smiles\nCC\n", encoding="utf-8")
+    csv_c.write_text("smiles\nCCC\n", encoding="utf-8")
+    entry_a = registry.add_user_database(
+        path=csv_a,
+        name="A",
+        alias="A",
+        description="",
+        role="analysis",
+        capabilities={"readable"},
+    )
+    entry_b = registry.add_user_database(
+        path=csv_b,
+        name="B",
+        alias="B",
+        description="",
+        role="analysis",
+        capabilities={"readable"},
+    )
+
+    try:
+        registry.update_entry(entry_b.database_id, metadata={"alias": "A"})
+        raise AssertionError("expected duplicate alias rejection")
+    except ValueError as exc:
+        assert "Alias already registered" in str(exc)
+
+    try:
+        registry.update_entry(entry_b.database_id, path=csv_a)
+        raise AssertionError("expected duplicate path rejection")
+    except ValueError as exc:
+        assert "Path already registered" in str(exc)
+
+    registry.update_entry(entry_a.database_id, path=csv_a, metadata={"alias": "A"})
+    registry.update_entry(entry_b.database_id, path=csv_c)
+    assert registry.get_by_id(entry_b.database_id).path == csv_c  # type: ignore[union-attr]
+
+
+def test_update_user_database_rejects_invalid_csv_schema(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    registry = _registry(tmp_path, monkeypatch)
+    csv_a = tmp_path / "a.csv"
+    invalid = tmp_path / "invalid.csv"
+    csv_a.write_text("smiles\nC\n", encoding="utf-8")
+    invalid.write_text("energy\n-10\n", encoding="utf-8")
+    entry = registry.add_user_database(
+        path=csv_a,
+        name="A",
+        alias="A",
+        description="",
+        role="analysis",
+        capabilities={"readable"},
+    )
+
+    try:
+        registry.update_entry(entry.database_id, path=invalid)
+        raise AssertionError("expected invalid schema rejection")
+    except ValueError as exc:
+        assert "CSV schema" in str(exc)
+
+
 def test_legacy_migration_is_idempotent(
     tmp_path: Path,
     monkeypatch,
@@ -241,3 +331,58 @@ def test_legacy_migration_is_idempotent(
     second = DatabaseRegistry(data_dir)
     second_count = len([e for e in second.load() if e.origin == "user"])
     assert first_count == second_count == 1
+
+
+def test_legacy_migration_dedupes_by_metadata_alias(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    data_dir = tmp_path / "data"
+    config_dir = tmp_path / "config"
+    data_dir.mkdir()
+    config_dir.mkdir()
+    overlay_path = config_dir / "databases_registry.json"
+    overlay_path.write_text(
+        json.dumps(
+            {
+                "schema_version": 2,
+                "entries": [
+                    {
+                        "schema_version": 2,
+                        "database_id": "user.existing",
+                        "origin": "user",
+                        "manifest_version": "1.0.0",
+                        "role": "analysis",
+                        "capabilities": ["readable"],
+                        "path": "legacy_user.csv",
+                        "metadata": {"alias": "LEGACY_USER", "name": "Existing"},
+                    }
+                ],
+                "overrides": {},
+            }
+        ),
+        encoding="utf-8",
+    )
+    legacy_path = data_dir / "databases_registry.json"
+    legacy_path.write_text(
+        json.dumps(
+            [
+                {
+                    "name": "Legacy User",
+                    "alias": "LEGACY_USER",
+                    "csv_path": "other_path.csv",
+                    "description": "legacy",
+                    "pipeline": "analysis",
+                    "created_at": "2026-01-01",
+                    "properties": ["smiles"],
+                }
+            ]
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("GRIMPERIUM_CONFIG_DIR", str(config_dir))
+
+    registry = DatabaseRegistry(data_dir)
+    user_entries = [entry for entry in registry.load() if entry.origin == "user"]
+
+    assert [entry.alias for entry in user_entries] == ["LEGACY_USER"]

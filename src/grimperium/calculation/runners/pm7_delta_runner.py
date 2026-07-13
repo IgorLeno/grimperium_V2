@@ -123,6 +123,7 @@ class PM7DeltaLearningRunner:
         charge: int = 0,
         multiplicity: int = 1,
         progress_callback: Callable[[str], None] | None = None,
+        run_id: str | None = None,
     ) -> MoleculeCalculationResult:
         """Run PM7 + Delta Learning and return a canonical calculation result."""
         method = method or get_calculation_method(METHOD_ID)
@@ -181,6 +182,7 @@ class PM7DeltaLearningRunner:
             method_id=METHOD_ID,
             method_version=method.version,
             property_role=PropertyRole.BASELINE,
+            run_id=run_id,
         )
         # Honor the caller-provided molecule identity/charge state.
         if name is not None:

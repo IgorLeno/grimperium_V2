@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import os
 import threading
 from collections.abc import Callable
@@ -14,6 +15,7 @@ from pathlib import Path
 from typing import Any
 
 SCHEMA_VERSION = 1
+LOG = logging.getLogger(__name__)
 
 
 class LedgerStatus(str, Enum):
@@ -62,6 +64,10 @@ class JournalEntry:
     desired_success: bool
     previous_status: str | None = None
     previous_reruns: int | None = None
+    expected_final_status: str | None = None
+    expected_reruns: int | None = None
+    expected_science_hash: str | None = None
+    worker_id: str | None = None
     final_status: str | None = None
     prepared_at: str | None = None
     committed_at: str | None = None
@@ -149,22 +155,38 @@ class ResultLedger:
         desired_success: bool,
         previous_status: str | None = None,
         previous_reruns: int | None = None,
+        expected_final_status: str | None = None,
+        expected_reruns: int | None = None,
+        expected_science_hash: str | None = None,
+        worker_id: str | None = None,
     ) -> JournalEntry:
         """Durably mark a sync transaction as prepared before dual-write."""
         if not result_id or not fingerprint:
             raise ValueError("result_id and fingerprint must not be blank")
         now = datetime.now(timezone.utc).isoformat()
-        entry = JournalEntry(
-            result_id=result_id,
-            fingerprint=fingerprint,
-            mol_id=mol_id,
-            txn_status=JournalTxnStatus.PREPARED,
-            desired_success=desired_success,
-            previous_status=previous_status,
-            previous_reruns=previous_reruns,
-            prepared_at=now,
-        )
         with self._lock:
+            previous = self._journal.get(result_id)
+            if (
+                previous is not None
+                and previous.txn_status is JournalTxnStatus.PREPARED
+                and previous.fingerprint == fingerprint
+            ):
+                # Retomar a mesma preparação sem sobrescrever o histórico.
+                return previous
+            entry = JournalEntry(
+                result_id=result_id,
+                fingerprint=fingerprint,
+                mol_id=mol_id,
+                txn_status=JournalTxnStatus.PREPARED,
+                desired_success=desired_success,
+                previous_status=previous_status,
+                previous_reruns=previous_reruns,
+                expected_final_status=expected_final_status,
+                expected_reruns=expected_reruns,
+                expected_science_hash=expected_science_hash,
+                worker_id=worker_id,
+                prepared_at=now,
+            )
             self._append_journal(entry)
             self._journal[result_id] = entry
         return entry
@@ -187,6 +209,10 @@ class ResultLedger:
                 desired_success=previous.desired_success,
                 previous_status=previous.previous_status,
                 previous_reruns=previous.previous_reruns,
+                expected_final_status=previous.expected_final_status,
+                expected_reruns=previous.expected_reruns,
+                expected_science_hash=previous.expected_science_hash,
+                worker_id=previous.worker_id,
                 final_status=final_status or previous.final_status,
                 prepared_at=previous.prepared_at,
                 committed_at=datetime.now(timezone.utc).isoformat(),
@@ -212,6 +238,10 @@ class ResultLedger:
                 desired_success=previous.desired_success,
                 previous_status=previous.previous_status,
                 previous_reruns=previous.previous_reruns,
+                expected_final_status=previous.expected_final_status,
+                expected_reruns=previous.expected_reruns,
+                expected_science_hash=previous.expected_science_hash,
+                worker_id=previous.worker_id,
                 final_status=previous.final_status,
                 prepared_at=previous.prepared_at,
                 committed_at=None,
@@ -248,7 +278,11 @@ class ResultLedger:
                 )
             else:
                 # Leave prepared so the next sync can resume safely via check().
-                recovered.append(entry)
+                # Do not count non-committed entries as recovered.
+                LOG.debug(
+                    "Prepared journal entry remains incomplete: %s",
+                    entry.result_id,
+                )
         return recovered
 
     def _load_index(self) -> None:
@@ -293,6 +327,26 @@ class ResultLedger:
                         if payload.get("previous_reruns") is not None
                         else None
                     ),
+                    expected_final_status=(
+                        str(payload["expected_final_status"])
+                        if payload.get("expected_final_status") is not None
+                        else None
+                    ),
+                    expected_reruns=(
+                        int(payload["expected_reruns"])
+                        if payload.get("expected_reruns") is not None
+                        else None
+                    ),
+                    expected_science_hash=(
+                        str(payload["expected_science_hash"])
+                        if payload.get("expected_science_hash") is not None
+                        else None
+                    ),
+                    worker_id=(
+                        str(payload["worker_id"])
+                        if payload.get("worker_id") is not None
+                        else None
+                    ),
                     final_status=(
                         str(payload["final_status"])
                         if payload.get("final_status") is not None
@@ -330,6 +384,10 @@ class ResultLedger:
             "desired_success": entry.desired_success,
             "previous_status": entry.previous_status,
             "previous_reruns": entry.previous_reruns,
+            "expected_final_status": entry.expected_final_status,
+            "expected_reruns": entry.expected_reruns,
+            "expected_science_hash": entry.expected_science_hash,
+            "worker_id": entry.worker_id,
             "final_status": entry.final_status,
             "prepared_at": entry.prepared_at,
             "committed_at": entry.committed_at,

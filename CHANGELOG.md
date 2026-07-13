@@ -8,6 +8,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- **Transactional contracts and run identity finalization** (2026-07-12)
+  - Worker online and offline delivery share one idempotent protocol via
+    `POST /sync_results` (`SyncResultApplicationService`); `/report/*` are
+    ledger-backed wrappers. Lost HTTP ACKs no longer double-apply results.
+  - `SyncResponse.items` reports per-`result_id` outcomes (`applied` /
+    `duplicate` / `rejected` / `conflict`); the offline queue confirms only
+    identified applied/duplicate IDs.
+  - Journal recovery commits prepared entries only with exact operational and
+    scientific proof; Pending is never treated as applied.
+  - Manifest `run_id` is authoritative for Method A/B and PM7 batch canonical
+    CSV rows; single-run finalization fails mutable runs on writer/attach errors
+    without reusing a previous canonical result.
+  - Completed/partial runs require `success_count + failure_count == molecule_count`.
+  - Results charts use the active analysis frame; compare_runs rejects
+    incompatible property/reference/mode mixes; registry edit validations match
+    add-time rules.
+- **Phase 8 end-to-end run identity coverage** (2026-07-12)
+  - Added real-wiring integration coverage for DatabasesView/BatchExecutionManager
+    PM7 batches and CalcView Method A/B `do_prediction` lifecycles.
+  - Tests now verify manifest `run_id` authority, canonical CSV coherence,
+    ResultsService compatibility, count finalization, and failure behavior when
+    Method B returns no canonical result.
+- **V2 transactional stabilization: authoritative runs and result consistency** (2026-07-12)
+  - Canonical Method A/B and PM7 batch outputs now carry the manifest `run_id`;
+    single-run finalization writes artifacts before completing and fails mutable
+    runs without masking the original error.
+  - Run completion counts must exactly match `molecule_count`; batch callers cap
+    failed/rerun/skip categories to non-successful molecules.
+  - Results charts use the active `ResultsService` analysis frame instead of raw
+    canonical long-form CSV; run comparison rejects incompatible property,
+    reference, or analysis-mode mixes.
+  - Database registry updates now share add-time path/header/schema/uniqueness
+    validations and legacy migration dedupes by `metadata.alias`.
+  - Verification: targeted pytest suite (96 tests), targeted `ruff`, targeted
+    strict `mypy`.
 - **Stabilization: Runs, Results, sync idempotency, PM7 provenance** (2026-07-12)
   - Results recognizes `PREDICTION_WITH_REFERENCE`, `BASELINE_WITH_REFERENCE`, and
     `SCIENTIFIC_SUMMARY_ONLY` without inventing fictitious FINAL estimates for

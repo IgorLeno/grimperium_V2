@@ -124,3 +124,12 @@ def test_pm7_adapter_keeps_artifact_paths_relative() -> None:
     assert canonical.artifacts
     for artifact in canonical.artifacts:
         assert not Path(artifact.relative_path).is_absolute()
+
+
+def test_pm7_adapter_uses_authoritative_run_id_when_provided() -> None:
+    canonical = pm7result_to_canonical(
+        _pm7_result(),
+        run_id="run_authoritative",
+    )
+
+    assert canonical.run.run_id == "run_authoritative"

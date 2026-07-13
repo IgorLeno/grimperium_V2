@@ -1,6 +1,8 @@
 import csv
 from datetime import datetime, timezone
 
+import pytest
+
 from grimperium.calculation.contracts.enums import OverallStatus, PropertyRole
 from grimperium.calculation.contracts.models import (
     CalculationMethodReference,
@@ -102,3 +104,32 @@ def test_write_canonical_csv_has_one_row_per_estimate(tmp_path) -> None:  # type
 
     rows = _read_rows(output_path)
     assert [row["estimate_id"] for row in rows] == ["estimate-0", "estimate-1"]
+
+
+def test_write_canonical_csv_preserves_existing_file_on_failure(
+    tmp_path,
+    monkeypatch,
+) -> None:  # type: ignore[no-untyped-def]
+    output_path = tmp_path / "results.csv"
+    original = "estimate_id,run_id\nold,run-001\n"
+    output_path.write_text(original, encoding="utf-8")
+
+    class FailingWriter:
+        def __init__(self, handle, fieldnames):  # type: ignore[no-untyped-def]
+            self.handle = handle
+
+        def writeheader(self) -> None:
+            self.handle.write("partial\n")
+
+        def writerows(self, rows) -> None:  # type: ignore[no-untyped-def]
+            raise RuntimeError("disk full")
+
+    monkeypatch.setattr(
+        "grimperium.calculation.output.csv_writer.csv.DictWriter",
+        FailingWriter,
+    )
+
+    with pytest.raises(RuntimeError, match="disk full"):
+        write_canonical_csv([_result_with_estimates()], output_path)
+
+    assert output_path.read_text(encoding="utf-8") == original

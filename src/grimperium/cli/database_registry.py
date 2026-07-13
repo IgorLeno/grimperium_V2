@@ -177,11 +177,7 @@ class DatabaseRegistry:
     ) -> DatabaseInfo:
         """Create and persist a user database with a stable user UUID."""
         self._validate_capabilities(capabilities)
-        resolved = Path(path).expanduser().resolve()
-        if not resolved.exists():
-            raise ValueError(f"CSV path does not exist: {resolved}")
-        if not resolved.is_file():
-            raise ValueError(f"CSV path is not a file: {resolved}")
+        resolved = self._validate_csv_path(path)
         self._assert_unique_alias_and_path(alias=alias, path=resolved)
         database_id = f"{USER_ID_PREFIX}{uuid.uuid4()}"
         entry = DatabaseInfo(
@@ -219,24 +215,55 @@ class DatabaseRegistry:
     def preview_csv_header(self, path: Path, *, max_columns: int = 12) -> list[str]:
         """Read only the CSV header for wizard preview (does not load the dataset)."""
         resolved = Path(path).expanduser()
+        header = self._read_csv_header(resolved)
+        return [col.strip() for col in header[:max_columns] if col.strip()]
+
+    def _validate_csv_path(self, path: Path) -> Path:
+        resolved = Path(path).expanduser().resolve()
+        header = self._read_csv_header(resolved)
+        if not self._header_has_valid_schema(header):
+            raise ValueError(
+                f"CSV schema must include a smiles or mol_id column: {resolved}"
+            )
+        return resolved
+
+    @staticmethod
+    def _read_csv_header(path: Path) -> list[str]:
+        resolved = Path(path).expanduser()
         if not resolved.exists():
             raise ValueError(f"CSV path does not exist: {resolved}")
         if not resolved.is_file():
             raise ValueError(f"CSV path is not a file: {resolved}")
         with resolved.open("r", encoding="utf-8", newline="") as handle:
             try:
-                header = next(csv_reader(handle))
+                return next(csv_reader(handle))
             except StopIteration as exc:
                 raise ValueError(f"CSV file is empty: {resolved}") from exc
-        return [col.strip() for col in header[:max_columns] if col.strip()]
 
-    def _assert_unique_alias_and_path(self, *, alias: str, path: Path) -> None:
+    @staticmethod
+    def _header_has_valid_schema(header: list[str]) -> bool:
+        columns = {col.strip().lower() for col in header if col.strip()}
+        return bool(columns) and ("smiles" in columns or "mol_id" in columns)
+
+    def _assert_unique_alias_and_path(
+        self,
+        *,
+        alias: str,
+        path: Path,
+        ignore_database_id: str | None = None,
+    ) -> None:
         alias_lower = alias.strip().lower()
-        resolved = path.resolve()
+        resolved = path.resolve() if self._path_is_set(path) else None
         for entry in self.load():
+            if entry.database_id == ignore_database_id:
+                continue
             if entry.alias.lower() == alias_lower:
                 raise ValueError(f"Alias already registered: {alias}")
-            if self._path_is_set(entry.path) and entry.path.resolve() == resolved:
+            if (
+                resolved is not None
+                and self._path_is_set(entry.path)
+                and entry.path.resolve() == resolved
+            ):
                 raise ValueError(f"Path already registered: {resolved}")
 
     def update_entry(
@@ -254,12 +281,23 @@ class DatabaseRegistry:
             raise ValueError(f"Unknown database: {database_id}")
         if capabilities is not None:
             self._validate_capabilities(capabilities)
+        resolved_path = self._validate_csv_path(path) if path is not None else None
+        next_alias = (
+            str(metadata["alias"])
+            if metadata is not None and metadata.get("alias") is not None
+            else current.alias
+        )
+        self._assert_unique_alias_and_path(
+            alias=next_alias,
+            path=resolved_path or current.path,
+            ignore_database_id=database_id,
+        )
 
         payload = self._read_overlay()
         if current.origin == "official":
             override = payload.overrides.get(database_id, {})
-            if path is not None:
-                override["path"] = self._serialize_path(path)
+            if resolved_path is not None:
+                override["path"] = self._serialize_path(resolved_path)
             if metadata:
                 override_metadata = dict(override.get("metadata", {}))
                 override_metadata.update(metadata)
@@ -268,7 +306,7 @@ class DatabaseRegistry:
         else:
             payload.entries = [
                 self._updated_user_entry(
-                    raw, database_id, path, metadata, role, capabilities
+                    raw, database_id, resolved_path, metadata, role, capabilities
                 )
                 for raw in payload.entries
             ]
@@ -408,7 +446,7 @@ class DatabaseRegistry:
         payload = self._read_overlay()
         existing_ids = {str(entry.get("database_id", "")) for entry in payload.entries}
         existing_aliases = {
-            str(entry.get("alias", "")).lower() for entry in payload.entries
+            self._entry_alias(entry).lower() for entry in payload.entries
         }
         existing_paths = {
             str(Path(str(entry.get("path", ""))).resolve())
@@ -421,7 +459,7 @@ class DatabaseRegistry:
             if mapped_id is None:
                 candidate = self._legacy_to_v2(raw)
                 candidate_id = str(candidate.get("database_id", ""))
-                candidate_alias = str(candidate.get("alias", "")).lower()
+                candidate_alias = self._entry_alias(candidate).lower()
                 candidate_path = str(Path(str(candidate.get("path", ""))).resolve())
                 if (
                     candidate_id in existing_ids
@@ -477,6 +515,13 @@ class DatabaseRegistry:
             "pm7": "official.crest_pm7",
             "nist": "official.nist_experimental",
         }.get(alias.lower())
+
+    @staticmethod
+    def _entry_alias(raw: dict[str, Any]) -> str:
+        metadata = raw.get("metadata", {})
+        if isinstance(metadata, dict) and metadata.get("alias") is not None:
+            return str(metadata["alias"])
+        return str(raw.get("alias") or raw.get("name") or "")
 
     def _apply_overrides(
         self,
@@ -657,8 +702,9 @@ class DatabaseRegistry:
 
     @staticmethod
     def _has_valid_csv_schema(df: pd.DataFrame) -> bool:
-        columns = set(df.columns)
-        return bool(columns) and ("smiles" in columns or "mol_id" in columns)
+        return DatabaseRegistry._header_has_valid_schema(
+            [str(col) for col in df.columns]
+        )
 
     @staticmethod
     def _path_is_set(path: Path) -> bool:

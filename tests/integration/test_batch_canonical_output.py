@@ -140,6 +140,19 @@ def test_batch_writes_canonical_csv_for_one_success(tmp_path: Path) -> None:
     assert rows[0]["schema_version"] == "1"
 
 
+def test_batch_writes_authoritative_run_id(tmp_path: Path) -> None:
+    out = tmp_path / "out"
+    manager, _, _ = _make_manager(
+        tmp_path, {"m1": _success_result("m1", -55.0)}, output_dir=out
+    )
+    manager.canonical_run_id = "run_from_manifest"
+
+    _run(manager, ["m1"])
+
+    rows = _read_canonical(out)
+    assert {row["run_id"] for row in rows} == {"run_from_manifest"}
+
+
 def test_batch_generates_xlsx_when_enabled(tmp_path: Path) -> None:
     out = tmp_path / "out"
     manager, _, _ = _make_manager(

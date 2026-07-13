@@ -482,6 +482,7 @@ class BatchView(BaseView):
             model_ref=None,
             molecule_count=batch.size,
         )
+        exec_manager.canonical_run_id = manifest.run_id
         manifest = self._run_service().start_run(manifest.run_id)
         self.controller.session.run = RunRef(
             run_id=manifest.run_id,
@@ -616,7 +617,10 @@ class BatchView(BaseView):
         if result is not None:
             self._display_batch_result(result)
             manifest = self._attach_existing_outputs(manifest, output_layout)
-            failure_count = result.failed_count + result.rerun_count + result.skip_count
+            failure_count = min(
+                result.failed_count + result.rerun_count + result.skip_count,
+                max(result.total_count - result.success_count, 0),
+            )
             if result.invalidated:
                 finalized = self._run_service().invalidate_run(
                     manifest.run_id,

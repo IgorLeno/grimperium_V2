@@ -330,7 +330,12 @@ class TestSyncResults:
             "/sync_results", json={"worker_id": "w1", "results": []}
         )
         assert resp.status_code == 200
-        assert resp.json() == {"accepted": 0, "rejected": 0, "duplicate": False}
+        assert resp.json() == {
+            "accepted": 0,
+            "rejected": 0,
+            "duplicate": False,
+            "items": [],
+        }
 
 
 # ── /status ───────────────────────────────────────────────────────────────────

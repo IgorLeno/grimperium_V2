@@ -19,14 +19,7 @@ from fastapi import Depends, FastAPI, Header, HTTPException, Request
 
 from grimperium.cli.settings_manager import DistributedDefaults, SettingsManager
 from grimperium.crest_pm7.batch.csv_manager import BatchCSVManager
-from grimperium.crest_pm7.batch.enums import MoleculeStatus
-from grimperium.crest_pm7.batch.result_applier import BatchResultApplier
-from grimperium.crest_pm7.batch.result_ledger import (
-    LedgerStatus,
-    ResultLedger,
-    build_legacy_result_id,
-    build_result_fingerprint,
-)
+from grimperium.crest_pm7.batch.result_ledger import ResultLedger
 from grimperium.crest_pm7.batch.state_manager import BatchStateManager
 from grimperium.crest_pm7.config import PM7Config
 from grimperium.server.config import ServerConfig
@@ -41,11 +34,19 @@ from grimperium.server.models import (
     ReportSuccessRequest,
     ShutdownResponse,
     StatusResponse,
+    SyncItemOutcome,
+    SyncItemResult,
     SyncResponse,
     SyncResult,
     SyncResultsRequest,
     WorkerInfo,
     WorkerInfoExtended,
+)
+from grimperium.server.sync_application import (
+    SyncConflictError,
+    SyncResultApplicationService,
+    apply_worker_result,
+    recover_sync_journal,
 )
 from grimperium.server.watchdog import make_heartbeat_registry, run_watchdog
 from grimperium.server.worker_registry import WorkerRegistry, make_worker_registry
@@ -123,77 +124,48 @@ def _apply_worker_result(
     result_update: dict[str, Any] | None = None,
 ) -> str:
     """Apply one worker result through the shared dual-write service."""
-    applier = BatchResultApplier(state_manager=state_manager, csv_manager=csv_manager)
-    if success:
-        return applier.apply_success(mol_id, result_update or {}).final_status
-
-    return applier.apply_failure(
-        mol_id,
-        error or "failure",
+    return apply_worker_result(
+        csv_manager,
+        state_manager,
+        mol_id=mol_id,
+        success=success,
+        error=error,
         force_skip=force_skip,
         result_update=result_update,
-    ).final_status
+    )
 
 
-def _sync_result_payload(result: SyncResult) -> dict[str, Any]:
-    """Return the stable payload used for ledger fingerprinting."""
-    return {
-        "mol_id": result.mol_id,
-        "success": result.success,
-        "result_update": result.result_update,
-        "error": result.error,
-        "completed_at": result.completed_at,
-    }
+def _sync_service(request: Request) -> SyncResultApplicationService:
+    return SyncResultApplicationService(
+        csv_manager=request.app.state.csv_manager,
+        state_manager=request.app.state.state_manager,
+        ledger=request.app.state.result_ledger,
+        worker_registry=request.app.state.worker_registry,
+        running_molecules=request.app.state.running_molecules,
+    )
 
 
-def _sync_result_id(result: SyncResult, state_manager: BatchStateManager) -> str:
-    """Resolve explicit result_id or a content-stable legacy fallback key.
-
-    Legacy clients without ``result_id`` get a deterministic ID derived from the
-    immutable payload. Mutable operational state such as ``reruns`` is never
-    included — otherwise retries after the first apply would mint a new ID.
-    """
-    del state_manager  # kept for call-site compatibility; must not affect ID
-    if result.result_id:
-        return result.result_id
-    return build_legacy_result_id(_sync_result_payload(result))
-
-
-def _record_worker_sync_metrics(
-    worker_reg: WorkerRegistry,
-    worker_id: str,
+def _report_as_sync_result(
     *,
-    final_status: str,
-) -> None:
-    """Update WorkerRegistry counters from the applier's final operational status."""
-    if final_status == MoleculeStatus.OK.value:
-        worker_reg.record_success(worker_id)
-    elif final_status == MoleculeStatus.SKIP.value:
-        worker_reg.record_skip(worker_id)
-    else:
-        worker_reg.record_failure(worker_id)
-
-
-def _recover_sync_journal(
-    ledger: ResultLedger,
-    state_manager: BatchStateManager,
-) -> None:
-    """Commit prepared journal entries whose dual-write already landed."""
-
-    def _already_applied(entry: object) -> bool:
-        mol_id = getattr(entry, "mol_id", None)
-        if not isinstance(mol_id, str):
-            return False
-        try:
-            current = state_manager.get_status(mol_id)
-        except Exception:
-            return False
-        # If molecule left RUNNING, the dual-write almost certainly finished.
-        return str(current).lower() not in {"running", "claimed", "selected"}
-
-    recovered = ledger.recover_incomplete(is_already_applied=_already_applied)
-    if recovered:
-        LOG.info("Recovered %d incomplete sync journal entr(y/ies)", len(recovered))
+    mol_id: str,
+    success: bool,
+    result_update: dict[str, Any] | None,
+    error: str | None,
+    result_id: str | None,
+    completed_at: str | None,
+) -> SyncResult:
+    """Adaptar endpoints legados /report/* para o protocolo /sync_results."""
+    stamp = completed_at or datetime.now(timezone.utc).isoformat().replace(
+        "+00:00", "Z"
+    )
+    return SyncResult(
+        result_id=result_id,
+        mol_id=mol_id,
+        success=success,
+        result_update=result_update,
+        error=error,
+        completed_at=stamp,
+    )
 
 
 # ── Factory ───────────────────────────────────────────────────────────────────
@@ -237,7 +209,19 @@ def create_app(config: ServerConfig) -> FastAPI:
     app.state.result_ledger = ResultLedger(
         Path(config.csv_path).parent / "result_ledger.jsonl"
     )
-    _recover_sync_journal(app.state.result_ledger, state_manager)
+    # Serviço temporário só para recuperação no startup (sem registry ativo ainda).
+    bootstrap_registry = make_worker_registry()
+    bootstrap_running: dict[str, str] = {}
+    recover_sync_journal(
+        app.state.result_ledger,
+        SyncResultApplicationService(
+            csv_manager=csv_manager,
+            state_manager=state_manager,
+            ledger=app.state.result_ledger,
+            worker_registry=bootstrap_registry,
+            running_molecules=bootstrap_running,
+        ),
+    )
 
     app.state.lock = asyncio.Lock()
     app.state.heartbeat_registry = make_heartbeat_registry()
@@ -342,32 +326,36 @@ def _register_routes(app: FastAPI) -> None:
     async def report_success(
         req: ReportSuccessRequest, request: Request, _: AuthDep
     ) -> dict[str, str]:
-        csv_manager: BatchCSVManager = request.app.state.csv_manager
-        sm: BatchStateManager = request.app.state.state_manager
+        """Wrapper legado: aplica via o mesmo serviço transacional de /sync_results."""
         lock: asyncio.Lock = request.app.state.lock
-        running_molecules: dict[str, str] = request.app.state.running_molecules
-
-        if req.mol_id not in running_molecules:
-            raise HTTPException(status_code=404, detail=f"{req.mol_id} is not RUNNING")
-
+        service = _sync_service(request)
+        sync_result = _report_as_sync_result(
+            mol_id=req.mol_id,
+            success=True,
+            result_update=req.result_update,
+            error=None,
+            result_id=req.result_id,
+            completed_at=req.completed_at,
+        )
         try:
             async with lock:
-                await asyncio.to_thread(
-                    _apply_worker_result,
-                    csv_manager,
-                    sm,
-                    mol_id=req.mol_id,
-                    success=True,
-                    result_update=req.result_update,
+                outcome = await asyncio.to_thread(
+                    service.apply_one, req.worker_id, sync_result
                 )
+        except SyncConflictError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
         except KeyError as exc:
             raise HTTPException(
                 status_code=404, detail=f"mol_id not found: {req.mol_id}"
             ) from exc
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
 
-        running_molecules.pop(req.mol_id, None)
-        worker_reg: WorkerRegistry = request.app.state.worker_registry
-        worker_reg.record_success(req.worker_id)
+        if outcome.item.status is SyncItemOutcome.REJECTED:
+            raise HTTPException(
+                status_code=409,
+                detail=outcome.item.detail or "result rejected",
+            )
         LOG.info("Worker %r reported success for %s", req.worker_id, req.mol_id)
         return {"status": "ok"}
 
@@ -375,36 +363,47 @@ def _register_routes(app: FastAPI) -> None:
     async def report_failure(
         req: ReportFailureRequest, request: Request, _: AuthDep
     ) -> dict[str, str]:
-        csv_manager: BatchCSVManager = request.app.state.csv_manager
-        sm: BatchStateManager = request.app.state.state_manager
+        """Wrapper legado: aplica via o mesmo serviço transacional de /sync_results."""
         lock: asyncio.Lock = request.app.state.lock
-        running_molecules: dict[str, str] = request.app.state.running_molecules
-
-        if req.mol_id not in running_molecules:
-            raise HTTPException(status_code=404, detail=f"{req.mol_id} is not RUNNING")
-
+        service = _sync_service(request)
+        # force_skip legado: embutir no error e aplicar via SyncResult.
+        # O applier recebe force_skip apenas no caminho direto; aqui mapeamos
+        # para um SyncResult e, se force_skip, aplicamos direto com prepare.
+        sync_result = _report_as_sync_result(
+            mol_id=req.mol_id,
+            success=False,
+            result_update=None,
+            error=req.error,
+            result_id=req.result_id,
+            completed_at=req.completed_at,
+        )
         try:
             async with lock:
-                await asyncio.to_thread(
-                    _apply_worker_result,
-                    csv_manager,
-                    sm,
-                    mol_id=req.mol_id,
-                    success=False,
-                    error=req.error,
-                    force_skip=req.force_skip,
-                )
+                if req.force_skip:
+                    outcome = await asyncio.to_thread(
+                        service.apply_force_skip,
+                        req.worker_id,
+                        sync_result,
+                        req.error,
+                    )
+                else:
+                    outcome = await asyncio.to_thread(
+                        service.apply_one, req.worker_id, sync_result
+                    )
+        except SyncConflictError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
         except KeyError as exc:
             raise HTTPException(
                 status_code=404, detail=f"mol_id not found: {req.mol_id}"
             ) from exc
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
 
-        running_molecules.pop(req.mol_id, None)
-        worker_reg: WorkerRegistry = request.app.state.worker_registry
-        if req.force_skip:
-            worker_reg.record_skip(req.worker_id)
-        else:
-            worker_reg.record_failure(req.worker_id)
+        if outcome.item.status is SyncItemOutcome.REJECTED:
+            raise HTTPException(
+                status_code=409,
+                detail=outcome.item.detail or "result rejected",
+            )
         LOG.info(
             "Worker %r reported failure for %s (force_skip=%s)",
             req.worker_id,
@@ -417,117 +416,67 @@ def _register_routes(app: FastAPI) -> None:
     async def sync_results(
         req: SyncResultsRequest, request: Request, _: AuthDep
     ) -> SyncResponse:
-        csv_manager: BatchCSVManager = request.app.state.csv_manager
-        sm: BatchStateManager = request.app.state.state_manager
-        ledger: ResultLedger = request.app.state.result_ledger
         lock: asyncio.Lock = request.app.state.lock
-        running_molecules: dict[str, str] = request.app.state.running_molecules
-        worker_reg: WorkerRegistry = request.app.state.worker_registry
+        service = _sync_service(request)
 
         accepted = 0
         rejected = 0
         duplicate_seen = False
+        items: list[SyncItemResult] = []
 
         for result in req.results:
             try:
                 async with lock:
-                    result_id = await asyncio.to_thread(_sync_result_id, result, sm)
-                    fingerprint = build_result_fingerprint(_sync_result_payload(result))
-                    ledger_decision = await asyncio.to_thread(
-                        ledger.check,
-                        result_id,
-                        fingerprint,
+                    outcome = await asyncio.to_thread(
+                        service.apply_one, req.worker_id, result
                     )
-                    if ledger_decision.status is LedgerStatus.DUPLICATE:
-                        duplicate_seen = True
-                        running_molecules.pop(result.mol_id, None)
-                        worker_reg.clear_current_mol(req.worker_id)
-                        continue
-                    if ledger_decision.status is LedgerStatus.CONFLICT:
-                        raise HTTPException(
-                            status_code=409,
-                            detail=f"Conflicting sync result_id: {result_id}",
-                        )
-
-                    incomplete = {
-                        entry.result_id: entry for entry in ledger.get_incomplete()
-                    }
-                    prepared = incomplete.get(result_id)
-                    current_status = sm.get_status(result.mol_id)
-                    if (
-                        prepared is not None
-                        and prepared.fingerprint == fingerprint
-                        and current_status
-                        in {
-                            MoleculeStatus.OK.value,
-                            MoleculeStatus.RERUN.value,
-                            MoleculeStatus.SKIP.value,
-                        }
-                    ):
-                        await asyncio.to_thread(
-                            ledger.commit,
-                            result_id,
-                            final_status=current_status,
-                        )
-                        running_molecules.pop(result.mol_id, None)
-                        worker_reg.clear_current_mol(req.worker_id)
-                        duplicate_seen = True
-                        continue
-
-                    previous_status = await asyncio.to_thread(
-                        sm.get_status, result.mol_id
-                    )
-                    previous_reruns = await asyncio.to_thread(
-                        sm.get_reruns, result.mol_id
-                    )
-                    await asyncio.to_thread(
-                        ledger.prepare,
-                        result_id=result_id,
+                items.append(outcome.item)
+                if outcome.item.status is SyncItemOutcome.APPLIED:
+                    accepted += 1
+                elif outcome.item.status is SyncItemOutcome.DUPLICATE:
+                    duplicate_seen = True
+                elif outcome.item.status in {
+                    SyncItemOutcome.REJECTED,
+                    SyncItemOutcome.CONFLICT,
+                }:
+                    rejected += 1
+            except SyncConflictError as exc:
+                conflict_id = service.resolve_result_id(result)
+                items.append(
+                    SyncItemResult(
+                        result_id=conflict_id,
                         mol_id=result.mol_id,
-                        fingerprint=fingerprint,
-                        desired_success=result.success,
-                        previous_status=previous_status,
-                        previous_reruns=previous_reruns,
+                        status=SyncItemOutcome.CONFLICT,
+                        detail=str(exc),
                     )
-                    try:
-                        final_status = await asyncio.to_thread(
-                            _apply_worker_result,
-                            csv_manager,
-                            sm,
-                            mol_id=result.mol_id,
-                            success=result.success,
-                            error=result.error,
-                            result_update=result.result_update,
-                        )
-                    except Exception as apply_exc:
-                        await asyncio.to_thread(
-                            ledger.mark_failed,
-                            result_id,
-                            error=str(apply_exc),
-                        )
-                        raise
-                    await asyncio.to_thread(
-                        ledger.commit,
-                        result_id,
-                        final_status=final_status,
-                    )
-                    _record_worker_sync_metrics(
-                        worker_reg,
-                        req.worker_id,
-                        final_status=final_status,
-                    )
-                running_molecules.pop(result.mol_id, None)
-                accepted += 1
-            except HTTPException:
-                raise
+                )
+                # Compat: lote com conflito explícito ainda retorna 409
+                # quando o único (ou qualquer) item conflita e não há applied.
+                raise HTTPException(
+                    status_code=409,
+                    detail=f"Conflicting sync result_id: {conflict_id}",
+                ) from exc
             except Exception as exc:
                 LOG.warning("sync_results rejected %s: %s", result.mol_id, exc)
+                try:
+                    rid = service.resolve_result_id(result)
+                except Exception:
+                    rid = result.result_id or "unknown"
+                items.append(
+                    SyncItemResult(
+                        result_id=rid,
+                        mol_id=result.mol_id,
+                        status=SyncItemOutcome.REJECTED,
+                        detail=str(exc),
+                    )
+                )
                 rejected += 1
 
         return SyncResponse(
             accepted=accepted,
             rejected=rejected,
             duplicate=duplicate_seen,
+            items=items,
         )
 
     @app.get("/status", response_model=StatusResponse)

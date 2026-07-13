@@ -354,6 +354,8 @@ def test_method_b_validates_selected_model_and_uses_existing_pipeline(
         path: Path,
         config: object,
         progress_callback: object,
+        *,
+        canonical_run_id: str | None = None,
     ) -> CalcPipelineResult:
         predictions.append((smiles, path))
         return CalcPipelineResult(
@@ -388,6 +390,78 @@ def test_method_b_validates_selected_model_and_uses_existing_pipeline(
     # Displayed values are derived from the canonical estimates (single source).
     assert view.history[-1].h298_pm7 == -65.0
     assert view.history[-1].delta_correction == -1.0
+
+
+def test_method_b_passes_manifest_run_id_to_pipeline(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    controller: MagicMock,
+) -> None:
+    model_path = tmp_path / "model.joblib"
+    model_path.write_text("placeholder", encoding="utf-8")
+    controller.current_model_path = model_path
+    calls: dict[str, object] = {}
+
+    def fake_prediction(
+        smiles: str,
+        mol_id: str,
+        path: Path,
+        config: object,
+        progress_callback: object,
+        *,
+        canonical_run_id: str | None = None,
+    ) -> CalcPipelineResult:
+        calls["canonical_run_id"] = canonical_run_id
+        canonical = _canonical_stub(baseline=-65.0, delta=-1.0, final=-66.0)
+        return CalcPipelineResult(
+            h298_pm7=-65.0,
+            delta_correction=-1.0,
+            h298_corrected=-66.0,
+            n_conformers=3,
+            execution_time=120.0,
+            model_version="1.0.0",
+            canonical=canonical,
+        )
+
+    from grimperium.cli.views import calc_view
+
+    monkeypatch.setattr(calc_view, "validate_model_for_method", lambda *_args: None)
+    monkeypatch.setattr(calc_view, "run_single_molecule_prediction", fake_prediction)
+    view = CalcView(controller)
+    method = get_calculation_method(
+        "pm7_delta_learning",
+        property_id="standard_enthalpy_of_formation",
+    )
+
+    assert view._run_method_b("CCO", method, canonical_run_id="run_manifest") is True
+
+    assert calls["canonical_run_id"] == "run_manifest"
+
+
+def test_method_a_corrects_runner_result_to_manifest_run_id(
+    monkeypatch: pytest.MonkeyPatch,
+    controller: MagicMock,
+) -> None:
+    class FakeRunner:
+        def __init__(self, **_kwargs: object) -> None:
+            pass
+
+        def calculate_single_smiles(self, smiles: str, **kwargs: object) -> object:
+            return _method_a_result()
+
+    from grimperium.cli.views import calc_view
+
+    monkeypatch.setattr(calc_view, "SemiempiricalFormationEnthalpyRunner", FakeRunner)
+    view = CalcView(controller)
+    method = get_calculation_method(
+        "semiempirical_am1_pm3_pm7",
+        property_id="standard_enthalpy_of_formation",
+    )
+
+    assert view._run_method_a("CCO", method, canonical_run_id="run_manifest") is True
+
+    assert view.last_calculation_result is not None
+    assert view.last_calculation_result.run.run_id == "run_manifest"
 
 
 def test_method_a_result_can_render_both_units_without_mutating_canonical_value(

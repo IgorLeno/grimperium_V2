@@ -262,6 +262,7 @@ def pm7result_to_canonical(
     method_id: str = LEGACY_METHOD_ID,
     method_version: str = LEGACY_METHOD_VERSION,
     property_role: PropertyRole = PropertyRole.BASELINE,
+    run_id: str | None = None,
 ) -> MoleculeCalculationResult:
     """Convert a legacy PM7Result to a canonical calculation result.
 
@@ -272,7 +273,7 @@ def pm7result_to_canonical(
     """
     if method_id == LEGACY_METHOD_ID:
         method_id = CREST_PM7_METHOD_ID
-    run_id = str(uuid4())
+    resolved_run_id = run_id or str(uuid4())
     artifacts: list[CalculationArtifact] = []
     conformers: list[ConformerResult] = []
 
@@ -326,7 +327,7 @@ def pm7result_to_canonical(
             name=result.mol_id,
         ),
         run=RunMetadata(
-            run_id=run_id,
+            run_id=resolved_run_id,
             execution_phase=result.phase or "A",
             method_ref=method_ref,
             started_at=timestamp,
