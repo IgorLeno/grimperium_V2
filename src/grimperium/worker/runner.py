@@ -15,7 +15,12 @@ from grimperium.crest_pm7.progress import (
     CREST_STATUS_NOT_ATTEMPTED,
     MOPAC_STATUS_NOT_ATTEMPTED,
 )
-from grimperium.worker.client import ServerError, WorkerClient, WorkerClientConfig
+from grimperium.worker.client import (
+    LeaseLostError,
+    ServerError,
+    WorkerClient,
+    WorkerClientConfig,
+)
 from grimperium.worker.local_store import LocalStore
 from grimperium.worker.offline_queue import (
     DeadLetterQueue,
@@ -53,14 +58,24 @@ def _run_heartbeat(
     client: WorkerClient,
     interval_s: float,
     attempt_id: str | None = None,
+    lease_lost: threading.Event | None = None,
 ) -> None:
-    """Send periodic heartbeats until stop_event is set."""
+    """Send periodic heartbeats until stop_event is set.
+
+    Erros transitórios (timeout/5xx) apenas logam warning.
+    Perda definitiva de lease (409/404) seta ``lease_lost`` e encerra o loop.
+    """
     while not stop_event.wait(timeout=interval_s):
         try:
             client.heartbeat(mol_id, attempt_id=attempt_id)
             LOG.debug("Heartbeat sent for %s", mol_id)
+        except LeaseLostError as exc:
+            LOG.error("Lease lost for %s: %s", mol_id, exc)
+            if lease_lost is not None:
+                lease_lost.set()
+            return
         except Exception:
-            LOG.warning("Heartbeat failed for %s", mol_id)
+            LOG.warning("Heartbeat failed for %s (transient)", mol_id)
 
 
 @dataclass
@@ -217,6 +232,7 @@ class WorkerRunner:
         )
 
         _stop_hb = threading.Event()
+        lease_lost = threading.Event()
         hb_thread = threading.Thread(
             target=_run_heartbeat,
             args=(
@@ -225,6 +241,7 @@ class WorkerRunner:
                 self._client,
                 self._config.heartbeat_interval_s,
                 attempt_id,
+                lease_lost,
             ),
             daemon=True,
         )
@@ -232,7 +249,16 @@ class WorkerRunner:
 
         try:
             result = self._pipeline.process_molecule(mol_id, smiles)
-            if result.success:
+            if lease_lost.is_set():
+                # Pipeline químico pode não ser cancelável; não publicar como válido.
+                self._archive_aborted_lease_loss(
+                    mol_id=mol_id,
+                    attempt_id=attempt_id,
+                    error="lease lost during processing",
+                )
+                self._last_run_succeeded = False
+                self._consecutive_failures += 1
+            elif result.success:
                 update = _pm7result_to_update(
                     result,
                     self._config.worker_id,
@@ -286,19 +312,26 @@ class WorkerRunner:
         except Exception as exc:
             LOG.exception("Unhandled error processing %s", mol_id)
             error_str = str(exc)
-            self._update_csv(mol_id, {"status": MoleculeStatus.RERUN.value})
-            self._store.mark_failure(mol_id, error_str)
+            if lease_lost.is_set():
+                self._archive_aborted_lease_loss(
+                    mol_id=mol_id,
+                    attempt_id=attempt_id,
+                    error=f"lease lost; also: {error_str}",
+                )
+            else:
+                self._update_csv(mol_id, {"status": MoleculeStatus.RERUN.value})
+                self._store.mark_failure(mol_id, error_str)
+                try:
+                    self._report_or_enqueue(
+                        mol_id=mol_id,
+                        success=False,
+                        result_update=None,
+                        error=error_str,
+                    )
+                except Exception:
+                    LOG.exception("Failed to report failure for %s", mol_id)
             self._last_run_succeeded = False
             self._consecutive_failures += 1
-            try:
-                self._report_or_enqueue(
-                    mol_id=mol_id,
-                    success=False,
-                    result_update=None,
-                    error=error_str,
-                )
-            except Exception:
-                LOG.exception("Failed to report failure for %s", mol_id)
         finally:
             _stop_hb.set()
             hb_thread.join(timeout=5.0)
@@ -306,6 +339,48 @@ class WorkerRunner:
         self._store.clear_completed()
         self.flush_offline_queue()
         return True
+
+    def _archive_aborted_lease_loss(
+        self,
+        *,
+        mol_id: str,
+        attempt_id: str | None,
+        error: str,
+    ) -> None:
+        """Arquivar processamento abortado por perda de lease (não sync como válido)."""
+        self._update_csv(mol_id, {"status": MoleculeStatus.RERUN.value})
+        self._store.mark_failure(mol_id, error)
+        record = self._store.get(mol_id)
+        result_id = record.result_id if record is not None else None
+        payload = {
+            "result_id": result_id,
+            "mol_id": mol_id,
+            "success": False,
+            "result_update": None,
+            "error": error,
+            "completed_at": datetime.now(timezone.utc)
+            .isoformat()
+            .replace("+00:00", "Z"),
+            "attempt_id": attempt_id,
+        }
+        try:
+            self._dead_letter.append(
+                DeadLetterRecord(
+                    result_id=str(result_id or f"aborted:{mol_id}"),
+                    mol_id=mol_id,
+                    attempt_id=attempt_id,
+                    original_payload=payload,
+                    returned_status="stale_attempt",
+                    detail=error,
+                    worker_id=self._config.worker_id,
+                    rejected_at=datetime.now(timezone.utc)
+                    .isoformat()
+                    .replace("+00:00", "Z"),
+                    rejection_origin="lease_lost",
+                )
+            )
+        except Exception:
+            LOG.exception("Failed to archive lease-lost abort for %s", mol_id)
 
     def _report_or_enqueue(
         self,

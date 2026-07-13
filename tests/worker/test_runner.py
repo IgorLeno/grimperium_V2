@@ -11,7 +11,7 @@ import pandas as pd
 
 from grimperium.crest_pm7.batch.csv_manager import BatchCSVManager
 from grimperium.worker.client import WorkerClient
-from grimperium.worker.offline_queue import dead_letter_path_for
+from grimperium.worker.offline_queue import DeadLetterRecord, dead_letter_path_for
 from grimperium.worker.runner import WorkerConfig, WorkerRunner
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -888,3 +888,140 @@ class TestHeartbeatAttemptWiring:
         thread.join(timeout=5.0)
         assert hb_seen, "expected at least one heartbeat"
         assert hb_seen[0] == ("m1", "att-hb-1")
+
+
+class TestDeadLetterIdempotency:
+    def test_append_same_rejection_is_idempotent(self, tmp_path: Path) -> None:
+        from grimperium.worker.offline_queue import (
+            DeadLetterQueue,
+            DeadLetterRecord,
+            compute_dead_letter_id,
+        )
+
+        path = tmp_path / "q_dead_letter.jsonl"
+        queue = DeadLetterQueue(path)
+        payload = {"result_id": "r1", "mol_id": "m1", "success": False}
+        record = DeadLetterRecord(
+            result_id="r1",
+            mol_id="m1",
+            attempt_id="a1",
+            original_payload=payload,
+            returned_status="conflict",
+            detail="x",
+            worker_id="w1",
+            rejected_at="2026-07-13T00:00:00Z",
+            rejection_origin="sync_results",
+        )
+        queue.append(record)
+        queue.append(
+            DeadLetterRecord(
+                result_id="r1",
+                mol_id="m1",
+                attempt_id="a1",
+                original_payload=payload,
+                returned_status="conflict",
+                detail="x",
+                worker_id="w1",
+                rejected_at="2026-07-13T00:00:01Z",
+                rejection_origin="sync_results",
+            )
+        )
+        assert len(queue.entries()) == 1
+        assert queue.entries()[0].dead_letter_id == compute_dead_letter_id(
+            result_id="r1",
+            returned_status="conflict",
+            original_payload=payload,
+        )
+
+    def test_crash_between_dl_and_confirm_then_reflush_no_duplicate(
+        self, tmp_path: Path
+    ) -> None:
+        queue_path = tmp_path / "offline.jsonl"
+        client = _mock_client()
+        client.sync_results.return_value = {
+            "accepted": 0,
+            "items": [
+                {
+                    "result_id": "r-crash",
+                    "mol_id": "m1",
+                    "status": "stale_attempt",
+                    "detail": "lease gone",
+                }
+            ],
+        }
+        runner = WorkerRunner(
+            _make_config(offline_queue_path=str(queue_path)),
+            pipeline=_mock_pipeline(success=True),
+            client=client,
+        )
+        entry = runner._offline_queue.enqueue(
+            mol_id="m1",
+            success=False,
+            error="late",
+            result_id="r-crash",
+            attempt_id="att-1",
+        )
+        # Simula crash: DL gravado, fila ainda contém o item.
+        runner._dead_letter.append(
+            DeadLetterRecord(
+                result_id=entry.result_id,
+                mol_id=entry.mol_id,
+                attempt_id=entry.attempt_id,
+                original_payload=entry.to_sync_dict(),
+                returned_status="stale_attempt",
+                detail="lease gone",
+                worker_id="w1",
+                rejected_at="2026-07-13T00:00:00Z",
+                rejection_origin="sync_results",
+            )
+        )
+        assert len(runner._offline_queue.pending()) == 1
+        # Restart: nova instância sobre os mesmos paths.
+        restarted = WorkerRunner(
+            _make_config(offline_queue_path=str(queue_path)),
+            pipeline=_mock_pipeline(success=True),
+            client=client,
+        )
+        restarted.flush_offline_queue()
+        assert len(restarted._dead_letter.entries()) == 1
+        assert restarted._offline_queue.pending() == []
+
+
+class TestLeaseLostDuringProcessing:
+    @patch(
+        "grimperium.worker.runner._pm7result_to_update",
+        return_value={"H298_pm7": -42.0},
+    )
+    def test_lease_lost_skips_normal_sync(self, _mock_update: MagicMock) -> None:
+        import threading
+
+        from grimperium.worker.client import LeaseLostError
+
+        client = _mock_client(claim_returns=("m1", "CCO", "att-lost"))
+        pipeline = _mock_pipeline(success=True)
+        release = threading.Event()
+
+        def slow_process(mol_id: str, smiles: str) -> MagicMock:
+            release.wait(timeout=2.0)
+            return pipeline.process_molecule.return_value
+
+        pipeline.process_molecule.side_effect = slow_process
+
+        def hb_lost(mol_id: str, attempt_id: str | None = None) -> None:
+            raise LeaseLostError(mol_id, 409, "owner mismatch")
+
+        client.heartbeat.side_effect = hb_lost
+        runner = WorkerRunner(
+            _make_config(heartbeat_interval_s=0.05),
+            pipeline=pipeline,
+            client=client,
+        )
+        thread = threading.Thread(target=runner.run_one, daemon=True)
+        thread.start()
+        time.sleep(0.2)
+        release.set()
+        thread.join(timeout=5.0)
+        client.sync_results.assert_not_called()
+        assert any(
+            e.rejection_origin == "lease_lost" for e in runner._dead_letter.entries()
+        )

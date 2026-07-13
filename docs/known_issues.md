@@ -62,8 +62,17 @@ any non-RUNNING status as proof of apply.
 per-item sync outcomes (including `conflict` / `stale_attempt` without aborting
 the batch HTTP response), `attempt_id` leases on claim (cleared on AoN reset /
 reclaim), immutable `result_id` reservation from first prepare, at most one
-terminal result per attempt, PREPARED resume gated on matching lease,
-`force_skip` without rerun increment, exact journal proof before commit, durable
+terminal result per attempt, PREPARED resume gated on matching lease and
+`OperationKind`, legacy payloads rejected on terminal OK/Skip, `force_skip`
+without rerun increment, exact journal proof before commit, durable idempotent
 worker dead-letter for `conflict`/`stale_attempt` before queue confirm, and
-heartbeat ownership/`attempt_id` validation. `BatchView` scientific outputs live
-under `runs/<run_id>/`.
+heartbeat ownership/`attempt_id` validation with worker-side lease-loss
+signaling. `BatchView` scientific outputs live under `runs/<run_id>/` with safe
+finalization and selection compensation.
+
+### Remaining known limitations (transactional path)
+
+- CREST/MOPAC subprocesses are not cooperatively cancelled when a lease is lost
+  mid-calculation; the worker gates publication after the pipeline returns.
+- Corrupt/truncated JSONL lines in dead-letter or journal may still abort load
+  for that line (skipped for dead-letter; journal still fails hard on bad JSON).

@@ -8,6 +8,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- **Transactional terminal-state safeguards** (2026-07-13)
+  - Legacy payloads without `attempt_id` are rejected on terminal OK/Skip and on
+    non-active statuses; accepted only on Assigned/Running/Selected without a
+    lease. Same committed `result_id` remains `duplicate`.
+  - `OperationKind` (`normal_result` / `force_skip`) participates in journal
+    identity and force_skip fingerprints; cross-kind resume is `conflict`.
+    Legacy journals default to `normal_result`.
+  - `BatchView._finalize_batch_run_safely` fails mutable Runs on attach/complete
+    errors without leaving them `running`; selection is compensated when
+    `create_run`/executor setup fails.
+  - Dead-letter uses stable `dead_letter_id` (idempotent across crash-before-
+    confirm). Heartbeat 409/404 signals definitive lease loss; aborted work is
+    archived and not published as a valid sync result. Chemical subprocesses are
+    not force-killed mid-run.
+  - Watchdog reclaim clears `running_molecules`; duplicate cleanup without
+    matching `attempt_id` no longer strips a newer lease.
 - **Final lease and recovery edge cases** (2026-07-12)
   - `BatchStateManager.reset_all_or_nothing` clears the full lease via
     `_clear_assignment_fields` (including `attempt_id`); late results after AoN

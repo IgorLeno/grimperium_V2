@@ -81,6 +81,7 @@ async def _lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
             cfg,
             app.state.lock,
             app.state.state_manager,
+            app.state.running_molecules,
         )
     )
     try:

@@ -15,6 +15,16 @@ class ServerError(Exception):
     """Raised when the server returns an unexpected or error response."""
 
 
+class LeaseLostError(ServerError):
+    """Perda definitiva de lease (HTTP 409 owner/attempt) no heartbeat."""
+
+    def __init__(self, mol_id: str, status_code: int, detail: str) -> None:
+        self.mol_id = mol_id
+        self.status_code = status_code
+        self.detail = detail
+        super().__init__(f"PUT /heartbeat/{mol_id} → {status_code}: {detail}")
+
+
 @dataclass
 class WorkerClientConfig:
     """Configuration for WorkerClient."""
@@ -126,8 +136,16 @@ class WorkerClient:
             f"/heartbeat/{mol_id}",
             json=body,
         )
-        if r.status_code not in (200, 404):
+        if r.status_code == 200:
+            return
+        if r.status_code == 409:
+            raise LeaseLostError(mol_id, r.status_code, r.text)
+        if r.status_code == 404:
+            # Molécula já não está no mapa de ownership — lease perdida.
+            raise LeaseLostError(mol_id, r.status_code, r.text)
+        if r.status_code >= 500:
             raise ServerError(f"PUT /heartbeat/{mol_id} → {r.status_code}: {r.text}")
+        raise ServerError(f"PUT /heartbeat/{mol_id} → {r.status_code}: {r.text}")
 
     def report_success(self, mol_id: str, result_update: dict[str, Any]) -> None:
         """Legado: preferir sync_results. Mantido para clientes antigos/testes."""

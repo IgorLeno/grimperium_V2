@@ -5,11 +5,16 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 
 from grimperium.crest_pm7.batch.enums import MoleculeStatus
-from grimperium.crest_pm7.batch.result_ledger import build_result_fingerprint
+from grimperium.crest_pm7.batch.result_ledger import (
+    OperationKind,
+    build_result_fingerprint,
+    with_operation_kind,
+)
 from grimperium.server.app import create_app
 from grimperium.server.config import ServerConfig
 from grimperium.server.models import SyncResult
 from grimperium.server.sync_application import (
+    SyncConflictError,
     SyncResultApplicationService,
     apply_worker_result,
     is_active_assignment_status,
@@ -503,15 +508,16 @@ async def test_prepared_stale_after_reclaim_and_new_claim(tmp_path: Path) -> Non
     ) as client:
         mol_id, attempt_a = await _claim(client)
         result_id = "prepared-a"
-        fingerprint_payload = {
-            "mol_id": mol_id,
-            "attempt_id": attempt_a,
-            "success": True,
-            "result_update": {"H298_pm7": -55.0},
-            "error": None,
-            "completed_at": "2026-04-21T10:00:00Z",
-        }
-        fingerprint = build_result_fingerprint(fingerprint_payload)
+        sync_result = SyncResult(
+            result_id=result_id,
+            mol_id=mol_id,
+            success=True,
+            result_update={"H298_pm7": -55.0},
+            error=None,
+            completed_at="2026-04-21T10:00:00Z",
+            attempt_id=attempt_a,
+        )
+        fingerprint = build_result_fingerprint(sync_result_payload(sync_result))
         app.state.result_ledger.prepare(
             result_id=result_id,
             mol_id=mol_id,
@@ -540,7 +546,17 @@ async def test_prepared_stale_after_reclaim_and_new_claim(tmp_path: Path) -> Non
             "/sync_results",
             json={
                 "worker_id": "w1",
-                "results": [{"result_id": result_id, **fingerprint_payload}],
+                "results": [
+                    {
+                        "result_id": result_id,
+                        "mol_id": mol_id,
+                        "attempt_id": attempt_a,
+                        "success": True,
+                        "result_update": {"H298_pm7": -55.0},
+                        "error": None,
+                        "completed_at": "2026-04-21T10:00:00Z",
+                    }
+                ],
             },
         )
 
@@ -572,15 +588,16 @@ async def test_prepared_resume_same_lease_assigned_or_running(
             app.state.state_manager.get_status(mol_id) == MoleculeStatus.ASSIGNED.value
         )
         result_id = "prepared-resume"
-        fingerprint_payload = {
-            "mol_id": mol_id,
-            "attempt_id": attempt_id,
-            "success": True,
-            "result_update": {"H298_pm7": -42.0},
-            "error": None,
-            "completed_at": "2026-04-21T10:00:00Z",
-        }
-        fingerprint = build_result_fingerprint(fingerprint_payload)
+        sync_result = SyncResult(
+            result_id=result_id,
+            mol_id=mol_id,
+            success=True,
+            result_update={"H298_pm7": -42.0},
+            error=None,
+            completed_at="2026-04-21T10:00:00Z",
+            attempt_id=attempt_id,
+        )
+        fingerprint = build_result_fingerprint(sync_result_payload(sync_result))
         app.state.result_ledger.prepare(
             result_id=result_id,
             mol_id=mol_id,
@@ -598,7 +615,17 @@ async def test_prepared_resume_same_lease_assigned_or_running(
             "/sync_results",
             json={
                 "worker_id": "w1",
-                "results": [{"result_id": result_id, **fingerprint_payload}],
+                "results": [
+                    {
+                        "result_id": result_id,
+                        "mol_id": mol_id,
+                        "attempt_id": attempt_id,
+                        "success": True,
+                        "result_update": {"H298_pm7": -42.0},
+                        "error": None,
+                        "completed_at": "2026-04-21T10:00:00Z",
+                    }
+                ],
             },
         )
 
@@ -654,7 +681,9 @@ async def test_force_skip_prepared_recovery_without_metric_duplication(
             completed_at="2026-04-21T10:00:00Z",
             attempt_id=attempt_id,
         )
-        fingerprint = build_result_fingerprint(sync_result_payload(result))
+        fingerprint = build_result_fingerprint(
+            with_operation_kind(sync_result_payload(result), OperationKind.FORCE_SKIP)
+        )
         previous_reruns = app.state.state_manager.get_reruns(mol_id)
         app.state.result_ledger.prepare(
             result_id="force-skip-1",
@@ -667,6 +696,7 @@ async def test_force_skip_prepared_recovery_without_metric_duplication(
             expected_reruns=previous_reruns,
             attempt_id=attempt_id,
             worker_id="w1",
+            operation_kind=OperationKind.FORCE_SKIP,
         )
         apply_worker_result(
             app.state.csv_manager,
@@ -732,3 +762,208 @@ async def test_force_skip_keeps_reruns_and_metrics_once(tmp_path: Path) -> None:
         worker2 = next(w for w in status2.json() if w["worker_id"] == "w1")
         assert worker2["skipped"] == 1
         assert app.state.state_manager.get_reruns(mol_id) == before
+
+
+@pytest.mark.anyio
+async def test_legacy_new_result_id_on_ok_without_attempt_is_stale(
+    tmp_path: Path,
+) -> None:
+    """Novo result_id legado sem attempt_id não altera molécula OK."""
+    csv_path = tmp_path / "thermo_pm7.csv"
+    _write_csv(csv_path)
+
+    async with await _client(csv_path) as client:
+        mol_id, attempt_id = await _claim(client)
+        science = {"H298_pm7": -55.0, "G298_pm7": -60.0, "gap": 5.0}
+        first = await client.post(
+            "/sync_results",
+            json={
+                "worker_id": "w1",
+                "results": [
+                    {
+                        "result_id": "legacy-ok-r1",
+                        "mol_id": mol_id,
+                        "attempt_id": attempt_id,
+                        "success": True,
+                        "result_update": science,
+                        "error": None,
+                        "completed_at": "2026-04-21T10:00:00Z",
+                    }
+                ],
+            },
+        )
+        assert first.json()["items"][0]["status"] == "applied"
+        second = await client.post(
+            "/sync_results",
+            json={
+                "worker_id": "w1",
+                "results": [
+                    {
+                        "result_id": "legacy-ok-r2",
+                        "mol_id": mol_id,
+                        "success": True,
+                        "result_update": {"H298_pm7": -99.0},
+                        "error": None,
+                        "completed_at": "2026-04-21T10:01:00Z",
+                    }
+                ],
+            },
+        )
+
+    assert second.json()["items"][0]["status"] == "stale_attempt"
+    scientific = pd.read_csv(csv_path)
+    state = pd.read_csv(tmp_path / "batch_state.csv", keep_default_na=False)
+    assert float(scientific.loc[0, "H298_pm7"]) == -55.0
+    assert str(state.loc[0, "status"]) == MoleculeStatus.OK.value
+    assert int(state.loc[0, "reruns"]) == 0
+
+
+@pytest.mark.anyio
+async def test_legacy_new_result_id_on_skip_without_attempt_is_stale(
+    tmp_path: Path,
+) -> None:
+    csv_path = tmp_path / "thermo_pm7.csv"
+    _write_csv(csv_path)
+    app = create_app(
+        ServerConfig(
+            csv_path=str(csv_path),
+            api_token="",
+            startup_grace_s=0,
+            watchdog_interval_s=999,
+        )
+    )
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        mol_id, attempt_id = await _claim(client)
+        sync_service = SyncResultApplicationService(
+            csv_manager=app.state.csv_manager,
+            state_manager=app.state.state_manager,
+            ledger=app.state.result_ledger,
+            worker_registry=app.state.worker_registry,
+            running_molecules=app.state.running_molecules,
+        )
+        applied = sync_service.apply_force_skip(
+            "w1",
+            SyncResult(
+                result_id="skip-legacy-r1",
+                mol_id=mol_id,
+                success=False,
+                result_update=None,
+                error="manual skip",
+                completed_at="2026-04-21T10:00:00Z",
+                attempt_id=attempt_id,
+            ),
+            "manual skip",
+        )
+        assert applied.item.status.value == "applied"
+        reruns = app.state.state_manager.get_reruns(mol_id)
+        second = await client.post(
+            "/sync_results",
+            json={
+                "worker_id": "w1",
+                "results": [
+                    {
+                        "result_id": "skip-legacy-r2",
+                        "mol_id": mol_id,
+                        "success": False,
+                        "result_update": None,
+                        "error": "retry",
+                        "completed_at": "2026-04-21T10:01:00Z",
+                    }
+                ],
+            },
+        )
+        assert second.json()["items"][0]["status"] == "stale_attempt"
+        assert app.state.state_manager.get_status(mol_id) == MoleculeStatus.SKIP.value
+        assert app.state.state_manager.get_reruns(mol_id) == reruns
+
+
+@pytest.mark.anyio
+async def test_legacy_same_result_id_on_ok_still_duplicate(tmp_path: Path) -> None:
+    csv_path = tmp_path / "thermo_pm7.csv"
+    _write_csv(csv_path)
+
+    async with await _client(csv_path) as client:
+        mol_id, attempt_id = await _claim(client)
+        payload = {
+            "result_id": "legacy-dup-r1",
+            "mol_id": mol_id,
+            "attempt_id": attempt_id,
+            "success": True,
+            "result_update": {"H298_pm7": -10.0},
+            "error": None,
+            "completed_at": "2026-04-21T10:00:00Z",
+        }
+        first = await client.post(
+            "/sync_results", json={"worker_id": "w1", "results": [payload]}
+        )
+        legacy_resend = dict(payload)
+        legacy_resend.pop("attempt_id")
+        second = await client.post(
+            "/sync_results",
+            json={"worker_id": "w1", "results": [legacy_resend]},
+        )
+
+    assert first.json()["items"][0]["status"] == "applied"
+    assert second.json()["items"][0]["status"] == "duplicate"
+
+
+@pytest.mark.anyio
+async def test_prepared_normal_resume_via_force_skip_conflicts(
+    tmp_path: Path,
+) -> None:
+    csv_path = tmp_path / "thermo_pm7.csv"
+    _write_csv(csv_path)
+    app = create_app(
+        ServerConfig(
+            csv_path=str(csv_path),
+            api_token="",
+            startup_grace_s=0,
+            watchdog_interval_s=999,
+        )
+    )
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        mol_id, attempt_id = await _claim(client)
+        sync_service = SyncResultApplicationService(
+            csv_manager=app.state.csv_manager,
+            state_manager=app.state.state_manager,
+            ledger=app.state.result_ledger,
+            worker_registry=app.state.worker_registry,
+            running_molecules=app.state.running_molecules,
+        )
+
+        result = SyncResult(
+            result_id="opkind-r1",
+            mol_id=mol_id,
+            success=False,
+            result_update=None,
+            error="timeout",
+            completed_at="2026-04-21T10:00:00Z",
+            attempt_id=attempt_id,
+        )
+        payload = sync_result_payload(result)
+        fingerprint = build_result_fingerprint(
+            with_operation_kind(payload, OperationKind.NORMAL_RESULT)
+        )
+        app.state.result_ledger.prepare(
+            result_id="opkind-r1",
+            mol_id=mol_id,
+            fingerprint=fingerprint,
+            desired_success=False,
+            previous_status=MoleculeStatus.RUNNING.value,
+            previous_reruns=0,
+            expected_final_status=MoleculeStatus.RERUN.value,
+            expected_reruns=1,
+            worker_id="w1",
+            attempt_id=attempt_id,
+            operation_kind=OperationKind.NORMAL_RESULT,
+        )
+        with pytest.raises(SyncConflictError):
+            sync_service.apply_force_skip("w1", result, "admin skip")
+        assert app.state.state_manager.get_status(mol_id) in {
+            MoleculeStatus.RUNNING.value,
+            MoleculeStatus.ASSIGNED.value,
+        }

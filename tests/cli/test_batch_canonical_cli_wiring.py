@@ -188,3 +188,107 @@ def test_batch_view_method_fields_always_crest_pm7_with_delta_session() -> None:
     assert method_id == "crest_pm7"
     assert method_version == "1.0.0"
     assert snapshot == {"method_id": "crest_pm7"}
+
+
+def test_create_run_failure_restores_prior_pending(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    runs_root = tmp_path / "runs"
+    monkeypatch.setenv("GRIMPERIUM_RUNS_DIR", str(runs_root))
+    csv_path = tmp_path / "thermo_pm7.csv"
+    _pending_csv(csv_path)
+    service = RunService(runs_root)
+    view = _view(tmp_path, csv_path, service)
+
+    def boom(**_kwargs: object) -> None:
+        raise RuntimeError("create_run failed")
+
+    monkeypatch.setattr(service, "create_run", boom)
+    with pytest.raises(RuntimeError, match="create_run failed"):
+        view._prepare_batch()
+
+    state = pd.read_csv(csv_path)
+    assert str(state.loc[0, "status"]) == MoleculeStatus.PENDING.value
+    assert list(runs_root.glob("*")) == []
+
+
+def test_create_run_failure_preserves_rerun(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    runs_root = tmp_path / "runs"
+    monkeypatch.setenv("GRIMPERIUM_RUNS_DIR", str(runs_root))
+    csv_path = tmp_path / "thermo_pm7.csv"
+    pd.DataFrame(
+        [
+            {
+                "mol_id": "mol_001",
+                "smiles": "CCO",
+                "nheavy": 3,
+                "status": MoleculeStatus.RERUN.value,
+                "reruns": 2,
+            }
+        ]
+    ).to_csv(csv_path, index=False)
+    service = RunService(runs_root)
+    view = _view(tmp_path, csv_path, service)
+
+    monkeypatch.setattr(
+        service, "create_run", lambda **_k: (_ for _ in ()).throw(RuntimeError("boom"))
+    )
+    with pytest.raises(RuntimeError):
+        view._prepare_batch()
+
+    state = pd.read_csv(csv_path)
+    assert str(state.loc[0, "status"]) == MoleculeStatus.RERUN.value
+    assert int(state.loc[0, "reruns"]) == 2
+
+
+def test_finalize_attach_failure_marks_run_failed(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    runs_root = tmp_path / "runs"
+    monkeypatch.setenv("GRIMPERIUM_RUNS_DIR", str(runs_root))
+    csv_path = tmp_path / "thermo_pm7.csv"
+    _pending_csv(csv_path)
+    service = RunService(runs_root)
+    view = _view(tmp_path, csv_path, service)
+    exec_manager, batch, manifest = view._prepare_batch()
+    output_layout = exec_manager._output_layout
+    assert output_layout is not None
+    started = service.start_run(manifest.run_id)
+    artifact = output_layout.output_dir / "calculation_results.csv"
+    artifact.parent.mkdir(parents=True, exist_ok=True)
+    artifact.write_text("mol_id\nmol_001\n", encoding="utf-8")
+
+    result = SimpleNamespace(
+        batch_id=batch.batch_id,
+        total_count=1,
+        success_count=1,
+        failed_count=0,
+        rerun_count=0,
+        skip_count=0,
+        total_time=1.0,
+        success_rate=100.0,
+        min_hof=None,
+        max_hof=None,
+        min_hof_mol_id=None,
+        max_hof_mol_id=None,
+        invalidated=False,
+    )
+    monkeypatch.setattr(view, "_display_batch_result", lambda *_a, **_k: None)
+
+    def boom_attach(*_a: object, **_k: object) -> None:
+        raise RuntimeError("attach failed")
+
+    monkeypatch.setattr(view, "_attach_existing_outputs", boom_attach)
+    with pytest.raises(RuntimeError, match="attach failed"):
+        view._finalize_batch_run_safely(started, output_layout, result)
+
+    failed = service.get_run(manifest.run_id)
+    assert failed.status is RunStatus.FAILED
+    assert artifact.exists()
+    assert view.controller.session.run is not None
+    assert view.controller.session.run.status == RunStatus.FAILED.value

@@ -21,9 +21,11 @@ from grimperium.crest_pm7.batch.result_ledger import (
     JournalEntry,
     JournalTxnStatus,
     LedgerStatus,
+    OperationKind,
     ResultLedger,
     build_legacy_result_id,
     build_result_fingerprint,
+    resolve_compatible_fingerprint,
 )
 from grimperium.crest_pm7.batch.state_manager import BatchStateManager
 from grimperium.server.models import SyncItemOutcome, SyncItemResult, SyncResult
@@ -98,9 +100,14 @@ class SyncResultApplicationService:
         """Aplicar um resultado com efeito operacional no máximo uma vez."""
         result_id = self.resolve_result_id(result)
         payload = sync_result_payload(result)
-        fingerprint = build_result_fingerprint(payload)
+        fingerprint, decision = resolve_compatible_fingerprint(
+            self._ledger,
+            result_id=result_id,
+            payload=payload,
+            operation_kind=OperationKind.NORMAL_RESULT,
+            attempt_id=result.attempt_id,
+        )
 
-        decision = self._ledger.check(result_id, fingerprint)
         if decision.status is LedgerStatus.DUPLICATE:
             self._cleanup_assignment(worker_id, result.mol_id, result.attempt_id)
             return SyncApplyOutcome(
@@ -153,6 +160,7 @@ class SyncResultApplicationService:
             expected_science_hash=expected.science_hash,
             worker_id=worker_id,
             attempt_id=result.attempt_id,
+            operation_kind=OperationKind.NORMAL_RESULT,
         )
         try:
             final_status = apply_worker_result(
@@ -305,7 +313,14 @@ class SyncResultApplicationService:
     def _stale_attempt_outcome(
         self, result_id: str, result: SyncResult
     ) -> SyncApplyOutcome | None:
-        """Reject results that do not match the current assignment lease."""
+        """Reject results that do not match the current assignment lease.
+
+        Política de payload legado (sem ``attempt_id``):
+        - rejeitado quando há lease ativa;
+        - rejeitado em estado terminal OK/Skip (novo result_id);
+        - aceito apenas em estado ativo compatível (Assigned/Running/Selected)
+          sem lease (clientes CSV verdadeiramente legados).
+        """
         current_attempt = self._state_manager.get_attempt_id(result.mol_id)
         if result.attempt_id is None:
             if current_attempt:
@@ -317,11 +332,42 @@ class SyncResultApplicationService:
                         detail="missing attempt_id for active assignment",
                     )
                 )
-            # CSV/payload legado sem lease: aceitar como antes.
+            try:
+                status = str(self._state_manager.get_status(result.mol_id)).lower()
+            except KeyError:
+                raise
+            except Exception:
+                status = ""
+            if is_terminal_status(status):
+                return SyncApplyOutcome(
+                    item=SyncItemResult(
+                        result_id=result_id,
+                        mol_id=result.mol_id,
+                        status=SyncItemOutcome.STALE_ATTEMPT,
+                        detail=(
+                            "legacy payload without attempt_id rejected on "
+                            f"terminal status={status!r}"
+                        ),
+                    )
+                )
+            if not is_active_assignment_status(status):
+                return SyncApplyOutcome(
+                    item=SyncItemResult(
+                        result_id=result_id,
+                        mol_id=result.mol_id,
+                        status=SyncItemOutcome.STALE_ATTEMPT,
+                        detail=(
+                            "legacy payload without attempt_id accepted only on "
+                            f"active assignment status (got={status!r})"
+                        ),
+                    )
+                )
             return None
         if current_attempt is None:
             try:
                 status = str(self._state_manager.get_status(result.mol_id)).lower()
+            except KeyError:
+                raise
             except Exception:
                 status = ""
             # Terminal sem lease ativo: NEW result_id é stale (duplicate já
@@ -405,8 +451,13 @@ class SyncResultApplicationService:
         """Aplicar force_skip legado pelo mesmo contrato de ledger."""
         result_id = self.resolve_result_id(result)
         payload = sync_result_payload(result)
-        fingerprint = build_result_fingerprint(payload)
-        decision = self._ledger.check(result_id, fingerprint)
+        fingerprint, decision = resolve_compatible_fingerprint(
+            self._ledger,
+            result_id=result_id,
+            payload=payload,
+            operation_kind=OperationKind.FORCE_SKIP,
+            attempt_id=result.attempt_id,
+        )
         if decision.status is LedgerStatus.DUPLICATE:
             self._cleanup_assignment(worker_id, result.mol_id, result.attempt_id)
             return SyncApplyOutcome(
@@ -459,6 +510,7 @@ class SyncResultApplicationService:
             expected_science_hash=expected.science_hash,
             worker_id=worker_id,
             attempt_id=result.attempt_id,
+            operation_kind=OperationKind.FORCE_SKIP,
         )
         try:
             final_status = apply_worker_result(
@@ -603,6 +655,9 @@ class SyncResultApplicationService:
         current_attempt = self._state_manager.get_attempt_id(mol_id)
         if current_attempt and attempt_id and attempt_id != current_attempt:
             return
+        # Duplicate/legado sem attempt_id não pode remover lease mais nova.
+        if current_attempt and not attempt_id:
+            return
         self._running_molecules.pop(mol_id, None)
         self._worker_registry.clear_current_mol(worker_id)
 
@@ -624,17 +679,19 @@ class _ExpectedEffect:
 
 
 def sync_result_payload(result: SyncResult) -> dict[str, Any]:
-    """Payload estável usado no fingerprint do ledger."""
-    payload: dict[str, Any] = {
+    """Payload estável usado no fingerprint do ledger.
+
+    ``attempt_id`` fica fora do fingerprint: é identidade de lease (journal),
+    não conteúdo científico. Assim o mesmo ``result_id`` committed continua
+    ``duplicate`` em resend legado sem ``attempt_id``.
+    """
+    return {
         "mol_id": result.mol_id,
         "success": result.success,
         "result_update": result.result_update,
         "error": result.error,
         "completed_at": result.completed_at,
     }
-    if result.attempt_id is not None:
-        payload["attempt_id"] = result.attempt_id
-    return payload
 
 
 def apply_worker_result(

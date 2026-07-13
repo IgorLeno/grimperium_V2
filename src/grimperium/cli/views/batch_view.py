@@ -46,7 +46,7 @@ from grimperium.crest_pm7.batch import (
 )
 from grimperium.crest_pm7.batch.enums import MoleculeStatus
 from grimperium.crest_pm7.config import PM7Config
-from grimperium.runs.models import RunManifest
+from grimperium.runs.models import TERMINAL_STATUSES, RunManifest, RunStatus
 from grimperium.runs.service import RunService
 
 if TYPE_CHECKING:
@@ -427,6 +427,29 @@ class BatchView(BaseView):
             xtb_timeout_seconds=xtb_timeout_seconds,
         )
 
+        # Snapshot pré-seleção para compensação se create_run/executor falhar.
+        eligible_mask_statuses = {
+            MoleculeStatus.PENDING.value,
+            MoleculeStatus.RERUN.value,
+            MoleculeStatus.SELECTED.value,
+        }
+        prior_csv: dict[str, dict[str, Any]] = {}
+        prior_state: dict[str, dict[str, Any]] = {}
+        loaded_df = csv_manager.df
+        if loaded_df is None:
+            raise RuntimeError("CSV not loaded before batch selection")
+        for mol_id in (
+            str(value)
+            for value in loaded_df.loc[
+                loaded_df["status"].isin(eligible_mask_statuses), "mol_id"
+            ].tolist()
+        ):
+            prior_csv[mol_id] = csv_manager.snapshot_row(mol_id)
+            try:
+                prior_state[mol_id] = state_manager.snapshot_row(mol_id)
+            except KeyError:
+                continue
+
         # Create batch
         batch_id = csv_manager.generate_batch_id()
         batch = csv_manager.select_batch(
@@ -438,29 +461,58 @@ class BatchView(BaseView):
         )
         state_manager.mark_selected_from_batch(batch)
 
-        method_id, method_version, method_snapshot = self._method_run_fields()
-        manifest = self._run_service().create_run(
-            property_id="standard_enthalpy_of_formation",
-            method_id=method_id,
-            method_version=method_version,
-            method_snapshot=method_snapshot,
-            execution_overrides=self._execution_overrides_snapshot(batch.size),
-            dataset_ref=self._dataset_ref_snapshot(self.csv_path),
-            model_ref=None,
-            molecule_count=batch.size,
-        )
-        # Outputs autoritativos vivem em runs/<run_id>/ (portáveis).
-        # batch_outputs/ legado não é mais a fonte científica.
-        output_layout = BatchOutputLayout(self._batch_output_dir(manifest.run_id))
-        exec_manager = BatchExecutionManager(
-            csv_manager=csv_manager,
-            state_manager=state_manager,
-            detail_manager=detail_manager,
-            pm7_config=pm7_config,
-            processor_adapter=processor,
-            output_layout=output_layout,
-            canonical_run_id=manifest.run_id,
-        )
+        manifest: RunManifest | None = None
+        try:
+            method_id, method_version, method_snapshot = self._method_run_fields()
+            manifest = self._run_service().create_run(
+                property_id="standard_enthalpy_of_formation",
+                method_id=method_id,
+                method_version=method_version,
+                method_snapshot=method_snapshot,
+                execution_overrides=self._execution_overrides_snapshot(batch.size),
+                dataset_ref=self._dataset_ref_snapshot(self.csv_path),
+                model_ref=None,
+                molecule_count=batch.size,
+            )
+            # Outputs autoritativos vivem em runs/<run_id>/ (portáveis).
+            # batch_outputs/ legado não é mais a fonte científica.
+            output_layout = BatchOutputLayout(self._batch_output_dir(manifest.run_id))
+            exec_manager = BatchExecutionManager(
+                csv_manager=csv_manager,
+                state_manager=state_manager,
+                detail_manager=detail_manager,
+                pm7_config=pm7_config,
+                processor_adapter=processor,
+                output_layout=output_layout,
+                canonical_run_id=manifest.run_id,
+            )
+        except Exception as prep_exc:
+            for mol in batch.molecules:
+                snap = prior_csv.get(mol.mol_id)
+                if snap is not None:
+                    csv_manager.restore_row(mol.mol_id, snap)
+                state_snap = prior_state.get(mol.mol_id)
+                if state_snap is not None:
+                    state_manager.restore_row(mol.mol_id, state_snap)
+            if manifest is not None:
+                try:
+                    current = self._run_service().get_run(manifest.run_id)
+                    if current.status not in TERMINAL_STATUSES:
+                        if current.status is RunStatus.CREATED:
+                            self._run_service().cancel_run(
+                                manifest.run_id,
+                                error=f"batch prepare failed: {prep_exc}",
+                            )
+                        else:
+                            self._run_service().fail_run(
+                                manifest.run_id,
+                                error=f"batch prepare failed: {prep_exc}",
+                            )
+                except Exception:
+                    logger.exception(
+                        "Failed to terminate orphan run after prepare error"
+                    )
+            raise
 
         return exec_manager, batch, manifest
 
@@ -614,8 +666,20 @@ class BatchView(BaseView):
             logging.disable(previous_disable)
             csv_monitor.stop(timeout=1.0)
 
-        # Display final result
+        # Finalização pós-execução: attach/complete fora do Live, mas com
+        # proteção para não deixar a Run em running (I8/I9).
         if result is not None:
+            self._finalize_batch_run_safely(manifest, output_layout, result)
+
+    def _finalize_batch_run_safely(
+        self,
+        manifest: RunManifest,
+        output_layout: BatchOutputLayout,
+        result: Any,
+    ) -> RunManifest:
+        """Anexar outputs e completar/invalidar a Run; falha → fail_run se mutável."""
+        original_error: Exception | None = None
+        try:
             self._display_batch_result(result)
             manifest = self._attach_existing_outputs(manifest, output_layout)
             failure_count = min(
@@ -639,6 +703,47 @@ class BatchView(BaseView):
                 run_id=finalized.run_id,
                 status=finalized.status.value,
             )
+            return finalized
+        except Exception as exc:
+            original_error = exc
+            # Best-effort: preservar artefatos já gravados no disco.
+            try:
+                manifest = self._attach_existing_outputs(manifest, output_layout)
+            except Exception:
+                logger.exception(
+                    "Failed to attach outputs during finalize recovery for %s",
+                    manifest.run_id,
+                )
+            service = self._run_service()
+            try:
+                current = service.get_run(manifest.run_id)
+            except FileNotFoundError:
+                self.controller.session.run = RunRef(
+                    run_id=manifest.run_id,
+                    status=RunStatus.FAILED.value,
+                )
+                raise original_error from None
+            if current.status not in TERMINAL_STATUSES:
+                failed = service.fail_run(
+                    manifest.run_id,
+                    error=str(original_error),
+                    success_count=getattr(result, "success_count", 0),
+                    failure_count=max(
+                        getattr(result, "total_count", 1)
+                        - getattr(result, "success_count", 0),
+                        0,
+                    ),
+                )
+                self.controller.session.run = RunRef(
+                    run_id=failed.run_id,
+                    status=failed.status.value,
+                )
+            else:
+                self.controller.session.run = RunRef(
+                    run_id=current.run_id,
+                    status=current.status.value,
+                )
+            raise original_error from None
 
     def _render_batch_display(self, tracker: ProgressTracker, frame_idx: int) -> Panel:
         """Render batch display: header + current molecule + completion history.

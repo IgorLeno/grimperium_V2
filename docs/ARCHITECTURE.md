@@ -776,12 +776,17 @@ Workers mint an explicit `result_id` and receive an `attempt_id` lease on
 `/claim`. Both travel in the offline JSONL queue and `SyncResult` payload.
 A result whose `attempt_id` does not match the current assignment is rejected
 as `stale_attempt` and must not clear a newer lease. Legacy clients without
-`attempt_id` are accepted only when no active lease exists.
+`attempt_id` are accepted **only** while the molecule is in an active assignment
+status (`Assigned`/`Running`/`Selected`) **and** no lease is active. A **new**
+`result_id` on terminal `OK`/`Skip` is always `stale_attempt`, with or without
+`attempt_id`. The same committed `result_id` remains `duplicate`.
 
 Lease invalidation is total: `reset_all_or_nothing`, reclaim, and stuck-reset
 paths clear `assigned_worker`, `worker_status`, `assigned_at`, and `attempt_id`
 via `_clear_assignment_fields`. After ALL_OR_NOTHING returns a molecule to
-Pending, a delayed result from the prior attempt is `stale_attempt`.
+Pending, a delayed result from the prior attempt is `stale_attempt`. Watchdog
+offline reclaim also clears matching entries from the in-memory
+`running_molecules` map so stale heartbeats become definitive lease loss.
 
 Invariant: one `result_id` applies at most once; one `attempt_id` produces at
 most one terminal scientific result. A terminal molecule (`OK`/`Skip`) without a
@@ -796,7 +801,12 @@ counters. Scientific/operational authority remains CSV + ledger.
 
 `force_skip` (legacy `/report/failure`) is an administrative Skip: `reruns` does
 not increment; journal `expected_reruns` equals the previous count so crash
-recovery can verify without a second apply.
+recovery can verify without a second apply. Operation identity includes
+`OperationKind` (`normal_result` / `force_skip`): it is stored on the journal
+and participates in the fingerprint for `force_skip` (normal fingerprints omit
+the field for backward compatibility). The same `result_id` prepared under one
+kind cannot resume under the other (`conflict`). Legacy journal lines without
+`operation_kind` default to `normal_result`.
 
 Workers enqueue results before the immediate online attempt, resend the same
 `result_id` until the server returns a terminal per-item status
@@ -805,11 +815,23 @@ always finishes the batch with HTTP 200 and `items[]` (never aborts the whole
 response on a single conflict). Unit wrappers `/report/*` still map individual
 conflicts to HTTP 409. Terminal `conflict`/`stale_attempt` are written to a
 durable worker dead-letter JSONL before leaving the offline queue; applied and
-duplicate are confirmed without dead-letter.
+duplicate are confirmed without dead-letter. Dead-letter identity is
+`dead_letter_id = sha256(result_id | returned_status | original_payload)` so a
+crash between append and confirm does not duplicate on restart.
 
 `PUT /heartbeat/{mol_id}` requires the current owner `worker_id` and matching
 `attempt_id` when a lease is active. Legacy heartbeats without `attempt_id` are
-accepted only when no active lease exists (otherwise HTTP 409).
+accepted only when no active lease exists (otherwise HTTP 409). Worker-side
+HTTP 409/404 on heartbeat is definitive lease loss: the heartbeat thread signals
+the runner, which archives the aborted processing to dead-letter and does **not**
+publish a normal scientific result. CREST/MOPAC subprocesses are not killed
+mid-run (no unsafe chemical cancel); only post-pipeline publication is gated.
+
+`BatchView` finalizes Runs via `_finalize_batch_run_safely`: attach outputs,
+then complete/invalidate. Any failure re-reads the Run and calls `fail_run` only
+if still mutable, preserving on-disk artifacts. Selection compensation restores
+pre-select CSV/`batch_state` snapshots when `create_run` or executor construction
+fails, so molecules are not left `Selected` without a Run.
 
 Journal recovery is conservative. A `committed` entry indexes the fingerprint and
 turns later deliveries into duplicates. A `prepared` entry is resumed only when

@@ -18,8 +18,10 @@ from grimperium.cli.views.batch_view import BatchView
 from grimperium.crest_pm7.batch.enums import BatchFailurePolicy, MoleculeStatus
 from grimperium.crest_pm7.batch.result_ledger import (
     JournalTxnStatus,
+    OperationKind,
     ResultLedger,
     build_result_fingerprint,
+    with_operation_kind,
 )
 from grimperium.runs.models import RunStatus
 from grimperium.runs.persistence import MANIFEST_FILENAME
@@ -28,13 +30,15 @@ from grimperium.server.app import create_app
 from grimperium.server.config import ServerConfig
 from grimperium.server.models import SyncResult
 from grimperium.server.sync_application import (
+    SyncConflictError,
     SyncResultApplicationService,
     apply_worker_result,
     sync_result_payload,
 )
-from grimperium.worker.client import ServerError, WorkerClient
+from grimperium.worker.client import LeaseLostError, ServerError, WorkerClient
 from grimperium.worker.offline_queue import (
     DeadLetterQueue,
+    DeadLetterRecord,
     OfflineResultQueue,
     dead_letter_path_for,
 )
@@ -133,7 +137,6 @@ async def test_lost_http_response_does_not_double_apply(tmp_path: Path) -> None:
                 "result_update": None,
                 "error": "MOPAC timeout",
                 "completed_at": "2026-04-21T10:00:00Z",
-                "attempt_id": attempt_id,
             }
         ),
     )
@@ -898,7 +901,6 @@ async def test_scenario_c_prepared_old_lease_vs_new_claim(tmp_path: Path) -> Non
                 "result_update": {"H298_pm7": -11.0},
                 "error": None,
                 "completed_at": "2026-04-21T10:00:00Z",
-                "attempt_id": attempt_a,
             }
         )
         app.state.result_ledger.prepare(
@@ -985,7 +987,9 @@ async def test_scenario_d_force_skip_crash_recovery(tmp_path: Path) -> None:
             completed_at="2026-04-21T10:00:00Z",
             attempt_id=attempt_id,
         )
-        fingerprint = build_result_fingerprint(sync_result_payload(result))
+        fingerprint = build_result_fingerprint(
+            with_operation_kind(sync_result_payload(result), OperationKind.FORCE_SKIP)
+        )
         previous_reruns = app.state.state_manager.get_reruns(mol_id)
         app.state.result_ledger.prepare(
             result_id="force-skip-crash",
@@ -998,6 +1002,7 @@ async def test_scenario_d_force_skip_crash_recovery(tmp_path: Path) -> None:
             expected_reruns=previous_reruns,
             attempt_id=attempt_id,
             worker_id="w1",
+            operation_kind=OperationKind.FORCE_SKIP,
         )
         apply_worker_result(
             app.state.csv_manager,
@@ -1138,4 +1143,325 @@ def test_scenario_f_batch_view_portable_runs(
     # Results consegue localizar o output via path portátil do manifest.
     assert "mol_001" in reloaded.output_paths["calculation_results_csv"].read_text(
         encoding="utf-8"
+    )
+
+
+# ── Cenários da estabilização terminal (prompt §14) ───────────────────────────
+
+
+@pytest.mark.anyio
+async def test_cenario_1_legacy_on_terminal_ok(tmp_path: Path) -> None:
+    """R1 OK → R2 legado sem attempt_id → stale; CSV/reruns intactos."""
+    csv_path = tmp_path / "thermo_pm7.csv"
+    _write_csv(csv_path)
+    async with await _client(csv_path) as client:
+        mol_id, attempt_id = await _claim(client)
+        r1 = await client.post(
+            "/sync_results",
+            json={
+                "worker_id": "w1",
+                "results": [
+                    {
+                        "result_id": "c1-r1",
+                        "mol_id": mol_id,
+                        "attempt_id": attempt_id,
+                        "success": True,
+                        "result_update": {"H298_pm7": -12.0},
+                        "error": None,
+                        "completed_at": "2026-07-13T00:00:00Z",
+                    }
+                ],
+            },
+        )
+        assert r1.json()["items"][0]["status"] == "applied"
+        r2 = await client.post(
+            "/sync_results",
+            json={
+                "worker_id": "w1",
+                "results": [
+                    {
+                        "result_id": "c1-r2",
+                        "mol_id": mol_id,
+                        "success": True,
+                        "result_update": {"H298_pm7": -99.0},
+                        "error": None,
+                        "completed_at": "2026-07-13T00:01:00Z",
+                    }
+                ],
+            },
+        )
+    assert r2.json()["items"][0]["status"] == "stale_attempt"
+    scientific = pd.read_csv(csv_path)
+    state = pd.read_csv(tmp_path / "batch_state.csv", keep_default_na=False)
+    assert float(scientific.loc[0, "H298_pm7"]) == -12.0
+    assert int(state.loc[0, "reruns"]) == 0
+
+
+@pytest.mark.anyio
+async def test_cenario_2_operation_kind_conflict(tmp_path: Path) -> None:
+    csv_path = tmp_path / "thermo_pm7.csv"
+    _write_csv(csv_path)
+    app = create_app(
+        ServerConfig(
+            csv_path=str(csv_path),
+            api_token="",
+            startup_grace_s=0,
+            watchdog_interval_s=999,
+        )
+    )
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        mol_id, attempt_id = await _claim(client)
+        service = SyncResultApplicationService(
+            csv_manager=app.state.csv_manager,
+            state_manager=app.state.state_manager,
+            ledger=app.state.result_ledger,
+            worker_registry=app.state.worker_registry,
+            running_molecules=app.state.running_molecules,
+        )
+        result = SyncResult(
+            result_id="c2-r1",
+            mol_id=mol_id,
+            success=False,
+            result_update=None,
+            error="timeout",
+            completed_at="2026-07-13T00:00:00Z",
+            attempt_id=attempt_id,
+        )
+        fp_normal = build_result_fingerprint(
+            with_operation_kind(
+                sync_result_payload(result), OperationKind.NORMAL_RESULT
+            )
+        )
+        app.state.result_ledger.prepare(
+            result_id="c2-r1",
+            mol_id=mol_id,
+            fingerprint=fp_normal,
+            desired_success=False,
+            attempt_id=attempt_id,
+            worker_id="w1",
+            operation_kind=OperationKind.NORMAL_RESULT,
+        )
+        with pytest.raises(SyncConflictError):
+            service.apply_force_skip("w1", result, "admin")
+
+        # Inverso: force_skip preparado → normal conflita
+        result2 = SyncResult(
+            result_id="c2-r2",
+            mol_id=mol_id,
+            success=False,
+            result_update=None,
+            error="skip",
+            completed_at="2026-07-13T00:00:00Z",
+            attempt_id=attempt_id,
+        )
+        fp_force = build_result_fingerprint(
+            with_operation_kind(sync_result_payload(result2), OperationKind.FORCE_SKIP)
+        )
+        app.state.result_ledger.prepare(
+            result_id="c2-r2",
+            mol_id=mol_id,
+            fingerprint=fp_force,
+            desired_success=False,
+            attempt_id=attempt_id,
+            worker_id="w1",
+            operation_kind=OperationKind.FORCE_SKIP,
+        )
+        with pytest.raises(SyncConflictError):
+            service.apply_one("w1", result2)
+
+
+def test_cenario_3_finalize_attach_failure(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    runs_root = tmp_path / "runs"
+    monkeypatch.setenv("GRIMPERIUM_RUNS_DIR", str(runs_root))
+    csv_path = tmp_path / "thermo_pm7.csv"
+    _write_csv(csv_path)
+    service = RunService(runs_root)
+    controller = SimpleNamespace(
+        console=Console(record=True),
+        settings_manager=None,
+        session=SessionContext(),
+        run_service=service,
+    )
+    view = BatchView(controller)  # type: ignore[arg-type]
+    view.csv_path = csv_path
+    view.detail_dir = tmp_path / "details"
+    exec_manager, batch, manifest = view._prepare_batch()
+    layout = exec_manager._output_layout
+    assert layout is not None
+    started = service.start_run(manifest.run_id)
+    artifact = layout.output_dir / "calculation_results.csv"
+    artifact.parent.mkdir(parents=True, exist_ok=True)
+    artifact.write_text("mol_id\nmol_001\n", encoding="utf-8")
+    result = SimpleNamespace(
+        batch_id=batch.batch_id,
+        total_count=1,
+        success_count=1,
+        failed_count=0,
+        rerun_count=0,
+        skip_count=0,
+        total_time=1.0,
+        success_rate=100.0,
+        min_hof=None,
+        max_hof=None,
+        min_hof_mol_id=None,
+        max_hof_mol_id=None,
+        invalidated=False,
+    )
+    monkeypatch.setattr(view, "_display_batch_result", lambda *_a, **_k: None)
+    monkeypatch.setattr(
+        view,
+        "_attach_existing_outputs",
+        lambda *_a, **_k: (_ for _ in ()).throw(RuntimeError("attach boom")),
+    )
+    with pytest.raises(RuntimeError, match="attach boom"):
+        view._finalize_batch_run_safely(started, layout, result)
+    assert service.get_run(manifest.run_id).status is RunStatus.FAILED
+    assert artifact.exists()
+
+
+def test_cenario_4_selection_compensated_on_create_run_failure(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    runs_root = tmp_path / "runs"
+    monkeypatch.setenv("GRIMPERIUM_RUNS_DIR", str(runs_root))
+    csv_path = tmp_path / "thermo_pm7.csv"
+    _write_csv(csv_path)
+    service = RunService(runs_root)
+    controller = SimpleNamespace(
+        console=Console(record=True),
+        settings_manager=None,
+        session=SessionContext(),
+        run_service=service,
+    )
+    view = BatchView(controller)  # type: ignore[arg-type]
+    view.csv_path = csv_path
+    view.detail_dir = tmp_path / "details"
+    monkeypatch.setattr(
+        service,
+        "create_run",
+        lambda **_k: (_ for _ in ()).throw(RuntimeError("create_run boom")),
+    )
+    with pytest.raises(RuntimeError, match="create_run boom"):
+        view._prepare_batch()
+    state = pd.read_csv(csv_path)
+    assert str(state.loc[0, "status"]) == MoleculeStatus.PENDING.value
+
+
+def test_cenario_5_dead_letter_crash_window(tmp_path: Path) -> None:
+    queue_path = tmp_path / "offline.jsonl"
+    client = MagicMock(spec=WorkerClient)
+    client.sync_results.return_value = {
+        "accepted": 0,
+        "items": [
+            {
+                "result_id": "c5-r1",
+                "mol_id": "mol_001",
+                "status": "conflict",
+                "detail": "fp",
+            }
+        ],
+    }
+    runner = WorkerRunner(
+        WorkerConfig(
+            server_url="http://test",
+            worker_id="w1",
+            offline_queue_path=str(queue_path),
+            heartbeat_interval_s=999.0,
+        ),
+        pipeline=MagicMock(),
+        client=client,
+    )
+    entry = runner._offline_queue.enqueue(
+        mol_id="mol_001",
+        success=False,
+        error="x",
+        result_id="c5-r1",
+        attempt_id="att",
+    )
+    runner._dead_letter.append(
+        DeadLetterRecord(
+            result_id=entry.result_id,
+            mol_id=entry.mol_id,
+            attempt_id=entry.attempt_id,
+            original_payload=entry.to_sync_dict(),
+            returned_status="conflict",
+            detail="fp",
+            worker_id="w1",
+            rejected_at="2026-07-13T00:00:00Z",
+            rejection_origin="sync_results",
+        )
+    )
+    restarted = WorkerRunner(
+        WorkerConfig(
+            server_url="http://test",
+            worker_id="w1",
+            offline_queue_path=str(queue_path),
+            heartbeat_interval_s=999.0,
+        ),
+        pipeline=MagicMock(),
+        client=client,
+    )
+    restarted.flush_offline_queue()
+    assert len(restarted._dead_letter.entries()) == 1
+    assert restarted._offline_queue.pending() == []
+
+
+def test_cenario_6_lease_lost_does_not_publish_valid_result(tmp_path: Path) -> None:
+    import threading
+    import time
+    from unittest.mock import patch
+
+    client = MagicMock(spec=WorkerClient)
+    client.claim.return_value = ("mol_001", "CCO", "att-1")
+    client.sync_results.side_effect = lambda results: {
+        "accepted": len(results),
+        "items": [
+            {
+                "result_id": str(item.get("result_id", "")),
+                "mol_id": str(item.get("mol_id", "")),
+                "status": "applied",
+            }
+            for item in results
+        ],
+    }
+    pipeline = MagicMock()
+    release = threading.Event()
+
+    def slow(_mol: str, _smiles: str) -> MagicMock:
+        release.wait(timeout=2.0)
+        out = MagicMock()
+        out.mol_id = "mol_001"
+        out.success = True
+        out.error_message = None
+        out.most_stable_hof = -1.0
+        return out
+
+    pipeline.process_molecule.side_effect = slow
+    client.heartbeat.side_effect = LeaseLostError("mol_001", 409, "lost")
+    runner = WorkerRunner(
+        WorkerConfig(
+            server_url="http://test",
+            worker_id="w1",
+            offline_queue_path=str(tmp_path / "offline.jsonl"),
+            heartbeat_interval_s=0.05,
+        ),
+        pipeline=pipeline,
+        client=client,
+    )
+    with patch(
+        "grimperium.worker.runner._pm7result_to_update",
+        return_value={"H298_pm7": -1.0},
+    ):
+        thread = threading.Thread(target=runner.run_one, daemon=True)
+        thread.start()
+        time.sleep(0.2)
+        release.set()
+        thread.join(timeout=5.0)
+    client.sync_results.assert_not_called()
+    assert any(
+        e.rejection_origin == "lease_lost" for e in runner._dead_letter.entries()
     )

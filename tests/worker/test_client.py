@@ -7,7 +7,12 @@ from typing import Any
 import httpx
 import pytest
 
-from grimperium.worker.client import ServerError, WorkerClient, WorkerClientConfig
+from grimperium.worker.client import (
+    LeaseLostError,
+    ServerError,
+    WorkerClient,
+    WorkerClientConfig,
+)
 
 # ── Minimal mock transport ─────────────────────────────────────────────────────
 
@@ -144,11 +149,19 @@ class TestHeartbeat:
         client = _make_client(t)
         client.heartbeat("m1", attempt_id="att-1")  # must not raise
 
-    def test_heartbeat_silently_tolerates_404(self) -> None:
+    def test_heartbeat_404_is_lease_lost(self) -> None:
         t = _MockTransport()
         t.add("PUT", "/heartbeat/ghost", _json_response(404, {"detail": "not running"}))
         client = _make_client(t)
-        client.heartbeat("ghost", attempt_id="att-1")  # must not raise
+        with pytest.raises(LeaseLostError):
+            client.heartbeat("ghost", attempt_id="att-1")
+
+    def test_heartbeat_409_is_lease_lost(self) -> None:
+        t = _MockTransport()
+        t.add("PUT", "/heartbeat/m1", _json_response(409, {"detail": "owner mismatch"}))
+        client = _make_client(t)
+        with pytest.raises(LeaseLostError):
+            client.heartbeat("m1", attempt_id="att-1")
 
     def test_heartbeat_raises_on_5xx(self) -> None:
         t = _MockTransport()

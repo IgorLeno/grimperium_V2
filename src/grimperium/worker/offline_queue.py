@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import tempfile
@@ -171,9 +172,10 @@ class DeadLetterRecord:
     worker_id: str
     rejected_at: str
     rejection_origin: str
+    dead_letter_id: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
-        return {
+        payload = {
             "result_id": self.result_id,
             "mol_id": self.mol_id,
             "attempt_id": self.attempt_id,
@@ -184,27 +186,67 @@ class DeadLetterRecord:
             "rejected_at": self.rejected_at,
             "rejection_origin": self.rejection_origin,
         }
+        dead_letter_id = self.dead_letter_id or compute_dead_letter_id(
+            result_id=self.result_id,
+            returned_status=self.returned_status,
+            original_payload=self.original_payload,
+        )
+        payload["dead_letter_id"] = dead_letter_id
+        return payload
 
     @classmethod
     def from_dict(cls, payload: dict[str, Any]) -> DeadLetterRecord:
         original = payload.get("original_payload")
+        original_payload = dict(original) if isinstance(original, dict) else {}
+        returned_status = str(payload["returned_status"])
+        result_id = str(payload["result_id"])
+        dead_letter_id = (
+            str(payload["dead_letter_id"])
+            if payload.get("dead_letter_id") is not None
+            else compute_dead_letter_id(
+                result_id=result_id,
+                returned_status=returned_status,
+                original_payload=original_payload,
+            )
+        )
         return cls(
-            result_id=str(payload["result_id"]),
+            result_id=result_id,
             mol_id=str(payload["mol_id"]),
             attempt_id=(
                 str(payload["attempt_id"])
                 if payload.get("attempt_id") is not None
                 else None
             ),
-            original_payload=dict(original) if isinstance(original, dict) else {},
-            returned_status=str(payload["returned_status"]),
+            original_payload=original_payload,
+            returned_status=returned_status,
             detail=(
                 str(payload["detail"]) if payload.get("detail") is not None else None
             ),
             worker_id=str(payload["worker_id"]),
             rejected_at=str(payload["rejected_at"]),
             rejection_origin=str(payload["rejection_origin"]),
+            dead_letter_id=dead_letter_id,
         )
+
+
+def compute_dead_letter_id(
+    *,
+    result_id: str,
+    returned_status: str,
+    original_payload: dict[str, Any],
+) -> str:
+    """Identidade estável de uma rejeição para deduplicar na janela de crash."""
+    encoded = json.dumps(
+        {
+            "result_id": result_id,
+            "returned_status": returned_status,
+            "original_payload": original_payload,
+        },
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+    ).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
 
 
 class DeadLetterQueue:
@@ -214,11 +256,32 @@ class DeadLetterQueue:
         self.path = Path(path)
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self._entries: list[DeadLetterRecord] = []
+        self._index: set[str] = set()
         self._load()
 
     def append(self, record: DeadLetterRecord) -> None:
-        """Gravar um registro de dead-letter de forma atômica."""
-        self._entries.append(record)
+        """Gravar um registro de dead-letter de forma atômica e idempotente."""
+        dead_letter_id = record.dead_letter_id or compute_dead_letter_id(
+            result_id=record.result_id,
+            returned_status=record.returned_status,
+            original_payload=record.original_payload,
+        )
+        if dead_letter_id in self._index:
+            return
+        normalized = DeadLetterRecord(
+            result_id=record.result_id,
+            mol_id=record.mol_id,
+            attempt_id=record.attempt_id,
+            original_payload=record.original_payload,
+            returned_status=record.returned_status,
+            detail=record.detail,
+            worker_id=record.worker_id,
+            rejected_at=record.rejected_at,
+            rejection_origin=record.rejection_origin,
+            dead_letter_id=dead_letter_id,
+        )
+        self._entries.append(normalized)
+        self._index.add(dead_letter_id)
         self._persist()
 
     def entries(self) -> list[DeadLetterRecord]:
@@ -228,14 +291,41 @@ class DeadLetterQueue:
         if not self.path.exists():
             return
         loaded: list[DeadLetterRecord] = []
+        index: set[str] = set()
         for line in self.path.read_text(encoding="utf-8").splitlines():
             line = line.strip()
             if not line:
                 continue
-            payload = json.loads(line)
+            try:
+                payload = json.loads(line)
+            except json.JSONDecodeError:
+                continue
             if isinstance(payload, dict) and payload.get("result_id"):
-                loaded.append(DeadLetterRecord.from_dict(payload))
+                record = DeadLetterRecord.from_dict(payload)
+                dead_letter_id = record.dead_letter_id or compute_dead_letter_id(
+                    result_id=record.result_id,
+                    returned_status=record.returned_status,
+                    original_payload=record.original_payload,
+                )
+                if dead_letter_id in index:
+                    continue
+                index.add(dead_letter_id)
+                loaded.append(
+                    DeadLetterRecord(
+                        result_id=record.result_id,
+                        mol_id=record.mol_id,
+                        attempt_id=record.attempt_id,
+                        original_payload=record.original_payload,
+                        returned_status=record.returned_status,
+                        detail=record.detail,
+                        worker_id=record.worker_id,
+                        rejected_at=record.rejected_at,
+                        rejection_origin=record.rejection_origin,
+                        dead_letter_id=dead_letter_id,
+                    )
+                )
         self._entries = loaded
+        self._index = index
 
     def _persist(self) -> None:
         lines = [

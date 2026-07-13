@@ -45,6 +45,7 @@ async def check_offline_workers(
     config: ServerConfig,
     lock: asyncio.Lock,
     state_manager: BatchStateManager | None = None,
+    running_molecules: dict[str, str] | None = None,
 ) -> list[str]:
     """Identify stale workers, mark them offline in the state CSV, and evict.
 
@@ -56,6 +57,8 @@ async def check_offline_workers(
         lock: Asyncio lock protecting CSV access.
         state_manager: Operational state manager for worker-offline recovery.
             When ``None``, the offline-marking step is a no-op.
+        running_molecules: In-memory mol→worker ownership map kept in sync with
+            lease reclaim (cleared for the offline worker).
 
     Returns:
         List of worker_ids that were evicted from the registry.
@@ -74,6 +77,14 @@ async def check_offline_workers(
         )
         async with lock:
             await asyncio.to_thread(_mark_worker_offline, worker_id, state_manager)
+            if running_molecules is not None:
+                to_clear = [
+                    mol_id
+                    for mol_id, owner in list(running_molecules.items())
+                    if owner == worker_id
+                ]
+                for mol_id in to_clear:
+                    running_molecules.pop(mol_id, None)
         del registry[worker_id]
 
     return stale
@@ -85,6 +96,7 @@ async def run_watchdog(
     config: ServerConfig,
     lock: asyncio.Lock,
     state_manager: BatchStateManager | None = None,
+    running_molecules: dict[str, str] | None = None,
 ) -> None:
     """Asyncio task: periodic heartbeat check with startup recovery.
 
@@ -96,6 +108,7 @@ async def run_watchdog(
         lock: Asyncio lock protecting CSV access.
         state_manager: Operational state manager for ``batch_state.csv``.
             Startup recovery and offline-marking use this when provided.
+        running_molecules: Optional ownership map cleared on worker reclaim.
     """
     LOG.info(
         "Watchdog starting — grace period %ds before first cycle",
@@ -109,7 +122,12 @@ async def run_watchdog(
         await asyncio.sleep(config.watchdog_interval_s)
         try:
             await check_offline_workers(
-                heartbeat_registry, csv_manager, config, lock, state_manager
+                heartbeat_registry,
+                csv_manager,
+                config,
+                lock,
+                state_manager,
+                running_molecules,
             )
         except Exception:
             LOG.exception("Watchdog cycle failed — continuing")

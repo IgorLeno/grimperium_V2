@@ -34,6 +34,18 @@ class JournalTxnStatus(str, Enum):
     FAILED = "failed"
 
 
+class OperationKind(str, Enum):
+    """Discriminador tipado da semântica operacional do resultado.
+
+    Participa da identidade (fingerprint) para que o mesmo ``result_id``
+    preparado como falha normal não possa ser retomado como ``force_skip``
+    (e vice-versa). Journals legados sem o campo recebem ``NORMAL_RESULT``.
+    """
+
+    NORMAL_RESULT = "normal_result"
+    FORCE_SKIP = "force_skip"
+
+
 @dataclass(frozen=True)
 class LedgerDecision:
     """Result of checking and optionally recording a synced result."""
@@ -69,6 +81,7 @@ class JournalEntry:
     expected_science_hash: str | None = None
     worker_id: str | None = None
     attempt_id: str | None = None
+    operation_kind: str = OperationKind.NORMAL_RESULT.value
     final_status: str | None = None
     prepared_at: str | None = None
     committed_at: str | None = None
@@ -181,10 +194,16 @@ class ResultLedger:
         expected_science_hash: str | None = None,
         worker_id: str | None = None,
         attempt_id: str | None = None,
+        operation_kind: str | OperationKind = OperationKind.NORMAL_RESULT,
     ) -> JournalEntry:
         """Durably mark a sync transaction as prepared before dual-write."""
         if not result_id or not fingerprint:
             raise ValueError("result_id and fingerprint must not be blank")
+        kind = (
+            operation_kind.value
+            if isinstance(operation_kind, OperationKind)
+            else str(operation_kind)
+        )
         now = datetime.now(timezone.utc).isoformat()
         with self._lock:
             previous = self._journal.get(result_id)
@@ -219,6 +238,7 @@ class ResultLedger:
                     if attempt_id is not None
                     else (previous.attempt_id if previous is not None else None)
                 ),
+                operation_kind=kind,
                 prepared_at=now,
             )
             self._append_journal(entry)
@@ -248,6 +268,7 @@ class ResultLedger:
                 expected_science_hash=previous.expected_science_hash,
                 worker_id=previous.worker_id,
                 attempt_id=previous.attempt_id,
+                operation_kind=previous.operation_kind,
                 final_status=final_status or previous.final_status,
                 prepared_at=previous.prepared_at,
                 committed_at=datetime.now(timezone.utc).isoformat(),
@@ -278,6 +299,7 @@ class ResultLedger:
                 expected_science_hash=previous.expected_science_hash,
                 worker_id=previous.worker_id,
                 attempt_id=previous.attempt_id,
+                operation_kind=previous.operation_kind,
                 final_status=previous.final_status,
                 prepared_at=previous.prepared_at,
                 committed_at=None,
@@ -312,6 +334,11 @@ class ResultLedger:
                 ):
                     return entry
         return None
+
+    def get_entry(self, result_id: str) -> JournalEntry | None:
+        """Return the current journal entry for ``result_id``, if any."""
+        with self._lock:
+            return self._journal.get(result_id)
 
     def recover_incomplete(
         self,
@@ -405,6 +432,11 @@ class ResultLedger:
                         if payload.get("attempt_id") is not None
                         else None
                     ),
+                    operation_kind=(
+                        str(payload["operation_kind"])
+                        if payload.get("operation_kind") is not None
+                        else OperationKind.NORMAL_RESULT.value
+                    ),
                     final_status=(
                         str(payload["final_status"])
                         if payload.get("final_status") is not None
@@ -447,6 +479,7 @@ class ResultLedger:
             "expected_science_hash": entry.expected_science_hash,
             "worker_id": entry.worker_id,
             "attempt_id": entry.attempt_id,
+            "operation_kind": entry.operation_kind,
             "final_status": entry.final_status,
             "prepared_at": entry.prepared_at,
             "committed_at": entry.committed_at,
@@ -470,6 +503,69 @@ def build_result_fingerprint(payload: dict[str, Any]) -> str:
     """Return a stable SHA-256 fingerprint for a synced result payload."""
     encoded = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
     return hashlib.sha256(encoded).hexdigest()
+
+
+def with_operation_kind(
+    payload: dict[str, Any],
+    operation_kind: OperationKind | str = OperationKind.NORMAL_RESULT,
+) -> dict[str, Any]:
+    """Incluir ``operation_kind`` no payload de fingerprint quando não for normal.
+
+    ``NORMAL_RESULT`` omite o campo para preservar fingerprints legados.
+    ``FORCE_SKIP`` entra no hash e conflita com prepare/retry de semântica
+    diferente sob o mesmo ``result_id``.
+    """
+    kind = (
+        operation_kind
+        if isinstance(operation_kind, OperationKind)
+        else OperationKind(str(operation_kind))
+    )
+    if kind is OperationKind.NORMAL_RESULT:
+        return dict(payload)
+    enriched = dict(payload)
+    enriched["operation_kind"] = kind.value
+    return enriched
+
+
+def resolve_compatible_fingerprint(
+    ledger: ResultLedger,
+    *,
+    result_id: str,
+    payload: dict[str, Any],
+    operation_kind: OperationKind | str = OperationKind.NORMAL_RESULT,
+    attempt_id: str | None = None,
+) -> tuple[str, LedgerDecision]:
+    """Escolher fingerprint compatível com journals pré-upgrade (com attempt_id).
+
+    Novos prepares usam payload sem ``attempt_id``. Journals antigos que
+    incluíam ``attempt_id`` no hash ainda fazem match via candidatos equivalentes
+    (payload ± attempt_id do request ou do journal).
+    """
+    kind = (
+        operation_kind
+        if isinstance(operation_kind, OperationKind)
+        else OperationKind(str(operation_kind))
+    )
+    candidates: list[str] = [
+        build_result_fingerprint(with_operation_kind(payload, kind))
+    ]
+    attempt_candidates = {value for value in (attempt_id, None) if value}
+    entry = ledger.get_entry(result_id)
+    if entry is not None and entry.attempt_id:
+        attempt_candidates.add(entry.attempt_id)
+    for candidate_attempt in attempt_candidates:
+        legacy_payload = dict(payload)
+        legacy_payload["attempt_id"] = candidate_attempt
+        legacy_fp = build_result_fingerprint(with_operation_kind(legacy_payload, kind))
+        if legacy_fp not in candidates:
+            candidates.append(legacy_fp)
+
+    primary = candidates[0]
+    for fingerprint in candidates:
+        decision = ledger.check(result_id, fingerprint)
+        if decision.status is not LedgerStatus.CONFLICT:
+            return fingerprint, decision
+    return primary, ledger.check(result_id, primary)
 
 
 def build_legacy_result_id(payload: dict[str, Any]) -> str:
