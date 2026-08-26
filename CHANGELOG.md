@@ -8,6 +8,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Semi-Imperium traceable domain and persistence model** (2026-08-26)
+  - Added `semi_imperium.domain` with molecular identity, effective
+    configuration, reproducible calculation signatures, explicit lifecycle
+    states, timestamps, and scientific provenance.
+  - Reuse is keyed by molecular identity plus a SHA-256 signature that
+    separates CREST search, conformer selection, MOPAC Hamiltonian/settings,
+    and the minimum-verification policy; execution-only settings (threads,
+    timeouts, paths) are excluded on purpose.
+  - Added `semi_imperium.persistence.SemiImperiumStore`, a JSON store with
+    atomic writes that keeps runs and calculations inside its own root and
+    never writes to Grimperium's datasets or batch CSVs.
+  - Lifecycle states are explicit (`pending`, `running`, `verified`,
+    `unverified`, `saddle`, `failed`) and validated against their
+    verification outcome; terminal records cannot be silently rewritten.
 - **Semi-Imperium focused application shell** (2026-08-26)
   - Added the independent `semi-imperium` command and `python -m semi_imperium`
     launch path with CALCULATE, DATABASE, and SETTINGS as its top-level areas.
