@@ -11,12 +11,12 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, ClassVar
 
-import questionary
 from prompt_toolkit.styles import Style
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 
+from grimperium.cli._questionary import questionary
 from grimperium.cli.styles import COLORS
 
 if TYPE_CHECKING:

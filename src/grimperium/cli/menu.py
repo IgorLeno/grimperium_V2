@@ -7,11 +7,10 @@ This module provides menu rendering and selection using questionary.
 from collections.abc import Callable
 from dataclasses import dataclass
 
-import questionary
 from prompt_toolkit.styles import Style
-from questionary import Choice, Separator
 from rich.console import Console
 
+from grimperium.cli._questionary import Choice, Separator, questionary
 from grimperium.cli.styles import COLORS, ICONS
 
 

@@ -289,6 +289,21 @@ A CLI oferece menus para:
 - Monitorar progresso das moléculas
 - Visualizar resultados
 
+### Iniciar o Semi-Imperium
+
+O Semi-Imperium é um shell independente e focado para os fluxos operacionais
+mais comuns:
+
+```bash
+poetry run semi-imperium
+# ou, com o ambiente Poetry ativo:
+python -m semi_imperium
+```
+
+Sua interface principal expõe somente **CALCULATE**, **DATABASE** e
+**SETTINGS**. O comando `grimperium` continua disponível com a interface
+completa do projeto.
+
 > **Sobre unidades:** A CLI exibe H298 em kcal/mol e kJ/mol simultaneamente (conversão IUPAC: 1 kcal = 4,184 kJ). Tempo de execução é exibido em minutos. Internamente, todos os cálculos e o CSV usam kcal/mol e segundos.
 
 ### Carregar os dados via código

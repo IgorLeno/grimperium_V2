@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Semi-Imperium focused application shell** (2026-08-26)
+  - Added the independent `semi-imperium` command and `python -m semi_imperium`
+    launch path with CALCULATE, DATABASE, and SETTINGS as its top-level areas.
+  - Preserved the existing `grimperium` and `grimperium-worker` entrypoints.
+
 ### Fixed
 - **Legacy journal recovery and dead-letter durability** (2026-07-13)
   - Infer `OperationKind` on load for legacy journals without the field; ambiguous

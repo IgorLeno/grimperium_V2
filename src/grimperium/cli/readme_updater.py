@@ -13,13 +13,13 @@ from typing import TypedDict, cast
 import joblib
 import numpy as np
 import pandas as pd
-import questionary
 from prompt_toolkit.styles import Style
 from rich.console import Console
 from rich.panel import Panel
 from rich.syntax import Syntax
 from rich.table import Table
 
+from grimperium.cli._questionary import questionary
 from grimperium.cli.styles import COLORS
 from grimperium.core.metrics import mae, r2_score
 from grimperium.ml.gate import evaluate_gate

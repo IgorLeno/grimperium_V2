@@ -28,6 +28,7 @@ classifiers = [
 ]
 packages = [
     {include = "grimperium", from = "src"},
+    {include = "semi_imperium", from = "src"},
 ]
 
 [tool.poetry.dependencies]
@@ -79,6 +80,7 @@ output = ["openpyxl"]
 [tool.poetry.scripts]
 grimperium = "grimperium.cli:main"
 grimperium-worker = "grimperium.worker.__main__:main"
+semi-imperium = "semi_imperium.app:main"
 
 [tool.ruff]
 target-version = "py310"
