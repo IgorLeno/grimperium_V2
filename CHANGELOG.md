@@ -8,6 +8,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Semi-Imperium molecule resolution and early validation** (2026-08-27)
+  - Added a resolver-neutral name-resolution service with a PubChem PUG REST
+    adapter, explicit structural disambiguation, and offline-testable transport.
+  - Molecular identity now retains original input, input type, resolved name,
+    canonical SMILES, InChI/InChIKey, resolver identifier, and PubChem CID.
+  - Added RDKit parsing, canonicalization, initial-3D preflight, and actionable
+    recovery through manual SMILES entry or removal before scientific runners.
 - **Semi-Imperium traceable domain and persistence model** (2026-08-26)
   - Added `semi_imperium.domain` with molecular identity, effective
     configuration, reproducible calculation signatures, explicit lifecycle

@@ -29,7 +29,7 @@ from semi_imperium.domain.enums import (
     VerificationPolicy,
 )
 from semi_imperium.domain.hashing import DIGEST_ALGORITHM, stable_digest
-from semi_imperium.domain.identity import MolecularIdentity
+from semi_imperium.domain.identity import MolecularIdentity, MoleculeInputType
 from semi_imperium.domain.records import (
     RECORD_SCHEMA_VERSION,
     CalculationRecord,
@@ -62,6 +62,7 @@ __all__ = [
     "ConformerSelectionSettings",
     "EffectiveConfiguration",
     "MolecularIdentity",
+    "MoleculeInputType",
     "RunRecord",
     "RunState",
     "ScientificProvenance",
