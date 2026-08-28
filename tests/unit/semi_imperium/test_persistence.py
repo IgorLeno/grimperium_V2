@@ -343,7 +343,7 @@ def test_signature_separates_every_scientifically_relevant_group() -> None:
             conformer_search=ConformerSearchSettings(method="gfnff")
         ),
         "selection": make_configuration(
-            conformer_selection=ConformerSelectionSettings(subset_size=5)
+            conformer_selection=ConformerSelectionSettings(top_n=5)
         ),
         "hamiltonian": make_configuration(
             semiempirical=SemiempiricalSettings(hamiltonian="AM1")
@@ -352,9 +352,7 @@ def test_signature_separates_every_scientifically_relevant_group() -> None:
             semiempirical=SemiempiricalSettings(scf_convergence=1.0e-6)
         ),
         "verification": make_configuration(
-            verification=VerificationSettings(
-                policy=VerificationPolicy.REQUIRE_MINIMUM
-            )
+            verification=VerificationSettings(policy=VerificationPolicy.REQUIRE_MINIMUM)
         ),
     }
 
@@ -382,9 +380,7 @@ def test_signature_from_pm7_config_tracks_science_not_execution_details() -> Non
     )
     stricter_science = EffectiveConfiguration.from_pm7_config(
         PM7Config(),
-        verification=VerificationSettings(
-            policy=VerificationPolicy.REQUIRE_MINIMUM
-        ),
+        verification=VerificationSettings(policy=VerificationPolicy.REQUIRE_MINIMUM),
     )
     different_hamiltonian_settings = EffectiveConfiguration.from_pm7_config(
         PM7Config(mopac_precise_scf=False)
@@ -479,9 +475,7 @@ def test_reuse_prefers_the_most_recently_completed_attempt(tmp_path: Path) -> No
     molecule = make_molecule()
 
     older = finish_verified(
-        make_record(
-            run_id="run-0001", molecule=molecule, configuration=configuration
-        )
+        make_record(run_id="run-0001", molecule=molecule, configuration=configuration)
     )
     newer_base = make_record(
         run_id="run-0002",

@@ -8,6 +8,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Semi-Imperium optional CREST search and bounded conformer selection**
+  (2026-08-28)
+  - Added `semi_imperium.conformers` with typed conformer geometries,
+    ensembles, and search provenance that records the effective CREST
+    settings, the executable version, and the run the ensemble belongs to.
+  - CREST configuration is independent of the AM1/PM3/PM7 choice and gained an
+    `enabled` flag; disabling it routes the molecule through an RDKit
+    initial-3D structure so MOPAC always receives a geometry.
+  - CREST Energy Top-N is the default selection strategy: it ranks the
+    ensemble by the energy the search reported, keeps `top_n` conformers
+    (default 10), and accepts an optional energy window.
+  - CONFPASS prioritization is available but EXPERIMENTAL: it receives the
+    whole ensemble before any cut, adapts XYZ to SDF preserving atom order,
+    coordinates, connectivity and provenance, and records the PAS
+    completeness label as advisory metadata that can never be selection
+    evidence.
+  - CREST, CONFPASS and the RDKit route sit behind adapter protocols, so the
+    orchestration is exercised with in-memory doubles instead of binaries.
+  - `ConformerSelectionSettings.subset_size` was replaced by `top_n`; the
+    field participates in the calculation signature, whose contract version
+    was bumped to invalidate configurations made under the former defaults.
 - **Semi-Imperium molecule resolution and early validation** (2026-08-27)
   - Added a resolver-neutral name-resolution service with a PubChem PUG REST
     adapter, explicit structural disambiguation, and offline-testable transport.

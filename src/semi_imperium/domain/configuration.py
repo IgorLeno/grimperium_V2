@@ -20,7 +20,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
-from semi_imperium.domain.enums import VerificationPolicy
+from semi_imperium.domain.enums import ConformerSelectionStrategy, VerificationPolicy
 from semi_imperium.domain.hashing import DIGEST_ALGORITHM, stable_digest
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
@@ -28,14 +28,26 @@ if TYPE_CHECKING:  # pragma: no cover - typing only
 
 #: Bumping this invalidates every previously computed signature on purpose.
 #: Do it whenever the meaning of a signature field changes.
-SIGNATURE_VERSION = 1
+SIGNATURE_VERSION = 2
 
 SIGNATURE_ID_LENGTH = 16
+
+#: How many conformers the default strategy carries into the MOPAC stage.
+DEFAULT_CONFORMER_TOP_N = 10
 
 
 @dataclass(frozen=True)
 class ConformerSearchSettings:
-    """CREST conformer search settings that affect the sampled ensemble."""
+    """CREST conformer search settings that affect the sampled ensemble.
+
+    The search is its own concept, independent of which semiempirical
+    Hamiltonian runs afterwards: AM1, PM3 and PM7 all consume the same
+    ensemble, and turning the search off is a configuration choice, not
+    a different method.
+    """
+
+    enabled: bool = True
+    """When ``False`` no CREST search runs and the initial-3D route is used."""
 
     program: str = "crest"
     method: str = "gfn2"
@@ -52,6 +64,7 @@ class ConformerSearchSettings:
     def to_dict(self) -> dict[str, Any]:
         """Serialize to JSON-compatible primitives."""
         return {
+            "enabled": self.enabled,
             "program": self.program,
             "method": self.method,
             "quick_mode": self.quick_mode,
@@ -68,6 +81,7 @@ class ConformerSearchSettings:
     def from_dict(cls, payload: dict[str, Any]) -> ConformerSearchSettings:
         """Deserialize from JSON-compatible primitives."""
         return cls(
+            enabled=bool(payload["enabled"]),
             program=str(payload["program"]),
             method=str(payload["method"]),
             quick_mode=str(payload["quick_mode"]),
@@ -83,17 +97,54 @@ class ConformerSearchSettings:
 
 @dataclass(frozen=True)
 class ConformerSelectionSettings:
-    """Which conformers from the search are carried into the final result."""
+    """Which conformers from the search are carried into the final result.
 
-    strategy: str = "lowest_pm7_hof_within_crest_subset"
-    subset_size: int = 3
+    The default is CREST Energy Top-N: rank the ensemble by the energy
+    the *search* reported and keep the ``top_n`` lowest. Any other
+    strategy has to be asked for explicitly, which is what keeps an
+    experimental one from becoming the silent default.
+    """
+
+    strategy: str = ConformerSelectionStrategy.CREST_ENERGY_TOP_N.value
+    top_n: int = DEFAULT_CONFORMER_TOP_N
     energy_window_kcal_mol: float | None = None
+    """Optional extra bound: discard conformers this far above the lowest."""
+
+    def __post_init__(self) -> None:
+        try:
+            ConformerSelectionStrategy(self.strategy)
+        except ValueError as exc:
+            known = ", ".join(item.value for item in ConformerSelectionStrategy)
+            raise ValueError(
+                f"Unknown conformer selection strategy {self.strategy!r}; "
+                f"expected one of: {known}"
+            ) from exc
+        if self.top_n < 1:
+            raise ValueError(
+                f"ConformerSelectionSettings.top_n must be >= 1, got {self.top_n}"
+            )
+        window = self.energy_window_kcal_mol
+        if window is not None and window <= 0:
+            raise ValueError(
+                "ConformerSelectionSettings.energy_window_kcal_mol must be > 0 "
+                f"when set, got {window}"
+            )
+
+    @property
+    def resolved_strategy(self) -> ConformerSelectionStrategy:
+        """The strategy as an enum member; always valid after construction."""
+        return ConformerSelectionStrategy(self.strategy)
+
+    @property
+    def is_experimental(self) -> bool:
+        """Whether the configured strategy is still under evaluation."""
+        return self.resolved_strategy.is_experimental
 
     def to_dict(self) -> dict[str, Any]:
         """Serialize to JSON-compatible primitives."""
         return {
             "strategy": self.strategy,
-            "subset_size": self.subset_size,
+            "top_n": self.top_n,
             "energy_window_kcal_mol": self.energy_window_kcal_mol,
         }
 
@@ -103,7 +154,7 @@ class ConformerSelectionSettings:
         window = payload.get("energy_window_kcal_mol")
         return cls(
             strategy=str(payload["strategy"]),
-            subset_size=int(payload["subset_size"]),
+            top_n=int(payload["top_n"]),
             energy_window_kcal_mol=None if window is None else float(window),
         )
 
@@ -343,6 +394,7 @@ class EffectiveConfiguration:
 
 
 __all__ = [
+    "DEFAULT_CONFORMER_TOP_N",
     "SIGNATURE_VERSION",
     "CalculationSignature",
     "ConformerSearchSettings",

@@ -89,6 +89,42 @@ class VerificationOutcome(str, Enum):
     """Verification itself failed to execute."""
 
 
+class ConformerSource(str, Enum):
+    """Which route produced the structures a calculation starts from.
+
+    The source is a scientific fact about a result: a number obtained
+    from a single RDKit starting structure is not the same evidence as
+    one obtained from a sampled CREST ensemble, so the two are never
+    conflated behind a single "conformer" label.
+    """
+
+    CREST = "crest"
+    """Structures sampled by a CREST conformer search."""
+
+    RDKIT_INITIAL_3D = "rdkit_initial_3d"
+    """One embedded starting structure, used when the search is off."""
+
+
+class ConformerSelectionStrategy(str, Enum):
+    """How a sampled ensemble is narrowed before the MOPAC stage.
+
+    Selection is what bounds the cost of a calculation, so it is part of
+    the calculation signature: two runs that kept different conformers
+    did not compute the same thing.
+    """
+
+    CREST_ENERGY_TOP_N = "crest_energy_top_n"
+    """Default: rank by the CREST search energy and keep the N lowest."""
+
+    CONFPASS_PRIORITIZATION = "confpass_prioritization"
+    """EXPERIMENTAL: CONFPASS orders the ensemble before the cut."""
+
+    @property
+    def is_experimental(self) -> bool:
+        """Whether results from this strategy are not production evidence."""
+        return self in EXPERIMENTAL_SELECTION_STRATEGIES
+
+
 class RunState(str, Enum):
     """Lifecycle state of a run, i.e. one batch of calculations."""
 
@@ -120,6 +156,13 @@ RESULT_CALCULATION_STATES = frozenset(
         CalculationState.UNVERIFIED,
         CalculationState.SADDLE,
     }
+)
+
+#: Strategies that are still under evaluation. They stay selectable on
+#: purpose, but a result produced by one of them carries the experimental
+#: mark all the way into its selection record.
+EXPERIMENTAL_SELECTION_STRATEGIES = frozenset(
+    {ConformerSelectionStrategy.CONFPASS_PRIORITIZATION}
 )
 
 TERMINAL_RUN_STATES = frozenset(
@@ -217,11 +260,14 @@ __all__ = [
     "ALLOWED_RUN_TRANSITIONS",
     "COHERENT_VERIFICATION_OUTCOMES",
     "DEFAULT_REUSABLE_STATES",
+    "EXPERIMENTAL_SELECTION_STRATEGIES",
     "RESULT_CALCULATION_STATES",
     "TERMINAL_CALCULATION_STATES",
     "TERMINAL_RUN_STATES",
     "VERIFIED_ONLY_REUSABLE_STATES",
     "CalculationState",
+    "ConformerSelectionStrategy",
+    "ConformerSource",
     "RunState",
     "VerificationOutcome",
     "VerificationPolicy",
