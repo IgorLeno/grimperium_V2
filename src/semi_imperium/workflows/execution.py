@@ -228,7 +228,7 @@ def _relative_artifacts(
 class _UnavailableSearch:
     """Search backend used when CREST is off; calling it is a programming error."""
 
-    def search(  # noqa: ARG002 - the protocol fixes this signature
+    def search(
         self,
         request: ConformerRequest,
         settings: ConformerSearchSettings,
@@ -236,6 +236,7 @@ class _UnavailableSearch:
         """Refuse loudly: the workflow must have taken the initial-3D route."""
         from semi_imperium.conformers import ConformerBackendError
 
+        del settings
         raise ConformerBackendError(
             "No CREST execution backend is configured, so "
             f"{request.molecule_id!r} cannot run a conformer search",

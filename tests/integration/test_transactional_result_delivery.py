@@ -13,6 +13,11 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 from rich.console import Console
 
+pytest.importorskip(
+    "fastapi",
+    reason="transactional server integration requires the optional server extra",
+)
+
 from grimperium.cli.session import SessionContext
 from grimperium.cli.views.batch_view import BatchView
 from grimperium.crest_pm7.batch.enums import BatchFailurePolicy, MoleculeStatus

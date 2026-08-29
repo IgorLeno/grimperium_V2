@@ -34,6 +34,7 @@ from typing import Protocol
 from semi_imperium import __version__ as SEMI_IMPERIUM_VERSION
 from semi_imperium.domain import (
     DEFAULT_REUSABLE_STATES,
+    VERIFIED_ONLY_REUSABLE_STATES,
     CalculationRecord,
     CalculationResultData,
     CalculationSignature,
@@ -566,13 +567,15 @@ def review(
     store: SemiImperiumStore,
     settings: SemiImperiumSettings,
     only_selected: bool = True,
-    accepted_states: frozenset[CalculationState] = frozenset(DEFAULT_REUSABLE_STATES),
+    accepted_states: frozenset[CalculationState] | None = None,
 ) -> CalculatePlan:
     """Resolve the selected rows, then ask the store what already exists.
 
     Reuse is decided per molecule *and per Hamiltonian*: asking for PM7
     when only AM1 was computed before is a missing Hamiltonian, not a
-    reusable result.
+    reusable result. Unless the caller supplies ``accepted_states``, a
+    configuration that requires a minimum accepts verified records only;
+    looser policies retain the general result-state reuse contract.
     """
     session.resolve_all(only_selected=only_selected)
     targets = session.selected_entries if only_selected else session.entries
@@ -608,8 +611,15 @@ def review(
                 hamiltonian, crest_enabled=entry.crest_enabled
             )
             signature = configuration.signature()
+            reusable_states = accepted_states
+            if reusable_states is None:
+                reusable_states = (
+                    VERIFIED_ONLY_REUSABLE_STATES
+                    if configuration.verification.requires_minimum
+                    else DEFAULT_REUSABLE_STATES
+                )
             decision = store.find_reusable(
-                identity, signature, accepted_states=accepted_states
+                identity, signature, accepted_states=reusable_states
             )
             hamiltonian_plans.append(
                 HamiltonianPlan(

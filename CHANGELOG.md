@@ -8,6 +8,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Semi-Imperium scientific guide and end-to-end integration contract**
+  (2026-08-29)
+  - Documented the independently launchable workflow, ΔHf° meaning,
+    AM1/PM3/PM7 and CREST responsibilities, conformer generation versus
+    selection, default Energy Top-N and experimental CONFPASS boundaries.
+  - Made local-minimum verification, non-proof of a global minimum, signature
+    reuse, provenance, isolated persistence and real-versus-double test evidence
+    explicit.
+  - Added integration coverage across molecule sessions, reuse, conformer and
+    Hamiltonian boundaries, verification outcomes, persistence, launch and
+    legacy Grimperium coexistence, plus an opt-in real CREST+MOPAC smoke test.
+  - Reuse review now narrows eligible records to confirmed minima whenever the
+    effective policy is `require_minimum`; saddle and failed verification
+    records remain persisted evidence but no longer satisfy that request.
 - **Semi-Imperium Calculate, Database and Settings workflows** (2026-08-29)
   - Calculate is a tabular session: one or many molecules entered by chemical
     name or SMILES, each row with its own editable identity, charge and

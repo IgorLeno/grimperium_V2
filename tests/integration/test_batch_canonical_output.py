@@ -6,6 +6,8 @@ import csv
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from grimperium.calculation.output.csv_writer import CANONICAL_CSV_COLUMNS
 from grimperium.crest_pm7.batch.enums import BatchFailurePolicy, MoleculeStatus
 from grimperium.crest_pm7.batch.execution_manager import BatchExecutionManager
@@ -154,6 +156,9 @@ def test_batch_writes_authoritative_run_id(tmp_path: Path) -> None:
 
 
 def test_batch_generates_xlsx_when_enabled(tmp_path: Path) -> None:
+    pytest.importorskip(
+        "openpyxl", reason="XLSX integration requires the optional output extra"
+    )
     out = tmp_path / "out"
     manager, _, _ = _make_manager(
         tmp_path, {"m1": _success_result("m1", -55.0)}, output_dir=out, write_xlsx=True

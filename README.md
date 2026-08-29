@@ -292,7 +292,9 @@ A CLI oferece menus para:
 ### Iniciar o Semi-Imperium
 
 O Semi-Imperium é um shell independente e focado para os fluxos operacionais
-mais comuns:
+de cálculo e catálogo de entalpia padrão de formação (`ΔHf°`) com MOPAC
+AM1/PM3/PM7. Cada Hamiltoniano é tratado independentemente; CREST é uma busca
+conformacional opcional, não a fonte da `ΔHf°` final:
 
 ```bash
 poetry run semi-imperium
@@ -304,7 +306,14 @@ Sua interface principal expõe somente **CALCULATE**, **DATABASE** e
 **SETTINGS**. O comando `grimperium` continua disponível com a interface
 completa do projeto.
 
-> **Sobre unidades:** A CLI exibe H298 em kcal/mol e kJ/mol simultaneamente (conversão IUPAC: 1 kcal = 4,184 kJ). Tempo de execução é exibido em minutos. Internamente, todos os cálculos e o CSV usam kcal/mol e segundos.
+O guia [Semi-Imperium](docs/SEMI_IMPERIUM.md) descreve o escopo científico,
+geração versus seleção de conformeros, Energy Top-N, CONFPASS experimental,
+verificação de mínimo local, limites sobre mínimo global, reutilização,
+proveniência e armazenamento isolado.
+
+> **Sobre unidades:** a CLI legada do Grimperium exibe H298 em kcal/mol e
+> kJ/mol simultaneamente (1 kcal = 4,184 kJ). O Semi-Imperium exibe e persiste
+> sua `ΔHf°` em kcal/mol no store JSON próprio. Tempos internos usam segundos.
 
 ### Carregar os dados via código
 ```python
