@@ -8,6 +8,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Semi-Imperium Calculate, Database and Settings workflows** (2026-08-29)
+  - Calculate is a tabular session: one or many molecules entered by chemical
+    name or SMILES, each row with its own editable identity, charge and
+    multiplicity, its own CREST switch, its own independent AM1/PM3/PM7
+    requests, plus select-all/clear-selection bulk operations.
+  - After identity resolution the area reviews compatible local results per
+    molecule *and per Hamiltonian*, then offers three explicit choices in the
+    normal menu — reuse existing results, calculate only the missing
+    Hamiltonians, or recalculate everything. Choosing one prepares the runs,
+    persists them and executes them; a reusable result is never overwritten,
+    because a recalculation is stored under a new run id beside it.
+  - Execution goes through a `CalculationExecutor` boundary; the production
+    executor drives the existing conformer/MOPAC orchestration and refuses to
+    run when a molecule asks for CREST and no CREST backend is configured.
+  - Database reports one row per molecule with explicit AM1/PM3/PM7 lifecycle
+    and verification statuses, CREST usage, the conformer selection strategy,
+    the run behind each number, and drills down into every stored calculation.
+  - Settings exposes focused CREST, MOPAC and runtime/readiness defaults and
+    states that they apply to the next run: every run records the effective
+    configuration it used, so changing a default never re-describes a stored
+    result.
+  - The launched shell now registers Semi-Imperium's own areas instead of
+    Grimperium's screens, and its main-menu header reports staged molecules,
+    requested Hamiltonians, CREST usage, the store and tool readiness.
 - **Semi-Imperium independent MOPAC minimum workflow** (2026-08-29)
   - AM1, PM3 and PM7 optimize the finite selected-conformer set independently
     and retain separate provisional and verified selections.

@@ -3,25 +3,47 @@
 from __future__ import annotations
 
 import sys
+from dataclasses import replace
 
 from rich.panel import Panel
 
 from grimperium.cli.app import GrimperiumCLI
 from grimperium.cli.styles import COLORS, FOOTER_NAVIGATION
-from grimperium.cli.views import CalcView, DatabasesView, MethodsView, SettingsView
 from semi_imperium import __version__
-from semi_imperium.menu import show_main_menu
+from semi_imperium.menu import format_status_line, show_main_menu
+from semi_imperium.settings import SemiImperiumSettings
+from semi_imperium.views import (
+    CalculateView,
+    DatabaseView,
+    HamiltonianView,
+    SettingsView,
+)
+from semi_imperium.workspace import SemiImperiumWorkspace
 
 
 class SemiImperiumCLI(GrimperiumCLI):
-    """Focused shell backed by Grimperium's calculation and data services."""
+    """Focused shell over Semi-Imperium's own calculation and data workflows."""
+
+    def __init__(self, workspace: SemiImperiumWorkspace | None = None) -> None:
+        self.workspace = workspace or SemiImperiumWorkspace(
+            settings=_default_settings()
+        )
+        super().__init__()
 
     def _register_views(self) -> None:
         """Register the three areas and CALCULATE's supporting method picker."""
-        self.controller.register_view("calc", CalcView(self.controller))
-        self.controller.register_view("methods", MethodsView(self.controller))
-        self.controller.register_view("databases", DatabasesView(self.controller))
-        self.controller.register_view("settings", SettingsView(self.controller))
+        self.controller.register_view(
+            "calc", CalculateView(self.controller, self.workspace)
+        )
+        self.controller.register_view(
+            "methods", HamiltonianView(self.controller, self.workspace)
+        )
+        self.controller.register_view(
+            "databases", DatabaseView(self.controller, self.workspace)
+        )
+        self.controller.register_view(
+            "settings", SettingsView(self.controller, self.workspace)
+        )
 
     def show_welcome(self) -> None:
         """Display the Semi-Imperium identity without changing Grimperium's UI."""
@@ -38,6 +60,19 @@ class SemiImperiumCLI(GrimperiumCLI):
         )
         self.console.print()
 
+    def status_line(self) -> str:
+        """Summarize the staged molecules, their requests and the store."""
+        session = self.workspace.session
+        settings = self.workspace.settings
+        return format_status_line(
+            molecule_count=len(session),
+            selected_count=len(session.selected_entries),
+            hamiltonians=session.default_hamiltonians,
+            crest_enabled=settings.conformer_search.enabled,
+            store_root=str(settings.runtime.store_root),
+            tools_ready=settings.runtime.is_ready,
+        )
+
     def display_main_menu(self) -> str | None:
         """Display the focused three-area top-level menu."""
         self.console.print(
@@ -48,16 +83,19 @@ class SemiImperiumCLI(GrimperiumCLI):
             )
         )
         self.console.print()
+        return show_main_menu(self.status_line())
 
-        summary = self.controller.session_summary()
-        return show_main_menu(
-            property_label=summary["property"],
-            method_label=summary["method"],
-            dataset_label=summary["dataset"],
-            model_label=summary["model"],
-            status=summary["status"],
-            width=self.console.size.width,
-        )
+
+def _default_settings() -> SemiImperiumSettings:
+    """Root the store inside the project rather than the current directory."""
+    from grimperium.cli.constants import get_project_root
+
+    settings = SemiImperiumSettings()
+    runtime = replace(
+        settings.runtime,
+        store_root=get_project_root() / "data" / "semi_imperium",
+    )
+    return replace(settings, runtime=runtime)
 
 
 def main() -> int:
