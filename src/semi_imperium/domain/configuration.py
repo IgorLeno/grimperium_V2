@@ -28,7 +28,7 @@ if TYPE_CHECKING:  # pragma: no cover - typing only
 
 #: Bumping this invalidates every previously computed signature on purpose.
 #: Do it whenever the meaning of a signature field changes.
-SIGNATURE_VERSION = 2
+SIGNATURE_VERSION = 3
 
 SIGNATURE_ID_LENGTH = 16
 
@@ -206,14 +206,38 @@ class VerificationSettings:
     """The minimum-verification policy applied to every calculation."""
 
     policy: VerificationPolicy = VerificationPolicy.NONE
-    imaginary_frequency_threshold_cm1: float = -10.0
-    """Frequencies below this value count as imaginary (saddle evidence)."""
+    imaginary_frequency_threshold_cm1: float = -50.0
+    """Non-trivial modes below MOPAC's numerical low-mode region are imaginary."""
+
+    trivial_mode_cutoff_cm1: float = 30.0
+    """MOPAC's documented upper scale for translational/rotational modes."""
+
+    max_displacement_reoptimizations: int = 2
+    """Finite recovery budget after the selected conformers are exhausted."""
+
+    displacement_step_angstrom: float = 0.1
+    """Maximum Cartesian displacement along an imaginary normal mode."""
 
     def __post_init__(self) -> None:
         if self.imaginary_frequency_threshold_cm1 > 0:
             raise ValueError(
                 "VerificationSettings.imaginary_frequency_threshold_cm1 must be "
                 f"<= 0, got {self.imaginary_frequency_threshold_cm1}"
+            )
+        if self.trivial_mode_cutoff_cm1 <= 0:
+            raise ValueError(
+                "VerificationSettings.trivial_mode_cutoff_cm1 must be > 0, "
+                f"got {self.trivial_mode_cutoff_cm1}"
+            )
+        if self.max_displacement_reoptimizations < 0:
+            raise ValueError(
+                "VerificationSettings.max_displacement_reoptimizations must be "
+                f">= 0, got {self.max_displacement_reoptimizations}"
+            )
+        if self.displacement_step_angstrom <= 0:
+            raise ValueError(
+                "VerificationSettings.displacement_step_angstrom must be > 0, "
+                f"got {self.displacement_step_angstrom}"
             )
 
     @property
@@ -228,6 +252,9 @@ class VerificationSettings:
             "imaginary_frequency_threshold_cm1": (
                 self.imaginary_frequency_threshold_cm1
             ),
+            "trivial_mode_cutoff_cm1": self.trivial_mode_cutoff_cm1,
+            "max_displacement_reoptimizations": (self.max_displacement_reoptimizations),
+            "displacement_step_angstrom": self.displacement_step_angstrom,
         }
 
     @classmethod
@@ -237,6 +264,13 @@ class VerificationSettings:
             policy=VerificationPolicy(str(payload["policy"])),
             imaginary_frequency_threshold_cm1=float(
                 payload["imaginary_frequency_threshold_cm1"]
+            ),
+            trivial_mode_cutoff_cm1=float(payload.get("trivial_mode_cutoff_cm1", 30.0)),
+            max_displacement_reoptimizations=int(
+                payload.get("max_displacement_reoptimizations", 2)
+            ),
+            displacement_step_angstrom=float(
+                payload.get("displacement_step_angstrom", 0.1)
             ),
         )
 

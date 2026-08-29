@@ -255,8 +255,8 @@ def test_disabling_the_crest_search_is_a_signature_relevant_choice() -> None:
 
 
 def test_conformer_contract_change_bumps_the_signature_version() -> None:
-    assert SIGNATURE_VERSION == 2
-    assert configuration().signature().version == 2
+    assert SIGNATURE_VERSION == 3
+    assert configuration().signature().version == 3
 
 
 def test_crest_ensemble_records_settings_version_and_run_provenance() -> None:

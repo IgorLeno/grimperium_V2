@@ -8,6 +8,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Semi-Imperium independent MOPAC minimum workflow** (2026-08-29)
+  - AM1, PM3 and PM7 optimize the finite selected-conformer set independently
+    and retain separate provisional and verified selections.
+  - Added a concrete executable backend that writes and runs MOPAC optimization
+    and `FORCE` jobs, parses final Cartesian geometries and normal-coordinate
+    vectors, and stores each attempt in an isolated artifact directory.
+  - Converged geometries are journaled as `optimized_unverified` before `FORCE`
+    classifies them as a verified minimum, saddle, or verification failure;
+    only a verified minimum exposes a final heat of formation.
+  - Frequency diagnostics account for MOPAC's documented projected trivial
+    modes and numerical low-frequency region rather than using frequency sign
+    alone.
+  - Saddle recovery records normal-mode displacement lineage and is capped by
+    a signature-relevant reoptimization budget.
+  - Added a production composition point connecting conformer preparation to
+    persisted independent MOPAC minimum calculations.
 - **Semi-Imperium optional CREST search and bounded conformer selection**
   (2026-08-28)
   - Added `semi_imperium.conformers` with typed conformer geometries,
