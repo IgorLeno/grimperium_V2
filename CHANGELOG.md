@@ -8,6 +8,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Extreme-folding filter calibration** (2026-10-04)
+  - `scripts/calibrate_folding_filter.py`: computes `fold_contacts` (heavy-atom
+    pairs ≥ k bonds apart closer than f · Σr_vdW, classic H-bond pairs
+    excluded) on the CBS reference geometries of
+    `data/thermo_cbs_chon_v2.csv`, sweeps (k, f, c_min) and proposes values
+    within a ≤1% discard budget.
+  - `reports/folding_calibration/report.md`: adopted k = 6, f = 1.00,
+    c_min = 1, discarding 20 of 27746 usable references (0.07%); `r_max`
+    still requires real CREST ensembles.
+  - Verification: full run on the dataset; `black`, `ruff`,
+    `mypy --strict` on the script (no unit tests).
 - **ThermoCBS CHON reference cut v2** (2026-10-03)
   - `scripts/build_thermo_cbs_chon.py` rebuilds the CHON cut from the
     Chemperium ThermoCBS source, filtering elements from the reference `xyz`
