@@ -5,9 +5,11 @@ protocols that hold CREST and CONFPASS at arm's length, the two
 selection strategies, and the workflow that chooses between the CREST
 route and the initial-3D route.
 
-:class:`semi_imperium.conformers.initial_structure.RDKitInitialStructure`
-is imported from its own module on purpose: it is the only piece that
-pulls RDKit in, and the rest of the stage stays free of it.
+:class:`semi_imperium.conformers.initial_structure.RDKitInitialStructure`,
+:class:`semi_imperium.conformers.topology.SmilesTopology` and
+:class:`semi_imperium.conformers.confpass_port.PortedConfPass` are
+imported from their own modules on purpose: they pull RDKit (and, for
+CONFPASS, scikit-learn) in, and the rest of the stage stays free of it.
 """
 
 from semi_imperium.conformers.backends import (
@@ -56,7 +58,11 @@ from semi_imperium.conformers.selection import (
     EnergyTopNSelector,
     SelectionResult,
 )
-from semi_imperium.conformers.workflow import ConformerPreparation, ConformerWorkflow
+from semi_imperium.conformers.workflow import (
+    ConformerPreparation,
+    ConformerWorkflow,
+    TopologyProvider,
+)
 
 __all__ = [
     "BYPASSED_ALL_FOLDED",
@@ -89,6 +95,7 @@ __all__ = [
     "InitialStructureBackend",
     "MoleculeTopology",
     "SelectionResult",
+    "TopologyProvider",
     "UnavailableConfPass",
     "apply_folding_filter",
     "build_confpass_candidates",

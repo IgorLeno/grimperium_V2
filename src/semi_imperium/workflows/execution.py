@@ -11,6 +11,11 @@ Nothing is inferred when a program is missing. If a molecule asks for a
 CREST search and no CREST execution backend is configured, the
 calculation fails with that reason instead of quietly falling back to a
 single embedded structure, because the two are different evidence.
+
+The experimental CONFPASS strategy runs on the in-process CONFPASS PART 1
+port unless a backend is injected, and every topology the conformer stage
+needs is derived from the SMILES and checked against the ensemble's atom
+order before use.
 """
 
 from __future__ import annotations
@@ -21,6 +26,8 @@ from typing import TYPE_CHECKING, Any
 from semi_imperium.domain import (
     CalculationResultData,
     CalculationState,
+    ConformerSelectionStrategy,
+    EffectiveConfiguration,
     VerificationOutcome,
     VerificationPolicy,
 )
@@ -70,6 +77,7 @@ class ScientificCalculationExecutor:
         from semi_imperium.conformers import ConformerRequest, ConformerWorkflow
         from semi_imperium.conformers.crest import CrestConformerSearch
         from semi_imperium.conformers.initial_structure import RDKitInitialStructure
+        from semi_imperium.conformers.topology import SmilesTopology
 
         identity = request.identity
         artifacts = (
@@ -84,7 +92,8 @@ class ScientificCalculationExecutor:
                 else _UnavailableSearch()
             ),
             initial_structure_backend=RDKitInitialStructure(),
-            confpass_backend=self.confpass_backend,
+            confpass_backend=self._confpass_backend_for(configuration),
+            topology_provider=SmilesTopology(),
         )
         workflow = SemiImperiumCalculationWorkflow.from_pm7_config(
             conformer_workflow=conformer_workflow,
@@ -112,6 +121,21 @@ class ScientificCalculationExecutor:
             policy=configuration.verification.policy,
             store_root=self.settings.runtime.store_root,
         )
+
+    def _confpass_backend_for(self, configuration: EffectiveConfiguration) -> Any:
+        """Return the injected CONFPASS backend, or the port when it is needed.
+
+        The port pulls scikit-learn in, so it is only imported for a
+        configuration that actually selects with CONFPASS.
+        """
+        if self.confpass_backend is not None:
+            return self.confpass_backend
+        strategy = configuration.conformer_selection.resolved_strategy
+        if strategy is not ConformerSelectionStrategy.CONFPASS_PRIORITIZATION:
+            return None
+        from semi_imperium.conformers.confpass_port import PortedConfPass
+
+        return PortedConfPass()
 
     def _pm7_config(self) -> Any:
         """Project the runtime settings onto Grimperium's execution config."""

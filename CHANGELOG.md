@@ -8,6 +8,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **CONFPASS and folding filter wired into production** (2026-10-04)
+  - `src/semi_imperium/conformers/topology.py`: `SmilesTopology` derives the
+    explicit-hydrogen, kekulized topology from the SMILES (RDKit `AddHs`
+    order, the order the initial-3D route and the CREST input use) and
+    refuses it unless the ensemble's first conformer has the same element at
+    every position and every bond within 1.3x the summed covalent radii;
+    error codes `topology_parse_failed`, `topology_bond_order_unsupported`,
+    `topology_atom_order_mismatch`.
+  - `src/semi_imperium/conformers/workflow.py`: optional `topology_provider`
+    on `ConformerWorkflow`, called only when CONFPASS or the folding filter
+    needs connectivity; an explicit `topology=` still wins.
+  - `src/semi_imperium/workflows/execution.py`: `ScientificCalculationExecutor`
+    uses `PortedConfPass` when the strategy is CONFPASS and no backend was
+    injected, and always passes `SmilesTopology`. `views.py` is unchanged
+    (it never built the backends). Production still has no CREST runner, so
+    it only ever sees the one-conformer RDKit route.
+  - `tests/unit/semi_imperium/test_conformer_topology.py`: atom order against
+    `RDKitInitialStructure`, kekulization, reordered ensembles refused,
+    lazy provider, executor wiring.
+  - Verification: `poetry run pytest tests/unit/semi_imperium/test_conformer_topology.py -q`
 - **CONFPASS PART 1 port** (2026-10-04)
   - `src/semi_imperium/conformers/confpass_port.py`: `PortedConfPass`
     (EXPERIMENTAL), a `ConfPassBackend` reproducing CONFPASS PART 1 in
@@ -16,8 +36,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     correction, ward clustering, `pipe_x_as` (default, x = 0.8,
     x_as = 0.2), `pipe_x`, `pipe_as`. Keeps CREST's order and never reads
     energies, like the original; no longer depends on `PYTHONHASHSEED`.
-    Not yet injected in `views.py` (production still uses
-    `UnavailableConfPass`).
+    Injected in production by the entry below.
   - `src/semi_imperium/conformers/confpass.py`: `ConfPassSelector` returns a
     one-conformer ensemble without calling CONFPASS
     (`single_conformer_ensemble`), and when the backend reports

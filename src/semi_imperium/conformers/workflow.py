@@ -13,6 +13,7 @@ exercised with in-memory doubles and never spawns anything.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
@@ -43,6 +44,10 @@ from semi_imperium.domain.configuration import (
     ConformerSelectionSettings,
 )
 from semi_imperium.domain.enums import ConformerSelectionStrategy
+
+#: Derives the topology of a request in the atom order of its ensemble;
+#: raises :class:`ConformerBackendError` when it cannot vouch for that order.
+TopologyProvider = Callable[[ConformerRequest, ConformerEnsemble], MoleculeTopology]
 
 
 @dataclass(frozen=True)
@@ -90,10 +95,12 @@ class ConformerWorkflow:
         search_backend: ConformerSearchBackend,
         initial_structure_backend: InitialStructureBackend,
         confpass_backend: ConfPassBackend | None = None,
+        topology_provider: TopologyProvider | None = None,
     ) -> None:
         self._search_backend = search_backend
         self._initial_structure_backend = initial_structure_backend
         self._confpass_backend = confpass_backend
+        self._topology_provider = topology_provider
 
     def prepare(
         self,
@@ -112,15 +119,20 @@ class ConformerWorkflow:
             selection_settings: Which strategy narrows the ensemble.
             topology: Connectivity matching the ensemble's atom order.
                 Required by CONFPASS, which needs SDF input, and by the
-                folding filter when it is enabled.
+                folding filter when it is enabled. When omitted, the
+                workflow's topology provider derives it from the built
+                ensemble, and only if one of those two needs it.
 
         Raises:
-            ConformerBackendError: If the chosen route fails.
+            ConformerBackendError: If the chosen route or the topology
+                provider fails.
             ValueError: If the configured strategy or the folding filter is
                 missing something it needs, such as a CONFPASS backend or a
                 topology.
         """
         ensemble = self.build_ensemble(request, search_settings)
+        if topology is None and self._needs_topology(selection_settings):
+            topology = self._derive_topology(request, ensemble)
         folding_settings = selection_settings.folding_filter
         folding: FoldingFilterOutcome | None = None
         if folding_settings.enabled:
@@ -147,6 +159,25 @@ class ConformerWorkflow:
         if search_settings.enabled:
             return self._search_backend.search(request, search_settings)
         return self._initial_structure_backend.build(request, search_settings)
+
+    @staticmethod
+    def _needs_topology(settings: ConformerSelectionSettings) -> bool:
+        """Whether the folding filter or the strategy reads connectivity."""
+        return (
+            settings.folding_filter.enabled
+            or settings.resolved_strategy
+            is ConformerSelectionStrategy.CONFPASS_PRIORITIZATION
+        )
+
+    def _derive_topology(
+        self,
+        request: ConformerRequest,
+        ensemble: ConformerEnsemble,
+    ) -> MoleculeTopology | None:
+        """Ask the provider, if any, for the topology of ``ensemble``."""
+        if self._topology_provider is None:
+            return None
+        return self._topology_provider(request, ensemble)
 
     def _selector_for(
         self,
@@ -176,4 +207,4 @@ class ConformerWorkflow:
         )
 
 
-__all__ = ["ConformerPreparation", "ConformerWorkflow"]
+__all__ = ["ConformerPreparation", "ConformerWorkflow", "TopologyProvider"]
