@@ -19,3 +19,7 @@ Rule: after migrating a responsibility to a split manager, remove the old schema
 [2026-07-03] Context: adding watchdog startup-recovery regression tests on Python 3.14
 Mistake: testing the watchdog by sleeping briefly and cancelling the infinite task made the test nondeterministic and hit the known `asyncio.to_thread` hang in this checkout.
 Rule: tests for watchdog startup recovery must call a one-shot recovery helper and patch `asyncio.to_thread` to run synchronously; do not rely on sleep-plus-cancel timing for infinite async loops.
+
+[2026-10-04] Context: adding stored CREST outputs as test fixtures
+Mistake: `git add` of the fixture directory silently skipped `crest_conformers.xyz` because `.gitignore` ignores CREST output names everywhere; the commit passed locally but would fail on a clean checkout.
+Rule: after staging fixtures copied from tool output, compare `git status`/`git show --stat` against the files on disk, and run the new test from a `git archive HEAD` export before reporting; unignore fixtures with an explicit `!tests/fixtures/...` rule, never `git add -f`.
