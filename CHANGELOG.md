@@ -8,6 +8,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **CONFPASS golden files** (2026-10-04)
+  - `tests/fixtures/confpass_golden/`: 13 CREST ensembles (2-121
+    conformers) adapted to SDF by the production adapter, and the original
+    CONFPASS PART 1 output on them (commit `1b5efb6`; `pipe_x_as`,
+    `pipe_x`, `pipe_as`, kept dihedrals, clusters at x = 0.8, failures).
+  - `scripts/confpass_golden/build_inputs.py` (project env) and
+    `scripts/confpass_golden/run_original.py` (isolated Python 3.8 env,
+    outside the repo) regenerate them; the README records the environment
+    and the behaviour the port must match: energies never read, failure on
+    ensembles without a variable dihedral, hash-seed-dependent column order.
+  - `tests/unit/semi_imperium/test_confpass_golden_fixtures.py`: fixture
+    integrity (hashes, CREST order, full rankings or explicit failures).
 - **Semi-Imperium extreme-folding filter** (2026-10-04)
   - `src/semi_imperium/domain/configuration.py`: `FoldingFilterSettings`
     inside `ConformerSelectionSettings` (disabled by default; calibrated

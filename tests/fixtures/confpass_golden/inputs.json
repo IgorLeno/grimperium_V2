@@ -1,0 +1,162 @@
+{
+  "generator": "scripts/confpass_golden/build_inputs.py",
+  "rdkit": "2026.03.3",
+  "cases": [
+    {
+      "case": "propanoic_acid",
+      "run": "cbt_002",
+      "smiles": "CCC(=O)O",
+      "atoms": 11,
+      "conformers": 2,
+      "energy_inversions": 0,
+      "largest_inversion_kcal_mol": 0.0,
+      "source_sha256": "333d731863dfff404e1041f13e549b2469ba3bad1a587a7bff8718db82a09f5f",
+      "sdf": "propanoic_acid.sdf",
+      "sdf_sha256": "5eaaabc1bb00d77e9425baeaf3bf8e33ba432e0711acd985fdf9dc387a59fc6e"
+    },
+    {
+      "case": "methyl_acetate",
+      "run": "cbt_020",
+      "smiles": "COC(C)=O",
+      "atoms": 11,
+      "conformers": 3,
+      "energy_inversions": 0,
+      "largest_inversion_kcal_mol": 0.0,
+      "source_sha256": "0423aec7545621eae9c0ffe1ffae3d5af6736606a4c68737d157149ac9b745f5",
+      "sdf": "methyl_acetate.sdf",
+      "sdf_sha256": "8d7918686378e6d238e8206d5be899f937c19809332a1970a14cdbb4101184bb"
+    },
+    {
+      "case": "propanol",
+      "run": "cbt_014",
+      "smiles": "CCCO",
+      "atoms": 12,
+      "conformers": 5,
+      "energy_inversions": 0,
+      "largest_inversion_kcal_mol": 0.0,
+      "source_sha256": "c28725d99bdc52ea409cb2669dd2d12961f244218ee75158da30750e2caa77b8",
+      "sdf": "propanol.sdf",
+      "sdf_sha256": "10633620a90181386d3e2f66a388e59fe08064b5a472bacc76ffea5074c39bcd"
+    },
+    {
+      "case": "butanoic_acid",
+      "run": "cbt_003",
+      "smiles": "CCCC(=O)O",
+      "atoms": 14,
+      "conformers": 6,
+      "energy_inversions": 0,
+      "largest_inversion_kcal_mol": 0.0,
+      "source_sha256": "ff98af499ff25dea038f64f6b7446a62f68366b438bff56512a37588d4178609",
+      "sdf": "butanoic_acid.sdf",
+      "sdf_sha256": "57960bea6e064ee012aea87bbe5589d37265f6c9cbae6b3932e812106572f140"
+    },
+    {
+      "case": "pentanoic_acid",
+      "run": "cbt_004",
+      "smiles": "CCCCC(=O)O",
+      "atoms": 17,
+      "conformers": 15,
+      "energy_inversions": 0,
+      "largest_inversion_kcal_mol": 0.0,
+      "source_sha256": "fba6e164de83639a86d3a73fe0b191184e6ef73ce8c4feff7c7833d8b8b43bff",
+      "sdf": "pentanoic_acid.sdf",
+      "sdf_sha256": "7a9a4d54c308feb52b0e4551fa9618392264d5ef17b520ddf64fac3cbbde832d"
+    },
+    {
+      "case": "butanol",
+      "run": "cbt_015",
+      "smiles": "CCCCO",
+      "atoms": 15,
+      "conformers": 16,
+      "energy_inversions": 0,
+      "largest_inversion_kcal_mol": 0.0,
+      "source_sha256": "d2f166433ec0166693aa4b9b2d2930b7e00b542b54f85ba1f9a0964e9769c1a7",
+      "sdf": "butanol.sdf",
+      "sdf_sha256": "50a83bd0c6e26a46b7e44c6c688c0b4e4477396d95e3080770146be44f8620f3"
+    },
+    {
+      "case": "methyl_propanoate",
+      "run": "cbt_021",
+      "smiles": "CCC(=O)OC",
+      "atoms": 14,
+      "conformers": 19,
+      "energy_inversions": 2,
+      "largest_inversion_kcal_mol": 0.011835,
+      "source_sha256": "543494f84b16790b42c630e2dfa89c1092d5328ab8a845d68052aa243a62ef46",
+      "sdf": "methyl_propanoate.sdf",
+      "sdf_sha256": "627fdca8cb62548c43f3e3e56b5c894aee032f88c54e929a1cff591199d46c11"
+    },
+    {
+      "case": "methyl_butanoate",
+      "run": "cbt_022",
+      "smiles": "CCCC(=O)OC",
+      "atoms": 17,
+      "conformers": 23,
+      "energy_inversions": 1,
+      "largest_inversion_kcal_mol": 0.000828,
+      "source_sha256": "e708019289d712c490991698756ae17365176b5d32556ef6c922ca25415b867a",
+      "sdf": "methyl_butanoate.sdf",
+      "sdf_sha256": "447daec4991617f039a3483b48de1938625b3d56733657d190111d1226ff0c97"
+    },
+    {
+      "case": "hexanoic_acid",
+      "run": "cbt_005",
+      "smiles": "CCCCCC(=O)O",
+      "atoms": 20,
+      "conformers": 40,
+      "energy_inversions": 0,
+      "largest_inversion_kcal_mol": 0.0,
+      "source_sha256": "35a82946a26ae7764900fb5c188e4cecd3962ab16cbe05874e8092581d809798",
+      "sdf": "hexanoic_acid.sdf",
+      "sdf_sha256": "1eec7036b8d5b248206507d707ff95399b72329cd6f0cb56b574520b9a60dd9b"
+    },
+    {
+      "case": "methyl_pentanoate",
+      "run": "cbt_023",
+      "smiles": "CCCCC(=O)OC",
+      "atoms": 20,
+      "conformers": 46,
+      "energy_inversions": 1,
+      "largest_inversion_kcal_mol": 0.006451,
+      "source_sha256": "32b417f325026d532bc1d476c16ba66de77ca3b6fd41d4df35f0a2b711349f7a",
+      "sdf": "methyl_pentanoate.sdf",
+      "sdf_sha256": "47ca0863bcc4f7ed1910d7c4aba7990458e1f6b52acbe5d5723fa51b3fa9c425"
+    },
+    {
+      "case": "glycerol",
+      "run": "cbt_013",
+      "smiles": "OCC(O)CO",
+      "atoms": 14,
+      "conformers": 73,
+      "energy_inversions": 0,
+      "largest_inversion_kcal_mol": 0.0,
+      "source_sha256": "b415542116f91dddc7d22bb8cf5dcc6a05a2dc5c45aa84d29352f156a7336285",
+      "sdf": "glycerol.sdf",
+      "sdf_sha256": "292ebba9299a1362e8eb1ffb51f8c6d7b0a193e4a1786916877909da318e3df4"
+    },
+    {
+      "case": "triacetin",
+      "run": "cbt_030",
+      "smiles": "CC(=O)OCC(COC(C)=O)OC(C)=O",
+      "atoms": 29,
+      "conformers": 95,
+      "energy_inversions": 3,
+      "largest_inversion_kcal_mol": 0.027686,
+      "source_sha256": "f55a6dbf0630f5baf5ac74786a6fd35bf29ac0c7c03a361f72fcf1349cb3b61b",
+      "sdf": "triacetin.sdf",
+      "sdf_sha256": "66e5ef03a87a0aad0917f8183569164c16178d5fb3a2d8431571cc8e55134b9c"
+    },
+    {
+      "case": "heptanoic_acid",
+      "run": "cbt_006",
+      "smiles": "CCCCCCC(=O)O",
+      "atoms": 23,
+      "conformers": 121,
+      "energy_inversions": 0,
+      "largest_inversion_kcal_mol": 0.0,
+      "source_sha256": "21522c70c39075a16d020759d75e453058b8957a815c7fa455f7c420e5a93b47",
+      "sdf": "heptanoic_acid.sdf",
+      "sdf_sha256": "a6b888a54ba21818a29764f212e7498ed7ab88b51297b192afb275e36ec46825"
+    }
+  ]
+}
