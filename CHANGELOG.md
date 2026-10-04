@@ -8,6 +8,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **CONFPASS PART 1 port** (2026-10-04)
+  - `src/semi_imperium/conformers/confpass_port.py`: `PortedConfPass`
+    (EXPERIMENTAL), a `ConfPassBackend` reproducing CONFPASS PART 1 in
+    RDKit + scikit-learn (MIT attribution, Goodman-lab/CONFPASS commit
+    `1b5efb6`): rotatable-bond dihedrals, fixed-dihedral removal, gap
+    correction, ward clustering, `pipe_x_as` (default, x = 0.8,
+    x_as = 0.2), `pipe_x`, `pipe_as`. Keeps CREST's order and never reads
+    energies, like the original; no longer depends on `PYTHONHASHSEED`.
+    Not yet injected in `views.py` (production still uses
+    `UnavailableConfPass`).
+  - `src/semi_imperium/conformers/confpass.py`: `ConfPassSelector` returns a
+    one-conformer ensemble without calling CONFPASS
+    (`single_conformer_ensemble`), and when the backend reports
+    `confpass_no_variable_dihedral` keeps the CREST order with evidence
+    `confpass_fallback_crest_order`; other backend failures still propagate.
+  - `tests/unit/semi_imperium/test_confpass_port.py`: fidelity against
+    `tests/fixtures/confpass_golden/golden.json` (kept dihedrals, clusters at
+    x, all three priority lists on 12 cases; one ward tree equals a fit per
+    cluster count) plus error codes; selector fallback tests in
+    `test_conformer_selection.py`.
+  - Verification: `poetry run pytest tests/unit/semi_imperium/test_confpass_port.py -q`
+    (also under `PYTHONHASHSEED=0,1,12345`).
 - **CONFPASS golden files** (2026-10-04)
   - `tests/fixtures/confpass_golden/`: 13 CREST ensembles (2-121
     conformers) adapted to SDF by the production adapter, and the original

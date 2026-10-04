@@ -48,6 +48,10 @@ PROGRAM_FIELD = "SEARCH_PROGRAM"
 VERSION_FIELD = "SEARCH_PROGRAM_VERSION"
 RUN_FIELD = "RUN_ID"
 
+#: Backend error code for an ensemble with no dihedral that varies; the
+#: selector falls back to the search order instead of failing.
+CONFPASS_NO_VARIABLE_DIHEDRAL = "confpass_no_variable_dihedral"
+
 _COUNTS_TAIL = "  0  0  0  0  0  0  0  0999 V2000"
 _ATOM_TAIL = " 0  0  0  0  0  0  0  0  0  0  0  0"
 _BOND_TAIL = "  0  0  0  0"
@@ -296,6 +300,10 @@ class ConfPassSelector:
     discarded, so the ``top_n`` cut applies to CONFPASS's ordering rather
     than to a list something else already truncated.
 
+    A one-conformer ensemble is returned as-is without calling CONFPASS.
+    An ensemble with no varying dihedral, on which the original CONFPASS
+    crashes, keeps the search's order and says so in the evidence.
+
     The PAS completeness class each ranking may carry is recorded in
     :attr:`SelectionResult.advisory_labels` only. It never enters the
     result's evidence, which :class:`SelectionResult` enforces.
@@ -319,12 +327,40 @@ class ConfPassSelector:
         strategy = ConformerSelectionStrategy.CONFPASS_PRIORITIZATION
         require_strategy(settings, strategy)
 
+        if ensemble.size == 1:
+            # Nothing to prioritize, and CONFPASS cannot cluster one sample.
+            return SelectionResult(
+                strategy=strategy,
+                selected=ensemble.conformers,
+                considered=1,
+                ranking_basis="single_conformer_ensemble",
+                evidence=("experimental_strategy", "single_conformer_ensemble"),
+            )
+
         candidates = build_confpass_candidates(
             ensemble,
             self.topology,
             molecule_id=self.molecule_id,
         )
-        rankings = tuple(self.backend.prioritize(candidates))
+        try:
+            rankings = tuple(self.backend.prioritize(candidates))
+        except ConformerBackendError as exc:
+            if exc.code != CONFPASS_NO_VARIABLE_DIHEDRAL:
+                raise
+            # Every original CONFPASS method crashes here; keeping the
+            # search's own order is the stated fallback, recorded openly.
+            return SelectionResult(
+                strategy=strategy,
+                selected=ensemble.conformers[: settings.top_n],
+                considered=ensemble.size,
+                ranking_basis="crest_search_order",
+                evidence=(
+                    "experimental_strategy",
+                    CONFPASS_NO_VARIABLE_DIHEDRAL,
+                    "confpass_fallback_crest_order",
+                    f"top_n={settings.top_n}",
+                ),
+            )
         _validate_rankings(rankings, ensemble)
 
         by_index = {conformer.index: conformer for conformer in ensemble.conformers}
@@ -405,6 +441,7 @@ def _read_data_fields(lines: Sequence[str]) -> dict[str, str]:
 
 
 __all__ = [
+    "CONFPASS_NO_VARIABLE_DIHEDRAL",
     "AdaptedStructure",
     "ConfPassSelector",
     "MoleculeTopology",

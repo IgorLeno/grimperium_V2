@@ -20,6 +20,7 @@ from semi_imperium.conformers.backends import (
     InitialStructureBackend,
 )
 from semi_imperium.conformers.confpass import (
+    CONFPASS_NO_VARIABLE_DIHEDRAL,
     AdaptedStructure,
     ConfPassSelector,
     MoleculeTopology,
@@ -59,6 +60,7 @@ from semi_imperium.conformers.workflow import ConformerPreparation, ConformerWor
 
 __all__ = [
     "BYPASSED_ALL_FOLDED",
+    "CONFPASS_NO_VARIABLE_DIHEDRAL",
     "FORBIDDEN_EVIDENCE_TERMS",
     "HARTREE_TO_KCAL_MOL",
     "PAS_COMPLETENESS_LABEL_KEY",

@@ -22,6 +22,7 @@ from dataclasses import dataclass, field
 import pytest
 
 from semi_imperium.conformers import (
+    CONFPASS_NO_VARIABLE_DIHEDRAL,
     HARTREE_TO_KCAL_MOL,
     PAS_COMPLETENESS_LABEL_KEY,
     Conformer,
@@ -31,6 +32,7 @@ from semi_imperium.conformers import (
     ConformerRequest,
     ConformerSearchProvenance,
     ConformerWorkflow,
+    ConfPassBackend,
     ConfPassCandidate,
     ConfPassRanking,
     ConfPassSelector,
@@ -472,7 +474,7 @@ def test_selection_settings_reject_an_empty_energy_window() -> None:
 
 
 def confpass_selection(
-    backend: FakeConfPass,
+    backend: ConfPassBackend,
     *,
     conformers: int = 6,
     top_n: int = 2,
@@ -564,6 +566,54 @@ def test_missing_confpass_backend_fails_loudly() -> None:
         )
 
     assert failure.value.code == "confpass_unavailable"
+
+
+@dataclass
+class FailingConfPass:
+    """CONFPASS double that fails with a given backend error code."""
+
+    code: str
+    calls: int = 0
+
+    def prioritize(
+        self,
+        candidates: Sequence[ConfPassCandidate],
+    ) -> Sequence[ConfPassRanking]:
+        self.calls += 1
+        raise ConformerBackendError("CONFPASS failed", code=self.code)
+
+
+def test_confpass_without_variable_dihedral_keeps_the_search_order() -> None:
+    backend = FailingConfPass(code=CONFPASS_NO_VARIABLE_DIHEDRAL)
+
+    result = confpass_selection(backend, conformers=4, top_n=3)
+
+    assert result.selected_indices == (0, 1, 2)
+    assert result.considered == 4
+    assert result.ranking_basis == "crest_search_order"
+    assert result.is_experimental is True
+    assert CONFPASS_NO_VARIABLE_DIHEDRAL in result.evidence
+    assert "confpass_fallback_crest_order" in result.evidence
+
+
+def test_confpass_fallback_does_not_hide_other_backend_failures() -> None:
+    backend = FailingConfPass(code="sdf_parse_failed")
+
+    with pytest.raises(ConformerBackendError) as failure:
+        confpass_selection(backend, conformers=3)
+
+    assert failure.value.code == "sdf_parse_failed"
+
+
+def test_confpass_returns_a_single_conformer_without_calling_the_backend() -> None:
+    backend = FailingConfPass(code="confpass_too_few_conformers")
+
+    result = confpass_selection(backend, conformers=1, top_n=5)
+
+    assert backend.calls == 0
+    assert result.selected_indices == (0,)
+    assert result.ranking_basis == "single_conformer_ensemble"
+    assert "single_conformer_ensemble" in result.evidence
 
 
 def test_xyz_to_sdf_adaptation_preserves_structure_and_provenance() -> None:
