@@ -8,6 +8,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Semi-Imperium extreme-folding filter** (2026-10-04)
+  - `src/semi_imperium/domain/configuration.py`: `FoldingFilterSettings`
+    inside `ConformerSelectionSettings` (disabled by default; calibrated
+    k = 6, f = 1.00, c_min = 1; `max_rg_ratio` unset). Serialized, and thus
+    part of the signature, only when enabled, so existing signatures stay
+    reusable.
+  - `src/semi_imperium/conformers/folding.py`: `apply_folding_filter` runs
+    before any selection strategy, records per-conformer contacts and
+    `rg_ratio`, and never empties the ensemble
+    (`folding_filter_bypassed_all_folded`). `ConformerWorkflow` requires a
+    `MoleculeTopology` when the filter is enabled.
+  - `tests/unit/semi_imperium/test_folding_filter.py`: settings, signature,
+    descriptor, H-bond exclusion, bypass invariant and workflow wiring.
+  - Verification: filter reproduces the calibration's 20 flagged references
+    and their contact counts exactly on all 27746 usable references.
 - **Extreme-folding filter calibration** (2026-10-04)
   - `scripts/calibrate_folding_filter.py`: computes `fold_contacts` (heavy-atom
     pairs ≥ k bonds apart closer than f · Σr_vdW, classic H-bond pairs

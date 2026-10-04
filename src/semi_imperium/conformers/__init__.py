@@ -42,6 +42,12 @@ from semi_imperium.conformers.ensemble import (
     ConformerGeometry,
     ConformerSearchProvenance,
 )
+from semi_imperium.conformers.folding import (
+    BYPASSED_ALL_FOLDED,
+    FoldingFilterOutcome,
+    FoldingMeasurement,
+    apply_folding_filter,
+)
 from semi_imperium.conformers.selection import (
     FORBIDDEN_EVIDENCE_TERMS,
     PAS_COMPLETENESS_LABEL_KEY,
@@ -52,6 +58,7 @@ from semi_imperium.conformers.selection import (
 from semi_imperium.conformers.workflow import ConformerPreparation, ConformerWorkflow
 
 __all__ = [
+    "BYPASSED_ALL_FOLDED",
     "FORBIDDEN_EVIDENCE_TERMS",
     "HARTREE_TO_KCAL_MOL",
     "PAS_COMPLETENESS_LABEL_KEY",
@@ -75,10 +82,13 @@ __all__ = [
     "CrestRun",
     "CrestRunner",
     "EnergyTopNSelector",
+    "FoldingFilterOutcome",
+    "FoldingMeasurement",
     "InitialStructureBackend",
     "MoleculeTopology",
     "SelectionResult",
     "UnavailableConfPass",
+    "apply_folding_filter",
     "build_confpass_candidates",
     "parse_crest_ensemble",
     "read_sd_record",

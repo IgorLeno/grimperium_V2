@@ -29,6 +29,10 @@ from semi_imperium.conformers.ensemble import (
     ConformerEnsemble,
     ConformerSearchProvenance,
 )
+from semi_imperium.conformers.folding import (
+    FoldingFilterOutcome,
+    apply_folding_filter,
+)
 from semi_imperium.conformers.selection import (
     ConformerSelector,
     EnergyTopNSelector,
@@ -47,6 +51,8 @@ class ConformerPreparation:
 
     ensemble: ConformerEnsemble
     selection: SelectionResult
+    folding: FoldingFilterOutcome | None = None
+    """Set only when the folding filter ran before the selection."""
 
     @property
     def selected(self) -> tuple[Conformer, ...]:
@@ -65,11 +71,14 @@ class ConformerPreparation:
 
     def to_dict(self) -> dict[str, Any]:
         """Serialize to JSON-compatible primitives."""
-        return {
+        payload: dict[str, Any] = {
             "provenance": self.provenance.to_dict(),
             "ensemble_size": self.ensemble.size,
             "selection": self.selection.to_dict(),
         }
+        if self.folding is not None:
+            payload["folding_filter"] = self.folding.to_dict()
+        return payload
 
 
 class ConformerWorkflow:
@@ -102,17 +111,32 @@ class ConformerWorkflow:
                 molecule through the initial-3D structure instead.
             selection_settings: Which strategy narrows the ensemble.
             topology: Connectivity matching the ensemble's atom order.
-                Required only by CONFPASS, which needs SDF input.
+                Required by CONFPASS, which needs SDF input, and by the
+                folding filter when it is enabled.
 
         Raises:
             ConformerBackendError: If the chosen route fails.
-            ValueError: If the configured strategy is missing something
-                it needs, such as a CONFPASS backend or a topology.
+            ValueError: If the configured strategy or the folding filter is
+                missing something it needs, such as a CONFPASS backend or a
+                topology.
         """
         ensemble = self.build_ensemble(request, search_settings)
+        folding_settings = selection_settings.folding_filter
+        folding: FoldingFilterOutcome | None = None
+        if folding_settings.enabled:
+            if topology is None:
+                raise ValueError(
+                    "The folding filter needs the molecule topology to count "
+                    "contacts; pass one matching the atom order"
+                )
+            folding = apply_folding_filter(ensemble, topology, folding_settings)
         selector = self._selector_for(selection_settings, request, topology)
-        selection = selector.select(ensemble, selection_settings)
-        return ConformerPreparation(ensemble=ensemble, selection=selection)
+        selection = selector.select(
+            ensemble if folding is None else folding.kept, selection_settings
+        )
+        return ConformerPreparation(
+            ensemble=ensemble, selection=selection, folding=folding
+        )
 
     def build_ensemble(
         self,

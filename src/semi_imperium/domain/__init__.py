@@ -12,6 +12,7 @@ from semi_imperium.domain.configuration import (
     ConformerSearchSettings,
     ConformerSelectionSettings,
     EffectiveConfiguration,
+    FoldingFilterSettings,
     SemiempiricalSettings,
     VerificationSettings,
 )
@@ -69,6 +70,7 @@ __all__ = [
     "ConformerSelectionStrategy",
     "ConformerSource",
     "EffectiveConfiguration",
+    "FoldingFilterSettings",
     "MolecularIdentity",
     "MoleculeInputType",
     "RunRecord",

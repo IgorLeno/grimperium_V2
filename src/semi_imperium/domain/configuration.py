@@ -96,6 +96,89 @@ class ConformerSearchSettings:
 
 
 @dataclass(frozen=True)
+class FoldingFilterSettings:
+    """Optional pre-selection stage that drops extremely folded conformers.
+
+    A conformer is discarded when it has at least ``min_contacts`` pairs
+    of heavy atoms that are ``min_topological_distance`` or more bonds
+    apart yet closer than ``vdw_scale`` times the sum of their van der
+    Waals radii (classic O/N hydrogen-bond pairs excluded), and — only
+    when ``max_rg_ratio`` is set — its heavy-atom radius of gyration is
+    below that fraction of the ensemble's largest.
+
+    The numeric defaults come from the calibration on the CBS reference
+    geometries (``reports/folding_calibration/report.md``): they discard
+    0.07% of those references. ``max_rg_ratio`` stays ``None`` until it
+    can be calibrated on real CREST ensembles.
+    """
+
+    enabled: bool = False
+    min_topological_distance: int = 6
+    vdw_scale: float = 1.0
+    min_contacts: int = 1
+    max_rg_ratio: float | None = None
+    """``None`` means the radius-of-gyration condition is not applied."""
+
+    hbond_max_h_acceptor_angstrom: float = 2.5
+    """H···acceptor distance below which a donor/acceptor pair is an H-bond."""
+
+    def __post_init__(self) -> None:
+        if self.min_topological_distance < 2:
+            raise ValueError(
+                "FoldingFilterSettings.min_topological_distance must be >= 2, "
+                f"got {self.min_topological_distance}"
+            )
+        if self.vdw_scale <= 0:
+            raise ValueError(
+                f"FoldingFilterSettings.vdw_scale must be > 0, got {self.vdw_scale}"
+            )
+        if self.min_contacts < 1:
+            raise ValueError(
+                "FoldingFilterSettings.min_contacts must be >= 1, "
+                f"got {self.min_contacts}"
+            )
+        ratio = self.max_rg_ratio
+        # rg_ratio is at most 1 by construction, so a larger bound would
+        # silently mean "always", which None already says explicitly.
+        if ratio is not None and not 0 < ratio <= 1:
+            raise ValueError(
+                "FoldingFilterSettings.max_rg_ratio must be in (0, 1] when set, "
+                f"got {ratio}"
+            )
+        if self.hbond_max_h_acceptor_angstrom <= 0:
+            raise ValueError(
+                "FoldingFilterSettings.hbond_max_h_acceptor_angstrom must be > 0, "
+                f"got {self.hbond_max_h_acceptor_angstrom}"
+            )
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize to JSON-compatible primitives."""
+        return {
+            "enabled": self.enabled,
+            "min_topological_distance": self.min_topological_distance,
+            "vdw_scale": self.vdw_scale,
+            "min_contacts": self.min_contacts,
+            "max_rg_ratio": self.max_rg_ratio,
+            "hbond_max_h_acceptor_angstrom": self.hbond_max_h_acceptor_angstrom,
+        }
+
+    @classmethod
+    def from_dict(cls, payload: dict[str, Any]) -> FoldingFilterSettings:
+        """Deserialize from JSON-compatible primitives."""
+        ratio = payload.get("max_rg_ratio")
+        return cls(
+            enabled=bool(payload["enabled"]),
+            min_topological_distance=int(payload["min_topological_distance"]),
+            vdw_scale=float(payload["vdw_scale"]),
+            min_contacts=int(payload["min_contacts"]),
+            max_rg_ratio=None if ratio is None else float(ratio),
+            hbond_max_h_acceptor_angstrom=float(
+                payload["hbond_max_h_acceptor_angstrom"]
+            ),
+        )
+
+
+@dataclass(frozen=True)
 class ConformerSelectionSettings:
     """Which conformers from the search are carried into the final result.
 
@@ -109,6 +192,9 @@ class ConformerSelectionSettings:
     top_n: int = DEFAULT_CONFORMER_TOP_N
     energy_window_kcal_mol: float | None = None
     """Optional extra bound: discard conformers this far above the lowest."""
+
+    folding_filter: FoldingFilterSettings = field(default_factory=FoldingFilterSettings)
+    """Runs before any strategy; disabled by default."""
 
     def __post_init__(self) -> None:
         try:
@@ -141,21 +227,35 @@ class ConformerSelectionSettings:
         return self.resolved_strategy.is_experimental
 
     def to_dict(self) -> dict[str, Any]:
-        """Serialize to JSON-compatible primitives."""
-        return {
+        """Serialize to JSON-compatible primitives.
+
+        A disabled folding filter is left out on purpose: it computes the
+        same selection as before the filter existed, so configurations
+        that do not use it keep their stored signatures and stay reusable.
+        """
+        payload: dict[str, Any] = {
             "strategy": self.strategy,
             "top_n": self.top_n,
             "energy_window_kcal_mol": self.energy_window_kcal_mol,
         }
+        if self.folding_filter.enabled:
+            payload["folding_filter"] = self.folding_filter.to_dict()
+        return payload
 
     @classmethod
     def from_dict(cls, payload: dict[str, Any]) -> ConformerSelectionSettings:
         """Deserialize from JSON-compatible primitives."""
         window = payload.get("energy_window_kcal_mol")
+        folding = payload.get("folding_filter")
         return cls(
             strategy=str(payload["strategy"]),
             top_n=int(payload["top_n"]),
             energy_window_kcal_mol=None if window is None else float(window),
+            folding_filter=(
+                FoldingFilterSettings()
+                if folding is None
+                else FoldingFilterSettings.from_dict(folding)
+            ),
         )
 
 
@@ -434,6 +534,7 @@ __all__ = [
     "ConformerSearchSettings",
     "ConformerSelectionSettings",
     "EffectiveConfiguration",
+    "FoldingFilterSettings",
     "SemiempiricalSettings",
     "VerificationSettings",
 ]
