@@ -8,6 +8,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **CREST atom-order preservation test** (2026-10-04)
+  - `tests/fixtures/crest_atom_order/`: RDKit initial structure, CREST input
+    and CREST ensemble of three stored runs (butanoic acid, glycerol, methyl
+    acetate), with a source-order and a canonical SMILES per case and a
+    survey of all 37 stored runs (35 complete, all keep element order and
+    connectivity in every conformer).
+  - `tests/unit/semi_imperium/test_crest_atom_order.py`: every CREST
+    conformer keeps the input element order and connectivity;
+    `SmilesTopology` accepts the real ensemble for a source-order SMILES
+    (checked on every conformer); a re-parsed canonical SMILES that reorders
+    atoms is refused with `topology_atom_order_mismatch`.
+  - Verification: `poetry run pytest tests/unit/semi_imperium/test_crest_atom_order.py -q`
 - **CONFPASS and folding filter wired into production** (2026-10-04)
   - `src/semi_imperium/conformers/topology.py`: `SmilesTopology` derives the
     explicit-hydrogen, kekulized topology from the SMILES (RDKit `AddHs`

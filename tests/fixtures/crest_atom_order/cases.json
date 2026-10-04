@@ -1,0 +1,31 @@
+{
+  "cases": [
+    {
+      "run": "cbt_003",
+      "name": "butanoic acid",
+      "atoms": 14,
+      "conformers": 6,
+      "source_order_smiles": "CCCC(=O)O",
+      "canonical_smiles": "CCCC(=O)O",
+      "canonical_keeps_order": true
+    },
+    {
+      "run": "cbt_013",
+      "name": "glycerol",
+      "atoms": 14,
+      "conformers": 73,
+      "source_order_smiles": "C(C(CO)O)O",
+      "canonical_smiles": "OCC(O)CO",
+      "canonical_keeps_order": false
+    },
+    {
+      "run": "cbt_020",
+      "name": "methyl acetate",
+      "atoms": 11,
+      "conformers": 3,
+      "source_order_smiles": "CC(=O)OC",
+      "canonical_smiles": "COC(C)=O",
+      "canonical_keeps_order": false
+    }
+  ]
+}

@@ -166,6 +166,8 @@ crest_conformers.xyz
 crest_dynamics.trj
 crest_input_copy.xyz
 crest_rotamers.xyz
+# Stored CREST ensembles used as test fixtures
+!tests/fixtures/crest_atom_order/*/crest_conformers.xyz
 crestopt.log
 ensemble_energies.log
 gfnff_adjacency
