@@ -8,6 +8,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **ThermoCBS CHON reference cut v2** (2026-10-03)
+  - `scripts/build_thermo_cbs_chon.py` rebuilds the CHON cut from the
+    Chemperium ThermoCBS source, filtering elements from the reference `xyz`
+    block and keeping geometry, `H298_b3`, `S298` and `cp_*` columns, with a
+    manifest (source/output SHA-256, counts, units).
+  - Output `data/thermo_cbs_chon_v2.csv`: 27760 rows; the previous
+    `thermo_cbs_chon.csv` included 1808 molecules containing S, Se or B.
+  - Hub restructure plan and conformer-selection spec in `docs/plans/`.
 - **Semi-Imperium scientific guide and end-to-end integration contract**
   (2026-08-29)
   - Documented the independently launchable workflow, ΔHf° meaning,
