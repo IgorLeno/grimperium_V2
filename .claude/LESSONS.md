@@ -23,3 +23,11 @@ Rule: tests for watchdog startup recovery must call a one-shot recovery helper a
 [2026-10-04] Context: adding stored CREST outputs as test fixtures
 Mistake: `git add` of the fixture directory silently skipped `crest_conformers.xyz` because `.gitignore` ignores CREST output names everywhere; the commit passed locally but would fail on a clean checkout.
 Rule: after staging fixtures copied from tool output, compare `git status`/`git show --stat` against the files on disk, and run the new test from a `git archive HEAD` export before reporting; unignore fixtures with an explicit `!tests/fixtures/...` rule, never `git add -f`.
+
+[2026-10-05] Context: conformer-validation pilot, arms B/C on an imine (cbs_01102)
+Mistake: the CONFPASS port passed 13 golden cases that were all C/H/O, then crashed on the first N-H imine because current RDKit keeps a stereo-defining hydrogen that RDKit 2020.09.5 drops; the original's NH2 hydrogen choice also turned out to follow `PYTHONHASHSEED`.
+Rule: golden files for a port validated on an older library must cover every heteroatom class present in the target dataset, and the reference run must pin `PYTHONHASHSEED` whenever the original iterates over sets.
+
+[2026-10-05] Context: retrying failed pairs of the conformer-validation pilot
+Mistake: `run --limit 8 --retry-errors` planned 7 new molecules (new CREST runs) because `--limit` counts molecules with pending arms, not the first N of the sample.
+Rule: before any resume or retry of `scripts/conformer_validation run`, read the `--dry-run` plan (pairs and CREST count) and narrow with `--arms`/`--limit` until it matches exactly the intended pairs.
