@@ -468,6 +468,14 @@ def _read_molecule(sd_record: str) -> tuple[Any, Any]:
             "RDKit could not read the first CONFPASS candidate's molblock",
             code="sdf_parse_failed",
         )
+    # Newer RDKit keeps a hydrogen that defines double-bond stereo perceived
+    # from the 3D geometry (an imine N-H); RDKit 2020.09.5, which CONFPASS
+    # was validated on, drops it. The heavy-atom naming assumes every
+    # hydrogen is gone, so drop those too.
+    if any(atom.GetAtomicNum() == 1 for atom in mol.GetAtoms()):
+        params = Chem.RemoveHsParameters()
+        params.removeDefiningBondStereo = True
+        mol = Chem.RemoveHs(mol, params)
     return mol, mol_h
 
 

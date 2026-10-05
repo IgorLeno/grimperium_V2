@@ -17,9 +17,14 @@ checkout. For every SDF listed in ``inputs.json`` it records:
 The clustering is computed once per case and shared by the three methods,
 exactly as ``confpass.conp.get_priority`` builds it.
 
+Run it with ``PYTHONHASHSEED=0``: with two equivalent hydrogens on a
+terminal heavy atom (``amidino_alanine``'s NH2) CONFPASS picks the dihedral
+end through ``set`` iteration, so the hydrogen, and the priorities, follow
+the seed. Seed 0 picks the lowest atom index, as the port does.
+
 Usage::
 
-    <isolated-env>/bin/python scripts/confpass_golden/run_original.py \\
+    PYTHONHASHSEED=0 <isolated-env>/bin/python scripts/confpass_golden/run_original.py \\
         --confpass-src ~/Estagio/confpass-original/src/confpass \\
         --fixtures tests/fixtures/confpass_golden
 """

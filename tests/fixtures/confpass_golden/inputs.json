@@ -157,6 +157,18 @@
       "source_sha256": "21522c70c39075a16d020759d75e453058b8957a815c7fa455f7c420e5a93b47",
       "sdf": "heptanoic_acid.sdf",
       "sdf_sha256": "a6b888a54ba21818a29764f212e7498ed7ab88b51297b192afb275e36ec46825"
+    },
+    {
+      "case": "amidino_alanine",
+      "run": "cbs_01102",
+      "smiles": "[H]/N=C(/N)N[C@H](C)C(=O)O",
+      "atoms": 18,
+      "conformers": 29,
+      "energy_inversions": 0,
+      "largest_inversion_kcal_mol": 0.0,
+      "source_sha256": "fdf682960eec725e7d693b29b46c8b18b98aeda97ca31c4c1a355c43a66ca157",
+      "sdf": "amidino_alanine.sdf",
+      "sdf_sha256": "ad7a621a24ffecd4d3349b2347f44e135a7c60cf9a2a713629c3423c3a153e6d"
     }
   ]
 }

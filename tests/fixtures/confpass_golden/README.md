@@ -1,7 +1,7 @@
 # CONFPASS golden files
 
 Reference output of the original CONFPASS PART 1 (Goodman-lab/CONFPASS,
-MIT, commit `1b5efb69585ea1f51bedccfed1d9d07133c18a53`) on 13 CREST
+MIT, commit `1b5efb69585ea1f51bedccfed1d9d07133c18a53`) on 14 CREST
 ensembles. The ported backend must reproduce `golden.json` on the SDF
 files in `inputs/`.
 
@@ -9,6 +9,7 @@ files in `inputs/`.
 
 - `inputs/*.sdf` — one file per case, written by the production adapter
   (`build_confpass_candidates`) from a stored `runs/cbt_*/crest_conformers.xyz`
+  (`amidino_alanine`: `runs/conformer_validation/cbs_01102`)
   parsed with `parse_crest_ensemble`. Records keep CREST's order.
 - `inputs.json` — per case: source run, SMILES perceived from the geometry
   (RDKit `DetermineBonds`, charge 0), atom and conformer counts, energy
@@ -26,7 +27,7 @@ poetry run python scripts/confpass_golden/build_inputs.py --runs runs --output t
 ```
 
 ```bash
-~/Estagio/confpass-original/.venv/bin/python scripts/confpass_golden/run_original.py --confpass-src ~/Estagio/confpass-original/src/confpass --fixtures tests/fixtures/confpass_golden
+PYTHONHASHSEED=0 ~/Estagio/confpass-original/.venv/bin/python scripts/confpass_golden/run_original.py --confpass-src ~/Estagio/confpass-original/src/confpass --fixtures tests/fixtures/confpass_golden
 ```
 
 `runs/` is not versioned, so the SDF inputs are the source of truth here;
@@ -51,6 +52,16 @@ model was not downloaded.
   `pipe_x_as`/`pipe_x`, `IndexError` for `pipe_as`). The port needs an
   explicit fallback instead.
 - **Dihedral column order depends on `PYTHONHASHSEED`** (built through
-  `set` iteration). Over 20 seeds the priority lists and clusters were
-  identical; only column order changed, so the columns are stored sorted.
-  `golden.json` is byte-identical across seeds.
+  `set` iteration). Over 20 seeds the priority lists and clusters of the
+  first 13 cases were identical; only column order changed, so the columns
+  are stored sorted, and those cases are byte-identical across seeds.
+- **Equivalent terminal hydrogens follow the seed.** `amidino_alanine`: the
+  NH2 dihedral end is taken from `set(neighbours) - {partner}`, so CONFPASS
+  picks H 11 or H 12 depending on `PYTHONHASHSEED` (H 11 in 13 of 20 seeds;
+  the priorities change from position 13 on). The port always takes the
+  lowest atom index; the golden file is generated with `PYTHONHASHSEED=0`,
+  which picks the same hydrogen.
+- **Stereo-defining hydrogen.** `amidino_alanine` also has an imine N-H.
+  Current RDKit keeps it when reading the molblock without hydrogens
+  (C=N stereo perceived from 3D); RDKit 2020.09.5 drops it. The port drops
+  it too, otherwise the heavy-atom naming runs out of names.

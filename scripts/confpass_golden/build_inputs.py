@@ -57,6 +57,8 @@ CASES: tuple[tuple[str, str], ...] = (
     ("glycerol", "cbt_013"),
     ("triacetin", "cbt_030"),
     ("heptanoic_acid", "cbt_006"),
+    # Imine N-H whose C=N stereo current RDKit keeps when removing hydrogens.
+    ("amidino_alanine", "conformer_validation/cbs_01102"),
 )
 
 ENSEMBLE_FILE = "crest_conformers.xyz"

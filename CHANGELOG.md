@@ -244,6 +244,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Preserved the existing `grimperium` and `grimperium-worker` entrypoints.
 
 ### Fixed
+- **CONFPASS port on imines with a stereo-defining N-H** (2026-10-05)
+  - `src/semi_imperium/conformers/confpass_port.py`: current RDKit keeps the
+    hydrogen that defines C=N stereo (perceived from 3D) when it reads the
+    molblock without hydrogens, so the heavy-atom naming ran out of names
+    and arms B/C of the conformer-validation pilot failed with `IndexError`
+    on `cbs_01102` (`[H]/N=C(/N)N[C@H](C)C(=O)O`). Those hydrogens are now
+    dropped as RDKit 2020.09.5 (the CONFPASS reference) drops them.
+  - `tests/fixtures/confpass_golden/`: new case `amidino_alanine` (that
+    molecule's 29-conformer CREST ensemble). The original CONFPASS picks the
+    NH2 dihedral hydrogen by `set` order, so its output follows
+    `PYTHONHASHSEED` (H 11 in 13 of 20 seeds); the golden file is now
+    generated with `PYTHONHASHSEED=0`, matching the port's lowest-index
+    choice. The 13 earlier cases are unchanged.
+  - Verification: `poetry run pytest tests/unit/semi_imperium/test_confpass_port.py -q`
+    (86 passed; 6 fail without the fix)
 - **ThermoCBS enthalpy units in the CHON cut** (2026-10-05)
   - `scripts/build_thermo_cbs_chon.py`: the source writes about 1% of
     `H298_cbs`/`H298_b3`/`cbs_b3` as plain integers in cal/mol (e.g.
