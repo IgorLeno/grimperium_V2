@@ -112,6 +112,11 @@ logs/
 *.csv.bak
 *.parquet
 !tests/fixtures/*.csv
+# Conformer-selection validation: only the sample list and the summary are
+# versioned; raw per-molecule results stay local.
+!reports/conformer_validation/sample.csv
+!reports/conformer_validation/summary.csv
+reports/conformer_validation/results.jsonl
 
 # PM7/MOPAC outputs
 *.mop

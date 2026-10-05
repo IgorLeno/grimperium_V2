@@ -8,6 +8,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Conformer-selection validation script** (2026-10-04)
+  - `scripts/conformer_validation/`: `sample` draws 200 closed-shell
+    molecules from `data/thermo_cbs_chon_v2.csv` (one per SMILES, reference
+    geometry must perceive to the SMILES, 6 nheavy x 5 strict rotatable-bond
+    strata, seed 20261004); `run` runs CREST once per molecule and arms
+    A (energy Top-10), B (CONFPASS port Top-10) and C (folding filter + B)
+    with PM7 `require_minimum`, appending one resumable JSON line per
+    (molecule, arm) with selection, folding descriptors, MOPAC outcome,
+    delta and symmetry-aware heavy-atom RMSD; `--dry-run`, `--limit`,
+    `--arms`, `--ensemble-dir`, `--retry-errors`; `summarize` writes
+    `summary.csv`/`report.md` and applies the spec section 5 decision rule.
+  - `.gitignore`: `reports/conformer_validation/sample.csv` and
+    `summary.csv` are versionable, `results.jsonl` stays local. The sample
+    list itself is not committed yet: 4 of the 200 drawn rows carry an
+    `H298_cbs` scaled by 1000 (252 such rows in the closed-shell population).
+  - `tests/unit/test_conformer_validation_*.py`: sampling, RMSD, arms on the
+    `crest_atom_order` fixtures, runner with a fake MOPAC (resume, isolated
+    errors, worker processes), summary and decision rule. No CREST/MOPAC run.
+  - Verification: `poetry run pytest tests/unit/test_conformer_validation_*.py -q`
+- **Subprocess CREST runner** (2026-10-04)
+  - `src/semi_imperium/conformers/crest_runner.py`: `SubprocessCrestRunner`
+    implements `CrestRunner` from `ConformerSearchSettings` (method, `--v3`,
+    `--nci`, quick mode, `--ewin`, `--rthr`, `--opt`, `--chrg`, `--uhf`,
+    `--T`), embeds the input with `RDKitInitialStructure` (SMILES `AddHs`
+    order), runs xTB pre-optimization when `preoptimizer="xtb"`, accepts only
+    `crest_conformers.xyz` (never `crest_best.xyz`) and records
+    `crest_run.json` so a finished run is reused; a stored run under other
+    settings or an unrecorded ensemble is refused. Not exported from
+    `conformers/__init__.py` and not wired into `ScientificCalculationExecutor`.
+  - `tests/unit/semi_imperium/test_crest_runner.py`: command, cache, timeout,
+    missing executable/ensemble, failed pre-optimization, adapter errors.
+  - Verification: `poetry run pytest tests/unit/semi_imperium/test_crest_runner.py -q`
 - **CREST atom-order preservation test** (2026-10-04)
   - `tests/fixtures/crest_atom_order/`: RDKit initial structure, CREST input
     and CREST ensemble of three stored runs (butanoic acid, glycerol, methyl
