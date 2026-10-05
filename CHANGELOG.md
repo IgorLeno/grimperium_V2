@@ -8,6 +8,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Conformer-validation sample** (2026-10-05)
+  - `reports/conformer_validation/sample.csv`: 200 molecules drawn with seed
+    20261004 from the unit-repaired `data/thermo_cbs_chon_v2.csv`
+    (sha256 `82272f19…`); population 26817 after excluding 9
+    `topology_mismatch` and 2 `disconnected_geometry` references.
 - **Conformer-selection validation script** (2026-10-04)
   - `scripts/conformer_validation/`: `sample` draws 200 closed-shell
     molecules from `data/thermo_cbs_chon_v2.csv` (one per SMILES, reference
@@ -20,9 +25,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     `--arms`, `--ensemble-dir`, `--retry-errors`; `summarize` writes
     `summary.csv`/`report.md` and applies the spec section 5 decision rule.
   - `.gitignore`: `reports/conformer_validation/sample.csv` and
-    `summary.csv` are versionable, `results.jsonl` stays local. The sample
-    list itself is not committed yet: 4 of the 200 drawn rows carry an
-    `H298_cbs` scaled by 1000 (252 such rows in the closed-shell population).
+    `summary.csv` are versionable, `results.jsonl` stays local.
   - `tests/unit/test_conformer_validation_*.py`: sampling, RMSD, arms on the
     `crest_atom_order` fixtures, runner with a fake MOPAC (resume, isolated
     errors, worker processes), summary and decision rule. No CREST/MOPAC run.
@@ -241,6 +244,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Preserved the existing `grimperium` and `grimperium-worker` entrypoints.
 
 ### Fixed
+- **ThermoCBS enthalpy units in the CHON cut** (2026-10-05)
+  - `scripts/build_thermo_cbs_chon.py`: the source writes about 1% of
+    `H298_cbs`/`H298_b3`/`cbs_b3` as plain integers in cal/mol (e.g.
+    `-79523` for 3-butenoic acid). Integer-formatted values are now divided
+    by 1000, recorded per row in `h298_unit_repair` and counted in the
+    manifest; the build fails unless `H298_cbs = H298_b3 + cbs_b3` holds for
+    every source row (it does after the repair, and failed for 1100+ rows
+    before).
+  - `data/thermo_cbs_chon_v2.csv` rebuilt (gitignored; previous file kept
+    locally as `thermo_cbs_chon_v2.pre-unit-repair.csv`): same 27760 rows,
+    262 `H298_cbs`, 264 `H298_b3`, 107 `cbs_b3` values repaired, 16
+    `conformer_rank_by_h298` changed; manifest updated. The folding
+    calibration only reads geometries and is unaffected.
+  - `tests/unit/test_build_thermo_cbs_chon.py`: repair, provenance column,
+    identity guard.
+  - Verification: `poetry run pytest tests/unit/test_build_thermo_cbs_chon.py -q`
 - **Legacy journal recovery and dead-letter durability** (2026-07-13)
   - Infer `OperationKind` on load for legacy journals without the field; ambiguous
     PREPARED lines are rejected instead of resumed as normal failure.

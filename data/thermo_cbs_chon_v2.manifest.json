@@ -1,10 +1,15 @@
 {
-  "created_at": "2026-10-04T02:29:18.357596+00:00",
+  "created_at": "2026-10-05T02:06:44.524989+00:00",
   "source": "/home/plasma-test/Estagio/chemperium-data/datasets/thermo_cbs.csv",
   "source_sha256": "bb3d918e424d342ed5b277876d17fb8d92630b02270a785045369212d47ebe76",
   "source_citation": "Dobbelaere et al., J. Cheminf. 16:99 (2024); Zenodo 10.5281/zenodo.11409710; CC-BY 4.0",
   "filter": "elements from xyz subset of {C,H,O,N}",
   "rows": 27760,
+  "h298_unit_repair": {
+    "H298_cbs": 262,
+    "H298_b3": 264,
+    "cbs_b3": 107
+  },
   "unique_smiles": 27335,
   "multiplicity": {
     "1": 27107,
@@ -23,6 +28,6 @@
     "S298": "cal/(mol K)",
     "cp_*": "cal/(mol K)"
   },
-  "units_note": "inferred from CH4/CH3OH sanity values; the source README does not state units",
-  "output_sha256": "20693a0d7c2b6c66052a263687124321f761888e4773fe2edf72e61a4831ffa8"
+  "units_note": "inferred from CH4/CH3OH sanity values; the source README does not state units. Integer-formatted enthalpies in the source are cal/mol and were divided by 1000 (see h298_unit_repair).",
+  "output_sha256": "82272f1909f376b9a0952e660d37964665fbcd197435c31909866fcd2e75d9d6"
 }
