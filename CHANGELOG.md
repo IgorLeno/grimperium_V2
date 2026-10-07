@@ -8,6 +8,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Per-molecule CBS × experimental comparison** (2026-10-07)
+  - `scripts/build_experimental_hf.py`: with `--cbs-csv`, also writes
+    `<output>_vs_cbs.csv`, one row per molecule matched by InChIKey
+    (`exp_id`, `mol_id`, `inchikey`, `smiles`, `nheavy`, `source`,
+    `H298_exp`, `uncertainty`, `H298_cbs`, `cbs_minus_exp`,
+    `conflict_flag`, `low_priority_only`, `validation_only`; lowest CBS
+    conformer, sorted by `exp_id`). Path and sha256 go into
+    `cbs_comparison` of the manifest. The manifest previously kept only
+    statistics and the 20 largest differences.
+  - `data/thermo_exp_hf_vs_cbs.csv`: 722 molecules against
+    `data/thermo_cbs_chon_v2.csv`. Regenerated with the same sources;
+    `data/thermo_exp_hf.csv` and `data/thermo_exp_hf_all_sources.csv` are
+    byte-identical, the manifest changes only in `created_at` and the two
+    new keys.
+  - Verification: `poetry run pytest tests/unit/test_build_experimental_hf.py -q`
 - **NIST WebBook validation values in the experimental ΔHf° table** (2026-10-07)
   - `scripts/fetch_nist_webbook.py`: resumable fetcher. One formula search
     per C-containing formula of the CBS reference and the experimental table
