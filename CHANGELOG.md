@@ -8,6 +8,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Dashboard web: scaffold local** (2026-10-07)
+  - `apps/dashboard/`: Vite 8, React 19, TypeScript 6 e Recharts 3 com proxy
+    `/api` para a API local, ESLint e Vitest. Inclui teste de montagem do React.
+  - `apps/dashboard/README.md`: explica a execução por HTTP; abrir
+    `index.html` via `file://` não executa os módulos do Vite.
+  - `.gitignore`: ignora `node_modules/` e `dist/` do dashboard.
+  - Verification: em `apps/dashboard`, `npm run lint`, `npm run typecheck`,
+    `npm run test` e `npm run build`.
 - **NIST WebBook validation values in the experimental ΔHf° table** (2026-10-07)
   - `scripts/fetch_nist_webbook.py`: resumable fetcher. One formula search
     per C-containing formula of the CBS reference and the experimental table

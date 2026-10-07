@@ -94,6 +94,10 @@ dmypy.json
 .DS_Store
 Thumbs.db
 
+# Local dashboard dependencies and build output
+apps/dashboard/node_modules/
+apps/dashboard/dist/
+
 # Project specific
 data/raw/
 data/processed/
