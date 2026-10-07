@@ -32,7 +32,7 @@ ATCT_ROW = (
     '<tr id="{rid} i{number} CAS{cas}"><td class="bkgName"><span class="Name"> '
     '<a href="species/?species_number={number}">{name}</a></span></td>'
     '<td class="bkgFormula&gt; &lt;span class=" formula"=""> '
-    '<button onclick="copyname(\'{name}\');" type="button">{formula}  (g) </button>'
+    '<button onclick="copyname(\'{name}\');" type="button">{formula}  ({label}) </button>'
     ' </td><td class="bkgImage"><span class="Name"><img class="lazy" '
     'data-original="images/{number}.png" alt="{smiles}"></span></td>'
     '<td class="bkgDHf0"><span class="DHf0">0.0</span></td>'
@@ -64,6 +64,7 @@ ATCT_ROWS = [
         "h298": "-100.0",
         "unc": "± 0.40",
         "phase": "0",
+        "label": "g",
     },
     {
         "rid": "s1_6n3_1c0",
@@ -75,6 +76,7 @@ ATCT_ROWS = [
         "h298": "150.0",
         "unc": "± 0.05",
         "phase": "0",
+        "label": "g",
     },
     {
         "rid": "s1_6_8n4_1_1c0",
@@ -86,6 +88,7 @@ ATCT_ROWS = [
         "h298": "-240.0",
         "unc": "± 0.10",
         "phase": "500",
+        "label": "cr,l",
     },
 ]
 
@@ -400,3 +403,19 @@ def test_rmg_zero_uncertainty_is_kept(tmp_path: Path) -> None:
     )
     values, _ = builder.read_rmg(directory)
     assert values[0].uncertainty_kj == 0.0
+
+
+@pytest.mark.parametrize(
+    ("formula", "atct_id", "expected"),
+    [
+        ("CH4  (g) ", "74-82-8*0", "g"),
+        ("CH3COOH  (g, syn) ", "64-19-7*1", "g_variant"),
+        ("CH2  (g, singlet) ", "2465-56-7*2", "g_variant"),
+        ("C6H6  (cr,l) ", "71-43-2*500", "condensed"),
+        ("NH2CH2COOH  (aq) ", "56-40-6*800", "condensed"),
+    ],
+)
+def test_atct_phase_from_formula_label(
+    formula: str, atct_id: str, expected: str
+) -> None:
+    assert builder.atct_phase(formula, atct_id) == expected

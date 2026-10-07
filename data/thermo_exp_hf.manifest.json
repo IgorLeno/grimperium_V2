@@ -1,5 +1,5 @@
 {
-  "created_at": "2026-10-07T03:16:13.832465+00:00",
+  "created_at": "2026-10-07T03:29:42.213865+00:00",
   "sources": {
     "atct": {
       "version": "1.222",
@@ -23,7 +23,8 @@
     },
     "rejected_values": {
       "elements": 4098,
-      "phase": 1650,
+      "phase": 744,
+      "gas_variant": 906,
       "open_shell": 278,
       "charged": 904,
       "unparsable_smiles": 45

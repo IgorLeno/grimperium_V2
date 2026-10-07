@@ -5,8 +5,11 @@ Sources, in selection priority:
 
 1. ATcT, Active Thermochemical Tables (Ruscic & Bross, Argonne), main table
    of a TN version saved as HTML. The SMILES of each species is read from
-   the ``alt`` text of its structure image; the phase from the ``*N``
-   suffix of the ATcT ID (``*0`` = gas). No explicit licence is stated on
+   the ``alt`` text of its structure image; the phase from the formula label
+   (``(g)``, ``(cr,l)``, ``(aq)``...). Gas species with an ATcT ID suffix
+   other than ``*0`` are conformer or spin-state variants (``g, syn``,
+   ``g, triplet``) and are rejected as ``gas_variant``; ``*0`` is the
+   reference state. No explicit licence is stated on
    the site, so the raw page stays out of git.
 2. RMG-database reference set (``input/reference_sets/main``, MIT header),
    one YAML per species with H298, uncertainty and the source tag
@@ -64,7 +67,9 @@ from rdkit.Chem.rdMolDescriptors import CalcMolFormula
 KJ_PER_KCAL = 4.184
 ALLOWED_ELEMENTS = frozenset({"C", "H", "N", "O"})
 CONFLICT_FLOOR_KCAL = 1.0
-GAS_PHASE_SUFFIX = "*0"
+GAS_REFERENCE_SUFFIX = "*0"
+#: Formula button text ends with the phase label, e.g. ``CH4  (g)``.
+ATCT_PHASE_LABEL = re.compile(r"\(([^()]*)\)\s*$")
 
 #: Lower rank wins. RMG values are ranked by the source they cite.
 SOURCE_RANK: dict[str, int] = {
@@ -250,6 +255,15 @@ class _AtctTableParser(HTMLParser):
             self._row[self._field] = self._row.get(self._field, "") + data
 
 
+def atct_phase(formula_text: str, atct_id: str) -> str:
+    """``g``, ``g_variant`` (non-reference gas form) or ``condensed``."""
+    match = ATCT_PHASE_LABEL.search(formula_text.strip())
+    label = match.group(1).strip() if match else ""
+    if not label.startswith("g"):
+        return "condensed"
+    return "g" if atct_id.endswith(GAS_REFERENCE_SUFFIX) else "g_variant"
+
+
 def atct_version(html: str) -> str:
     match = re.search(r"based on version\s+([\d.]+\w*)", html)
     return match.group(1) if match else "unknown"
@@ -285,7 +299,7 @@ def read_atct(path: Path) -> tuple[list[SourceValue], dict[str, Any]]:
                 raw_smiles=row.get("smiles", ""),
                 h298_kj=float(h298_text),
                 uncertainty_kj=parse_uncertainty(row.get("Uncert", "")),
-                phase="g" if atct_id.endswith(GAS_PHASE_SUFFIX) else "condensed",
+                phase=atct_phase(row.get("formula", ""), atct_id),
                 declared_charge=int(row["charge"]),
             )
         )
@@ -396,7 +410,8 @@ def long_table(values: Iterable[SourceValue]) -> tuple[pd.DataFrame, dict[str, i
     rejected: dict[str, int] = {}
     for value in values:
         if value.phase != "g":
-            rejected["phase"] = rejected.get("phase", 0) + 1
+            reason = "gas_variant" if value.phase == "g_variant" else "phase"
+            rejected[reason] = rejected.get(reason, 0) + 1
             continue
         if value.declared_charge not in (None, 0):
             rejected["charged"] = rejected.get("charged", 0) + 1
