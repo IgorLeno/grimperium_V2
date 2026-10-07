@@ -75,6 +75,7 @@ cli = ["rich", "questionary"]
 server = ["fastapi", "uvicorn", "pydantic-settings"]
 worker = ["httpx", "rich", "questionary"]
 distributed = ["fastapi", "uvicorn", "httpx", "pydantic-settings", "rich"]
+dashboard = ["fastapi", "uvicorn"]
 output = ["openpyxl"]
 
 [tool.poetry.scripts]
