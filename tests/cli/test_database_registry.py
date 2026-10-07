@@ -167,6 +167,61 @@ def test_migrates_legacy_data_registry_to_overlay(
     assert (data_dir / "databases_registry.json.bak").exists()
 
 
+def test_experimental_manifest_points_at_exp_table(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    data_dir = tmp_path / "data"
+    data_dir.mkdir()
+    pd.DataFrame({"smiles": ["C", "CCO"], "H298_exp": [-17.8, -56.1]}).to_csv(
+        data_dir / "thermo_exp_hf.csv", index=False
+    )
+    registry = _registry(tmp_path, monkeypatch)
+
+    exp = registry.get_by_id("official.nist_experimental")
+
+    assert exp is not None
+    assert exp.alias == "EXP"
+    assert exp.path == data_dir / "thermo_exp_hf.csv"
+    assert exp.status == "available"
+    assert exp.molecules == 2
+    assert exp.has_capability("reference_values")
+    assert not exp.has_capability("analysis_input")
+
+
+def test_legacy_exp_alias_migrates_to_official_override(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    data_dir = tmp_path / "data"
+    data_dir.mkdir()
+    (data_dir / "databases_registry.json").write_text(
+        json.dumps(
+            [
+                {
+                    "name": "Legacy EXP",
+                    "alias": "EXP",
+                    "csv_path": "legacy_exp.csv",
+                    "description": "legacy",
+                    "pipeline": "reference",
+                    "created_at": "2026-10-07",
+                    "properties": ["smiles"],
+                }
+            ]
+        ),
+        encoding="utf-8",
+    )
+    registry = _registry(tmp_path, monkeypatch)
+
+    entries = registry.load()
+    exp = registry.get_by_id("official.nist_experimental")
+
+    assert exp is not None
+    assert exp.name == "Legacy EXP"
+    assert exp.path == data_dir / "legacy_exp.csv"
+    assert all(entry.origin == "official" for entry in entries)
+
+
 def test_add_user_database_rejects_duplicate_alias(
     tmp_path: Path,
     monkeypatch,

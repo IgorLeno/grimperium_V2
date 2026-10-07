@@ -89,7 +89,7 @@ def test_menu_options_use_database_ids(tmp_path: Path, monkeypatch) -> None:
 
     db_options = [o for o in options if o.value.startswith("view_")]
     assert len(db_options) == 3
-    assert {o.label for o in db_options} == {"CBS", "PM7", "NIST"}
+    assert {o.label for o in db_options} == {"CBS", "PM7", "EXP"}
     assert {o.value for o in db_options} == {
         "view_official.cbs_chon",
         "view_official.crest_pm7",

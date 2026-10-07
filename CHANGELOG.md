@@ -8,6 +8,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Experimental ΔHf° database** (2026-10-07)
+  - `scripts/build_experimental_hf.py`: builds one gas-phase ΔHf°(298.15 K)
+    per InChIKey from ATcT TN 1.222 (main table saved as HTML; SMILES from
+    the structure image, charge from the row id, phase from the ATcT ID),
+    the RMG-database reference set (commit `6391cc4f`) and Bains et al.
+    2022 (Zenodo 4661783). Scope: C-containing CHON, neutral, closed-shell,
+    no isotopes. Selection: lowest-H298 species per source when isomers
+    collapse to one key, then source rank, then reported uncertainty;
+    Bains `Yaws`/`Stewart` lowest priority, `FILTER == 1` never selected.
+    Flags `conflict_flag`, `low_priority_only`, `stewart_reference` (PM6/PM7
+    parametrisation set) and `isomers_collapsed`. kJ/mol to kcal/mol with
+    4.184. Optional `--cbs-csv` writes CBS - experimental statistics into
+    the manifest.
+  - `data/thermo_exp_hf.csv` (1534 molecules), `data/thermo_exp_hf_all_sources.csv`
+    (3724 source values) and `data/thermo_exp_hf.manifest.json` (sha256,
+    citations, rules). Licence CC-BY-SA, inherited from Bains et al.; ATcT
+    values redistributed with citation. Raw sources stay in `data/raw/`.
+  - Overlap with `data/thermo_cbs_chon_v2.csv`: 516 molecules by InChIKey;
+    CBS - experimental bias +4.6 kcal/mol, growing with molecule size
+    (+3.5 against ATcT values alone).
+  - `src/grimperium/resources/databases/nist_experimental.json`: the
+    placeholder becomes "Experimental ΔHf" (alias `EXP`, path
+    `thermo_exp_hf.csv`, `readable` + `reference_values`); the id
+    `official.nist_experimental` is kept. Local overlays that already
+    override this entry keep showing the old name until
+    `reset_official_overrides` is applied.
+  - `tests/unit/test_build_experimental_hf.py`: parsing, screening,
+    selection, conflicts, isomer collapse and CBS comparison on synthetic
+    fixtures, no network.
+  - Verification: `poetry run pytest tests/unit/test_build_experimental_hf.py -q`
 - **Conformer-validation sample** (2026-10-05)
   - `reports/conformer_validation/sample.csv`: 200 molecules drawn with seed
     20261004 from the unit-repaired `data/thermo_cbs_chon_v2.csv`
