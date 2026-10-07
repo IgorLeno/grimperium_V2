@@ -58,6 +58,11 @@ NOT_FOUND_PAGE = HEAD + "<h1>Chemical Formula Not Found</h1></main></body></html
             (["C111", "U222", "C444"], "truncated"),
         ),
         (SINGLE_PAGE, (["C333"], "single")),
+        (
+            HEAD + '<span class="inchi-text">InChI=1S/CH4/h1H4</span>'
+            '<a href="/cgi/cbook.cgi?Str2File=C555">2d Mol file</a></main>',
+            (["C555"], "single"),
+        ),
         (NOT_FOUND_PAGE, ([], "not_found")),
         (HEAD + "</main>", ([], "unknown")),
     ],

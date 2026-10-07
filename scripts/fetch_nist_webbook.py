@@ -63,6 +63,8 @@ RESULT_ITEM = re.compile(
     r'<li><a href="/cgi/cbook\.cgi\?ID=([A-Za-z0-9]+)&amp;[^"]*">(?:(?!</a>).)*</a>'
     r"\s*\(((?:[^()<]|<sub>|</sub>)*)\)"
 )
+#: The 2D structure file link names the page's own compound.
+STRUCTURE_LINK = re.compile(r"[?&]Str2File=([A-Za-z0-9]+)")
 COMPOUND_LINK = re.compile(r"/cgi/cbook\.cgi\?ID=([A-Za-z0-9]+)&amp;Units=SI&amp;Mask=")
 NOT_FOUND = "Chemical Formula Not Found"
 FORMULA_SAFE = re.compile(r"^[A-Z][A-Za-z0-9]*$")
@@ -130,7 +132,10 @@ def compound_ids(page: str, formula: str | None = None) -> tuple[list[str], str]
         ]
         return list(dict.fromkeys(ids)), kind
     if 'class="inchi-text"' in page or "CAS Registry Number" in page:
-        # The page links its own other sections; isotopologue links are rare.
+        structure = STRUCTURE_LINK.search(page)
+        if structure:
+            return [structure.group(1)], "single"
+        # Else the page links its own other sections; isotopologues are rare.
         links = Counter(COMPOUND_LINK.findall(page))
         if links:
             return [links.most_common(1)[0][0]], "single"
