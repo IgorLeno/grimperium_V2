@@ -117,6 +117,10 @@ logs/
 !reports/conformer_validation/sample.csv
 !reports/conformer_validation/summary.csv
 reports/conformer_validation/results.jsonl
+# Experimental ΔHf table and its per-source long table are versioned with the
+# manifest; the raw source files under data/raw/ stay local.
+!data/thermo_exp_hf.csv
+!data/thermo_exp_hf_all_sources.csv
 
 # PM7/MOPAC outputs
 *.mop
