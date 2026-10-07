@@ -31,3 +31,7 @@ Rule: golden files for a port validated on an older library must cover every het
 [2026-10-05] Context: retrying failed pairs of the conformer-validation pilot
 Mistake: `run --limit 8 --retry-errors` planned 7 new molecules (new CREST runs) because `--limit` counts molecules with pending arms, not the first N of the sample.
 Rule: before any resume or retry of `scripts/conformer_validation run`, read the `--dry-run` plan (pairs and CREST count) and narrow with `--arms`/`--limit` until it matches exactly the intended pairs.
+
+[2026-10-07] Context: building the experimental ΔHf table from the ATcT main table
+Mistake: trusting the image `alt` SMILES as the structure selected the benzene cation (233 kcal/mol) as benzene, because ATcT ions often carry a neutral SMILES; the error only showed up as a 208 kcal/mol CBS outlier.
+Rule: when a source's display SMILES defines identity, cross-check charge (and formula) against the source's own metadata before screening, and inspect the largest outliers of any reference comparison before reporting statistics.
