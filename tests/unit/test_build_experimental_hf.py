@@ -419,3 +419,263 @@ def test_atct_phase_from_formula_label(
     formula: str, atct_id: str, expected: str
 ) -> None:
     assert builder.atct_phase(formula, atct_id) == expected
+
+
+# Synthetic values in the NIST WebBook compound-page layout (not NIST data).
+NIST_ONE_D_ROW = (
+    '<tr class="cal"><td style="text-align: left;">{quantity}</td>'
+    '<td class="right-nowrap">{value}</td><td style="text-align: right;">'
+    '{units}</td><td style="text-align: center;"><a href="#">{method}</a></td>'
+    '<td style="text-align: left;">Ref</td><td style="text-align: left;">x</td></tr>'
+)
+NIST_ONE_D_HEAD = (
+    '<table class="data" aria-label="One dimensional data"><tr>'
+    '<th scope="col">Quantity</th><th scope="col">Value</th>'
+    '<th scope="col">Units</th><th scope="col">Method</th>'
+    '<th scope="col">Reference</th><th scope="col">Comment</th></tr>'
+)
+NIST_T_TABLE = (
+    '<h3>Enthalpy of {what}</h3><table class="data" aria-label="Enthalpy of '
+    '{what}"><tr><th scope="col">&#916;<sub>{sub}</sub>H (kJ/mol)</th>'
+    '<th scope="col">Temperature (K)</th><th scope="col">Method</th>'
+    '<th scope="col">Reference</th><th scope="col">Comment</th></tr>{rows}</table>'
+)
+ETHANOL_INCHI = "InChI=1S/C2H6O/c1-2-3/h3H,2H2,1H3"
+ETHANOL_KEY = "LFQSCWFLJHTTHZ-UHFFFAOYSA-N"
+
+
+def _q(kind: str, phase: str = "") -> str:
+    """``ΔfH°gas`` or ``ΔvapH°`` as the WebBook writes them."""
+    if kind == "f":
+        return f"&#916;<sub>f</sub>H&deg;<sub>{phase}</sub>"
+    return f"&#916;<sub>{kind}</sub>H&deg;"
+
+
+def _nist_section(section: str, rows: list[tuple[str, str, str]]) -> str:
+    body = "".join(
+        NIST_ONE_D_ROW.format(quantity=q, value=v, units="kJ/mol", method=m)
+        for q, v, m in rows
+    )
+    return f'<h2 id="{section}">x</h2>{NIST_ONE_D_HEAD}{body}</table>'
+
+
+def _nist_page(
+    *,
+    formula: str = "C<sub>2</sub>H<sub>6</sub>O",
+    inchi: str = ETHANOL_INCHI,
+    inchikey: str = ETHANOL_KEY,
+    gas: list[tuple[str, str, str]] | None = None,
+    condensed: list[tuple[str, str, str]] | None = None,
+    phase: list[tuple[str, str, str]] | None = None,
+    vap_table: list[tuple[str, str]] | None = None,
+) -> str:
+    parts = [
+        "<html><body><h1>NIST Chemistry WebBook, SRD 69</h1>"
+        '<main id="main"><h1 id="Top">Ethanol</h1><ul>'
+        '<li><strong><a href="#">Formula</a>:</strong> ' + formula + "</li>"
+        '<li><strong><a href="#">Molecular weight</a>:</strong> 46.0684</li>'
+        '<li><div><strong>IUPAC Standard InChI:</strong> <span class="inchi-text">'
+        + inchi
+        + "</span></div></li>"
+        '<li><div><strong>IUPAC Standard InChIKey:</strong> <span class="inchi-text">'
+        + inchikey
+        + "</span></div></li></ul>"
+    ]
+    if gas is not None:
+        parts.append(_nist_section("Thermo-Gas", gas))
+    if condensed is not None:
+        parts.append(_nist_section("Thermo-Condensed", condensed))
+    if phase is not None or vap_table is not None:
+        parts.append(_nist_section("Thermo-Phase", phase or []))
+        if vap_table is not None:
+            rows = "".join(
+                f'<tr class="exp"><td class="right-nowrap">{v}</td>'
+                f'<td class="right-nowrap">{t}</td><td>N/A</td><td>Ref</td>'
+                "<td>&nbsp;</td></tr>"
+                for v, t in vap_table
+            )
+            parts.append(NIST_T_TABLE.format(what="vaporization", sub="vap", rows=rows))
+    parts.append(
+        '<h2 id="Notes">Notes</h2><table class="data"><tr><td>'
+        + _q("f", "gas")
+        + "</td><td>Enthalpy of formation of gas at standard conditions</td></tr>"
+        "</table></main></body></html>"
+    )
+    return "".join(parts)
+
+
+def _write_nist(tmp_path: Path, pages: dict[str, str]) -> Path:
+    import gzip
+
+    directory = tmp_path / "nist"
+    (directory / "compound").mkdir(parents=True)
+    for compound_id, page in pages.items():
+        with gzip.open(directory / "compound" / f"{compound_id}.html.gz", "wt") as fh:
+            fh.write(page)
+    (directory / "fetch_log.jsonl").write_text(
+        '{"url": "u", "status": 200, "time": "2026-10-07T01:00:00+00:00"}\n'
+        '{"url": "u", "status": 200, "time": "2026-10-08T02:00:00+00:00"}\n'
+    )
+    return directory
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("-234. ± 2.", (-234.0, 2.0)),
+        ("-323.6", (-323.6, None)),
+        ("95.5 ± 0.3", (95.5, 0.3)),
+    ],
+)
+def test_parse_nist_value(text: str, expected: tuple[float, float | None]) -> None:
+    assert builder.parse_nist_value(text) == expected
+
+
+def test_pick_nist_prefers_average_then_uncertainty_then_median() -> None:
+    average = builder.pick_nist([(-1.0, 0.1, "Ccb"), (-2.0, 2.0, "AVG")])
+    assert (average.value_kj, average.uncertainty_kj, average.n_rows) == (-2.0, 2.0, 2)
+    precise = builder.pick_nist(
+        [(-1.0, 0.5, "Ccb"), (-3.0, 0.2, "Ccb"), (-9.0, None, "N/A")]
+    )
+    assert precise.value_kj == -3.0
+    median = builder.pick_nist(
+        [(-5.0, None, "a"), (-1.0, None, "b"), (-3.0, None, "c")]
+    )
+    assert (median.value_kj, median.uncertainty_kj) == (-3.0, None)
+
+
+def test_parse_nist_page_reads_identity_and_average() -> None:
+    page = builder.parse_nist_page(
+        _nist_page(gas=[(_q("f", "gas"), "-200. &plusmn; 2.", "AVG")]), "C1"
+    )
+    assert page.name == "Ethanol"
+    assert page.formula == "C2H6O"
+    assert (page.inchi, page.inchikey) == (ETHANOL_INCHI, ETHANOL_KEY)
+    assert page.picks["gas"] == builder.NistPick(-200.0, 2.0, "AVG", 1)
+    assert set(page.picks) == {"gas"}  # the Notes symbol table is not data
+
+
+def test_nist_condensed_plus_vaporization_at_298() -> None:
+    html = _nist_page(
+        gas=[(_q("f", "gas"), "-200. &plusmn; 2.", "AVG")],
+        condensed=[(_q("f", "liquid"), "-240. &plusmn; 3.", "AVG")],
+        phase=[(_q("vap"), "41. &plusmn; 4.", "AVG")],
+    )
+    page = builder.parse_nist_page(html, "C1")
+    smiles, reason = builder.nist_smiles(page)
+    assert (smiles, reason) == ("CCO", "")
+
+    values = {v.source: v for v in builder.nist_values(page, smiles)}
+    assert set(values) == {"nist:gas", "nist:liquid+vap"}
+    derived = values["nist:liquid+vap"]
+    assert derived.h298_kj == pytest.approx(-199.0)
+    assert derived.uncertainty_kj == pytest.approx(5.0)
+    assert all(v.validation_only and v.phase == "g" for v in values.values())
+
+
+def test_nist_vaporization_off_298_is_ignored() -> None:
+    html = _nist_page(
+        condensed=[(_q("f", "liquid"), "-240. &plusmn; 3.", "AVG")],
+        vap_table=[("38.6", "351.5"), ("40.0", "326.")],
+    )
+    page = builder.parse_nist_page(html, "C1")
+    assert "vap" not in page.picks
+    assert page.off_298_rows == 2
+    assert builder.nist_values(page, "CCO") == []
+
+
+def test_nist_vaporization_table_row_at_298_is_used() -> None:
+    html = _nist_page(
+        condensed=[(_q("f", "liquid"), "-240.", "Ccb")],
+        vap_table=[("42.0", "298."), ("38.6", "351.5")],
+    )
+    page = builder.parse_nist_page(html, "C1")
+    (value,) = builder.nist_values(page, "CCO")
+    assert value.source == "nist:liquid+vap"
+    assert value.h298_kj == pytest.approx(-198.0)
+    assert value.uncertainty_kj is None
+
+
+def test_nist_compound_without_gas_or_route_gives_nothing(tmp_path: Path) -> None:
+    pages = {
+        "C1": _nist_page(condensed=[(_q("f", "liquid"), "-240.", "Ccb")]),
+        "C2": _nist_page(inchi="", inchikey=""),
+    }
+    values, info = builder.read_nist(_write_nist(tmp_path, pages))
+    assert values == []
+    assert info["identity_rejects"] == {"no_usable_value": 1, "no_inchi": 1}
+
+
+@pytest.mark.parametrize(
+    ("kwargs", "reason"),
+    [
+        ({"formula": "C<sub>2</sub>H<sub>4</sub>O"}, "formula_mismatch"),
+        ({"inchikey": "IKHGUXGNUITLKF-UHFFFAOYSA-N"}, "inchikey_mismatch"),
+        ({"inchi": "InChI=1S/garbage"}, "unparsable_inchi"),
+    ],
+)
+def test_nist_identity_must_match_page_metadata(
+    kwargs: dict[str, str], reason: str
+) -> None:
+    page = builder.parse_nist_page(_nist_page(**kwargs), "C1")
+    assert builder.nist_smiles(page) == (None, reason)
+
+
+def test_nist_ranks_below_trainable_sources_and_is_validation_only(
+    tmp_path: Path,
+) -> None:
+    ethanol = _nist_page(gas=[(_q("f", "gas"), "-229.5 &plusmn; 0.1", "AVG")])
+    propanol = _nist_page(
+        formula="C<sub>3</sub>H<sub>8</sub>O",
+        inchi="InChI=1S/C3H8O/c1-2-3-4/h4H,2-3H2,1H3",
+        inchikey="BDERNNFJNOPAEC-UHFFFAOYSA-N",
+        gas=[(_q("f", "gas"), "-250. &plusmn; 1.", "AVG")],
+    )
+    nist_dir = _write_nist(tmp_path, {"C64175": ethanol, "C71238": propanol})
+    bains = _write_bains(tmp_path, BAINS_ROWS)
+
+    table, long, info = builder.build(None, None, bains, nist_dir)
+    by_smiles = table.set_index("smiles")
+    # Bains Pedley (trainable) beats NIST; NIST beats the low-priority Yaws.
+    assert by_smiles.loc["CCO", "source"] == "bains:Pedley"
+    assert not by_smiles.loc["CCO", "validation_only"]
+    assert by_smiles.loc["CCCO", "source"] == "nist:gas"
+    assert bool(by_smiles.loc["CCCO", "validation_only"])
+    assert not by_smiles.loc["CCCO", "low_priority_only"]
+    assert long.loc[long["source"] == "nist:gas", "validation_only"].all()
+    assert info["nist"]["retrieved"] == ["2026-10-07", "2026-10-08"]
+    rank = builder.SOURCE_RANK
+    assert rank["bains:Winget"] < rank["nist:gas"] < rank["nist:liquid+vap"]
+
+
+def test_nist_ion_gas_value_is_lowest_priority_fallback() -> None:
+    mixed = _nist_page(
+        gas=[
+            (_q("f", "gas"), "-230. &plusmn; 9.", "Ion"),
+            (_q("f", "gas"), "-234. &plusmn; 2.", "Ccb"),
+        ]
+    )
+    page = builder.parse_nist_page(mixed, "C1")
+    assert set(page.picks) == {"gas"}
+    assert page.picks["gas"].value_kj == -234.0
+
+    ion_only = _nist_page(gas=[(_q("f", "gas"), "-230. &plusmn; 9.", "Ion")])
+    page = builder.parse_nist_page(ion_only, "C1")
+    (value,) = builder.nist_values(page, "CCO")
+    assert value.source == "nist:gas_ion"
+    assert builder.SOURCE_RANK["nist:gas_ion"] >= builder.LOW_PRIORITY_RANK
+
+
+def test_main_cites_nist_terms(tmp_path: Path) -> None:
+    gas_only = _nist_page(gas=[(_q("f", "gas"), "-229.5 &plusmn; 0.1", "AVG")])
+    output = tmp_path / "exp.csv"
+    argv = ["--nist-dir", str(_write_nist(tmp_path, {"C1": gas_only}))]
+    assert builder.main([*argv, "--output", str(output)]) == 0
+
+    manifest = json.loads(output.with_suffix(".manifest.json").read_text())
+    assert manifest["validation_only_rows"] == 1
+    assert any(
+        "Number 69" in c and "2026-10-07 to 2026-10-08" in c
+        for c in manifest["citations"]
+    )
+    assert "validation_only=True" in manifest["license_note"]
