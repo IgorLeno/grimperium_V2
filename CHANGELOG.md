@@ -28,6 +28,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Overlap with `data/thermo_cbs_chon_v2.csv`: 516 molecules by InChIKey;
     CBS - experimental bias +4.6 kcal/mol, growing with molecule size
     (+3.5 against ATcT values alone).
+  - `src/grimperium/resources/databases/nist_experimental.json`: the
+    placeholder becomes "Experimental ΔHf" (alias `EXP`, path
+    `thermo_exp_hf.csv`, `readable` + `reference_values`); the id
+    `official.nist_experimental` is kept. Local overlays that already
+    override this entry keep showing the old name until
+    `reset_official_overrides` is applied.
   - `tests/unit/test_build_experimental_hf.py`: parsing, screening,
     selection, conflicts, isomer collapse and CBS comparison on synthetic
     fixtures, no network.
