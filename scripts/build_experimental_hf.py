@@ -17,6 +17,14 @@ Sources, in selection priority:
 3. Bains, Petkowski, Zhan & Seager, Data 7:33 (2022), Zenodo
    10.5281/zenodo.4661783 (CC-BY-SA), ``Measured_Enthalpy_V2.7.xlsx``:
    one column per original compilation, in kJ/mol, no uncertainty.
+4. NIST Chemistry WebBook (SRD 69), compound pages cached by
+   ``fetch_nist_webbook.py``. Identity comes from the page InChI; the gas
+   value is the WebBook ``AVG`` row when listed. NIST values are
+   validation-only, so they rank below every trainable measured value
+   (after Bains ``Winget``): a NIST value is selected only when no
+   trainable measured source covers the molecule. Gas values from ion
+   energetics (method ``Ion``) are kept as ``nist:gas_ion`` with the lowest
+   priority.
 
 Why the rules below:
 
@@ -38,7 +46,24 @@ Why the rules below:
   selected;
 * a selected value conflicts with another source when they differ by more
   than ``max(2 * combined uncertainty, 1 kcal/mol)``; unknown uncertainty
-  counts as zero.
+  counts as zero;
+* NIST values are validation-only (the site states "All rights reserved"
+  and its robots.txt sets ``ai-train=no``): every NIST value, and every
+  selected row taken from NIST, carries ``validation_only=True``;
+* a NIST InChI must reproduce the page's own formula and InChIKey, so a
+  page whose structure and metadata disagree is rejected, not guessed;
+* NIST values without a reported uncertainty stay in the long table but are
+  never selected: they are mostly single old measurements, and the gross
+  errors seen against ATcT and CBS (ethanolamine, hexylamine) are all in
+  this group, where no second source can raise a conflict;
+* per NIST quantity one value is used: the WebBook ``AVG`` row, else the
+  lowest reported uncertainty, else the lower median; ``Ion`` gas rows only
+  when the page has no other gas value;
+* ``ΔfH°(gas) = ΔfH°(liquid) + ΔvapH°`` (or solid + ``ΔsubH°``) only with
+  transition enthalpies at 298.15 K: the ``°`` rows (standard conditions)
+  or table rows within 1 K of 298.15 K; other temperatures are ignored,
+  not extrapolated. The uncertainty is the quadrature sum, or unknown if
+  either part has none.
 
 Units: sources are in kJ/mol; outputs are kcal/mol (thermochemical calorie,
 ``KJ_PER_KCAL`` = 4.184, the same value as ``KCAL_TO_KJ`` in
@@ -87,8 +112,12 @@ SOURCE_RANK: dict[str, int] = {
     "bains:Jorgensen": 16,
     **{f"bains:Add Lit {i}": 17 for i in range(1, 6)},
     "bains:Winget": 18,
+    "nist:gas": 20,
+    "nist:liquid+vap": 21,
+    "nist:solid+sub": 21,
     "bains:Yaws": 90,
     "bains:Stewart": 91,
+    "nist:gas_ion": 92,
 }
 LOW_PRIORITY_RANK = 90
 UNRANKED = 50
@@ -111,7 +140,17 @@ CITATIONS = {
     "(github.com/ReactionMechanismGenerator/RMG-database)",
     "bains": "Bains, Petkowski, Zhan, Seager, Data 7:33 (2022); "
     "Zenodo 10.5281/zenodo.4661783 (CC-BY-SA)",
+    "nist": "Linstrom, P. J.; Mallard, W. G. (eds.) NIST Chemistry WebBook, "
+    "NIST Standard Reference Database Number 69, National Institute of "
+    "Standards and Technology, Gaithersburg MD, doi:10.18434/T4D303 "
+    "(retrieved {retrieved})",
 }
+NIST_TERMS = (
+    "NIST SRD 69 data: (c) U.S. Secretary of Commerce, all rights reserved; "
+    "webbook.nist.gov robots.txt sets Content-Signal ai-train=no. Every NIST "
+    "value carries validation_only=True and must not be used as an ML "
+    "training target; NIST rows are not covered by the CC-BY-SA licence."
+)
 
 
 @dataclass(frozen=True)
@@ -127,6 +166,8 @@ class SourceValue:
     phase: str
     selectable: bool = True
     declared_charge: int | None = None
+    #: NIST values: never to be used as ML training targets (site terms).
+    validation_only: bool = False
 
 
 @dataclass(frozen=True)
@@ -400,6 +441,313 @@ def read_bains(path: Path) -> tuple[list[SourceValue], dict[str, Any]]:
     return values, {"rows": data_rows, "filter_flagged_rows": filtered_rows}
 
 
+# --------------------------------------------------------------------- NIST
+
+
+@dataclass(frozen=True)
+class NistPick:
+    """The value chosen for one quantity of one NIST compound page."""
+
+    value_kj: float
+    uncertainty_kj: float | None
+    method: str
+    n_rows: int
+
+
+@dataclass(frozen=True)
+class NistPage:
+    compound_id: str
+    name: str
+    formula: str
+    inchi: str
+    inchikey: str
+    picks: dict[str, NistPick]
+    off_298_rows: int
+
+
+class _NistPageParser(HTMLParser):
+    """Collect identity fields and every data table of a WebBook page."""
+
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self.name = ""
+        self.inchi_texts: list[str] = []
+        self.li_texts: list[str] = []
+        self.tables: list[dict[str, Any]] = []
+        self._section = ""
+        self._in_title = False
+        self._in_inchi = False
+        self._li_stack: list[str] = []
+        self._cell: list[str] | None = None
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        attributes = {key: value or "" for key, value in attrs}
+        if tag == "h1" and attributes.get("id") == "Top":
+            self._in_title = True
+        elif tag == "h2":
+            self._section = attributes.get("id", "")
+        elif tag == "span" and attributes.get("class") == "inchi-text":
+            self._in_inchi = True
+            self.inchi_texts.append("")
+        elif tag == "li":
+            self._li_stack.append("")
+        elif tag == "table":
+            self.tables.append(
+                {
+                    "section": self._section,
+                    "label": attributes.get("aria-label", ""),
+                    "rows": [],
+                }
+            )
+        elif tag == "tr" and self.tables:
+            self.tables[-1]["rows"].append([])
+        elif tag in {"td", "th"} and self.tables and self.tables[-1]["rows"]:
+            self._cell = []
+            self.tables[-1]["rows"][-1].append(self._cell)
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag == "h1":
+            self._in_title = False
+        elif tag == "span":
+            self._in_inchi = False
+        elif tag == "li" and self._li_stack:
+            text = self._li_stack.pop()
+            self.li_texts.append(text)
+            if self._li_stack:
+                self._li_stack[-1] += text
+        elif tag in {"td", "th"}:
+            self._cell = None
+
+    def handle_data(self, data: str) -> None:
+        if self._in_title:
+            self.name += data
+        if self._in_inchi:
+            self.inchi_texts[-1] += data
+        if self._li_stack:
+            self._li_stack[-1] += data
+        if self._cell is not None:
+            self._cell.append(data)
+
+
+#: Quantity label (whitespace removed) of the one-dimensional data tables.
+NIST_QUANTITIES = {
+    "ΔfH°gas": "gas",
+    "ΔfH°liquid": "liquid",
+    "ΔfH°solid": "solid",
+    "ΔvapH°": "vap",
+    "ΔsubH°": "sub",
+}
+#: Header of the temperature-dependent tables, used only at 298.15 K.
+NIST_T_TABLES = {"ΔvapH(kJ/mol)": "vap", "ΔsubH(kJ/mol)": "sub"}
+NIST_T_TOLERANCE_K = 1.0
+NIST_ION_METHOD = "Ion"
+NIST_DERIVED = {
+    "nist:liquid+vap": ("liquid", "vap"),
+    "nist:solid+sub": ("solid", "sub"),
+}
+
+
+def parse_nist_value(text: str) -> tuple[float, float | None]:
+    """``-234. ± 2.`` -> (-234.0, 2.0); ``-323.6`` -> (-323.6, None)."""
+    value, _, uncertainty = text.partition("±")
+    return float(value), float(uncertainty) if uncertainty.strip() else None
+
+
+def pick_nist(rows: list[tuple[float, float | None, str]]) -> NistPick:
+    """NIST average if listed, else lowest reported uncertainty, else median.
+
+    The WebBook ``AVG`` row is its own average of the individual points.
+    Without it, the most precise value wins; with no uncertainty at all, the
+    lower median keeps one actual reported value.
+    """
+    averages = [row for row in rows if row[2] == "AVG"]
+    if averages:
+        value, uncertainty, method = averages[0]
+    else:
+        with_u = [row for row in rows if row[1] is not None]
+        if with_u:
+            value, uncertainty, method = min(with_u, key=lambda row: row[1] or 0.0)
+        else:
+            ordered = sorted(rows)
+            value, uncertainty, method = ordered[(len(ordered) - 1) // 2]
+    return NistPick(value, uncertainty, method, len(rows))
+
+
+def _cell_text(cell: list[str]) -> str:
+    return " ".join("".join(cell).split())
+
+
+def parse_nist_page(page: str, compound_id: str) -> NistPage:
+    parser = _NistPageParser()
+    parser.feed(page)
+    parser.close()
+
+    standard: dict[str, list[tuple[float, float | None, str]]] = {}
+    at_298: dict[str, list[tuple[float, float | None, str]]] = {}
+    off_298 = 0
+    for table in parser.tables:
+        rows = [[_cell_text(cell) for cell in row] for row in table["rows"]]
+        header = rows[0][0].replace(" ", "") if rows and rows[0] else ""
+        if header in NIST_T_TABLES:
+            quantity = NIST_T_TABLES[header]
+            for cells in rows[1:]:
+                try:
+                    value, temperature = float(cells[0]), float(cells[1])
+                except (IndexError, ValueError):
+                    continue
+                if abs(temperature - 298.15) <= NIST_T_TOLERANCE_K:
+                    at_298.setdefault(quantity, []).append((value, None, "T298"))
+                else:
+                    off_298 += 1
+            continue
+        for cells in rows:
+            if len(cells) < 4:
+                continue
+            kind = NIST_QUANTITIES.get(cells[0].replace(" ", ""))
+            if kind is None or cells[2] != "kJ/mol":
+                continue
+            try:
+                value, uncertainty = parse_nist_value(cells[1])
+            except ValueError:
+                continue
+            standard.setdefault(kind, []).append((value, uncertainty, cells[3]))
+
+    # Ion-energetics gas values are indirect (appearance energies, typical
+    # uncertainty 8-12 kJ/mol): used only when no other gas value exists.
+    gas_rows = standard.pop("gas", [])
+    direct = [row for row in gas_rows if row[2] != NIST_ION_METHOD]
+    if direct:
+        standard["gas"] = direct
+    elif gas_rows:
+        standard["gas_ion"] = gas_rows
+    picks = {kind: pick_nist(found) for kind, found in standard.items()}
+    for kind, found in at_298.items():
+        picks.setdefault(kind, pick_nist(found))
+
+    inchi = next((t.strip() for t in parser.inchi_texts if t.startswith("InChI=")), "")
+    inchikey = next(
+        (t.strip() for t in parser.inchi_texts if not t.startswith("InChI=")), ""
+    )
+    formula = next(
+        (
+            "".join(text.split(":", 1)[1].split())
+            for text in parser.li_texts
+            if text.strip().startswith("Formula:")
+        ),
+        "",
+    )
+    return NistPage(
+        compound_id=compound_id,
+        name=" ".join(parser.name.split()),
+        formula=formula,
+        inchi=inchi,
+        inchikey=inchikey,
+        picks=picks,
+        off_298_rows=off_298,
+    )
+
+
+def nist_smiles(page: NistPage) -> tuple[str | None, str]:
+    """SMILES of the page InChI after checking it against the page's own data.
+
+    The InChI defines the identity; its formula must equal the listed
+    formula and the InChIKey of the SMILES round trip must equal the listed
+    InChIKey, so a wrong structure cannot pass silently.
+    """
+    if not page.inchi:
+        return None, "no_inchi"
+    mol = Chem.MolFromInchi(page.inchi)  # type: ignore[no-untyped-call]
+    if mol is None:
+        return None, "unparsable_inchi"
+    if CalcMolFormula(mol) != page.formula:
+        return None, "formula_mismatch"
+    smiles = Chem.MolToSmiles(mol)
+    roundtrip = Chem.MolFromSmiles(smiles)
+    expected = page.inchikey or str(
+        Chem.InchiToInchiKey(page.inchi)  # type: ignore[no-untyped-call]
+    )
+    if roundtrip is None or inchikey_of(roundtrip) != expected:
+        return None, "inchikey_mismatch"
+    return smiles, ""
+
+
+def nist_values(page: NistPage, smiles: str) -> list[SourceValue]:
+    """Measured gas value and condensed + vaporization/sublimation routes."""
+
+    def value(source: str, h298_kj: float, uncertainty_kj: float | None) -> SourceValue:
+        return SourceValue(
+            source=source,
+            source_id=page.compound_id,
+            name=page.name,
+            raw_smiles=smiles,
+            h298_kj=h298_kj,
+            uncertainty_kj=uncertainty_kj,
+            phase="g",
+            selectable=uncertainty_kj is not None,
+            validation_only=True,
+        )
+
+    values: list[SourceValue] = []
+    for kind in ("gas", "gas_ion"):
+        gas = page.picks.get(kind)
+        if gas is not None:
+            values.append(value(f"nist:{kind}", gas.value_kj, gas.uncertainty_kj))
+    for source, (condensed, transition) in NIST_DERIVED.items():
+        first, second = page.picks.get(condensed), page.picks.get(transition)
+        if first is None or second is None:
+            continue
+        uncertainty = (
+            math.hypot(first.uncertainty_kj, second.uncertainty_kj)
+            if first.uncertainty_kj is not None and second.uncertainty_kj is not None
+            else None
+        )
+        values.append(value(source, first.value_kj + second.value_kj, uncertainty))
+    return values
+
+
+def _fetch_dates(directory: Path) -> list[str]:
+    log = directory / "fetch_log.jsonl"
+    if not log.is_file():
+        return []
+    with log.open(encoding="utf-8") as handle:
+        times = sorted(str(json.loads(line).get("time", ""))[:10] for line in handle)
+    times = [t for t in times if t]
+    return [times[0], times[-1]] if times else []
+
+
+def read_nist(directory: Path) -> tuple[list[SourceValue], dict[str, Any]]:
+    """Compound pages cached by ``fetch_nist_webbook.py`` (gzip HTML)."""
+    import gzip
+
+    files = sorted((directory / "compound").glob("*.html.gz"))
+    values: list[SourceValue] = []
+    rejected: dict[str, int] = {}
+    off_298 = 0
+    for path in files:
+        with gzip.open(path, "rt", encoding="utf-8") as handle:
+            page = parse_nist_page(handle.read(), path.name.removesuffix(".html.gz"))
+        off_298 += page.off_298_rows
+        smiles, reason = nist_smiles(page)
+        if smiles is None:
+            rejected[reason] = rejected.get(reason, 0) + 1
+            continue
+        found = nist_values(page, smiles)
+        if not found:
+            rejected["no_usable_value"] = rejected.get("no_usable_value", 0) + 1
+        values.extend(found)
+    info = {
+        "compound_pages": len(files),
+        "identity_rejects": rejected,
+        "transition_rows_off_298_ignored": off_298,
+        "retrieved": _fetch_dates(directory),
+        "values_by_route": {
+            source: sum(v.source == source for v in values)
+            for source in ("nist:gas", "nist:gas_ion", *NIST_DERIVED)
+        },
+    }
+    return values, info
+
+
 # ---------------------------------------------------------------- selection
 
 
@@ -436,6 +784,7 @@ def long_table(values: Iterable[SourceValue]) -> tuple[pd.DataFrame, dict[str, i
                     kj_to_kcal(uncertainty) if uncertainty is not None else math.nan
                 ),
                 "selectable": value.selectable,
+                "validation_only": value.validation_only,
             }
         )
     return pd.DataFrame.from_records(records), rejected
@@ -507,6 +856,7 @@ def select(long: pd.DataFrame) -> pd.DataFrame:
                     (candidates["source_rank"] >= LOW_PRIORITY_RANK).all()
                 ),
                 "stewart_reference": bool((group["source"] == "bains:Stewart").any()),
+                "validation_only": bool(chosen["validation_only"]),
             }
         )
     table = pd.DataFrame.from_records(rows)
@@ -594,7 +944,10 @@ def compare_with_cbs(table: pd.DataFrame, cbs_csv: Path) -> dict[str, Any]:
 
 
 def build(
-    atct_html: Path | None, rmg_dir: Path | None, bains_xlsx: Path | None
+    atct_html: Path | None,
+    rmg_dir: Path | None,
+    bains_xlsx: Path | None,
+    nist_dir: Path | None = None,
 ) -> tuple[pd.DataFrame, pd.DataFrame, dict[str, Any]]:
     values: list[SourceValue] = []
     info: dict[str, Any] = {}
@@ -602,6 +955,7 @@ def build(
         ("atct", atct_html, read_atct),
         ("rmg", rmg_dir, read_rmg),
         ("bains", bains_xlsx, read_bains),
+        ("nist", nist_dir, read_nist),
     )
     for name, path, reader in readers:
         if path is None:
@@ -630,6 +984,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--rmg-dir", type=Path, default=None)
     parser.add_argument("--rmg-commit", default="unknown")
     parser.add_argument("--bains-xlsx", type=Path, default=None)
+    parser.add_argument("--nist-dir", type=Path, default=None, help="fetch cache")
     parser.add_argument("--cbs-csv", type=Path, default=None)
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args(argv)
@@ -642,7 +997,9 @@ def main(argv: list[str] | None = None) -> int:
             return 1
 
     RDLogger.DisableLog("rdApp.*")  # type: ignore[attr-defined]
-    table, long, info = build(args.atct_html, args.rmg_dir, args.bains_xlsx)
+    table, long, info = build(
+        args.atct_html, args.rmg_dir, args.bains_xlsx, args.nist_dir
+    )
     if "atct" in info and args.atct_version:
         info["atct"]["version"] = args.atct_version
 
@@ -659,6 +1016,9 @@ def main(argv: list[str] | None = None) -> int:
         citations.append(CITATIONS["rmg"].format(commit=args.rmg_commit))
     if "bains" in info:
         citations.append(CITATIONS["bains"])
+    if "nist" in info:
+        retrieved = " to ".join(info["nist"]["retrieved"]) or "unknown date"
+        citations.append(CITATIONS["nist"].format(retrieved=retrieved))
 
     manifest: dict[str, Any] = {
         "created_at": datetime.now(timezone.utc).isoformat(),
@@ -670,12 +1030,15 @@ def main(argv: list[str] | None = None) -> int:
             else "see citations"
         ),
         "license_note": "ATcT states no explicit licence; its values are "
-        "redistributed with citation. RMG-database carries an MIT header.",
+        "redistributed with citation. RMG-database carries an MIT header."
+        + (" " + NIST_TERMS if "nist" in info else ""),
         "filter": "contains C; elements subset of {C,H,N,O}; no isotopes; "
         "formal charge 0; no radical electrons; gas phase",
         "selection": "per InChIKey: within one source keep the lowest H298 "
         "species (stereo/tautomer collapse), then lowest source_rank, then "
-        "lowest reported uncertainty; Bains FILTER==1 never selected",
+        "lowest reported uncertainty; Bains FILTER==1 never selected; "
+        "NIST values without reported uncertainty never selected; "
+        "validation_only follows the selected value (True for NIST)",
         "source_rank": SOURCE_RANK,
         "conflict_rule": "|dH| > max(2*hypot(u1,u2), "
         f"{CONFLICT_FLOOR_KCAL} kcal/mol), unknown u = 0",
@@ -691,6 +1054,7 @@ def main(argv: list[str] | None = None) -> int:
         "conflict_rows": int(table["conflict_flag"].sum()),
         "low_priority_only_rows": int(table["low_priority_only"].sum()),
         "stewart_reference_rows": int(table["stewart_reference"].sum()),
+        "validation_only_rows": int(table["validation_only"].sum()),
         "isomers_collapsed_rows": int((table["isomers_collapsed"] > 0).sum()),
         "skeleton_duplicates": int(table["inchikey"].str[:14].duplicated().sum()),
         "nheavy": table["nheavy"].value_counts().sort_index().to_dict(),
