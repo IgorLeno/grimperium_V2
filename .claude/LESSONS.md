@@ -35,3 +35,7 @@ Rule: before any resume or retry of `scripts/conformer_validation run`, read the
 [2026-10-07] Context: building the experimental ΔHf table from the ATcT main table
 Mistake: trusting the image `alt` SMILES as the structure selected the benzene cation (233 kcal/mol) as benzene, because ATcT ions often carry a neutral SMILES; the error only showed up as a 208 kcal/mol CBS outlier.
 Rule: when a source's display SMILES defines identity, cross-check charge (and formula) against the source's own metadata before screening, and inspect the largest outliers of any reference comparison before reporting statistics.
+
+[2026-10-07] Context: NIST WebBook fetcher, search pages parsed by regex after a 10-formula pilot
+Mistake: the pilot passed, but the full run hit result names with markup (`<sup>`) and single-species pages without section links; species were skipped silently as "truncated"/"unknown".
+Rule: a scraper must count every page kind it classifies and treat any non-expected kind as a failure to inspect; re-run the parser over the whole cache (offline) after the fetch, before building on it.
