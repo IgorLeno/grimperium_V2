@@ -1,5 +1,5 @@
 {
-  "created_at": "2026-10-07T03:29:42.213865+00:00",
+  "created_at": "2026-10-07T13:34:47.945710+00:00",
   "sources": {
     "atct": {
       "version": "1.222",
@@ -21,11 +21,33 @@
       "values": 6836,
       "sha256": "b506c18f8a0ca6ab48050dddf26822763b3ab50472e1b8f0ac6fb0af632327f8"
     },
+    "nist": {
+      "compound_pages": 2936,
+      "identity_rejects": {
+        "no_usable_value": 1143,
+        "formula_mismatch": 27,
+        "no_inchi": 114,
+        "inchikey_mismatch": 4
+      },
+      "transition_rows_off_298_ignored": 3523,
+      "retrieved": [
+        "2026-10-07",
+        "2026-10-07"
+      ],
+      "values_by_route": {
+        "nist:gas": 1472,
+        "nist:gas_ion": 36,
+        "nist:liquid+vap": 862,
+        "nist:solid+sub": 432
+      },
+      "path": "data/raw/nist_webbook",
+      "values": 2802
+    },
     "rejected_values": {
       "elements": 4098,
       "phase": 744,
       "gas_variant": 906,
-      "open_shell": 278,
+      "open_shell": 279,
       "charged": 904,
       "unparsable_smiles": 45
     }
@@ -33,12 +55,13 @@
   "citations": [
     "Ruscic, B.; Bross, D. H. Active Thermochemical Tables (ATcT) values based on ver. 1.222 of the Thermochemical Network, Argonne National Laboratory (atct.anl.gov)",
     "RMG-database input/reference_sets/main, commit 6391cc4f75341803605d9ad17417e14cf2db1f59 (github.com/ReactionMechanismGenerator/RMG-database)",
-    "Bains, Petkowski, Zhan, Seager, Data 7:33 (2022); Zenodo 10.5281/zenodo.4661783 (CC-BY-SA)"
+    "Bains, Petkowski, Zhan, Seager, Data 7:33 (2022); Zenodo 10.5281/zenodo.4661783 (CC-BY-SA)",
+    "Linstrom, P. J.; Mallard, W. G. (eds.) NIST Chemistry WebBook, NIST Standard Reference Database Number 69, National Institute of Standards and Technology, Gaithersburg MD, doi:10.18434/T4D303 (retrieved 2026-10-07 to 2026-10-07)"
   ],
   "license": "CC-BY-SA (share-alike inherited from Bains et al. 2022)",
-  "license_note": "ATcT states no explicit licence; its values are redistributed with citation. RMG-database carries an MIT header.",
+  "license_note": "ATcT states no explicit licence; its values are redistributed with citation. RMG-database carries an MIT header. NIST SRD 69 data: (c) U.S. Secretary of Commerce, all rights reserved; webbook.nist.gov robots.txt sets Content-Signal ai-train=no. Every NIST value carries validation_only=True and must not be used as an ML training target; NIST rows are not covered by the CC-BY-SA licence.",
   "filter": "contains C; elements subset of {C,H,N,O}; no isotopes; formal charge 0; no radical electrons; gas phase",
-  "selection": "per InChIKey: within one source keep the lowest H298 species (stereo/tautomer collapse), then lowest source_rank, then lowest reported uncertainty; Bains FILTER==1 never selected",
+  "selection": "per InChIKey: within one source keep the lowest H298 species (stereo/tautomer collapse), then lowest source_rank, then lowest reported uncertainty; Bains FILTER==1 never selected; NIST values without reported uncertainty never selected; validation_only follows the selected value (True for NIST)",
   "source_rank": {
     "atct": 0,
     "rmg:ATcT": 1,
@@ -66,8 +89,12 @@
     "bains:Add Lit 4": 17,
     "bains:Add Lit 5": 17,
     "bains:Winget": 18,
+    "nist:gas": 20,
+    "nist:liquid+vap": 21,
+    "nist:solid+sub": 21,
     "bains:Yaws": 90,
-    "bains:Stewart": 91
+    "bains:Stewart": 91,
+    "nist:gas_ion": 92
   },
   "conflict_rule": "|dH| > max(2*hypot(u1,u2), 1.0 kcal/mol), unknown u = 0",
   "units": {
@@ -76,61 +103,69 @@
     "source_spread": "kcal/mol"
   },
   "kj_per_kcal": 4.184,
-  "rows": 1534,
-  "long_rows": 3724,
+  "rows": 2170,
+  "long_rows": 6525,
   "selected_by_source": {
+    "nist:gas": 600,
     "bains:Pedley": 528,
-    "bains:Yaws": 514,
+    "bains:Yaws": 481,
     "atct": 266,
     "rmg:CCCBDB": 58,
     "bains:NIST-1": 51,
     "bains:Cioslowski": 50,
+    "nist:liquid+vap": 34,
+    "nist:solid+sub": 28,
     "bains:Cox-1": 23,
     "bains:Add Lit 1": 21,
     "bains:Winget": 18,
+    "nist:gas_ion": 7,
     "bains:Sandler": 2,
     "rmg:ATcT": 2,
     "rmg:Cioslowski": 1
   },
-  "conflict_rows": 173,
-  "low_priority_only_rows": 514,
-  "stewart_reference_rows": 130,
-  "isomers_collapsed_rows": 5,
-  "skeleton_duplicates": 6,
+  "conflict_rows": 295,
+  "low_priority_only_rows": 488,
+  "stewart_reference_rows": 131,
+  "validation_only_rows": 669,
+  "isomers_collapsed_rows": 16,
+  "skeleton_duplicates": 67,
   "nheavy": {
     "1": 1,
     "2": 10,
     "3": 46,
     "4": 89,
-    "5": 128,
-    "6": 201,
-    "7": 195,
-    "8": 235,
-    "9": 191,
-    "10": 320,
-    "11": 62,
-    "12": 33,
-    "13": 4,
-    "14": 10,
-    "15": 2,
-    "16": 4,
-    "18": 2,
+    "5": 136,
+    "6": 222,
+    "7": 265,
+    "8": 319,
+    "9": 306,
+    "10": 431,
+    "11": 152,
+    "12": 71,
+    "13": 33,
+    "14": 34,
+    "15": 11,
+    "16": 19,
+    "17": 4,
+    "18": 11,
+    "19": 4,
+    "20": 5,
     "21": 1
   },
-  "output_sha256": "14be496d8284c3130141f363fbcabd1b5da2be6b08faa5c541ba587b472bfcc4",
-  "all_sources_sha256": "fb56a4fba578f9c38915c00b28d13e185773fe19dad2dbf8fb8c9ea748ad0133",
+  "output_sha256": "56686e0ef0eb369e023c1fb1889865119e5f6874bc0386a7e9dec0746ae10dc1",
+  "all_sources_sha256": "6860d30430b2265a8400faf20bbe16dc819fc621fcde4e1aad89fd50ef2f28e2",
   "cbs_comparison": {
     "cbs_csv": "data/thermo_cbs_chon_v2.csv",
     "cbs_sha256": "82272f1909f376b9a0952e660d37964665fbcd197435c31909866fcd2e75d9d6",
-    "overlap_inchikey": 516,
-    "overlap_skeleton_only": 138,
+    "overlap_inchikey": 722,
+    "overlap_skeleton_only": 178,
     "units": "kcal/mol, CBS - experimental",
     "all": {
-      "n": 516,
-      "mae": 5.050582543650968,
-      "bias": 4.647375819104153,
-      "rmse": 5.980911143947476,
-      "max_abs": 33.430402810707456
+      "n": 722,
+      "mae": 5.329691381678256,
+      "bias": 4.862606575027938,
+      "rmse": 6.306823779066886,
+      "max_abs": 30.286540000000002
     },
     "by_source_family": {
       "atct": {
@@ -141,11 +176,18 @@
         "max_abs": 9.038664206500954
       },
       "bains": {
-        "n": 412,
-        "mae": 5.4025089830421935,
-        "bias": 4.951608499554473,
-        "rmse": 6.336528984779281,
-        "max_abs": 33.430402810707456
+        "n": 388,
+        "mae": 5.326544852309237,
+        "bias": 4.863637223541817,
+        "rmse": 6.1224406827274604,
+        "max_abs": 30.286540000000002
+      },
+      "nist": {
+        "n": 230,
+        "mae": 6.091612536370437,
+        "bias": 5.503162972150634,
+        "rmse": 7.30064306126966,
+        "max_abs": 24.30743575525814
       },
       "rmg": {
         "n": 29,
@@ -156,25 +198,15 @@
       }
     },
     "excluding_conflicts_and_low_priority": {
-      "n": 310,
-      "mae": 4.987151935977301,
-      "bias": 4.574777070128907,
-      "rmse": 5.8522334657292605,
+      "n": 484,
+      "mae": 5.388457277783923,
+      "bias": 4.956308195802979,
+      "rmse": 6.379051502831127,
       "max_abs": 30.286540000000002
     },
     "outliers_top20": [
       {
-        "exp_id": "exp_01227",
-        "mol_id": "cbs_46622",
-        "smiles": "ON=C1CCCCC1",
-        "source": "bains:Yaws",
-        "H298_exp": -46.367,
-        "H298_cbs": -12.937,
-        "cbs_minus_exp": 33.43,
-        "conflict_flag": false
-      },
-      {
-        "exp_id": "exp_00960",
+        "exp_id": "exp_01372",
         "mol_id": "cbs_47240",
         "smiles": "Cc1cc(C)[n+]([O-])c(C)c1",
         "source": "bains:Cioslowski",
@@ -184,17 +216,117 @@
         "conflict_flag": false
       },
       {
-        "exp_id": "exp_01460",
+        "exp_id": "exp_02102",
+        "mol_id": "cbs_42472",
+        "smiles": "Oc1nc(O)nc(O)n1",
+        "source": "nist:gas",
+        "H298_exp": -134.823,
+        "H298_cbs": -110.516,
+        "cbs_minus_exp": 24.307,
+        "conflict_flag": true
+      },
+      {
+        "exp_id": "exp_01634",
+        "mol_id": "cbs_05115",
+        "smiles": "O=C1CCCCCCCCC1",
+        "source": "nist:gas",
+        "H298_exp": -72.921,
+        "H298_cbs": -52.876,
+        "cbs_minus_exp": 20.044,
+        "conflict_flag": false
+      },
+      {
+        "exp_id": "exp_00189",
+        "mol_id": "cbs_30406",
+        "smiles": "CCCCCCCCCCCCCCCCCCCC",
+        "source": "nist:gas",
+        "H298_exp": -108.939,
+        "H298_cbs": -90.066,
+        "cbs_minus_exp": 18.873,
+        "conflict_flag": false
+      },
+      {
+        "exp_id": "exp_00987",
+        "mol_id": "cbs_30501",
+        "smiles": "CCCCCCCCCCCCCCCCCCC",
+        "source": "nist:gas",
+        "H298_exp": -103.991,
+        "H298_cbs": -85.528,
+        "cbs_minus_exp": 18.463,
+        "conflict_flag": false
+      },
+      {
+        "exp_id": "exp_01552",
+        "mol_id": "cbs_30482",
+        "smiles": "CCCCCCCCCCCCCCCCCC",
+        "source": "nist:gas",
+        "H298_exp": -99.092,
+        "H298_cbs": -82.399,
+        "cbs_minus_exp": 16.693,
+        "conflict_flag": false
+      },
+      {
+        "exp_id": "exp_01099",
+        "mol_id": "cbs_30393",
+        "smiles": "CCCCCCCCCCCCCCCCC",
+        "source": "nist:gas",
+        "H298_exp": -94.144,
+        "H298_cbs": -78.121,
+        "cbs_minus_exp": 16.024,
+        "conflict_flag": false
+      },
+      {
+        "exp_id": "exp_00277",
+        "mol_id": "cbs_30323",
+        "smiles": "CCCCCCCCCCCCCCCC",
+        "source": "nist:liquid+vap",
+        "H298_exp": -89.627,
+        "H298_cbs": -73.991,
+        "cbs_minus_exp": 15.637,
+        "conflict_flag": false
+      },
+      {
+        "exp_id": "exp_00508",
+        "mol_id": "cbs_30424",
+        "smiles": "C=CCCCCCCCCCCCCCC",
+        "source": "nist:gas",
+        "H298_exp": -59.369,
+        "H298_cbs": -43.963,
+        "cbs_minus_exp": 15.406,
+        "conflict_flag": false
+      },
+      {
+        "exp_id": "exp_00720",
+        "mol_id": "cbs_30317",
+        "smiles": "CCCCCCCCCCCCCCCC(=O)O",
+        "source": "nist:gas",
+        "H298_exp": -174.474,
+        "H298_cbs": -159.433,
+        "cbs_minus_exp": 15.041,
+        "conflict_flag": false
+      },
+      {
+        "exp_id": "exp_02014",
+        "mol_id": "cbs_30469",
+        "smiles": "CCCCCCCCCCCCCCC",
+        "source": "nist:gas",
+        "H298_exp": -84.799,
+        "H298_cbs": -69.765,
+        "cbs_minus_exp": 15.034,
+        "conflict_flag": false
+      },
+      {
+        "exp_id": "exp_02056",
         "mol_id": "cbs_47811",
         "smiles": "CC(C)c1ccc(O)cc1",
         "source": "bains:Pedley",
         "H298_exp": -50.048,
         "H298_cbs": -35.087,
         "cbs_minus_exp": 14.961,
-        "conflict_flag": false
+        "conflict_flag": true
       },
       {
-        "exp_id": "exp_00417",
+        "exp_id": "exp_00614",
         "mol_id": "cbs_14954",
         "smiles": "C=CC(N)=O",
         "source": "bains:NIST-1",
@@ -204,7 +336,17 @@
         "conflict_flag": true
       },
       {
-        "exp_id": "exp_01387",
+        "exp_id": "exp_01251",
+        "mol_id": "cbs_52542",
+        "smiles": "C=C1C=CC=CC1",
+        "source": "nist:gas_ion",
+        "H298_exp": 35.851,
+        "H298_cbs": 50.649,
+        "cbs_minus_exp": 14.798,
+        "conflict_flag": false
+      },
+      {
+        "exp_id": "exp_01959",
         "mol_id": "cbs_48319",
         "smiles": "CC(C)CN(CC(C)C)N=O",
         "source": "bains:Pedley",
@@ -214,7 +356,7 @@
         "conflict_flag": false
       },
       {
-        "exp_id": "exp_01362",
+        "exp_id": "exp_01928",
         "mol_id": "cbs_06657",
         "smiles": "CCC#CC(=O)OCC",
         "source": "bains:Pedley",
@@ -224,7 +366,7 @@
         "conflict_flag": false
       },
       {
-        "exp_id": "exp_00766",
+        "exp_id": "exp_01101",
         "mol_id": "cbs_09602",
         "smiles": "C[C@@H]1CCCC[C@H]1O",
         "source": "bains:Cox-1",
@@ -234,7 +376,17 @@
         "conflict_flag": false
       },
       {
-        "exp_id": "exp_00043",
+        "exp_id": "exp_02073",
+        "mol_id": "cbs_05741",
+        "smiles": "CCCCC(=O)CCC",
+        "source": "nist:gas",
+        "H298_exp": -83.485,
+        "H298_cbs": -69.566,
+        "cbs_minus_exp": 13.918,
+        "conflict_flag": false
+      },
+      {
+        "exp_id": "exp_00075",
         "mol_id": "cbs_30354",
         "smiles": "C1=CCOC1",
         "source": "bains:Yaws",
@@ -244,124 +396,14 @@
         "conflict_flag": false
       },
       {
-        "exp_id": "exp_01482",
-        "mol_id": "cbs_47287",
-        "smiles": "c1ccc(-c2ccon2)cc1",
-        "source": "bains:Pedley",
-        "H298_exp": 33.341,
-        "H298_cbs": 45.772,
-        "cbs_minus_exp": 12.43,
-        "conflict_flag": false
-      },
-      {
-        "exp_id": "exp_00963",
-        "mol_id": "cbs_22837",
-        "smiles": "CCCCNC",
-        "source": "bains:NIST-1",
-        "H298_exp": -25.884,
-        "H298_cbs": -14.072,
-        "cbs_minus_exp": 11.812,
-        "conflict_flag": false
-      },
-      {
-        "exp_id": "exp_00033",
-        "mol_id": "cbs_26804",
-        "smiles": "CC(C)C=O",
-        "source": "bains:Pedley",
-        "H298_exp": -59.13,
-        "H298_cbs": -47.491,
-        "cbs_minus_exp": 11.639,
+        "exp_id": "exp_01597",
+        "mol_id": "cbs_30465",
+        "smiles": "O=[N+]([O-])OCC(CO[N+](=O)[O-])O[N+](=O)[O-]",
+        "source": "nist:gas",
+        "H298_exp": -66.707,
+        "H298_cbs": -80.457,
+        "cbs_minus_exp": -13.75,
         "conflict_flag": true
-      },
-      {
-        "exp_id": "exp_00483",
-        "mol_id": "cbs_45425",
-        "smiles": "NCCN1CCNCC1",
-        "source": "bains:Yaws",
-        "H298_exp": 5.999,
-        "H298_cbs": 17.574,
-        "cbs_minus_exp": 11.575,
-        "conflict_flag": false
-      },
-      {
-        "exp_id": "exp_01242",
-        "mol_id": "cbs_47731",
-        "smiles": "CC(C)c1cccc(O)c1",
-        "source": "bains:Pedley",
-        "H298_exp": -46.845,
-        "H298_cbs": -35.337,
-        "cbs_minus_exp": 11.508,
-        "conflict_flag": false
-      },
-      {
-        "exp_id": "exp_00869",
-        "mol_id": "cbs_00932",
-        "smiles": "CCCCN(CC)CC",
-        "source": "bains:Yaws",
-        "H298_exp": -33.681,
-        "H298_cbs": -22.955,
-        "cbs_minus_exp": 10.726,
-        "conflict_flag": false
-      },
-      {
-        "exp_id": "exp_00750",
-        "mol_id": "cbs_11312",
-        "smiles": "OCCOCCO",
-        "source": "bains:Pedley",
-        "H298_exp": -136.52,
-        "H298_cbs": -125.874,
-        "cbs_minus_exp": 10.646,
-        "conflict_flag": false
-      },
-      {
-        "exp_id": "exp_01434",
-        "mol_id": "cbs_44714",
-        "smiles": "CC1=CC=C(C(C)C)CC1",
-        "source": "bains:Yaws",
-        "H298_exp": -4.924,
-        "H298_cbs": 5.353,
-        "cbs_minus_exp": 10.277,
-        "conflict_flag": false
-      },
-      {
-        "exp_id": "exp_00915",
-        "mol_id": "cbs_00170",
-        "smiles": "C(=C\\c1ccccc1)/c1ccccc1",
-        "source": "bains:Cioslowski",
-        "H298_exp": 56.4,
-        "H298_cbs": 66.573,
-        "cbs_minus_exp": 10.173,
-        "conflict_flag": false
-      },
-      {
-        "exp_id": "exp_01290",
-        "mol_id": "cbs_23368",
-        "smiles": "CCCNCCC",
-        "source": "bains:Pedley",
-        "H298_exp": -27.749,
-        "H298_cbs": -18.016,
-        "cbs_minus_exp": 9.732,
-        "conflict_flag": false
-      },
-      {
-        "exp_id": "exp_00571",
-        "mol_id": "cbs_48872",
-        "smiles": "CCC#CCCCCCC",
-        "source": "bains:Yaws",
-        "H298_exp": 5.394,
-        "H298_cbs": 14.907,
-        "cbs_minus_exp": 9.512,
-        "conflict_flag": false
-      },
-      {
-        "exp_id": "exp_01233",
-        "mol_id": "cbs_00566",
-        "smiles": "CN(C)CN(C)C",
-        "source": "bains:Pedley",
-        "H298_exp": -4.23,
-        "H298_cbs": 5.121,
-        "cbs_minus_exp": 9.352,
-        "conflict_flag": false
       }
     ]
   }
