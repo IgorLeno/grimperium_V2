@@ -679,3 +679,14 @@ def test_main_cites_nist_terms(tmp_path: Path) -> None:
         for c in manifest["citations"]
     )
     assert "validation_only=True" in manifest["license_note"]
+
+
+def test_nist_value_without_uncertainty_is_never_selected(tmp_path: Path) -> None:
+    bare = _nist_page(gas=[(_q("f", "gas"), "-229.5", "Ccb")])
+    values, _ = builder.read_nist(_write_nist(tmp_path, {"C1": bare}))
+    assert [(v.source, v.selectable) for v in values] == [("nist:gas", False)]
+
+    methane = builder.SourceValue("atct", "74-82-8*0", "Methane", "C", -74.5, 0.1, "g")
+    long, _ = builder.long_table([*values, methane])
+    assert len(long) == 2
+    assert list(builder.select(long)["smiles"]) == ["C"]

@@ -52,6 +52,10 @@ Why the rules below:
   selected row taken from NIST, carries ``validation_only=True``;
 * a NIST InChI must reproduce the page's own formula and InChIKey, so a
   page whose structure and metadata disagree is rejected, not guessed;
+* NIST values without a reported uncertainty stay in the long table but are
+  never selected: they are mostly single old measurements, and the gross
+  errors seen against ATcT and CBS (ethanolamine, hexylamine) are all in
+  this group, where no second source can raise a conflict;
 * per NIST quantity one value is used: the WebBook ``AVG`` row, else the
   lowest reported uncertainty, else the lower median; ``Ion`` gas rows only
   when the page has no other gas value;
@@ -679,6 +683,7 @@ def nist_values(page: NistPage, smiles: str) -> list[SourceValue]:
             h298_kj=h298_kj,
             uncertainty_kj=uncertainty_kj,
             phase="g",
+            selectable=uncertainty_kj is not None,
             validation_only=True,
         )
 
@@ -1032,6 +1037,7 @@ def main(argv: list[str] | None = None) -> int:
         "selection": "per InChIKey: within one source keep the lowest H298 "
         "species (stereo/tautomer collapse), then lowest source_rank, then "
         "lowest reported uncertainty; Bains FILTER==1 never selected; "
+        "NIST values without reported uncertainty never selected; "
         "validation_only follows the selected value (True for NIST)",
         "source_rank": SOURCE_RANK,
         "conflict_rule": "|dH| > max(2*hypot(u1,u2), "
