@@ -8,6 +8,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **NIST WebBook validation values in the experimental ΔHf° table** (2026-10-07)
+  - `scripts/fetch_nist_webbook.py`: resumable fetcher. One formula search
+    per C-containing formula of the CBS reference and the experimental table
+    (1045; gas or condensed thermochemistry, no ions), then each compound
+    page (`Mask=7`). One request per 5 s, honest User-Agent, gzip cache in
+    `data/raw/nist_webbook/` (not versioned), stops on 403/429 or a
+    challenge page; isotopologues skipped from the result list.
+  - `scripts/build_experimental_hf.py`: new source `--nist-dir`. Identity
+    from the page InChI, checked against the page formula and InChIKey
+    (31 pages rejected, mostly NIST InChIs of another compound). One value
+    per quantity (`AVG` row, else lowest uncertainty, else lower median);
+    gas values plus liquid + ΔvapH° / solid + ΔsubH° at 298.15 K only.
+    NIST values without reported uncertainty are never selected. Every NIST
+    value and selected NIST row has `validation_only=True` (site terms:
+    all rights reserved, `ai-train=no`) and must not be an ML training
+    target; NIST ranks below every trainable measured source, ion-energetics
+    gas values (`nist:gas_ion`) lowest. Manifest cites NIST SRD 69 and the
+    terms.
+  - `data/thermo_exp_hf.csv`: 2170 molecules (was 1534), 669 from NIST
+    (`validation_only`); 33 former `bains:Yaws`-only rows now take a NIST
+    value. `data/thermo_exp_hf_all_sources.csv`: 6525 values.
+  - NIST gas vs ATcT on 128 shared molecules: MAE 0.57 kcal/mol with
+    reported uncertainty (n=102), 2.05 without. CBS overlap 722 molecules,
+    CBS - experimental bias +4.9 kcal/mol (+5.5 on NIST rows, larger
+    molecules).
+  - `tests/unit/test_fetch_nist_webbook.py`,
+    `tests/unit/test_build_experimental_hf.py`: synthetic WebBook pages, no
+    network.
+  - Verification: `poetry run pytest tests/unit/test_fetch_nist_webbook.py
+    tests/unit/test_build_experimental_hf.py -q`
 - **Experimental ΔHf° database** (2026-10-07)
   - `scripts/build_experimental_hf.py`: builds one gas-phase ΔHf°(298.15 K)
     per InChIKey from ATcT TN 1.222 (main table saved as HTML; SMILES from
