@@ -59,7 +59,8 @@ WEBBOOK_MARKER = "NIST Chemistry WebBook"
 RESULT_COUNT = re.compile(r"(\d+)\s+matching species were found")
 #: Result item: compound id and the formula shown after the name.
 RESULT_ITEM = re.compile(
-    r'<li><a href="/cgi/cbook\.cgi\?ID=([A-Za-z0-9]+)&amp;[^"]*">[^<]*</a>'
+    # Names can hold markup, e.g. ``Tricyclo[6.2.0.0<sup>3,6</sup>]...``.
+    r'<li><a href="/cgi/cbook\.cgi\?ID=([A-Za-z0-9]+)&amp;[^"]*">(?:(?!</a>).)*</a>'
     r"\s*\(((?:[^()<]|<sub>|</sub>)*)\)"
 )
 COMPOUND_LINK = re.compile(r"/cgi/cbook\.cgi\?ID=([A-Za-z0-9]+)&amp;Units=SI&amp;Mask=")

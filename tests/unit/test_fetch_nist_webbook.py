@@ -30,11 +30,13 @@ fetcher_module = _load_fetcher()
 # Synthetic pages in the WebBook layout (not NIST data).
 HEAD = "<html><body><h1>NIST Chemistry WebBook, SRD 69</h1><main>"
 LIST_PAGE = (
-    HEAD + "<h1>Search Results</h1><p> 2 matching species were found. </p><ol>"
+    HEAD + "<h1>Search Results</h1><p> 3 matching species were found. </p><ol>"
     '<li><a href="/cgi/cbook.cgi?ID=C111&amp;Units=SI&amp;Mask=1">A</a>  '
     "(CH<sub>4</sub>O)<br /></li>"
     '<li><a href="/cgi/cbook.cgi?ID=U222&amp;Units=SI&amp;Mask=2">B</a>  '
     "(CHD<sub>3</sub>O)</li>"
+    '<li><a href="/cgi/cbook.cgi?ID=C444&amp;Units=SI&amp;Mask=2">X[0.0<sup>3,6'
+    "</sup>]</a>  (CH<sub>4</sub>O)</li>"
     "</ol></main></body></html>"
 )
 SINGLE_PAGE = (
@@ -50,10 +52,10 @@ NOT_FOUND_PAGE = HEAD + "<h1>Chemical Formula Not Found</h1></main></body></html
 @pytest.mark.parametrize(
     ("page", "expected"),
     [
-        (LIST_PAGE, (["C111", "U222"], "list")),
+        (LIST_PAGE, (["C111", "U222", "C444"], "list")),
         (
-            LIST_PAGE.replace(" 2 matching", " 3 matching"),
-            (["C111", "U222"], "truncated"),
+            LIST_PAGE.replace(" 3 matching", " 4 matching"),
+            (["C111", "U222", "C444"], "truncated"),
         ),
         (SINGLE_PAGE, (["C333"], "single")),
         (NOT_FOUND_PAGE, ([], "not_found")),
@@ -171,4 +173,4 @@ def test_transient_errors_retry_once_then_stop_after_three(
 
 
 def test_isotopologues_are_skipped_by_listed_formula() -> None:
-    assert fetcher_module.compound_ids(LIST_PAGE, "CH4O") == (["C111"], "list")
+    assert fetcher_module.compound_ids(LIST_PAGE, "CH4O") == (["C111", "C444"], "list")
