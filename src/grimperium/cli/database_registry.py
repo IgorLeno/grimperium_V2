@@ -514,6 +514,7 @@ class DatabaseRegistry:
             "cbs": "official.cbs_chon",
             "pm7": "official.crest_pm7",
             "nist": "official.nist_experimental",
+            "exp": "official.nist_experimental",
         }.get(alias.lower())
 
     @staticmethod
