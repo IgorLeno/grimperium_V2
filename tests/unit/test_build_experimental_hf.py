@@ -351,3 +351,52 @@ def test_main_writes_outputs_and_refuses_overwrite(tmp_path: Path) -> None:
     assert (output.parent / "exp_all_sources.csv").exists()
 
     assert builder.main(argv) == 1
+
+
+def test_atct_charge_comes_from_row_id(tmp_path: Path) -> None:
+    cation = {
+        **ATCT_ROWS[0],
+        "rid": "s1_6n4_1c1",
+        "number": "99",
+        "name": "Methane cation",
+        "h298": "1100.0",
+    }
+    values, _ = builder.read_atct(_write_atct(tmp_path, [ATCT_ROWS[0], cation]))
+    assert {value.declared_charge for value in values} == {0, 1}
+
+    long, rejected = builder.long_table(values)
+    assert set(long["name"]) == {"Methane"}
+    assert rejected == {"charged": 1}
+
+
+def test_same_source_isomers_keep_lowest_enthalpy() -> None:
+    values = [
+        builder.SourceValue(
+            "atct", "628-92-2*0", "Cycloheptene", "C1=CCCCCC1", -8.7, 0.7, "g"
+        ),
+        builder.SourceValue(
+            "atct", "45509-99-7*0", "trans-Cycloheptene", "C1=CCCCCC1", 103.9, 0.4, "g"
+        ),
+        builder.SourceValue(
+            "bains:Pedley", "row1", "Cycloheptene", "C1=CCCCCC1", -9.0, None, "g"
+        ),
+    ]
+    long, _ = builder.long_table(values)
+    row = builder.select(long).iloc[0]
+
+    assert row["source_id"] == "628-92-2*0"
+    assert row["isomers_collapsed"] == 1
+    assert row["n_values"] == 2
+    assert not row["conflict_flag"]
+    assert row["source_spread"] == pytest.approx(builder.kj_to_kcal(0.3))
+
+
+def test_rmg_zero_uncertainty_is_kept(tmp_path: Path) -> None:
+    directory = tmp_path / "rmg0"
+    directory.mkdir()
+    (directory / "Methane.yml").write_text(
+        "smiles: C\nreference_data:\n  ATcT:\n    thermo_data:\n"
+        "      H298: {units: kJ/mol, uncertainty: 0.0, value: -74.5}\n"
+    )
+    values, _ = builder.read_rmg(directory)
+    assert values[0].uncertainty_kj == 0.0

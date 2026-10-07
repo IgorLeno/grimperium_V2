@@ -26,6 +26,11 @@ Why the rules below:
   PM6/PM7, and ``Yaws`` mixes measured and estimated values: both get the
   lowest priority, and ``stewart_reference`` flags molecules whose PM7 error
   is not an independent test;
+* ATcT ions often carry a neutral SMILES in the image ``alt`` text; the net
+  charge is read from the row id and charged species are rejected;
+* species of one source that collapse to one InChIKey (stereo missing from
+  the SMILES, tautomers merged by the standard InChI) keep only the lowest
+  H298 of that source, counted in ``isomers_collapsed``;
 * Bains rows with ``FILTER == 1`` are kept in the long table but never
   selected;
 * a selected value conflicts with another source when they differ by more
@@ -87,7 +92,11 @@ BAINS_SHEET = "Measured Enthalpy"
 BAINS_HEADER_ROW = 2  # zero-based row with Name, SMILES, source columns
 BAINS_FILTER_COLUMN = "FILTER"
 
-ATCT_ROW_ID = re.compile(r"^s\S+\s+i(?P<number>\d+)\s+CAS(?P<cas>\S*)$")
+#: Row id, e.g. ``s1_6n4_1c0 i23 CAS74-82-8``: the ``c<n>`` suffix of the first
+#: token is the net charge (the image ``alt`` SMILES of ions is often neutral).
+ATCT_ROW_ID = re.compile(
+    r"^s\S*?c(?P<charge>-?\d+)\s+i(?P<number>\d+)\s+CAS(?P<cas>\S*)$"
+)
 
 CITATIONS = {
     "atct": "Ruscic, B.; Bross, D. H. Active Thermochemical Tables (ATcT) "
@@ -112,6 +121,7 @@ class SourceValue:
     uncertainty_kj: float | None
     phase: str
     selectable: bool = True
+    declared_charge: int | None = None
 
 
 @dataclass(frozen=True)
@@ -205,6 +215,7 @@ class _AtctTableParser(HTMLParser):
             if match:
                 self._row = {
                     "species_number": match["number"],
+                    "charge": match["charge"],
                     "cas": match["cas"],
                 }
                 self.rows.append(self._row)
@@ -275,6 +286,7 @@ def read_atct(path: Path) -> tuple[list[SourceValue], dict[str, Any]]:
                 h298_kj=float(h298_text),
                 uncertainty_kj=parse_uncertainty(row.get("Uncert", "")),
                 phase="g" if atct_id.endswith(GAS_PHASE_SUFFIX) else "condensed",
+                declared_charge=int(row["charge"]),
             )
         )
     info = {
@@ -386,6 +398,9 @@ def long_table(values: Iterable[SourceValue]) -> tuple[pd.DataFrame, dict[str, i
         if value.phase != "g":
             rejected["phase"] = rejected.get("phase", 0) + 1
             continue
+        if value.declared_charge not in (None, 0):
+            rejected["charged"] = rejected.get("charged", 0) + 1
+            continue
         if value.raw_smiles not in cache:
             cache[value.raw_smiles] = standardize(value.raw_smiles)
         structure, reason = cache[value.raw_smiles]
@@ -422,18 +437,34 @@ def _conflicts(chosen: pd.Series, others: pd.DataFrame) -> int:
     return count
 
 
+def _collapse_isomers(candidates: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Keep the lowest H298 per source; return (kept, dropped).
+
+    Distinct species of one source can share an InChIKey when the source
+    SMILES omits stereo or the standard InChI merges tautomers (ATcT lists
+    cycloheptene and trans-cycloheptene, urea and isourea, E/Z imines with
+    the same SMILES). A key without that distinction stands for the most
+    stable form, so the lowest enthalpy is kept.
+    """
+    ordered = candidates.sort_values(["source", "H298_exp", "source_id"])
+    first_id = ordered.groupby("source")["source_id"].transform("first")
+    same_species = ordered["source_id"] == first_id
+    return ordered[same_species], ordered[~same_species]
+
+
 def select(long: pd.DataFrame) -> pd.DataFrame:
     """One row per InChIKey: best rank, then lowest uncertainty, then source id."""
     rows: list[dict[str, Any]] = []
     for inchikey, group in long.groupby("inchikey", sort=True):
-        candidates = group[group["selectable"]]
+        candidates, collapsed = _collapse_isomers(group[group["selectable"]])
         if candidates.empty:
             continue
         ordered = candidates.assign(
             _unc=candidates["uncertainty"].fillna(math.inf)
         ).sort_values(["source_rank", "_unc", "source", "source_id"])
         chosen = ordered.iloc[0]
-        others = group.drop(index=chosen.name)
+        compared = group.drop(index=collapsed.index)
+        others = compared.drop(index=chosen.name)
         rows.append(
             {
                 "inchikey": inchikey,
@@ -451,10 +482,12 @@ def select(long: pd.DataFrame) -> pd.DataFrame:
                 "source": chosen["source"],
                 "source_id": chosen["source_id"],
                 "name": chosen["name"],
-                "n_values": len(group),
-                "n_sources": group["source"].nunique(),
-                "source_spread": group["H298_exp"].max() - group["H298_exp"].min(),
+                "n_values": len(compared),
+                "n_sources": compared["source"].nunique(),
+                "source_spread": compared["H298_exp"].max()
+                - compared["H298_exp"].min(),
                 "n_conflicts": _conflicts(chosen, others),
+                "isomers_collapsed": collapsed["source_id"].nunique(),
                 "low_priority_only": bool(
                     (candidates["source_rank"] >= LOW_PRIORITY_RANK).all()
                 ),
@@ -616,10 +649,18 @@ def main(argv: list[str] | None = None) -> int:
         "created_at": datetime.now(timezone.utc).isoformat(),
         "sources": info,
         "citations": citations,
+        "license": (
+            "CC-BY-SA (share-alike inherited from Bains et al. 2022)"
+            if "bains" in info
+            else "see citations"
+        ),
+        "license_note": "ATcT states no explicit licence; its values are "
+        "redistributed with citation. RMG-database carries an MIT header.",
         "filter": "contains C; elements subset of {C,H,N,O}; no isotopes; "
         "formal charge 0; no radical electrons; gas phase",
-        "selection": "per InChIKey: lowest source_rank, then lowest reported "
-        "uncertainty; Bains FILTER==1 never selected",
+        "selection": "per InChIKey: within one source keep the lowest H298 "
+        "species (stereo/tautomer collapse), then lowest source_rank, then "
+        "lowest reported uncertainty; Bains FILTER==1 never selected",
         "source_rank": SOURCE_RANK,
         "conflict_rule": "|dH| > max(2*hypot(u1,u2), "
         f"{CONFLICT_FLOOR_KCAL} kcal/mol), unknown u = 0",
@@ -635,6 +676,7 @@ def main(argv: list[str] | None = None) -> int:
         "conflict_rows": int(table["conflict_flag"].sum()),
         "low_priority_only_rows": int(table["low_priority_only"].sum()),
         "stewart_reference_rows": int(table["stewart_reference"].sum()),
+        "isomers_collapsed_rows": int((table["isomers_collapsed"] > 0).sum()),
         "skeleton_duplicates": int(table["inchikey"].str[:14].duplicated().sum()),
         "nheavy": table["nheavy"].value_counts().sort_index().to_dict(),
         "output_sha256": sha256_of(args.output),
