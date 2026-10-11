@@ -1,0 +1,23 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "grimperium-api",
+      "runtimeExecutable": "poetry",
+      "runtimeArgs": [
+        "run", "uvicorn", "grimperium.webapi.app:create_app", "--factory",
+        "--host", "127.0.0.1", "--port", "8000"
+      ],
+      "port": 8000,
+      "autoPort": false
+    },
+    {
+      "name": "grimperium-dashboard",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev", "--", "--host", "127.0.0.1", "--port", "5173", "--strictPort"],
+      "cwd": "apps/dashboard",
+      "port": 5173,
+      "autoPort": false
+    }
+  ]
+}
