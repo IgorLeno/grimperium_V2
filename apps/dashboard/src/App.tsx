@@ -11,10 +11,10 @@ export function App() {
   return (
     <>
       <header className="app-header">
-        <strong>Grimperium</strong>
+        <div className="brand"><span className="brand-mark" aria-hidden="true">✳</span><span><strong>Grimperium</strong><small>Atlas de dados moleculares</small></span></div>
         <nav aria-label="Telas">
-          <button type="button" aria-current={view === 'progress' ? 'page' : undefined} onClick={() => setView('progress')}>Progresso</button>
-          <button type="button" aria-current={view === 'experimental' ? 'page' : undefined} onClick={() => setView('experimental')}>Experimental</button>
+          <button type="button" aria-current={view === 'progress' ? 'page' : undefined} onClick={() => setView('progress')}>01 <span>Panorama</span></button>
+          <button type="button" aria-label="Experimental" aria-current={view === 'experimental' ? 'page' : undefined} onClick={() => setView('experimental')}>02 <span>Referência experimental</span></button>
         </nav>
         <div className="api-health" role="status">
           {health.state.status === 'loading' && 'Conectando à API…'}

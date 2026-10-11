@@ -12,6 +12,7 @@ import {
 } from 'recharts'
 import type { ComparisonPoint, ExperimentalComparison, ExperimentalSummary } from './api'
 import { CountTable, ErrorNotice, Section } from './Resource'
+import { MetricCard, MoleculeIllustration, RankedBars, StoryNote } from './StoryVisuals'
 import { useApi } from './useApi'
 
 const PAGE_SIZE = 25
@@ -42,11 +43,11 @@ function FilteredStats({ points }: { points: ComparisonPoint[] }) {
   const mae = count ? points.reduce((sum, point) => sum + Math.abs(point.cbs_minus_exp), 0) / count : null
   const rmse = count ? Math.sqrt(points.reduce((sum, point) => sum + point.cbs_minus_exp ** 2, 0) / count) : null
   return (
-    <div className="metrics" aria-label="Estatísticas dos pares filtrados">
-      <p><strong>{count.toLocaleString('pt-BR')}</strong> pares filtrados</p>
-      <p><strong>{format(bias)}</strong> viés CBS − exp</p>
-      <p><strong>{format(mae)}</strong> MAE</p>
-      <p><strong>{format(rmse)}</strong> RMSE</p>
+    <div className="metric-grid metric-grid--four" aria-label="Estatísticas dos pares filtrados">
+      <MetricCard label="Pares no recorte" value={count.toLocaleString('pt-BR')} note="Moléculas com CBS e medida experimental" accent />
+      <MetricCard label="Diferença média" value={format(bias)} note="CBS − experimento · kcal/mol" />
+      <MetricCard label="Erro absoluto médio" value={format(mae)} note="Distância média, sem sinal · kcal/mol" />
+      <MetricCard label="RMSE" value={format(rmse)} note="Raiz do erro quadrático médio; destaca diferenças grandes · kcal/mol" />
     </div>
   )
 }
@@ -130,7 +131,9 @@ function ComparisonExplorer({ comparison }: { comparison: ExperimentalComparison
   return (
     <>
       <Section title="Explorar pares CBS × experimental">
-        <p>Valores NIST marcados como “só validação” não são alvos de treino. Pares ordenados por maior |CBS − exp|.</p>
+        <div className="section-heading"><div><span className="eyebrow eyebrow--dark">Etapa 02 / comparação</span><h3>Quando cálculo e medida se encontram</h3><p>Um par é uma molécula que tem ambos os valores. A distância entre eles é medida em {comparison.units}.</p></div></div>
+        <div className="editorial-callout"><span>Como ler</span><p><strong>Quanto mais perto de zero, menor a diferença.</strong> O sinal indica a direção: positivo significa CBS acima do experimental. Não é uma medida de causa.</p></div>
+        <div className="filter-heading"><div><span className="eyebrow eyebrow--dark">Explore o conjunto</span><h3>Escolha o recorte</h3></div><p>Indicadores, gráficos e tabela respondem aos mesmos filtros.</p></div>
         <div className="filters">
           <label>Buscar ID, SMILES ou fonte
             <input value={query} onChange={(event) => { setQuery(event.target.value); resetPage() }} placeholder="Ex.: cbs_01102" />
@@ -150,14 +153,16 @@ function ComparisonExplorer({ comparison }: { comparison: ExperimentalComparison
         ) : (
           <>
             <PairCharts points={filtered} />
+            <div className="table-heading"><div><span className="eyebrow eyebrow--dark">Os dados em detalhe</span><h3>Molécula por molécula</h3><p>Ordenado pela maior diferença absoluta entre CBS e experimento. Valores em {comparison.units}.</p></div></div>
             <div className="table-wrap">
-              <table>
+              <table className="pair-table">
+                <caption className="sr-only">Pares CBS e experimental filtrados, ordenados pela diferença absoluta</caption>
                 <thead><tr><th scope="col">ID exp.</th><th scope="col">ID CBS</th><th scope="col">SMILES</th><th scope="col">Fonte</th><th scope="col">Pesados</th><th scope="col">Exp.</th><th scope="col">CBS</th><th scope="col">CBS − exp</th><th scope="col">Flags</th></tr></thead>
                 <tbody>{visible.map((point) => (
                   <tr key={point.exp_id}>
-                    <td>{point.exp_id}</td><td>{point.mol_id}</td><td className="smiles">{point.smiles}</td><td>{point.source}</td>
-                    <td>{point.nheavy}</td><td>{format(point.H298_exp)}</td><td>{format(point.H298_cbs)}</td><td>{format(point.cbs_minus_exp)}</td>
-                    <td>{[point.validation_only && 'só validação', point.conflict_flag && 'conflito', point.low_priority_only && 'baixa prioridade'].filter(Boolean).join(', ') || '—'}</td>
+                    <td className="id-cell">{point.exp_id}</td><td className="id-cell">{point.mol_id}</td><td className="smiles">{point.smiles}</td><td>{point.source}</td>
+                    <td className="num-cell">{point.nheavy}</td><td className="num-cell">{format(point.H298_exp)}</td><td className="num-cell">{format(point.H298_cbs)}</td><td className="num-cell"><span className={Math.abs(point.cbs_minus_exp) >= 10 ? 'difference difference--high' : 'difference'}>{format(point.cbs_minus_exp)}</span></td>
+                    <td className="flags-cell">{[point.validation_only && 'só validação', point.conflict_flag && 'conflito', point.low_priority_only && 'baixa prioridade'].filter(Boolean).join(', ') || '—'}</td>
                   </tr>
                 ))}</tbody>
               </table>
@@ -167,6 +172,7 @@ function ComparisonExplorer({ comparison }: { comparison: ExperimentalComparison
               <button type="button" disabled={page === 0} onClick={() => setPage((value) => value - 1)}>Anterior</button>
               <button type="button" disabled={page >= maxPage} onClick={() => setPage((value) => value + 1)}>Próxima</button>
             </div>
+            <p className="table-footnote">Valores “só validação” não são alvos de treino. Flags podem coexistir na mesma molécula.</p>
           </>
         )}
       </Section>
@@ -179,24 +185,37 @@ export function ExperimentalView() {
   const comparison = useApi<ExperimentalComparison>('/api/experimental/comparison')
   return (
     <div className="view">
-      <div className="view-heading">
-        <div><h1>Experimental</h1><p>Fontes de ΔHf gasoso e diferenças contra a referência CBS.</p></div>
-        <button type="button" onClick={() => { summary.reload(); comparison.reload() }}>Atualizar dados</button>
+      <div className="hero hero--experimental">
+        <div className="hero__copy">
+          <span className="eyebrow">02 / Referência experimental</span>
+          <h1>O cálculo encontra<br /><em>o mundo medido.</em></h1>
+          <p>Valores experimentais ajudam a entender a diferença entre uma previsão computacional e uma medida de laboratório.</p>
+          <button type="button" className="refresh-button" onClick={() => { summary.reload(); comparison.reload() }}>↻ <span>Atualizar dados</span></button>
+        </div>
+        <div className="hero__art"><MoleculeIllustration /><span>Uma representação visual da rede molecular</span></div>
       </div>
       <Section title="Cobertura e proveniência">
         {summary.state.status === 'loading' && <p role="status">Carregando fontes…</p>}
         {summary.state.status === 'error' && <ErrorNotice message={summary.state.message} retry={summary.reload} />}
         {summary.state.status === 'ready' && (summary.state.data.rows === 0 ? <p>Nenhum valor experimental disponível.</p> : (
           <>
-            <p className="metric">{summary.state.data.rows.toLocaleString('pt-BR')} <small>moléculas</small></p>
-            <div className="columns">
-              <div><h3>Por família</h3><CountTable counts={summary.state.data.by_source_family} label="Família" /></div>
-              <div><h3>Por fonte</h3><CountTable counts={summary.state.data.by_source} label="Fonte" /></div>
-              <div><h3>Flags</h3><CountTable counts={summary.state.data.flags} label="Flag" /><h3>Incerteza</h3><CountTable counts={summary.state.data.uncertainty_kind} label="Tipo" /></div>
+            <div className="section-heading"><div><span className="eyebrow eyebrow--dark">Etapa 01 / cobertura</span><h3>De onde vêm as medidas?</h3><p>Cada molécula tem uma fonte selecionada. As barras comparam famílias de fontes no conjunto experimental; os percentuais usam todas as {summary.state.data.rows.toLocaleString('pt-BR')} moléculas como base.</p></div></div>
+            <div className="coverage-layout">
+              <div className="coverage-total"><span>Base experimental</span><p className="metric">{summary.state.data.rows.toLocaleString('pt-BR')}</p><strong>moléculas com valor experimental</strong><p>ΔHf° gasoso a 298,15 K</p></div>
+              <div className="coverage-chart"><h3>Famílias de fontes</h3><p className="subtle">Participação sobre {summary.state.data.rows.toLocaleString('pt-BR')} moléculas</p><RankedBars counts={summary.state.data.by_source_family} total={summary.state.data.rows} label="Moléculas por família de fonte" /></div>
+            </div>
+            <div className="detail-grid detail-grid--three">
+              <div><h3>Fonte selecionada</h3><p className="subtle">Uma fonte por molécula.</p><CountTable counts={summary.state.data.by_source} label="Fonte" /></div>
+              <div><h3>Observações dos dados</h3><p className="subtle">Flags podem se sobrepor; não são partes de um total.</p><CountTable counts={summary.state.data.flags} label="Flag" /></div>
+              <div><h3>Incerteza informada</h3><p className="subtle">Como a incerteza foi descrita na fonte.</p><CountTable counts={summary.state.data.uncertainty_kind} label="Tipo" /></div>
             </div>
           </>
         ))}
       </Section>
+      <div className="story-grid">
+        <StoryNote number="01" title="Medida e cálculo são coisas diferentes">O valor experimental vem de uma fonte de referência; CBS é um cálculo. A comparação mostra a distância entre os dois.</StoryNote>
+        <StoryNote number="02" title="Nem todo valor serve para treino">Registros marcados “só validação” permanecem úteis para comparação, mas não são alvos de treinamento do modelo.</StoryNote>
+      </div>
       {comparison.state.status === 'loading' && <p role="status">Carregando comparação CBS…</p>}
       {comparison.state.status === 'error' && <Section title="Comparação CBS"><ErrorNotice message={comparison.state.message} retry={comparison.reload} /></Section>}
       {comparison.state.status === 'ready' && (comparison.state.data.points.length === 0 ? (

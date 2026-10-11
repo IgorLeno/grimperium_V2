@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **Narrativa visual do dashboard local** (2026-10-11)
+  - `apps/dashboard/src/`: reorganiza Progresso e Experimental em contexto,
+    indicadores explicados, gráficos, barras de fontes e tabela de pares com
+    maior legibilidade. Uma ilustração vetorial e layout responsivo dão
+    identidade visual sem alterar os dados ou a API.
+  - Mantém CSV legado e store Semi-Imperium separados; percentuais exibem sua
+    base e as flags sobrepostas continuam como contagens.
+  - Verification: `npm run lint`, `npm run typecheck`, `npm run test`,
+    `npm run build` em `apps/dashboard`.
+
 ### Added
 - **Dashboard local de progresso e referência experimental** (2026-10-11)
   - `apps/dashboard/`: Vite 8, React 19, TypeScript 6 e Recharts 3 com proxy
