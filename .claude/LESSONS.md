@@ -47,3 +47,7 @@ Rule: include `vite/client` in `tsconfig.json` types when importing CSS from Typ
 [2026-10-07] Context: handing off the dashboard scaffold before execution docs
 Mistake: the user opened `index.html` via `file://`, where Vite cannot transform TSX modules, and the page did not run.
 Rule: document the HTTP startup path next to every new Vite scaffold before inviting a browser check; never point users at the source HTML file.
+
+[2026-10-11] Context: adding the health endpoint to a dashboard with separate data requests
+Mistake: a retry test used a global sequence of mocked fetch responses; the new health request consumed the response intended for the dataset.
+Rule: mock responses by endpoint when testing a page that makes multiple requests, and count retries for the specific endpoint under test.

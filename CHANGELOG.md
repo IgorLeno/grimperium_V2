@@ -8,14 +8,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
-- **Dashboard web: scaffold local** (2026-10-07)
+- **Dashboard local de progresso e referência experimental** (2026-10-11)
   - `apps/dashboard/`: Vite 8, React 19, TypeScript 6 e Recharts 3 com proxy
-    `/api` para a API local, ESLint e Vitest. Inclui teste de montagem do React.
-  - `apps/dashboard/README.md`: explica a execução por HTTP; abrir
-    `index.html` via `file://` não executa os módulos do Vite.
-  - `.gitignore`: ignora `node_modules/` e `dist/` do dashboard.
-  - Verification: em `apps/dashboard`, `npm run lint`, `npm run typecheck`,
-    `npm run test` e `npm run build`.
+    `/api`, ESLint e Vitest. `node_modules/` e `dist/` são ignorados.
+  - `apps/dashboard/src/`: consulta os quatro endpoints de leitura;
+    apresenta status, qualidade CBS e store Semi-Imperium, fontes/flags,
+    paridade CBS × experimental, erro por tamanho e tabela filtrável de pares.
+    Erros, dados vazios e recarga ficam explícitos por seção; o cabeçalho
+    mostra a saúde da API.
+  - `.claude/launch.json` e `apps/dashboard/README.md`: configurações de
+    preview e instruções de execução por HTTP.
+  - Verification: `npm run lint`, `npm run typecheck`, `npm run test`,
+    `npm run build` em `apps/dashboard`; `poetry run pytest tests/webapi -q`.
 - **Per-molecule CBS × experimental comparison** (2026-10-07)
   - `scripts/build_experimental_hf.py`: with `--cbs-csv`, also writes
     `<output>_vs_cbs.csv`, one row per molecule matched by InChIKey
