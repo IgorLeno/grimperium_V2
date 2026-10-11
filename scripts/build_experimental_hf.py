@@ -868,11 +868,32 @@ def select(long: pd.DataFrame) -> pd.DataFrame:
 # ----------------------------------------------------------- CBS comparison
 
 
-def compare_with_cbs(table: pd.DataFrame, cbs_csv: Path) -> dict[str, Any]:
+COMPARISON_COLUMNS = [
+    "exp_id",
+    "mol_id",
+    "inchikey",
+    "smiles",
+    "nheavy",
+    "source",
+    "H298_exp",
+    "uncertainty",
+    "H298_cbs",
+    "cbs_minus_exp",
+    "conflict_flag",
+    "low_priority_only",
+    "validation_only",
+]
+
+
+def compare_with_cbs(
+    table: pd.DataFrame, cbs_csv: Path
+) -> tuple[dict[str, Any], pd.DataFrame]:
     """Overlap and CBS - experimental statistics on shared InChIKeys.
 
     The CBS file can hold several reference conformers per molecule; the
-    lowest H298_cbs per InChIKey is used (most stable conformer).
+    lowest H298_cbs per InChIKey is used (most stable conformer). Also
+    returns the per-molecule comparison (``COMPARISON_COLUMNS``, sorted by
+    ``exp_id``) so plots can use every point, not only the top outliers.
     """
     cbs = pd.read_csv(
         cbs_csv, usecols=["mol_id", "smiles", "multiplicity", "charge", "H298_cbs"]
@@ -896,10 +917,11 @@ def compare_with_cbs(table: pd.DataFrame, cbs_csv: Path) -> dict[str, Any]:
         "overlap_inchikey": len(merged),
         "overlap_skeleton_only": skeleton_only,
     }
-    if merged.empty:
-        return report
     error = merged["H298_cbs"] - merged["H298_exp"]
     merged = merged.assign(cbs_minus_exp=error, abs_error=error.abs())
+    comparison = merged.sort_values("exp_id")[COMPARISON_COLUMNS].reset_index(drop=True)
+    if merged.empty:
+        return report, comparison
 
     def stats(frame: pd.DataFrame) -> dict[str, float | int]:
         err = frame["cbs_minus_exp"]
@@ -937,7 +959,7 @@ def compare_with_cbs(table: pd.DataFrame, cbs_csv: Path) -> dict[str, Any]:
         .round(3)
         .to_dict("records")
     )
-    return report
+    return report, comparison
 
 
 # --------------------------------------------------------------------- main
@@ -991,7 +1013,11 @@ def main(argv: list[str] | None = None) -> int:
 
     all_sources = args.output.with_name(args.output.stem + "_all_sources.csv")
     manifest_path = args.output.with_suffix(".manifest.json")
-    for target in (args.output, all_sources, manifest_path):
+    vs_cbs = args.output.with_name(args.output.stem + "_vs_cbs.csv")
+    targets = [args.output, all_sources, manifest_path]
+    if args.cbs_csv is not None:
+        targets.append(vs_cbs)
+    for target in targets:
         if target.exists():
             print(f"refusing to overwrite {target}", file=sys.stderr)
             return 1
@@ -1062,7 +1088,11 @@ def main(argv: list[str] | None = None) -> int:
         "all_sources_sha256": sha256_of(all_sources),
     }
     if args.cbs_csv is not None:
-        manifest["cbs_comparison"] = compare_with_cbs(table, args.cbs_csv)
+        report, comparison = compare_with_cbs(table, args.cbs_csv)
+        comparison.to_csv(vs_cbs, index=False, float_format="%.4f")
+        report["comparison_csv"] = str(vs_cbs)
+        report["comparison_sha256"] = sha256_of(vs_cbs)
+        manifest["cbs_comparison"] = report
 
     manifest_path.write_text(json.dumps(manifest, indent=2, default=str) + "\n")
     summary = {k: manifest[k] for k in ("rows", "long_rows", "conflict_rows")}

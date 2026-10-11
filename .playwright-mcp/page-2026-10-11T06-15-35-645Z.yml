@@ -1,0 +1,442 @@
+- generic [ref=f2e1]:
+  - generic [ref=f2e2]:
+    - banner [ref=f2e3]:
+      - strong [ref=f2e4]: Grimperium
+      - navigation "Telas" [ref=f2e5]:
+        - button "Progresso" [ref=f2e6] [cursor=pointer]
+        - button "Experimental" [ref=f2e7] [cursor=pointer]
+      - status [ref=f2e8]: API ativa · somente leitura
+    - main [ref=f2e9]:
+      - generic [ref=f2e106]:
+        - generic [ref=f2e107]:
+          - generic [ref=f2e108]:
+            - heading "Experimental" [level=1] [ref=f2e109]
+            - paragraph [ref=f2e110]: Fontes de ΔHf gasoso e diferenças contra a referência CBS.
+          - button "Atualizar dados" [ref=f2e111] [cursor=pointer]
+        - region "Cobertura e proveniência" [ref=f2e112]:
+          - heading "Cobertura e proveniência" [level=2] [ref=f2e113]
+          - paragraph [ref=f2e114]: 2.170 moléculas
+          - generic [ref=f2e115]:
+            - generic [ref=f2e116]:
+              - heading "Por família" [level=3] [ref=f2e117]
+              - table [ref=f2e118]:
+                - rowgroup [ref=f2e119]:
+                  - row [ref=f2e120]:
+                    - columnheader "Família" [ref=f2e121]
+                    - columnheader "Quantidade" [ref=f2e122]
+                - rowgroup [ref=f2e123]:
+                  - row [ref=f2e124]:
+                    - rowheader "bains" [ref=f2e125]
+                    - cell "1.174" [ref=f2e126]
+                  - row [ref=f2e127]:
+                    - rowheader "nist" [ref=f2e128]
+                    - cell "669" [ref=f2e129]
+                  - row [ref=f2e130]:
+                    - rowheader "atct" [ref=f2e131]
+                    - cell "266" [ref=f2e132]
+                  - row [ref=f2e133]:
+                    - rowheader "rmg" [ref=f2e134]
+                    - cell "61" [ref=f2e135]
+            - generic [ref=f2e136]:
+              - heading "Por fonte" [level=3] [ref=f2e137]
+              - table [ref=f2e138]:
+                - rowgroup [ref=f2e139]:
+                  - row [ref=f2e140]:
+                    - columnheader "Fonte" [ref=f2e141]
+                    - columnheader "Quantidade" [ref=f2e142]
+                - rowgroup [ref=f2e143]:
+                  - row [ref=f2e144]:
+                    - rowheader "nist:gas" [ref=f2e145]
+                    - cell "600" [ref=f2e146]
+                  - row [ref=f2e147]:
+                    - rowheader "bains:Pedley" [ref=f2e148]
+                    - cell "528" [ref=f2e149]
+                  - row [ref=f2e150]:
+                    - rowheader "bains:Yaws" [ref=f2e151]
+                    - cell "481" [ref=f2e152]
+                  - row [ref=f2e153]:
+                    - rowheader "atct" [ref=f2e154]
+                    - cell "266" [ref=f2e155]
+                  - row [ref=f2e156]:
+                    - rowheader "rmg:CCCBDB" [ref=f2e157]
+                    - cell "58" [ref=f2e158]
+                  - row [ref=f2e159]:
+                    - rowheader "bains:NIST-1" [ref=f2e160]
+                    - cell "51" [ref=f2e161]
+                  - row [ref=f2e162]:
+                    - rowheader "bains:Cioslowski" [ref=f2e163]
+                    - cell "50" [ref=f2e164]
+                  - row [ref=f2e165]:
+                    - rowheader "nist:liquid+vap" [ref=f2e166]
+                    - cell "34" [ref=f2e167]
+                  - row [ref=f2e168]:
+                    - rowheader "nist:solid+sub" [ref=f2e169]
+                    - cell "28" [ref=f2e170]
+                  - row [ref=f2e171]:
+                    - rowheader "bains:Cox-1" [ref=f2e172]
+                    - cell "23" [ref=f2e173]
+                  - row [ref=f2e174]:
+                    - rowheader "bains:Add Lit 1" [ref=f2e175]
+                    - cell "21" [ref=f2e176]
+                  - row [ref=f2e177]:
+                    - rowheader "bains:Winget" [ref=f2e178]
+                    - cell "18" [ref=f2e179]
+                  - row [ref=f2e180]:
+                    - rowheader "nist:gas_ion" [ref=f2e181]
+                    - cell "7" [ref=f2e182]
+                  - row [ref=f2e183]:
+                    - rowheader "bains:Sandler" [ref=f2e184]
+                    - cell "2" [ref=f2e185]
+                  - row [ref=f2e186]:
+                    - rowheader "rmg:ATcT" [ref=f2e187]
+                    - cell "2" [ref=f2e188]
+                  - row [ref=f2e189]:
+                    - rowheader "rmg:Cioslowski" [ref=f2e190]
+                    - cell "1" [ref=f2e191]
+            - generic [ref=f2e192]:
+              - heading "Flags" [level=3] [ref=f2e193]
+              - table [ref=f2e194]:
+                - rowgroup [ref=f2e195]:
+                  - row [ref=f2e196]:
+                    - columnheader "Flag" [ref=f2e197]
+                    - columnheader "Quantidade" [ref=f2e198]
+                - rowgroup [ref=f2e199]:
+                  - row [ref=f2e200]:
+                    - rowheader "validation_only" [ref=f2e201]
+                    - cell "669" [ref=f2e202]
+                  - row [ref=f2e203]:
+                    - rowheader "low_priority_only" [ref=f2e204]
+                    - cell "488" [ref=f2e205]
+                  - row [ref=f2e206]:
+                    - rowheader "conflict_flag" [ref=f2e207]
+                    - cell "295" [ref=f2e208]
+                  - row [ref=f2e209]:
+                    - rowheader "stewart_reference" [ref=f2e210]
+                    - cell "131" [ref=f2e211]
+              - heading "Incerteza" [level=3] [ref=f2e212]
+              - table [ref=f2e213]:
+                - rowgroup [ref=f2e214]:
+                  - row [ref=f2e215]:
+                    - columnheader "Tipo" [ref=f2e216]
+                    - columnheader "Quantidade" [ref=f2e217]
+                - rowgroup [ref=f2e218]:
+                  - row [ref=f2e219]:
+                    - rowheader "none" [ref=f2e220]
+                    - cell "1.174" [ref=f2e221]
+                  - row [ref=f2e222]:
+                    - rowheader "reported" [ref=f2e223]
+                    - cell "996" [ref=f2e224]
+        - region "Explorar pares CBS × experimental" [ref=f2e225]:
+          - heading "Explorar pares CBS × experimental" [level=2] [ref=f2e226]
+          - paragraph [ref=f2e227]: Valores NIST marcados como “só validação” não são alvos de treino. Pares ordenados por maior |CBS − exp|.
+          - generic [ref=f2e228]:
+            - generic [ref=f2e229]:
+              - text: Buscar ID, SMILES ou fonte
+              - textbox "Buscar ID, SMILES ou fonte" [ref=f2e230]:
+                - /placeholder: "Ex.: cbs_01102"
+            - generic [ref=f2e231]:
+              - text: Fonte
+              - combobox "Fonte" [ref=f2e232]:
+                - option "Todas" [selected]
+                - option "atct"
+                - option "bains:Add Lit 1"
+                - option "bains:Cioslowski"
+                - option "bains:Cox-1"
+                - option "bains:NIST-1"
+                - option "bains:Pedley"
+                - option "bains:Sandler"
+                - option "bains:Winget"
+                - option "bains:Yaws"
+                - option "nist:gas"
+                - option "nist:gas_ion"
+                - option "nist:liquid+vap"
+                - option "nist:solid+sub"
+                - option "rmg:CCCBDB"
+            - generic [ref=f2e233]:
+              - checkbox "Só validação" [checked] [ref=f2e234]
+              - text: Só validação
+            - generic [ref=f2e235]:
+              - checkbox "Só conflitos" [checked] [active] [ref=f2e236]
+              - text: Só conflitos
+          - generic "Estatísticas dos pares filtrados" [ref=f2e237]:
+            - paragraph [ref=f2e238]:
+              - strong [ref=f2e239]: "20"
+              - text: pares filtrados
+            - paragraph [ref=f2e240]:
+              - strong [ref=f2e241]: 4,09
+              - text: viés CBS − exp
+            - paragraph [ref=f2e242]:
+              - strong [ref=f2e243]: 5,91
+              - text: MAE
+            - paragraph [ref=f2e244]:
+              - strong [ref=f2e245]: 8,11
+              - text: RMSE
+          - generic [ref=f2e246]:
+            - region "Paridade CBS × experimental" [ref=f2e247]:
+              - heading "Paridade CBS × experimental" [level=2] [ref=f2e248]
+              - paragraph [ref=f2e249]: "ΔHf em kcal/mol; linha tracejada: igualdade."
+              - img "Dispersão de entalpia CBS versus experimental" [ref=f2e250]:
+                - generic [ref=f2e252]:
+                  - list [ref=f2e254]:
+                    - listitem [ref=f2e255]:
+                      - img "Validação + conflito legend icon" [ref=f2e6477]
+                      - text: Validação + conflito
+                  - application [ref=f2e267]:
+                    - generic [ref=f2e295]:
+                      - generic [ref=f2e296]:
+                        - generic [ref=f2e6539]: "-179"
+                        - generic [ref=f2e6541]: "-114"
+                        - generic [ref=f2e6543]: "-49"
+                        - generic [ref=f2e6545]: "16"
+                        - generic [ref=f2e6547]: "62"
+                      - generic [ref=f2e305]: Experimental
+                      - generic [ref=f2e306]:
+                        - generic [ref=f2e6549]: "-179"
+                        - generic [ref=f2e6551]: "-114"
+                        - generic [ref=f2e6553]: "-49"
+                        - generic [ref=f2e6555]: "16"
+                        - generic [ref=f2e6557]: "62"
+                      - generic [ref=f2e315]: CBS
+            - region "Erro por tamanho da molécula" [ref=f2e316]:
+              - heading "Erro por tamanho da molécula" [level=2] [ref=f2e317]
+              - paragraph [ref=f2e318]: CBS − experimental (kcal/mol) × número de átomos pesados.
+              - img "Dispersão de erro CBS menos experimental por número de átomos pesados" [ref=f2e319]:
+                - generic [ref=f2e321]:
+                  - list [ref=f2e323]:
+                    - listitem [ref=f2e324]:
+                      - img "Validação + conflito legend icon" [ref=f2e6559]
+                      - text: Validação + conflito
+                  - application [ref=f2e336]:
+                    - generic [ref=f2e361]:
+                      - generic [ref=f2e362]:
+                        - generic [ref=f2e363]: "0"
+                        - generic [ref=f2e6621]: "4"
+                        - generic [ref=f2e6623]: "8"
+                        - generic [ref=f2e6625]: "12"
+                        - generic [ref=f2e6627]: "16"
+                      - generic [ref=f2e373]: Átomos pesados
+                      - generic [ref=f2e374]:
+                        - generic [ref=f2e6387]: "-26"
+                        - generic [ref=f2e6629]: "-13"
+                        - generic [ref=f2e6631]: "0"
+                        - generic [ref=f2e6633]: "13"
+                        - generic [ref=f2e6635]: "26"
+                      - generic [ref=f2e385]: CBS − exp
+          - table [ref=f2e387]:
+            - rowgroup [ref=f2e388]:
+              - row [ref=f2e389]:
+                - columnheader "ID exp." [ref=f2e390]
+                - columnheader "ID CBS" [ref=f2e391]
+                - columnheader "SMILES" [ref=f2e392]
+                - columnheader "Fonte" [ref=f2e393]
+                - columnheader "Pesados" [ref=f2e394]
+                - columnheader "Exp." [ref=f2e395]
+                - columnheader "CBS" [ref=f2e396]
+                - columnheader "CBS − exp" [ref=f2e397]
+                - columnheader "Flags" [ref=f2e398]
+            - rowgroup [ref=f2e399]:
+              - row [ref=f2e410]:
+                - cell "exp_02102" [ref=f2e411]
+                - cell "cbs_42472" [ref=f2e412]
+                - cell "Oc1nc(O)nc(O)n1" [ref=f2e413]
+                - cell "nist:gas" [ref=f2e414]
+                - cell "9" [ref=f2e415]
+                - cell "-134,82" [ref=f2e416]
+                - cell "-110,52" [ref=f2e417]
+                - cell "24,31" [ref=f2e418]
+                - cell "só validação, conflito" [ref=f2e419]
+              - row [ref=f2e590]:
+                - cell "exp_01597" [ref=f2e591]
+                - cell "cbs_30465" [ref=f2e592]
+                - cell "O=[N+]([O-])OCC(CO[N+](=O)[O-])O[N+](=O)[O-]" [ref=f2e593]
+                - cell "nist:gas" [ref=f2e594]
+                - cell "15" [ref=f2e595]
+                - cell "-66,71" [ref=f2e596]
+                - cell "-80,46" [ref=f2e597]
+                - cell "-13,75" [ref=f2e598]
+                - cell "só validação, conflito" [ref=f2e599]
+              - row [ref=f2e620]:
+                - cell "exp_01387" [ref=f2e621]
+                - cell "cbs_52038" [ref=f2e622]
+                - cell "CC(C)(C)c1ccc(O)cc1" [ref=f2e623]
+                - cell "nist:solid+sub" [ref=f2e624]
+                - cell "11" [ref=f2e625]
+                - cell "-53,68" [ref=f2e626]
+                - cell "-40,98" [ref=f2e627]
+                - cell "12,7" [ref=f2e628]
+                - cell "só validação, conflito" [ref=f2e629]
+              - row [ref=f2e6637]:
+                - cell "exp_00225" [ref=f2e6638]
+                - cell "cbs_12123" [ref=f2e6639]
+                - cell "N#CCN1CCCCC1" [ref=f2e6640]
+                - cell "nist:gas" [ref=f2e6641]
+                - cell "9" [ref=f2e6642]
+                - cell "19,84" [ref=f2e6643]
+                - cell "30,17" [ref=f2e6644]
+                - cell "10,33" [ref=f2e6645]
+                - cell "só validação, conflito" [ref=f2e6646]
+              - row [ref=f2e6647]:
+                - cell "exp_00106" [ref=f2e6648]
+                - cell "cbs_00321" [ref=f2e6649]
+                - cell "c1cc2ccc3cccc4ccc(c1)c2c34" [ref=f2e6650]
+                - cell "nist:gas" [ref=f2e6651]
+                - cell "16" [ref=f2e6652]
+                - cell "53,94" [ref=f2e6653]
+                - cell "61,3" [ref=f2e6654]
+                - cell "7,36" [ref=f2e6655]
+                - cell "só validação, conflito" [ref=f2e6656]
+              - row [ref=f2e6657]:
+                - cell "exp_00257" [ref=f2e6658]
+                - cell "cbs_30560" [ref=f2e6659]
+                - cell "Nc1cccc(O)c1" [ref=f2e6660]
+                - cell "nist:gas" [ref=f2e6661]
+                - cell "8" [ref=f2e6662]
+                - cell "-23,57" [ref=f2e6663]
+                - cell "-17,11" [ref=f2e6664]
+                - cell "6,46" [ref=f2e6665]
+                - cell "só validação, conflito" [ref=f2e6666]
+              - row [ref=f2e6667]:
+                - cell "exp_00379" [ref=f2e6668]
+                - cell "cbs_47501" [ref=f2e6669]
+                - cell "O=C(O)c1ccc(O)cc1" [ref=f2e6670]
+                - cell "nist:gas" [ref=f2e6671]
+                - cell "10" [ref=f2e6672]
+                - cell "-117,73" [ref=f2e6673]
+                - cell "-111,58" [ref=f2e6674]
+                - cell "6,16" [ref=f2e6675]
+                - cell "só validação, conflito" [ref=f2e6676]
+              - row [ref=f2e6677]:
+                - cell "exp_00692" [ref=f2e6678]
+                - cell "cbs_09674" [ref=f2e6679]
+                - cell "CC(C)C(C)(C)O" [ref=f2e6680]
+                - cell "nist:gas" [ref=f2e6681]
+                - cell "7" [ref=f2e6682]
+                - cell "-85,33" [ref=f2e6683]
+                - cell "-79,64" [ref=f2e6684]
+                - cell "5,69" [ref=f2e6685]
+                - cell "só validação, conflito" [ref=f2e6686]
+              - row [ref=f2e6687]:
+                - cell "exp_01752" [ref=f2e6688]
+                - cell "cbs_46622" [ref=f2e6689]
+                - cell "ON=C1CCCCC1" [ref=f2e6690]
+                - cell "nist:solid+sub" [ref=f2e6691]
+                - cell "8" [ref=f2e6692]
+                - cell "-17,9" [ref=f2e6693]
+                - cell "-12,94" [ref=f2e6694]
+                - cell "4,96" [ref=f2e6695]
+                - cell "só validação, conflito" [ref=f2e6696]
+              - row [ref=f2e6697]:
+                - cell "exp_01869" [ref=f2e6698]
+                - cell "cbs_06759" [ref=f2e6699]
+                - cell "CC(=O)OC(C)(C)C" [ref=f2e6700]
+                - cell "nist:gas" [ref=f2e6701]
+                - cell "8" [ref=f2e6702]
+                - cell "-123,45" [ref=f2e6703]
+                - cell "-119,27" [ref=f2e6704]
+                - cell "4,17" [ref=f2e6705]
+                - cell "só validação, conflito" [ref=f2e6706]
+              - row [ref=f2e6707]:
+                - cell "exp_00740" [ref=f2e6708]
+                - cell "cbs_09555" [ref=f2e6709]
+                - cell "CC(C)(O)C(C)(C)O" [ref=f2e6710]
+                - cell "nist:gas" [ref=f2e6711]
+                - cell "8" [ref=f2e6712]
+                - cell "-129,16" [ref=f2e6713]
+                - cell "-125,33" [ref=f2e6714]
+                - cell "3,83" [ref=f2e6715]
+                - cell "só validação, conflito" [ref=f2e6716]
+              - row [ref=f2e6717]:
+                - cell "exp_00198" [ref=f2e6718]
+                - cell "cbs_30544" [ref=f2e6719]
+                - cell "Nc1ccccc1O" [ref=f2e6720]
+                - cell "nist:gas" [ref=f2e6721]
+                - cell "8" [ref=f2e6722]
+                - cell "-20,82" [ref=f2e6723]
+                - cell "-17,12" [ref=f2e6724]
+                - cell "3,7" [ref=f2e6725]
+                - cell "só validação, conflito" [ref=f2e6726]
+              - row [ref=f2e6727]:
+                - cell "exp_00237" [ref=f2e6728]
+                - cell "cbs_07559" [ref=f2e6729]
+                - cell "C=CC(=O)OCCCC" [ref=f2e6730]
+                - cell "nist:gas" [ref=f2e6731]
+                - cell "9" [ref=f2e6732]
+                - cell "-89,7" [ref=f2e6733]
+                - cell "-86,45" [ref=f2e6734]
+                - cell "3,25" [ref=f2e6735]
+                - cell "só validação, conflito" [ref=f2e6736]
+              - row [ref=f2e6737]:
+                - cell "exp_01883" [ref=f2e6738]
+                - cell "cbs_47524" [ref=f2e6739]
+                - cell "Oc1cccc(O)c1O" [ref=f2e6740]
+                - cell "nist:gas" [ref=f2e6741]
+                - cell "9" [ref=f2e6742]
+                - cell "-103,78" [ref=f2e6743]
+                - cell "-106,14" [ref=f2e6744]
+                - cell "-2,36" [ref=f2e6745]
+                - cell "só validação, conflito" [ref=f2e6746]
+              - row [ref=f2e6747]:
+                - cell "exp_00471" [ref=f2e6748]
+                - cell "cbs_51931" [ref=f2e6749]
+                - cell "Oc1ccc(O)c(O)c1" [ref=f2e6750]
+                - cell "nist:gas" [ref=f2e6751]
+                - cell "9" [ref=f2e6752]
+                - cell "-106,12" [ref=f2e6753]
+                - cell "-104" [ref=f2e6754]
+                - cell "2,11" [ref=f2e6755]
+                - cell "só validação, conflito" [ref=f2e6756]
+              - row [ref=f2e6757]:
+                - cell "exp_02088" [ref=f2e6758]
+                - cell "cbs_52041" [ref=f2e6759]
+                - cell "Cc1ccc(O)c(O)c1" [ref=f2e6760]
+                - cell "nist:gas" [ref=f2e6761]
+                - cell "9" [ref=f2e6762]
+                - cell "-71,32" [ref=f2e6763]
+                - cell "-69,3" [ref=f2e6764]
+                - cell "2,02" [ref=f2e6765]
+                - cell "só validação, conflito" [ref=f2e6766]
+              - row [ref=f2e6767]:
+                - cell "exp_01193" [ref=f2e6768]
+                - cell "cbs_09598" [ref=f2e6769]
+                - cell "OCCCCCCCCO" [ref=f2e6770]
+                - cell "nist:gas" [ref=f2e6771]
+                - cell "10" [ref=f2e6772]
+                - cell "-116,47" [ref=f2e6773]
+                - cell "-114,62" [ref=f2e6774]
+                - cell "1,84" [ref=f2e6775]
+                - cell "só validação, conflito" [ref=f2e6776]
+              - row [ref=f2e6777]:
+                - cell "exp_00117" [ref=f2e6778]
+                - cell "cbs_06247" [ref=f2e6779]
+                - cell "COC(=O)CC(=O)OC" [ref=f2e6780]
+                - cell "nist:gas" [ref=f2e6781]
+                - cell "9" [ref=f2e6782]
+                - cell "-176,34" [ref=f2e6783]
+                - cell "-178,12" [ref=f2e6784]
+                - cell "-1,78" [ref=f2e6785]
+                - cell "só validação, conflito" [ref=f2e6786]
+              - row [ref=f2e6787]:
+                - cell "exp_01305" [ref=f2e6788]
+                - cell "cbs_51779" [ref=f2e6789]
+                - cell "Cc1cccc(O)c1O" [ref=f2e6790]
+                - cell "nist:gas" [ref=f2e6791]
+                - cell "9" [ref=f2e6792]
+                - cell "-71,53" [ref=f2e6793]
+                - cell "-70,45" [ref=f2e6794]
+                - cell "1,09" [ref=f2e6795]
+                - cell "só validação, conflito" [ref=f2e6796]
+              - row [ref=f2e6797]:
+                - cell "exp_01242" [ref=f2e6798]
+                - cell "cbs_26876" [ref=f2e6799]
+                - cell "N=c1ccnc(O)[nH]1" [ref=f2e6800]
+                - cell "nist:gas" [ref=f2e6801]
+                - cell "8" [ref=f2e6802]
+                - cell "-14,1" [ref=f2e6803]
+                - cell "-14,47" [ref=f2e6804]
+                - cell "-0,37" [ref=f2e6805]
+                - cell "só validação, conflito" [ref=f2e6806]
+          - generic [ref=f2e650]:
+            - generic [ref=f2e651]: Mostrando 1–20 de 20
+            - button "Anterior" [disabled] [ref=f2e652]
+            - button "Próxima" [disabled] [ref=f2e653]
+  - generic [aria-hidden] [ref=f2e654]: "4"

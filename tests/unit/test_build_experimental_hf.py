@@ -309,8 +309,7 @@ def test_conflict_rule_uses_combined_uncertainty() -> None:
     assert builder._conflicts(chosen, others) == 1
 
 
-def test_compare_with_cbs_uses_lowest_conformer(tmp_path: Path) -> None:
-    table, _, _ = _built(tmp_path)
+def _write_cbs(tmp_path: Path) -> Path:
     cbs = tmp_path / "cbs.csv"
     pd.DataFrame(
         {
@@ -321,8 +320,13 @@ def test_compare_with_cbs_uses_lowest_conformer(tmp_path: Path) -> None:
             "H298_cbs": [-20.0, -50.0, -52.0, -30.0],
         }
     ).to_csv(cbs, index=False)
+    return cbs
 
-    report = builder.compare_with_cbs(table, cbs)
+
+def test_compare_with_cbs_uses_lowest_conformer(tmp_path: Path) -> None:
+    table, _, _ = _built(tmp_path)
+
+    report, comparison = builder.compare_with_cbs(table, _write_cbs(tmp_path))
 
     assert report["overlap_inchikey"] == 2
     methane = _row(table, "C")["H298_exp"]
@@ -330,6 +334,44 @@ def test_compare_with_cbs_uses_lowest_conformer(tmp_path: Path) -> None:
     errors = [-20.0 - methane, -52.0 - ethanol]
     assert report["all"]["bias"] == pytest.approx(sum(errors) / 2)
     assert report["all"]["mae"] == pytest.approx(sum(abs(e) for e in errors) / 2)
+
+    assert list(comparison.columns) == builder.COMPARISON_COLUMNS
+    assert list(comparison["exp_id"]) == sorted(comparison["exp_id"])
+    by_smiles = comparison.set_index("smiles")
+    assert by_smiles.loc["CCO", "mol_id"] == "cbs_3"
+    assert by_smiles.loc["CCO", "H298_cbs"] == -52.0
+    assert by_smiles.loc["C", "cbs_minus_exp"] == pytest.approx(errors[0])
+    assert by_smiles.loc["CCO", "cbs_minus_exp"] == pytest.approx(errors[1])
+
+
+def test_main_writes_cbs_comparison_csv_into_manifest(tmp_path: Path) -> None:
+    output = tmp_path / "exp.csv"
+    argv = [
+        "--atct-html",
+        str(_write_atct(tmp_path)),
+        "--rmg-dir",
+        str(_write_rmg(tmp_path)),
+        "--bains-xlsx",
+        str(_write_bains(tmp_path, BAINS_ROWS)),
+        "--cbs-csv",
+        str(_write_cbs(tmp_path)),
+        "--output",
+        str(output),
+    ]
+    assert builder.main(argv) == 0
+
+    vs_cbs = tmp_path / "exp_vs_cbs.csv"
+    report = json.loads(output.with_suffix(".manifest.json").read_text())[
+        "cbs_comparison"
+    ]
+    assert report["comparison_csv"] == str(vs_cbs)
+    assert report["comparison_sha256"] == builder.sha256_of(vs_cbs)
+    comparison = pd.read_csv(vs_cbs)
+    assert len(comparison) == report["overlap_inchikey"] == 2
+    errors = comparison["H298_cbs"] - comparison["H298_exp"]
+    assert comparison["cbs_minus_exp"].to_numpy() == pytest.approx(
+        errors.to_numpy(), abs=1e-4
+    )
 
 
 def test_main_writes_outputs_and_refuses_overwrite(tmp_path: Path) -> None:

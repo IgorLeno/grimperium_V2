@@ -39,3 +39,15 @@ Rule: when a source's display SMILES defines identity, cross-check charge (and f
 [2026-10-07] Context: NIST WebBook fetcher, search pages parsed by regex after a 10-formula pilot
 Mistake: the pilot passed, but the full run hit result names with markup (`<sup>`) and single-species pages without section links; species were skipped silently as "truncated"/"unknown".
 Rule: a scraper must count every page kind it classifies and treat any non-expected kind as a failure to inspect; re-run the parser over the whole cache (offline) after the fetch, before building on it.
+
+[2026-10-07] Context: scaffolding the Vite dashboard with TypeScript 6
+Mistake: the first typecheck could not resolve the side-effect CSS import in `main.tsx`.
+Rule: include `vite/client` in `tsconfig.json` types when importing CSS from TypeScript under the strict dashboard configuration.
+
+[2026-10-07] Context: handing off the dashboard scaffold before execution docs
+Mistake: the user opened `index.html` via `file://`, where Vite cannot transform TSX modules, and the page did not run.
+Rule: document the HTTP startup path next to every new Vite scaffold before inviting a browser check; never point users at the source HTML file.
+
+[2026-10-11] Context: adding the health endpoint to a dashboard with separate data requests
+Mistake: a retry test used a global sequence of mocked fetch responses; the new health request consumed the response intended for the dataset.
+Rule: mock responses by endpoint when testing a page that makes multiple requests, and count retries for the specific endpoint under test.

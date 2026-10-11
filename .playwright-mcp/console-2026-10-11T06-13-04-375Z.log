@@ -1,0 +1,4 @@
+[     723ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://127.0.0.1:5173/node_modules/.vite/deps/react-dom_client.js?v=6a67e23f:15804
+[     884ms] [ERROR] Failed to load resource: the server responded with a status of 502 (Bad Gateway) @ http://127.0.0.1:5173/api/dataset/progress:0
+[     886ms] [ERROR] Failed to load resource: the server responded with a status of 502 (Bad Gateway) @ http://127.0.0.1:5173/api/health:0
+[     906ms] [ERROR] Failed to load resource: the server responded with a status of 404 (Not Found) @ http://127.0.0.1:5173/favicon.ico:0

@@ -1,0 +1,15 @@
+- generic [ref=f2e2]:
+  - banner [ref=f2e3]:
+    - strong [ref=f2e4]: Grimperium
+    - navigation "Telas" [ref=f2e5]:
+      - button "Progresso" [ref=f2e6] [cursor=pointer]
+      - button "Experimental" [ref=f2e7] [cursor=pointer]
+    - status [ref=f2e8]: Conectando à API…
+  - main [ref=f2e9]:
+    - generic [ref=f2e10]:
+      - generic [ref=f2e11]:
+        - generic [ref=f2e12]:
+          - heading "Progresso do dataset" [level=1] [ref=f2e13]
+          - paragraph [ref=f2e14]: Contagens atuais do CSV legado e do store Semi-Imperium.
+        - button "Atualizar dados" [ref=f2e15] [cursor=pointer]
+      - status [ref=f2e16]: Carregando progresso…
