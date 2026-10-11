@@ -1,0 +1,25 @@
+- generic [ref=f2e1]:
+  - generic [ref=f2e2]:
+    - banner [ref=f2e3]:
+      - strong [ref=f2e4]: Grimperium
+      - navigation "Telas" [ref=f2e5]:
+        - button "Progresso" [ref=f2e6] [cursor=pointer]
+        - button "Experimental" [ref=f2e7] [cursor=pointer]
+      - status [ref=f2e8]: API ativa · somente leitura
+    - main [ref=f2e9]:
+      - generic [ref=f2e6923]:
+        - generic [ref=f2e6924]:
+          - generic [ref=f2e6925]:
+            - heading "Progresso do dataset" [level=1] [ref=f2e6926]
+            - paragraph [ref=f2e6927]: Contagens atuais do CSV legado e do store Semi-Imperium.
+          - button "Atualizar dados" [active] [ref=f2e6928] [cursor=pointer]
+        - region "Dataset PM7" [ref=f2e7018]:
+          - heading "Dataset PM7" [level=2] [ref=f2e7019]
+          - paragraph [ref=f2e7020]:
+            - generic [ref=f2e7021]: "Protocolo legado: crest_pm7"
+          - paragraph [ref=f2e7022]: 0 linhas
+          - paragraph [ref=f2e7023]: Nenhuma linha no dataset.
+        - region "Semi-Imperium" [ref=f2e7024]:
+          - heading "Semi-Imperium" [level=2] [ref=f2e7025]
+          - paragraph [ref=f2e7026]: Store ainda não existe.
+  - generic [aria-hidden] [ref=f2e654]: "4"

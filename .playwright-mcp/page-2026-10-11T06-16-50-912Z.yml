@@ -1,0 +1,108 @@
+- generic [ref=f2e1]:
+  - generic [ref=f2e2]:
+    - banner [ref=f2e3]:
+      - strong [ref=f2e4]: Grimperium
+      - navigation "Telas" [ref=f2e5]:
+        - button "Progresso" [active] [ref=f2e6] [cursor=pointer]
+        - button "Experimental" [ref=f2e7] [cursor=pointer]
+      - status [ref=f2e8]: API ativa · somente leitura
+    - main [ref=f2e9]:
+      - generic [ref=f2e6923]:
+        - generic [ref=f2e6924]:
+          - generic [ref=f2e6925]:
+            - heading "Progresso do dataset" [level=1] [ref=f2e6926]
+            - paragraph [ref=f2e6927]: Contagens atuais do CSV legado e do store Semi-Imperium.
+          - button "Atualizar dados" [ref=f2e6928] [cursor=pointer]
+        - region "Dataset PM7" [ref=f2e6929]:
+          - heading "Dataset PM7" [level=2] [ref=f2e6930]
+          - paragraph [ref=f2e6931]:
+            - generic [ref=f2e6932]: "Protocolo legado: crest_pm7"
+          - paragraph [ref=f2e6933]: 29.568 linhas
+          - img "Distribuição dos estados do dataset" [ref=f2e6934]:
+            - 'generic "Pending: 16.876" [ref=f2e6935]'
+            - 'generic "OK: 8.232" [ref=f2e6936]'
+            - 'generic "Selected: 4.427" [ref=f2e6937]'
+            - 'generic "Skip: 29" [ref=f2e6938]'
+            - 'generic "Rerun: 3" [ref=f2e6939]'
+            - 'generic "Running: 1" [ref=f2e6940]'
+          - generic [ref=f2e6941]:
+            - generic [ref=f2e6942]:
+              - heading "Estado do cálculo" [level=3] [ref=f2e6943]
+              - table [ref=f2e6944]:
+                - rowgroup [ref=f2e6945]:
+                  - row [ref=f2e6946]:
+                    - columnheader "Estado" [ref=f2e6947]
+                    - columnheader "Quantidade" [ref=f2e6948]
+                - rowgroup [ref=f2e6949]:
+                  - row [ref=f2e6950]:
+                    - rowheader "Pending" [ref=f2e6951]
+                    - cell "16.876" [ref=f2e6952]
+                  - row [ref=f2e6953]:
+                    - rowheader "OK" [ref=f2e6954]
+                    - cell "8.232" [ref=f2e6955]
+                  - row [ref=f2e6956]:
+                    - rowheader "Selected" [ref=f2e6957]
+                    - cell "4.427" [ref=f2e6958]
+                  - row [ref=f2e6959]:
+                    - rowheader "Skip" [ref=f2e6960]
+                    - cell "29" [ref=f2e6961]
+                  - row [ref=f2e6962]:
+                    - rowheader "Rerun" [ref=f2e6963]
+                    - cell "3" [ref=f2e6964]
+                  - row [ref=f2e6965]:
+                    - rowheader "Running" [ref=f2e6966]
+                    - cell "1" [ref=f2e6967]
+            - generic [ref=f2e6968]:
+              - heading "Qualidade CBS" [level=3] [ref=f2e6969]
+              - table [ref=f2e6970]:
+                - rowgroup [ref=f2e6971]:
+                  - row [ref=f2e6972]:
+                    - columnheader "Flag" [ref=f2e6973]
+                    - columnheader "Quantidade" [ref=f2e6974]
+                - rowgroup [ref=f2e6975]:
+                  - row [ref=f2e6976]:
+                    - rowheader "unset" [ref=f2e6977]
+                    - cell "21.336" [ref=f2e6978]
+                  - row [ref=f2e6979]:
+                    - rowheader "OK" [ref=f2e6980]
+                    - cell "8.169" [ref=f2e6981]
+                  - row [ref=f2e6982]:
+                    - rowheader "SUSPECT" [ref=f2e6983]
+                    - cell "63" [ref=f2e6984]
+        - region "Semi-Imperium" [ref=f2e6985]:
+          - heading "Semi-Imperium" [level=2] [ref=f2e6986]
+          - generic [ref=f2e6987]:
+            - paragraph [ref=f2e6988]:
+              - strong [ref=f2e6989]: "1"
+              - text: moléculas
+            - paragraph [ref=f2e6990]:
+              - strong [ref=f2e6991]: "2"
+              - text: execuções
+            - paragraph [ref=f2e6992]:
+              - strong [ref=f2e6993]: "2"
+              - text: cálculos
+          - table [ref=f2e6994]:
+            - rowgroup [ref=f2e6995]:
+              - row [ref=f2e6996]:
+                - columnheader "Estado mais recente" [ref=f2e6997]
+                - columnheader "Quantidade" [ref=f2e6998]
+            - rowgroup [ref=f2e6999]:
+              - row [ref=f2e7000]:
+                - rowheader "failed" [ref=f2e7001]
+                - cell "1" [ref=f2e7002]
+              - row [ref=f2e7003]:
+                - rowheader "pending" [ref=f2e7004]
+                - cell "0" [ref=f2e7005]
+              - row [ref=f2e7006]:
+                - rowheader "running" [ref=f2e7007]
+                - cell "0" [ref=f2e7008]
+              - row [ref=f2e7009]:
+                - rowheader "saddle" [ref=f2e7010]
+                - cell "0" [ref=f2e7011]
+              - row [ref=f2e7012]:
+                - rowheader "unverified" [ref=f2e7013]
+                - cell "0" [ref=f2e7014]
+              - row [ref=f2e7015]:
+                - rowheader "verified" [ref=f2e7016]
+                - cell "0" [ref=f2e7017]
+  - generic [aria-hidden] [ref=f2e654]: "4"

@@ -1,0 +1,46 @@
+{
+  "calculation_id": "calc-f798490b4da866d0",
+  "error_message": "This molecule asks for a CREST conformer search but no CREST execution backend is configured; disable CREST for it in the Calculate table or configure a CREST backend",
+  "molecule": {
+    "canonical_smiles": "CCO",
+    "charge": 0,
+    "cid": 702,
+    "display_name": "Ethanol",
+    "inchi": "InChI=1S/C2H6O/c1-2-3/h3H,2H2,1H3",
+    "inchikey": "LFQSCWFLJHTTHZ-UHFFFAOYSA-N",
+    "input_type": "chemical_name",
+    "molecule_id": "mol-33eca530e07c53cc",
+    "multiplicity": 1,
+    "original_input": "ethanol",
+    "resolved_name": "Ethanol",
+    "resolver": "pubchem",
+    "resolver_identifier": "702"
+  },
+  "provenance": {
+    "grimperium_version": "0.2.0",
+    "hostname": null,
+    "method_id": "semi_imperium_conformer_mopac",
+    "method_version": "1.0",
+    "notes": null,
+    "program_versions": {},
+    "property_id": "standard_enthalpy_of_formation",
+    "semi_imperium_version": "0.2.0",
+    "source": "semi_imperium"
+  },
+  "result": null,
+  "reuse_key": "mol-33eca530e07c53cc/409f096bd2c76eeaccbb435b1f38e86de422fa8fcacd55d943b933bb46f9b3e5",
+  "run_id": "run-20260830T105722-aaf3dd-01",
+  "schema_version": 1,
+  "signature": {
+    "algorithm": "sha256",
+    "digest": "409f096bd2c76eeaccbb435b1f38e86de422fa8fcacd55d943b933bb46f9b3e5",
+    "version": 3
+  },
+  "state": "failed",
+  "timestamps": {
+    "completed_at": "2026-08-30T10:57:22.984943+00:00",
+    "created_at": "2026-08-30T10:57:22.958870+00:00",
+    "started_at": "2026-08-30T10:57:22.980937+00:00"
+  },
+  "verification": "failed"
+}
