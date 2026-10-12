@@ -259,9 +259,8 @@ def _load(path: Path, spec: TableSpec) -> tuple[pd.DataFrame, list[str]]:
     frame = pd.read_csv(path, usecols=present, dtype=str, keep_default_na=False)
     for name in spec.numeric:
         if name in frame:
-            frame[name] = pd.to_numeric(
-                frame[name].str.strip().replace("", math.nan), errors="coerce"
-            )
+            # Blank and malformed cells both become NaN (descriptive, not strict).
+            frame[name] = pd.to_numeric(frame[name].str.strip(), errors="coerce")
     if spec.derived is not None and {"H298_cbs", "H298_pm7"} <= set(frame):
         frame = spec.derived(frame)
     _cache[(str(path), spec.key)] = (mtime, frame, missing)
