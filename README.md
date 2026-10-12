@@ -1,4 +1,4 @@
-# Grimperium — Corrigindo Química com Machine Learning
+# Grimperium — Aproximando velocidade e precisão em cálculos termodinâmicos
 
 [![CI](https://github.com/IgorLeno/grimperium_V2/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/IgorLeno/grimperium_V2/actions/workflows/ci.yml)
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue?logo=python&logoColor=white)](https://www.python.org/downloads/)
@@ -12,90 +12,49 @@
 
 ---
 
-## Resultados Atuais
+## Por que o Grimperium existe?
 
-### Baseline PM7
+Calcular propriedades termodinâmicas de moléculas envolve uma escolha difícil: **métodos computacionais rápidos costumam perder precisão; métodos mais precisos custam muito mais tempo de processamento**. O Grimperium investiga como reduzir essa diferença, sem afirmar que um modelo rápido passará a substituir qualquer cálculo de referência.
 
-| Métrica | Valor | O que significa |
-|---|---|---|
-| Moléculas calculadas (status OK) | 8,232 | Base de dados em crescimento ativo para treinar a correção ML |
-| Correlação PM7 vs CBS-QB3 (R²) | 0.7343 | PM7 captura 73.4% da variação real |
-| Erro absoluto mediano (P50) | 6.35 kcal/mol | Erro típico que o modelo ML precisará corrigir |
-| Erro no percentil 90 (P90) | 12.72 kcal/mol | Pior caso frequente |
-| Erro absoluto médio (MARE) | 7.29 kcal/mol | Média geral dos erros |
-| Viés médio (bias) | -6.45 kcal/mol | PM7 subestima sistematicamente |
+A ideia é **aprender com os resultados de um método mais preciso para corrigir as estimativas de outro, mais rápido**. Com dados que relacionam os dois métodos, treinamos um modelo de *machine learning* para prever a diferença entre eles. Na aplicação, o método rápido calcula o valor inicial e o modelo treinado fornece uma correção. Essa abordagem é chamada de **delta-learning**.
 
-> Nenhum modelo ML treinado ainda. Execute 'Treinar Modelo' na CLI.
----
+```text
+Para construir a correção:
+  molécula → cálculo rápido ─┐
+                             ├─ diferença entre resultados → treinar ML
+  molécula → referência precisa ┘
 
-## O que é este projeto?
-
-Grimperium é um framework científico que usa **machine learning** para tornar cálculos de química quântica mais rápidos e precisos.
-
-### O problema que ele resolve
-
-Calcular propriedades termodinâmicas de moléculas (como a entalpia — a energia armazenada numa molécula) com alta precisão é muito caro computacionalmente. O método mais preciso usado aqui, chamado **CBS-QB3**, pode levar horas por molécula. Já o método mais rápido, chamado **PM7** (semiempírico), termina em segundos — mas comete erros sistemáticos de 10–50 kcal/mol.
-
-### A solução: Delta-Learning
-
-Em vez de substituir o método preciso, o Grimperium ensina um modelo de ML a **corrigir os erros do método rápido**:
-
-```
-Predição final = PM7 (rápido, ~80% correto) + Correção ML (aprende os ~20% restantes)
+Para usar o modelo treinado:
+  nova molécula → cálculo rápido → correção estimada pelo ML → estimativa corrigida
 ```
 
-Essa abordagem chama-se **delta-learning** e tem duas vantagens principais:
-- O modelo de ML tem uma tarefa muito mais simples (aprender erros, não valores absolutos)
-- Converge com menos dados de treinamento
+O trabalho exige muitos pares de resultados para treinamento e validação. Por isso, o Grimperium também desenvolve **pipelines em Python para organizar moléculas, integrar ferramentas de química computacional, automatizar cálculos e preparar dados comparáveis**. A correção não é uma constante universal: ela depende dos métodos, da propriedade e do conjunto de dados que sustentam o treinamento.
 
-### Em números
+### Visão do projeto: um hub de métodos corrigidos
 
-| Dataset | Moléculas | Uso |
-|---|---|---|
-| `thermo_cbs_chon.csv` | 29.568 moléculas CHON | Referência de alta precisão (CBS-QB3) |
-| `thermo_pm7.csv` | ~2.200 moléculas OK (em crescimento ativo) | Resultados PM7 gerados pelo pipeline |
+O objetivo de longo prazo é construir um **hub de propriedades e métodos computacionais**, no qual diferentes combinações de método rápido, referência de maior precisão e modelo de correção possam ser configuradas, treinadas, comparadas e utilizadas. O princípio é o mesmo, mas **cada propriedade e par de métodos exigirá seus próprios dados, compatibilidades e validações**.
 
-O dataset cobre moléculas formadas apenas por **C, H, O e N** — escolha deliberada para manter a física homogênea e facilitar o aprendizado do delta.
+**Escopo implementado hoje:** o catálogo de propriedades está concentrado na **entalpia padrão de formação (ΔHf°)**. A combinação de referência CBS-QB3 e cálculo rápido PM7 é o exemplo central do fluxo de delta-learning. O repositório também possui rotinas de cálculos semiempíricos e interfaces de acompanhamento, mas isso **não significa que outras propriedades termodinâmicas já estejam suportadas ou corrigidas por ML**.
 
----
+A explicação conceitual e a separação entre implementação e visão futura estão em [Visão e escopo](docs/PRODUCT_VISION.md). Detalhes do treinamento estão em [Guia de delta-learning](docs/delta_learning_guide.md).
 
-## Onde estamos agora?
+### Validação e acompanhamento
 
-```
-[✅ Phase A]  Validação do pipeline CREST + MOPAC (PM7)
-[✅ Phase B]  Implementação da CLI interativa
-[✅ Phase C]  Error handling, retry system, estabilização do pipeline
-[✅ Phase D]  2.222 moléculas PM7 OK acumuladas (meta de 1.000 superada)
-[✅ Phase E]  Primeiro modelo ML treinado — RMSE 3,54 kcal/mol, R² 0,997 (gate pass ✅)
-[🔄 Agora  ]  Escalando volume de dados: meta 3.000 → 5.000 moléculas OK
-[⏳ Próximo]  Re-treino com maior volume + validação cruzada k-fold
-[⏳ Futuro ]  Hiperparametrização (Bayesian), escalar para 29k moléculas → deploy
-```
+- Um modelo de correção deve ser comparado ao **método rápido sem correção** e à **referência de maior precisão**, em dados de avaliação apropriados. A redução do erro precisa ser medida; não deve ser presumida.
+- Gráficos e dashboards ajudam a visualizar diferenças entre métodos, erros, variáveis relevantes e progresso das execuções. Ver [dashboard local](apps/dashboard/README.md).
+- As métricas e contagens registradas em relatórios e marcos históricos não devem ser confundidas com o **estado atual da base** ou com uma garantia geral de precisão.
 
-O quality gate de ML (`ml/gate.py`) já está implementado e avalia automaticamente se o modelo treinado atende limiares de MAE ≤ 3,5 kcal/mol, R² ≥ 0,97 e RMSE ≤ 5,0 kcal/mol antes de ser aceito. O primeiro modelo foi treinado em 2026-03-30 e **passou o gate** (MAE 2,50 kcal/mol, RMSE 3,54 kcal/mol, R² 0,997). O foco agora é escalar o volume de dados para re-treinar com maior representatividade.
+### Marcos históricos documentados
 
-**Status dos quality gates:**
+A documentação anterior registrou um primeiro modelo treinado e um *quality gate* de validação (MAE 2,50 kcal/mol, RMSE 3,54 kcal/mol e R² 0,997 na avaliação descrita naquele marco, de 2026-03-30). Essas métricas pertencem àquele experimento e **não caracterizam automaticamente todos os modelos, moléculas ou protocolos futuros**.
 
-| Gate | Status |
-|---|---|
-| `pytest` | ✅ 753 passing |
-| `mypy --strict` | ✅ Passando |
-| `ruff` | ✅ Passando |
-| `black` | ✅ Passando |
-| `pre-commit` | ✅ Ativo |
-| Cobertura de testes | ~82% (meta: ≥ 85%) |
+As contagens de moléculas exibidas em versões anteriores do README correspondiam a momentos distintos do processamento; para números correntes, deve-se consultar o dataset/registro de execução e o dashboard, em vez de somar ou reaproveitar snapshots antigos.
 
----
+### Pipeline atual em termos simples
 
-## Como o pipeline funciona?
+No percurso de entalpia de formação, as ferramentas do projeto permitem preparar estruturas moleculares, executar cálculos com métodos semiempíricos (incluindo PM7), registrar resultados e construir pares comparáveis à referência de maior precisão. Os dados são utilizados para treinar e avaliar a correção por ML. A correção é aplicada **quando o fluxo e o modelo compatível estão configurados**; nem toda execução de cálculo semiempírico realiza delta-learning automaticamente.
 
-Para cada molécula (representada como SMILES — uma string de texto):
-
-1. **CREST** gera múltiplas conformações 3D (diferentes "formas" que a molécula pode assumir)
-2. **MOPAC PM7** otimiza cada conformação e calcula a entalpia
-3. O conformer mais estável (menor entalpia) é selecionado
-4. Os resultados são salvos no CSV com descritores eletrônicos (HOMO, LUMO, GAP)
-5. *(Futuro)* O modelo ML aplica a correção delta → predição final
+O **Semi-Imperium** é um fluxo separado de cálculos e catalogação de ΔHf° com AM1/PM3/PM7; ele **não aplica correção de ML** ([escopo do Semi-Imperium](docs/SEMI_IMPERIUM.md)).
 
 ---
 
