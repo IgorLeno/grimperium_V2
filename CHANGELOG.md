@@ -8,6 +8,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Dashboard: shell Delta Chemistry com barra lateral de módulos** (2026-10-12)
+  - `apps/dashboard/src/modules.ts`: registro de módulos (um por propriedade);
+    `GrimperiumModule.tsx` agrupa as cinco telas existentes (entalpia de
+    formação). A barra lateral seleciona o módulo e as abas do cabeçalho
+    seguem o módulo ativo. Marca do cabeçalho e título da página passam a
+    “Delta Chemistry”.
+  - Menu superior com submenu: Resumo · Dados (Experimental, CBS, PM7) ·
+    Calcular (antiga aba Rotinas) · Treinar (tela explicativa, sem execução).
 - **Dashboard como atlas e painel de controle** (2026-10-12)
   - `apps/dashboard/src/`: cinco abas — Resumo (texto com números ao vivo,
     pipeline, mapa das tabelas), Experimental, CBS, PM7 e Rotinas. Cada aba

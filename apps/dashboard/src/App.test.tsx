@@ -99,7 +99,11 @@ function mockApi(overrides: Record<string, () => Response> = {}) {
 }
 
 function openTab(name: RegExp) {
-  fireEvent.click(within(screen.getByRole('navigation', { name: 'Telas' })).getByRole('button', { name }))
+  const menu = within(screen.getByRole('navigation', { name: 'Telas' }))
+  const top = menu.queryByRole('button', { name })
+  if (top) { fireEvent.click(top); return }
+  if (!screen.queryByRole('navigation', { name: 'Submenu de Dados' })) fireEvent.click(menu.getByRole('button', { name: /Dados/ }))
+  fireEvent.click(within(screen.getByRole('navigation', { name: 'Submenu de Dados' })).getByRole('button', { name }))
 }
 
 beforeEach(() => { window.localStorage.clear() })
@@ -203,7 +207,7 @@ test('aba PM7 mostra andamento e erro do cálculo rápido', async () => {
 test('rotinas: monta, valida e salva uma rotina sem disparar', async () => {
   mockApi()
   render(<App />)
-  openTab(/Rotinas/)
+  openTab(/Calcular/)
   fireEvent.click((await screen.findAllByRole('button', { name: /Criar nova rotina/ }))[0])
   fireEvent.change(screen.getByLabelText('Nome da rotina'), { target: { value: 'Teste álcoois' } })
   fireEvent.click(screen.getByRole('button', { name: /Pipeline/ }))
@@ -220,4 +224,37 @@ test('rotinas: monta, valida e salva uma rotina sem disparar', async () => {
   const menu = screen.getByRole('complementary', { name: 'Menu de rotinas' })
   expect(within(menu).getByText('Teste álcoois')).toBeInTheDocument()
   expect(JSON.parse(window.localStorage.getItem('grimperium.routines.v1') ?? '[]')[0].steps).toEqual(['rdkit', 'mopac'])
+})
+
+test('barra lateral lista o módulo Grimperium e mantém as telas dele', async () => {
+  mockApi()
+  render(<App />)
+  expect(screen.getByText('Delta Chemistry')).toBeInTheDocument()
+  const sidebar = screen.getByRole('complementary', { name: 'Módulos' })
+  const module = within(sidebar).getByRole('button', { name: /Grimperium/ })
+  expect(module).toHaveTextContent('Entalpia de formação (estado padrão)')
+  expect(module).toHaveAttribute('aria-current', 'true')
+  expect(within(sidebar).getAllByRole('button')).toHaveLength(1)
+  openTab(/CBS/)
+  expect(await screen.findByText('O que é a tabela CBS?')).toBeInTheDocument()
+  fireEvent.click(module)
+  expect(within(screen.getByRole('navigation', { name: 'Submenu de Dados' })).getByRole('button', { name: 'CBS' })).toHaveAttribute('aria-current', 'page')
+})
+
+test('menu superior: Resumo, Dados com submenu, Calcular e Treinar', async () => {
+  mockApi()
+  render(<App />)
+  const menu = within(screen.getByRole('navigation', { name: 'Telas' }))
+  expect(menu.getAllByRole('button').map((button) => button.textContent?.replace('▾', ''))).toEqual(['Resumo', 'Dados', 'Calcular', 'Treinar'])
+  expect(screen.queryByRole('navigation', { name: 'Submenu de Dados' })).not.toBeInTheDocument()
+  fireEvent.click(menu.getByRole('button', { name: /Dados/ }))
+  const sub = within(screen.getByRole('navigation', { name: 'Submenu de Dados' }))
+  expect(sub.getAllByRole('button').map((button) => button.textContent)).toEqual(['Experimental', 'CBS', 'PM7'])
+  expect(await screen.findByText('Paridade CBS × experimental')).toBeInTheDocument()
+  fireEvent.click(sub.getByRole('button', { name: 'PM7' }))
+  expect(await screen.findByText('O que é a tabela PM7?')).toBeInTheDocument()
+  expect(menu.getByRole('button', { name: /Dados/ })).toHaveAttribute('aria-current', 'page')
+  fireEvent.click(menu.getByRole('button', { name: 'Treinar' }))
+  expect(await screen.findByText('Cinco etapas, sem vazamento de dados')).toBeInTheDocument()
+  expect(screen.queryByRole('navigation', { name: 'Submenu de Dados' })).not.toBeInTheDocument()
 })

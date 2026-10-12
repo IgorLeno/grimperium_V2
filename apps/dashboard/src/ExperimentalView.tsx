@@ -297,7 +297,7 @@ export function ExperimentalView() {
   return (
     <div className="view">
       <PageHero
-        variant="exp" eyebrow="02 · Tabela experimental" title="O que o laboratório" accent="mediu de fato."
+        variant="exp" eyebrow="Dados · Tabela experimental" title="O que o laboratório" accent="mediu de fato."
         lead="Valores medidos de entalpia de formação: o gabarito do mundo real contra o qual comparamos os cálculos."
         onRefresh={() => { summary.reload(); comparison.reload(); profile.reload() }}
       />

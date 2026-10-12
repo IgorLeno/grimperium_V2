@@ -41,7 +41,7 @@ export function Pm7View() {
   return (
     <div className="view">
       <PageHero
-        variant="pm7" eyebrow="04 · Tabela PM7" title="O cálculo rápido" accent="e o erro que ele comete."
+        variant="pm7" eyebrow="Dados · Tabela PM7" title="O cálculo rápido" accent="e o erro que ele comete."
         lead="Para cada molécula da referência CBS, o pipeline CREST + MOPAC calcula a entalpia com PM7. A diferença para o CBS é o alvo do modelo."
         onRefresh={reload}
       />

@@ -27,15 +27,33 @@ define as duas configurações: inicie `grimperium-api` e depois
 `grimperium-dashboard`. As portas são fixas porque o proxy do Vite aponta para
 `127.0.0.1:8000`.
 
-## Telas
+## Delta Chemistry e módulos
 
-| Aba | O que mostra | Fonte |
-|-----|--------------|-------|
-| **01 Resumo** | Resumo em texto com números ao vivo, pipeline em 5 passos, mapa das três tabelas, fila CREST + PM7, store Semi-Imperium, ideia do Δ-learning e glossário. | `/api/dataset/progress`, perfis das tabelas, comparação |
-| **02 Experimental** | O que é a tabela; distribuições (entalpia, tamanho, elementos, fontes, incerteza, flags); comparação CBS × experimental (faixas de concordância, histograma das diferenças, acerto acumulado, paridade, erro por tamanho e por fonte); tabela completa pesquisável. | `data/thermo_exp_hf.csv`, `data/thermo_exp_hf_vs_cbs.csv` |
-| **03 CBS** | O que é a referência CBS; entalpia, tamanho, elementos, correção CBS − B3LYP, spin/carga, SMILES repetidos; tabela completa. | `data/thermo_cbs_chon.csv` |
-| **04 PM7** | O que é a tabela legada `crest_pm7`; andamento por estado, erro Δ = CBS − PM7, paridade, erro por tamanho, resultado do CREST/MOPAC, tempos; tabela completa. | `data/thermo_pm7.csv` |
-| **05 Rotinas** | Menu de rotinas e assistente em 5 passos (nome, propriedade, pipeline, configuração, saída) com parâmetros lidos do Semi-Imperium. | `/api/routines/catalog` |
+O dashboard é o shell do **Delta Chemistry**: um hub de métodos rápidos
+corrigidos por machine learning (Δ-learning) com dados de métodos precisos. A
+**barra lateral** lista os módulos, um por propriedade. Hoje existe um:
+
+| Módulo | Propriedade |
+|--------|-------------|
+| **Grimperium** | Entalpia de formação no estado padrão (PM7 corrigido com CBS) |
+
+Para adicionar um módulo, crie o componente de telas (modelo:
+`src/GrimperiumModule.tsx`) e inclua uma entrada em `MODULES`
+(`src/modules.ts`) com nome, propriedade e abas; a barra lateral e as abas do
+cabeçalho passam a refletir o módulo ativo.
+
+## Telas do módulo Grimperium
+
+Menu superior com submenu (definido em `src/modules.ts`):
+
+| Menu | Submenu | O que mostra | Fonte |
+|------|---------|--------------|-------|
+| **Resumo** | — | Resumo em texto com números ao vivo, pipeline em 5 passos, mapa das três tabelas, fila CREST + PM7, store Semi-Imperium, ideia do Δ-learning e glossário. | `/api/dataset/progress`, perfis das tabelas, comparação |
+| **Dados** | **Experimental** | O que é a tabela; distribuições; comparação CBS × experimental (concordância, paridade, erro por tamanho e fonte); tabela completa pesquisável. | `data/thermo_exp_hf.csv`, `data/thermo_exp_hf_vs_cbs.csv` |
+| | **CBS** | O que é a referência CBS; entalpia, tamanho, elementos, correção CBS − B3LYP, spin/carga, SMILES repetidos; tabela completa. | `data/thermo_cbs_chon.csv` |
+| | **PM7** | Tabela legada `crest_pm7`: andamento, erro Δ = CBS − PM7, paridade, resultado do CREST/MOPAC, tempos; tabela completa. | `data/thermo_pm7.csv` |
+| **Calcular** | — | Menu de rotinas e assistente em 5 passos (nome, propriedade, pipeline, configuração, saída) com parâmetros lidos do Semi-Imperium. | `/api/routines/catalog` |
+| **Treinar** | — | Explica as etapas do treino do modelo Δ e o portão de qualidade. Ainda sem execução: depende do back-end de jobs. | — |
 
 Cada gráfico traz um bloco **“Como ler”** em linguagem simples. Os CSVs CBS
 e PM7 ficam fora do Git; sem eles, a aba correspondente explica onde copiar o
