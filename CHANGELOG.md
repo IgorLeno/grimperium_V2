@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **Dashboard: menu lateral redesenhado** (2026-10-12)
+  - `apps/dashboard/src/App.tsx`, `style.css`: a barra lateral vira um cartão
+    flutuante com cabeçalho e contador, monograma do módulo, estado ativo em
+    gradiente com marcador lateral e nota de extensibilidade; o botão do
+    cabeçalho ganha ícone de painel (preenchido quando aberto). Funciona nos
+    temas claro e escuro e vira faixa horizontal em telas estreitas.
+    Comportamento, acessibilidade e persistência inalterados.
+
 ### Added
 - **Dashboard: shell Delta Chemistry com barra lateral de módulos** (2026-10-12)
   - `apps/dashboard/src/modules.ts`: registro de módulos (um por propriedade);
