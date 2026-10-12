@@ -246,3 +246,106 @@ def test_only_get_routes_are_exposed(paths: DashboardPaths) -> None:
         for method in getattr(route, "methods", set())
     }
     assert methods <= {"GET", "HEAD"}
+
+
+# --------------------------------------------------- table profiles & rows
+
+
+def _tables(tmp_path: Path, paths: DashboardPaths) -> DashboardPaths:
+    pd.DataFrame(
+        {
+            "mol_id": ["cbs_1", "cbs_2", "cbs_3"],
+            "smiles": ["C", "CCO", "CN"],
+            "nheavy": [1, 3, 2],
+            "charge": [0, 0, 0],
+            "multiplicity": [1, 1, 2],
+            "H298_cbs": [-17.8, -56.2, -5.5],
+            "H298_b3": [-10.0, -40.0, -1.0],
+            "cbs_b3": [-7.8, -16.2, -4.5],
+        }
+    ).to_csv(tmp_path / "cbs.csv", index=False)
+    pd.DataFrame(
+        {
+            "mol_id": ["a", "b", "c"],
+            "status": ["OK", "OK", "Pending"],
+            "smiles": ["C", "CCO", "N"],
+            "nheavy": [1, 3, 1],
+            "H298_cbs": [-17.8, -56.2, -10.0],
+            "H298_pm7": [-15.8, -60.2, ""],
+        }
+    ).to_csv(tmp_path / "pm7_full.csv", index=False)
+    return DashboardPaths(
+        pm7_csv=tmp_path / "pm7_full.csv",
+        semi_imperium_store=paths.semi_imperium_store,
+        exp_csv=paths.exp_csv,
+        exp_vs_cbs_csv=paths.exp_vs_cbs_csv,
+        cbs_csv=tmp_path / "cbs.csv",
+    )
+
+
+def test_cbs_profile_describes_size_composition_and_enthalpy(
+    tmp_path: Path, paths: DashboardPaths
+) -> None:
+    body = _client(_tables(tmp_path, paths)).get("/api/tables/cbs/profile").json()
+
+    assert body["rows"] == 3
+    assert body["nheavy"] == {"1": 1, "2": 1, "3": 1}
+    assert body["composition"] == {"CH": 1, "CHO": 1, "CHN": 1, "CHNO": 0}
+    assert body["categories"]["multiplicity"] == {"1": 2, "2": 1}
+    h298 = next(h for h in body["histograms"] if h["column"] == "H298_cbs")
+    assert h298["n"] == 3
+    assert sum(b["count"] for b in h298["bins"]) + h298["below"] + h298["above"] == 3
+    assert "smiles_count" in body["missing_columns"]
+
+
+def test_pm7_profile_derives_delta_and_pairs(
+    tmp_path: Path, paths: DashboardPaths
+) -> None:
+    body = _client(_tables(tmp_path, paths)).get("/api/tables/pm7/profile").json()
+
+    delta = next(h for h in body["histograms"] if h["column"] == "delta_cbs_pm7")
+    assert delta["n"] == 2
+    assert delta["mean"] == pytest.approx((-2.0 + 4.0) / 2)
+    assert body["pairs_total"] == 2
+    assert {p["id"] for p in body["pairs"]} == {"a", "b"}
+    assert [s["nheavy"] for s in body["by_nheavy"]] == [1, 3]
+    assert body["categories"]["status"] == {"OK": 2, "Pending": 1}
+
+
+def test_rows_search_sort_and_paginate(tmp_path: Path, paths: DashboardPaths) -> None:
+    client = _client(_tables(tmp_path, paths))
+    page = client.get(
+        "/api/tables/cbs/rows", params={"sort": "H298_cbs", "limit": 2}
+    ).json()
+    assert [row["mol_id"] for row in page["rows"]] == ["cbs_2", "cbs_1"]
+    assert (page["total"], page["matched"]) == (3, 3)
+
+    found = client.get("/api/tables/cbs/rows", params={"q": "cco"}).json()
+    assert [row["mol_id"] for row in found["rows"]] == ["cbs_2"]
+
+    pm7 = client.get("/api/tables/pm7/rows").json()
+    assert pm7["rows"][2]["H298_pm7"] is None
+    assert pm7["rows"][0]["delta_cbs_pm7"] == pytest.approx(-2.0)
+
+
+def test_unknown_table_and_missing_cbs(paths: DashboardPaths) -> None:
+    client = _client(paths)
+    assert client.get("/api/tables/xyz/profile").status_code == 422
+    response = client.get("/api/tables/cbs/profile")
+    assert response.status_code == 503
+    assert response.json()["detail"] == "table path not configured"
+
+
+def test_routine_catalog_mirrors_semi_imperium_defaults(paths: DashboardPaths) -> None:
+    body = _client(paths).get("/api/routines/catalog").json()
+
+    assert body["dispatch_enabled"] is False
+    assert [p["key"] for p in body["properties"]] == ["standard_enthalpy_of_formation"]
+    assert [m["key"] for m in body["input_modes"]] == ["smiles", "name", "manual"]
+    programs = {p["key"]: p for p in body["programs"]}
+    assert list(programs) == ["rdkit", "crest", "confpass", "mopac"]
+    mopac = {p["key"]: p for p in programs["mopac"]["parameters"]}
+    assert mopac["hamiltonian"]["default"] == "PM7"
+    assert mopac["hamiltonian"]["choices"] == ["AM1", "PM3", "PM7"]
+    crest = {p["key"]: p for p in programs["crest"]["parameters"]}
+    assert crest["quick_mode"]["choices"] == ["off", "quick", "squick", "mquick"]

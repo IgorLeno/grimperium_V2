@@ -18,6 +18,8 @@ class DashboardPaths:
     semi_imperium_store: Path
     exp_csv: Path
     exp_vs_cbs_csv: Path
+    cbs_csv: Path | None = None
+    """CHON CBS reference table; ``None`` reports it as not configured."""
 
     @classmethod
     def default(cls, root: Path = _REPO_ROOT) -> DashboardPaths:
@@ -28,4 +30,5 @@ class DashboardPaths:
             semi_imperium_store=data / "semi_imperium",
             exp_csv=data / "thermo_exp_hf.csv",
             exp_vs_cbs_csv=data / "thermo_exp_hf_vs_cbs.csv",
+            cbs_csv=data / "thermo_cbs_chon.csv",
         )

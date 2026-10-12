@@ -2,17 +2,26 @@
 
 from __future__ import annotations
 
-from fastapi import FastAPI, Request
+from pathlib import Path
+from typing import Literal
+
+from fastapi import FastAPI, Query, Request
 from fastapi.responses import JSONResponse
 
-from grimperium.webapi import readers
+from grimperium.webapi import profiles, readers
+from grimperium.webapi.catalog import routine_catalog
 from grimperium.webapi.config import DashboardPaths
 from grimperium.webapi.models import (
+    DatasetProfile,
     DatasetProgress,
     ExperimentalComparison,
     ExperimentalSummary,
     Health,
+    RoutineCatalog,
+    TablePage,
 )
+
+TableKey = Literal["exp", "cbs", "pm7"]
 
 
 def create_app(paths: DashboardPaths | None = None) -> FastAPI:
@@ -45,5 +54,38 @@ def create_app(paths: DashboardPaths | None = None) -> FastAPI:
     @app.get("/api/experimental/comparison")
     def experimental_comparison() -> ExperimentalComparison:
         return readers.experimental_comparison(files.exp_vs_cbs_csv)
+
+    def table_path(key: TableKey) -> Path:
+        path = {"exp": files.exp_csv, "cbs": files.cbs_csv, "pm7": files.pm7_csv}[key]
+        if path is None:
+            raise readers.DataUnavailable(Path(key), "table path not configured")
+        return path
+
+    @app.get("/api/tables/{key}/profile")
+    def table_profile(key: TableKey) -> DatasetProfile:
+        return profiles.profile(table_path(key), key)
+
+    @app.get("/api/tables/{key}/rows")
+    def table_rows(
+        key: TableKey,
+        q: str = "",
+        offset: int = Query(0, ge=0),
+        limit: int = Query(50, ge=1, le=profiles.MAX_PAGE),
+        sort: str | None = None,
+        desc: bool = False,
+    ) -> TablePage:
+        return profiles.rows(
+            table_path(key),
+            key,
+            query=q,
+            offset=offset,
+            limit=limit,
+            sort=sort,
+            descending=desc,
+        )
+
+    @app.get("/api/routines/catalog")
+    def catalog() -> RoutineCatalog:
+        return routine_catalog()
 
     return app
