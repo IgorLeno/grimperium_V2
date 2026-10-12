@@ -1,5 +1,7 @@
 # Delta-Learning Guide
 
+> **Escopo:** este guia descreve o mecanismo de correção da **entalpia padrão de formação (ΔHf°)** atualmente estudado pelo Grimperium. A **visão** de hub multipropriedade é futura e está explicada em [Visão do Grimperium](PRODUCT_VISION.md). Números chamados “típicos” abaixo são exemplos ou histórico, não garantias de precisão.
+
 This guide explains the delta-learning approach used in Grimperium for improving semiempirical thermodynamic predictions.
 
 ## What is Delta-Learning?
