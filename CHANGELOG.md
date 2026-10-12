@@ -7,6 +7,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Dashboard como atlas e painel de controle** (2026-10-12)
+  - `apps/dashboard/src/`: cinco abas — Resumo (texto com números ao vivo,
+    pipeline, mapa das tabelas), Experimental, CBS, PM7 e Rotinas. Cada aba
+    explica a tabela para leigos e distribui os dados em gráficos com bloco
+    “Como ler”: histogramas, tamanho molecular, composição CHON, fontes,
+    incerteza, flags, faixas de concordância, acerto acumulado, paridade,
+    erro por tamanho/fonte, andamento e tempos do CREST/MOPAC, além de
+    tabelas completas com busca, ordenação e paginação.
+  - Rotinas: menu e assistente em 5 passos (nome, propriedade, pipeline com
+    modo de entrada SMILES/PubChem/manual e ordem RDKit → CREST → CONFPASS →
+    MOPAC ou PM7 direto, configuração, saída). Salva no navegador e exporta
+    JSON; o disparo fica desativado até existir o back-end de jobs.
+  - `src/grimperium/webapi/profiles.py`, `catalog.py`, `app.py`: rotas `GET`
+    `/api/tables/{exp,cbs,pm7}/profile`, `/api/tables/{key}/rows` e
+    `/api/routines/catalog` (padrões lidos de `semi_imperium`).
+    `DashboardPaths.cbs_csv` aponta para `data/thermo_cbs_chon.csv`.
+  - `docs/GOOGLE_SHEETS_MIRROR.md`: plano do espelho somente leitura.
+  - Verification: `npm run lint`, `npm run typecheck`, `npm run test`,
+    `npm run build` em `apps/dashboard`; `poetry run pytest tests/webapi -q`;
+    `ruff`, `black` e `mypy --strict` em `src/grimperium/webapi`.
+
+### Changed
+- **Identidade visual do dashboard** (2026-10-12)
+  - `apps/dashboard/src/style.css`: tokens de tema com modo escuro, cards
+    arredondados, cabeçalho fixo com abas em pílula, heróis por aba e
+    animações sutis (respeitam `prefers-reduced-motion`). Paleta categórica
+    validada para daltonismo nos dois temas; cores de status sempre com
+    ícone e rótulo.
+  - Removido `ProgressView.tsx`: seu conteúdo foi para Resumo e PM7.
+
 ### Changed
 - **Narrativa visual do dashboard local** (2026-10-11)
   - `apps/dashboard/src/`: reorganiza Progresso e Experimental em contexto,

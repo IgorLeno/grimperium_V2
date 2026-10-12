@@ -75,3 +75,123 @@ class ExperimentalComparison(BaseModel):
     units: str
     stats: ErrorStats
     points: list[ComparisonPoint]
+
+
+# ------------------------------------------------------- dataset profiles
+
+
+class HistogramBin(BaseModel):
+    start: float
+    end: float
+    count: int
+
+
+class Histogram(BaseModel):
+    """Fixed-width bins over the central 99% of a numeric column.
+
+    Values outside ``[bins[0].start, bins[-1].end]`` are counted in
+    ``below``/``above`` instead of stretching the axis, so the chart stays
+    readable and no row silently disappears.
+    """
+
+    column: str
+    label: str
+    unit: str
+    n: int
+    below: int
+    above: int
+    mean: float | None
+    median: float | None
+    p05: float | None
+    p95: float | None
+    minimum: float | None
+    maximum: float | None
+    bins: list[HistogramBin]
+
+
+class SizeStats(BaseModel):
+    """Error column summarised per number of heavy atoms."""
+
+    nheavy: int
+    n: int
+    mean: float
+    mean_abs: float
+
+
+class ProfilePair(BaseModel):
+    id: str
+    x: float
+    y: float
+    nheavy: int | None
+
+
+class DatasetProfile(BaseModel):
+    key: str
+    title: str
+    path: str
+    rows: int
+    unique_smiles: int | None
+    nheavy: dict[str, int]
+    composition: dict[str, int]
+    categories: dict[str, dict[str, int]]
+    histograms: list[Histogram]
+    by_nheavy: list[SizeStats]
+    pairs: list[ProfilePair]
+    pairs_total: int
+    missing_columns: list[str]
+    manifest: dict[str, object] | None
+
+
+class TablePage(BaseModel):
+    key: str
+    columns: list[str]
+    total: int
+    matched: int
+    offset: int
+    limit: int
+    rows: list[dict[str, str | float | int | bool | None]]
+
+
+# --------------------------------------------------------- routine catalog
+
+
+class RoutineParameter(BaseModel):
+    key: str
+    label: str
+    kind: str
+    """``int``, ``float``, ``bool``, ``choice`` or ``text``."""
+    default: str | float | int | bool | None
+    choices: list[str] = []
+    unit: str = ""
+    help: str = ""
+    minimum: float | None = None
+    maximum: float | None = None
+
+
+class RoutineProgram(BaseModel):
+    key: str
+    label: str
+    role: str
+    description: str
+    executable: str | None
+    available: bool | None
+    """Whether the executable is on PATH now; ``None`` for Python libraries."""
+    experimental: bool = False
+    parameters: list[RoutineParameter]
+
+
+class RoutineProperty(BaseModel):
+    key: str
+    label: str
+    unit: str
+    description: str
+    available: bool
+
+
+class RoutineCatalog(BaseModel):
+    dispatch_enabled: bool
+    """Routines can be designed now; launching them needs the job backend."""
+    properties: list[RoutineProperty]
+    input_modes: list[RoutineProgram]
+    programs: list[RoutineProgram]
+    outputs: list[RoutineProgram]

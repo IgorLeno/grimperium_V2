@@ -83,3 +83,109 @@ export async function getJson<T>(path: string, signal: AbortSignal): Promise<T> 
   }
   return (await response.json()) as T
 }
+
+export type TableKey = 'exp' | 'cbs' | 'pm7'
+
+export interface HistogramBin {
+  start: number
+  end: number
+  count: number
+}
+
+export interface Histogram {
+  column: string
+  label: string
+  unit: string
+  n: number
+  below: number
+  above: number
+  mean: number | null
+  median: number | null
+  p05: number | null
+  p95: number | null
+  minimum: number | null
+  maximum: number | null
+  bins: HistogramBin[]
+}
+
+export interface SizeStats {
+  nheavy: number
+  n: number
+  mean: number
+  mean_abs: number
+}
+
+export interface ProfilePair {
+  id: string
+  x: number
+  y: number
+  nheavy: number | null
+}
+
+export interface DatasetProfile {
+  key: TableKey
+  title: string
+  path: string
+  rows: number
+  unique_smiles: number | null
+  nheavy: Record<string, number>
+  composition: Record<'CH' | 'CHO' | 'CHN' | 'CHNO', number>
+  categories: Record<string, Record<string, number>>
+  histograms: Histogram[]
+  by_nheavy: SizeStats[]
+  pairs: ProfilePair[]
+  pairs_total: number
+  missing_columns: string[]
+  manifest: Record<string, unknown> | null
+}
+
+export type Cell = string | number | boolean | null
+
+export interface TablePage {
+  key: TableKey
+  columns: string[]
+  total: number
+  matched: number
+  offset: number
+  limit: number
+  rows: Record<string, Cell>[]
+}
+
+export interface RoutineParameter {
+  key: string
+  label: string
+  kind: 'int' | 'float' | 'bool' | 'choice' | 'text'
+  default: string | number | boolean | null
+  choices: string[]
+  unit: string
+  help: string
+  minimum: number | null
+  maximum: number | null
+}
+
+export interface RoutineProgram {
+  key: string
+  label: string
+  role: string
+  description: string
+  executable: string | null
+  available: boolean | null
+  experimental: boolean
+  parameters: RoutineParameter[]
+}
+
+export interface RoutineProperty {
+  key: string
+  label: string
+  unit: string
+  description: string
+  available: boolean
+}
+
+export interface RoutineCatalog {
+  dispatch_enabled: boolean
+  properties: RoutineProperty[]
+  input_modes: RoutineProgram[]
+  programs: RoutineProgram[]
+  outputs: RoutineProgram[]
+}
