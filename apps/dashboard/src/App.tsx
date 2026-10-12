@@ -1,34 +1,31 @@
-import { lazy, Suspense, useState } from 'react'
+import { Suspense, useState } from 'react'
 import type { Health } from './api'
-import { SummaryView } from './SummaryView'
-import type { ViewKey } from './SummaryView'
+import { DEFAULT_MODULE, firstView, MODULES, topTabOf } from './modules'
 import { useApi } from './useApi'
 
-const ExperimentalView = lazy(() => import('./ExperimentalView').then((module) => ({ default: module.ExperimentalView })))
-const CbsView = lazy(() => import('./CbsView').then((module) => ({ default: module.CbsView })))
-const Pm7View = lazy(() => import('./Pm7View').then((module) => ({ default: module.Pm7View })))
-const RoutinesView = lazy(() => import('./RoutinesView').then((module) => ({ default: module.RoutinesView })))
-
-const TABS: { key: ViewKey; number: string; label: string; hint: string }[] = [
-  { key: 'summary', number: '01', label: 'Resumo', hint: 'Visão geral do projeto' },
-  { key: 'experimental', number: '02', label: 'Experimental', hint: 'Medidas de laboratório' },
-  { key: 'cbs', number: '03', label: 'CBS', hint: 'Referência de alta precisão' },
-  { key: 'pm7', number: '04', label: 'PM7', hint: 'Cálculo rápido (legado)' },
-  { key: 'routines', number: '05', label: 'Rotinas', hint: 'Painel de controle' },
-]
-
 export function App() {
-  const [view, setView] = useState<ViewKey>('summary')
+  const [moduleKey, setModuleKey] = useState(DEFAULT_MODULE.key)
+  const [view, setView] = useState(firstView(DEFAULT_MODULE.tabs[0]))
   const health = useApi<Health>('/api/health')
-  const navigate = (next: ViewKey) => { setView(next); window.scrollTo?.({ top: 0 }) }
+  const active = MODULES.find((item) => item.key === moduleKey) ?? DEFAULT_MODULE
+  const topTab = topTabOf(active, view)
+  const navigate = (next: string) => { setView(next); window.scrollTo?.({ top: 0 }) }
+  const selectModule = (key: string) => {
+    if (key === active.key) return
+    const next = MODULES.find((item) => item.key === key)
+    if (!next) return
+    setModuleKey(next.key)
+    navigate(firstView(next.tabs[0]))
+  }
   return (
     <>
       <header className="app-header">
-        <div className="brand"><span className="brand-mark" aria-hidden="true">✳</span><span><strong>Grimperium</strong><small>Atlas de dados moleculares</small></span></div>
+        <div className="brand"><span className="brand-mark" aria-hidden="true">Δ</span><span><strong>Delta Chemistry</strong><small>Métodos rápidos, corrigidos por IA</small></span></div>
         <nav aria-label="Telas">
-          {TABS.map((tab) => (
-            <button key={tab.key} type="button" title={tab.hint} aria-current={view === tab.key ? 'page' : undefined} onClick={() => navigate(tab.key)}>
-              <small aria-hidden="true">{tab.number}</small>{tab.label}
+          {active.tabs.map((tab) => (
+            <button key={tab.key} type="button" title={tab.hint} aria-current={topTab.key === tab.key ? 'page' : undefined}
+              onClick={() => { if (topTab.key !== tab.key) navigate(firstView(tab)) }}>
+              {tab.label}{tab.children && <small aria-hidden="true">▾</small>}
             </button>
           ))}
         </nav>
@@ -47,16 +44,35 @@ export function App() {
           )}
         </div>
       </header>
-      <main>
-        <Suspense fallback={<p role="status" className="loading-state">Carregando tela…</p>}>
-          {view === 'summary' && <SummaryView onNavigate={navigate} />}
-          {view === 'experimental' && <ExperimentalView />}
-          {view === 'cbs' && <CbsView />}
-          {view === 'pm7' && <Pm7View />}
-          {view === 'routines' && <RoutinesView />}
-        </Suspense>
-      </main>
-      <footer className="app-footer">Grimperium · dados lidos dos arquivos locais em <code>data/</code> · o painel apenas dispara processos; os cálculos rodam no back-end</footer>
+      <div className="app-shell">
+        <aside className="module-sidebar" aria-label="Módulos">
+          <p className="module-sidebar__title">Propriedade</p>
+          <nav aria-label="Módulos de propriedade">
+            {MODULES.map((item) => (
+              <button key={item.key} type="button" aria-current={item.key === active.key ? 'true' : undefined} onClick={() => selectModule(item.key)}>
+                <strong>{item.name}</strong>
+                <span>{item.property}</span>
+                <small>{item.description}</small>
+              </button>
+            ))}
+          </nav>
+          <p className="module-sidebar__note">Cada módulo corrige um método rápido para uma propriedade. Novos módulos aparecem aqui.</p>
+        </aside>
+        <main>
+          {topTab.children && (
+            <nav className="submenu" aria-label={`Submenu de ${topTab.label}`}>
+              <span className="submenu__label">{topTab.label}</span>
+              {topTab.children.map((child) => (
+                <button key={child.key} type="button" title={child.hint} aria-current={view === child.key ? 'page' : undefined} onClick={() => navigate(child.key)}>{child.label}</button>
+              ))}
+            </nav>
+          )}
+          <Suspense fallback={<p role="status" className="loading-state">Carregando tela…</p>}>
+            <active.Component view={view} onNavigate={navigate} />
+          </Suspense>
+        </main>
+      </div>
+      <footer className="app-footer">Delta Chemistry · dados lidos dos arquivos locais em <code>data/</code> · o painel apenas dispara processos; os cálculos rodam no back-end</footer>
     </>
   )
 }

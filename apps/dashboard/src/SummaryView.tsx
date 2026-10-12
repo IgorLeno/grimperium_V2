@@ -8,7 +8,7 @@ import {
 import { formatNumber, formatPercent, formatSigned, series, statusColor } from './theme'
 import { useApi } from './useApi'
 
-export type ViewKey = 'summary' | 'experimental' | 'cbs' | 'pm7' | 'routines'
+export type ViewKey = 'summary' | 'experimental' | 'cbs' | 'pm7' | 'routines' | 'train'
 
 const CORE_GLOSSARY = [
   { term: 'Entalpia de formação (ΔHf°)', definition: 'A energia de “montar” a molécula a partir dos elementos. É a propriedade que o Grimperium prevê.' },
@@ -51,7 +51,7 @@ function TableNode({ title, value, caption, tone, onOpen, unavailable }: {
       <span className="data-node__title">{title}</span>
       <strong>{value}</strong>
       <span className="data-node__caption">{unavailable ? 'arquivo não encontrado neste computador' : caption}</span>
-      <span className="data-node__open">Abrir aba →</span>
+      <span className="data-node__open">Abrir tabela →</span>
     </button>
   )
 }
@@ -82,7 +82,7 @@ export function SummaryView({ onNavigate }: { onNavigate: (view: ViewKey) => voi
   return (
     <div className="view">
       <PageHero
-        eyebrow="01 · Resumo do projeto" title="De moléculas a" accent="conhecimento confiável."
+        eyebrow="Resumo do módulo Grimperium" title="De moléculas a" accent="conhecimento confiável."
         lead="O Grimperium prevê a energia de formação de moléculas combinando um cálculo rápido (PM7) com uma correção aprendida por IA a partir de cálculos de alta precisão (CBS)."
         onRefresh={reloadAll}
       />
@@ -179,7 +179,7 @@ export function SummaryView({ onNavigate }: { onNavigate: (view: ViewKey) => voi
       <section className="panel roadmap" aria-label="Próximos passos">
         <SectionHeading eyebrow="Em construção" title="O que vem a seguir" />
         <ol>
-          <li><strong>Disparo de rotinas.</strong> A aba Rotinas já monta e exporta a especificação; o back-end de jobs (fila, status e log) é o próximo lote.</li>
+          <li><strong>Disparo de rotinas.</strong> A tela Calcular já monta e exporta a especificação; o back-end de jobs (fila, status e log) é o próximo lote.</li>
           <li><strong>Planilha online.</strong> Espelho somente leitura das tabelas no Google Sheets, atualizado a partir dos CSVs locais.</li>
           <li><strong>Treino e avaliação.</strong> Painel do modelo Δ-learning com o quality gate (MAE ≤ 3,5, R² ≥ 0,97, RMSE ≤ 5,0 kcal/mol).</li>
         </ol>

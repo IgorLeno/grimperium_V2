@@ -42,7 +42,7 @@ export function CbsView() {
   return (
     <div className="view">
       <PageHero
-        variant="cbs" eyebrow="03 · Tabela CBS" title="A referência calculada" accent="com rigor máximo."
+        variant="cbs" eyebrow="Dados · Tabela CBS" title="A referência calculada" accent="com rigor máximo."
         lead="Dezenas de milhares de moléculas com entalpia calculada por um método quântico de alta precisão: é o “gabarito” que ensina o modelo a corrigir o PM7."
         onRefresh={reload}
       />
