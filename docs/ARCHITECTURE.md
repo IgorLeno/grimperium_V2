@@ -16,6 +16,14 @@
 
 ---
 
+## Product purpose and current scope
+
+The long-term Grimperium vision is a **hub of fast computational methods enhanced by corrections learned from more accurate reference methods**. The ML model estimates the *difference* between the accurate reference and the fast baseline; the corrected prediction is the fast estimate plus the learned correction. See [Product vision](PRODUCT_VISION.md) and [Delta-learning guide](delta_learning_guide.md).
+
+**Current property scope: standard enthalpy of formation only** (`standard_enthalpy_of_formation` in the method registry). Other properties and method/reference pairs are prospective and must not be described as implemented. Semi-Imperium is a separate uncorrected enthalpy-calculation workflow, not the ML-corrected hub.
+
+The sections below detail the existing architecture and some older design decisions; they are not a claim that the full multi-property hub is implemented.
+
 ## System Overview
 
 ### High-Level Architecture
