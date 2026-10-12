@@ -1,4 +1,6 @@
-# Grimperium: problema, mecanismo e visão do produto
+# Delta Chemistry e Grimperium: problema, mecanismo e visão do produto
+
+> **Nomes.** **Delta Chemistry** é o hub de rotinas de cálculo de propriedades (a visão descrita abaixo). **Grimperium** é o módulo de entalpia de formação no estado padrão, o único implementado hoje. Nas seções seguintes, “Grimperium” designa o que existe no código; “hub” e “Delta Chemistry”, a visão.
 
 ## O problema, sem pressupor conhecimento de química computacional
 

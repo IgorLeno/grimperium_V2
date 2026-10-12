@@ -12,6 +12,8 @@
 
 ---
 
+> **Nome do projeto.** O hub se chama **Delta Chemistry**: rotinas de cálculo de propriedades com métodos rápidos corrigidos por machine learning a partir de dados de métodos mais precisos. **Grimperium** é o módulo desse hub dedicado à **entalpia de formação no estado padrão** (PM7 corrigido com CBS), e é o único módulo implementado hoje. O pacote Python, o CLI e o repositório continuam com o nome `grimperium`; o painel web (`apps/dashboard`) usa a marca Delta Chemistry.
+
 ## Por que o Grimperium existe?
 
 Calcular propriedades termodinâmicas de moléculas envolve uma escolha difícil: **métodos computacionais rápidos costumam perder precisão; métodos mais precisos custam muito mais tempo de processamento**. O Grimperium investiga como reduzir essa diferença, sem afirmar que um modelo rápido passará a substituir qualquer cálculo de referência.

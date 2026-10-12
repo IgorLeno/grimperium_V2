@@ -8,6 +8,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Changed
+- **Dashboard: Delta Chemistry como hub e Grimperium como módulo** (2026-10-12)
+  - `apps/dashboard/src/modules.ts`, `DeltaModule.tsx`: a tela principal passa
+    a ser o hub **Delta Chemistry**, com as abas **Rotinas** (primeira),
+    **Resumos** e **Sobre** (última). As abas do Grimperium (Resumo, Dados,
+    Calcular, Treinar) só aparecem dentro do módulo Grimperium.
+  - `ResultsView.tsx` (Resumos, estado vazio: ainda não há resultados de
+    rotinas) e `AboutView.tsx` (explicação geral do hub). Rotinas reaproveita
+    `RoutinesView` (mesmas rotinas salvas da aba Calcular do Grimperium).
+  - Barra lateral com os grupos Hub e Módulos; o botão do menu lateral sai do
+    cabeçalho e vai para uma barra abaixo dele, com caminho (breadcrumb); a
+    marca no cabeçalho fica maior e sem sobreposição.
+  - Docs: README do dashboard, README raiz e `docs/PRODUCT_VISION.md` passam a
+    distinguir Delta Chemistry (hub) de Grimperium (módulo). Pacote Python,
+    CLI e nome do repositório não mudam.
 - **Dashboard: menu lateral redesenhado** (2026-10-12)
   - `apps/dashboard/src/App.tsx`, `style.css`: a barra lateral vira um cartão
     flutuante com cabeçalho e contador, monograma do módulo, estado ativo em

@@ -27,20 +27,34 @@ define as duas configurações: inicie `grimperium-api` e depois
 `grimperium-dashboard`. As portas são fixas porque o proxy do Vite aponta para
 `127.0.0.1:8000`.
 
-## Delta Chemistry e módulos
+## Delta Chemistry, hub e módulos
 
-O dashboard é o shell do **Delta Chemistry**: um hub de métodos rápidos
-corrigidos por machine learning (Δ-learning) com dados de métodos precisos. A
-**barra lateral** lista os módulos, um por propriedade. Hoje existe um:
+O dashboard é o shell do **Delta Chemistry**: um hub de rotinas de cálculo de
+propriedades com métodos rápidos corrigidos por machine learning (Δ-learning)
+a partir de dados de métodos mais precisos. A **barra lateral** tem dois grupos:
 
-| Módulo | Propriedade |
-|--------|-------------|
-| **Grimperium** | Entalpia de formação no estado padrão (PM7 corrigido com CBS) |
+| Item | O que é |
+|------|---------|
+| **Delta Chemistry** (hub, tela principal) | Rotinas, Resumos e Sobre — nada específico de uma propriedade |
+| **Grimperium** (módulo) | Entalpia de formação no estado padrão (PM7 corrigido com CBS) |
+
+O menu superior mostra só as abas do item ativo: as telas do Grimperium
+(Resumo, Dados, Calcular, Treinar) existem apenas dentro do módulo. O botão
+**Menu**, que oculta/mostra a barra lateral, fica numa barra abaixo do
+cabeçalho; o cabeçalho guarda só a marca e o menu superior.
 
 Para adicionar um módulo, crie o componente de telas (modelo:
 `src/GrimperiumModule.tsx`) e inclua uma entrada em `MODULES`
-(`src/modules.ts`) com nome, propriedade e abas; a barra lateral e as abas do
-cabeçalho passam a refletir o módulo ativo.
+(`src/modules.ts`) com nome, propriedade e abas. O hub é `HUB` no mesmo
+arquivo (componente `src/DeltaModule.tsx`).
+
+## Telas do hub Delta Chemistry
+
+| Menu | O que mostra |
+|------|--------------|
+| **Rotinas** (primeira) | Menu de rotinas e assistente em 5 passos, onde se escolhe a propriedade. É o mesmo componente da aba *Calcular* do Grimperium (`src/RoutinesView.tsx`) e usa o mesmo armazenamento local, então as rotinas aparecem nas duas. |
+| **Resumos** | Compilado dos resultados obtidos pelas rotinas. Ainda sem back-end de jobs não há resultados: a tela mostra o estado vazio. |
+| **Sobre** (última) | Explica o hub: a ideia do Δ-learning em três passos, como o hub se organiza, módulos disponíveis, escopo atual e glossário. |
 
 ## Telas do módulo Grimperium
 

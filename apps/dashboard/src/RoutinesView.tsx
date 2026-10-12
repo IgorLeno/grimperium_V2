@@ -311,7 +311,7 @@ function Wizard({ catalog, initial, onSave, onCancel }: {
   )
 }
 
-export function RoutinesView() {
+export function RoutinesView({ eyebrow = 'Calcular · Painel de controle' }: { eyebrow?: string }) {
   const { state, reload } = useApi<RoutineCatalog>('/api/routines/catalog')
   const [routines, setRoutines] = useState<RoutineSpec[]>(() => loadRoutines())
   const [editing, setEditing] = useState<RoutineSpec | null>(null)
@@ -326,7 +326,7 @@ export function RoutinesView() {
   return (
     <div className="view">
       <PageHero
-        variant="control" eyebrow="Calcular · Painel de controle" title="Monte a rotina," accent="o back-end executa."
+        variant="control" eyebrow={eyebrow} title="Monte a rotina," accent="o back-end executa."
         lead="O dashboard não calcula nada: ele descreve o que deve ser feito e dispara o processo. Monte rotinas em cinco passos com os programas e parâmetros que o Semi-Imperium aceita."
         art={<div className="control-art" aria-hidden="true"><span>⌬</span><i /><span>⟳</span><i /><span>⇣</span><i /><span>⚡</span></div>}
       />
