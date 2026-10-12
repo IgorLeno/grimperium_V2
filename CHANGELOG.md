@@ -16,6 +16,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     “Delta Chemistry”.
   - Menu superior com submenu: Resumo · Dados (Experimental, CBS, PM7) ·
     Calcular (antiga aba Rotinas) · Treinar (tela explicativa, sem execução).
+  - Barra lateral mais discreta (clara, estreita) e recolhível: botão no
+    cabeçalho oculta/mostra o menu e a escolha fica salva no navegador.
 - **Dashboard como atlas e painel de controle** (2026-10-12)
   - `apps/dashboard/src/`: cinco abas — Resumo (texto com números ao vivo,
     pipeline, mapa das tabelas), Experimental, CBS, PM7 e Rotinas. Cada aba

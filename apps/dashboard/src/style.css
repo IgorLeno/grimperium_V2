@@ -143,26 +143,28 @@ h1, h2, h3, h4 { letter-spacing: -.02em; }
 
 main { max-width: 84rem; margin: 0 auto; padding: 0 1.25rem 4rem; }
 /* ------------------------------------------------- module sidebar (hub) */
-.app-shell { display: grid; grid-template-columns: 16rem minmax(0, 1fr); max-width: 104rem; margin: 0 auto; align-items: start; }
+.app-shell { display: grid; grid-template-columns: 13.5rem minmax(0, 1fr); max-width: 104rem; margin: 0 auto; align-items: start; }
+.app-shell--collapsed { grid-template-columns: minmax(0, 1fr); }
 .app-shell main { max-width: none; margin: 0; min-width: 0; }
 .module-sidebar {
-  position: sticky; top: 4.1rem; align-self: start; display: grid; gap: .8rem; align-content: start;
-  min-height: calc(100vh - 4.1rem); padding: 1.25rem 1rem; color: var(--hero-text);
-  background: linear-gradient(180deg, var(--hero-to), var(--hero-from)); border-right: 1px solid rgba(255, 255, 255, .06);
+  position: sticky; top: 4.1rem; align-self: start; display: grid; gap: .5rem; align-content: start;
+  min-height: calc(100vh - 4.1rem); padding: 1.1rem .8rem; background: var(--surface-2); border-right: 1px solid var(--border);
 }
-.module-sidebar__title { margin: 0; color: #f0c993; font-size: .7rem; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; }
-.module-sidebar nav { display: grid; gap: .5rem; }
+.module-sidebar__title { margin: 0 0 .1rem .5rem; color: var(--text-muted); font-size: .66rem; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; }
+.module-sidebar nav { display: grid; gap: .15rem; }
 .module-sidebar nav button {
-  display: grid; gap: .15rem; text-align: left; padding: .8rem .9rem; border-radius: var(--radius);
-  border: 1px solid rgba(255, 255, 255, .1); background: rgba(255, 255, 255, .04); color: var(--hero-muted);
-  transition: background .2s, border-color .2s;
+  display: grid; gap: .05rem; text-align: left; padding: .5rem .6rem; border-radius: var(--radius-sm);
+  border: 0; background: transparent; color: var(--text-secondary); transition: background .2s, color .2s;
 }
-.module-sidebar nav button strong { color: #fff; font-size: 1rem; letter-spacing: -.02em; }
-.module-sidebar nav button span { font-size: .8rem; font-weight: 600; }
-.module-sidebar nav button small { font-size: .72rem; opacity: .75; line-height: 1.4; }
-.module-sidebar nav button:hover { background: rgba(255, 255, 255, .08); }
-.module-sidebar nav button[aria-current="true"] { border-color: #e2a35c; background: rgba(226, 163, 92, .14); box-shadow: inset 3px 0 0 #e2a35c; }
-.module-sidebar__note { margin: .4rem 0 0; color: var(--hero-muted); font-size: .72rem; line-height: 1.5; opacity: .8; }
+.module-sidebar nav button strong { color: var(--text-primary); font-size: .9rem; font-weight: 650; letter-spacing: -.01em; }
+.module-sidebar nav button span { font-size: .72rem; line-height: 1.35; }
+.module-sidebar nav button:hover { background: var(--hover-wash); }
+.module-sidebar nav button[aria-current="true"] { background: var(--brand-soft); box-shadow: inset 2px 0 0 var(--brand); }
+.sidebar-toggle {
+  flex: none; display: grid; place-items: center; width: 2.1rem; height: 2.1rem; padding: 0; border-radius: var(--radius-sm);
+  border: 1px solid rgba(255, 255, 255, .18); background: transparent; color: var(--hero-muted); font-size: 1.1rem; line-height: 1; transition: background .2s, color .2s;
+}
+.sidebar-toggle:hover { background: rgba(255, 255, 255, .1); color: #fff; }
 
 .view { display: grid; gap: 1.5rem; animation: rise .45s ease-out; }
 @keyframes rise { from { opacity: 0; transform: translateY(8px); } }
@@ -601,9 +603,9 @@ button.choice-card:hover:not(:disabled) { transform: translateY(-2px); border-co
 }
 @media (max-width: 900px) {
   .app-shell { grid-template-columns: 1fr; }
-  .module-sidebar { position: static; min-height: 0; padding: .8rem 1.25rem; border-right: 0; border-bottom: 1px solid rgba(255, 255, 255, .06); }
-  .module-sidebar nav { grid-auto-flow: column; grid-auto-columns: minmax(14rem, 1fr); overflow-x: auto; }
-  .module-sidebar nav button small, .module-sidebar__note { display: none; }
+  .module-sidebar { position: static; min-height: 0; padding: .6rem 1.25rem; border-right: 0; border-bottom: 1px solid var(--border); }
+  .module-sidebar__title { display: none; }
+  .module-sidebar nav { grid-auto-flow: column; grid-auto-columns: minmax(13rem, 1fr); overflow-x: auto; }
   .metric-grid--four { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .chart-grid, .explainer { grid-template-columns: 1fr; }
   .data-map { grid-template-columns: 1fr; }
