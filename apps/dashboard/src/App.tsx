@@ -3,7 +3,19 @@ import type { Health } from './api'
 import { DEFAULT_MODULE, firstView, MODULES, topTabOf } from './modules'
 import { useApi } from './useApi'
 
+const SIDEBAR_KEY = 'grimperium.sidebar.open'
+
+function readSidebarOpen(): boolean {
+  try { return window.localStorage.getItem(SIDEBAR_KEY) !== 'false' } catch { return true }
+}
+
 export function App() {
+  const [sidebarOpen, setSidebarOpen] = useState(readSidebarOpen)
+  const toggleSidebar = () => {
+    const next = !sidebarOpen
+    setSidebarOpen(next)
+    try { window.localStorage.setItem(SIDEBAR_KEY, String(next)) } catch { /* preferência não persistida */ }
+  }
   const [moduleKey, setModuleKey] = useState(DEFAULT_MODULE.key)
   const [view, setView] = useState(firstView(DEFAULT_MODULE.tabs[0]))
   const health = useApi<Health>('/api/health')
@@ -20,6 +32,10 @@ export function App() {
   return (
     <>
       <header className="app-header">
+        <button type="button" className="sidebar-toggle" aria-label={sidebarOpen ? 'Ocultar menu lateral' : 'Mostrar menu lateral'}
+          aria-expanded={sidebarOpen} aria-controls="module-sidebar" title={sidebarOpen ? 'Ocultar menu lateral' : 'Mostrar menu lateral'} onClick={toggleSidebar}>
+          <span aria-hidden="true">{sidebarOpen ? '‹' : '☰'}</span>
+        </button>
         <div className="brand"><span className="brand-mark" aria-hidden="true">Δ</span><span><strong>Delta Chemistry</strong><small>Métodos rápidos, corrigidos por IA</small></span></div>
         <nav aria-label="Telas">
           {active.tabs.map((tab) => (
@@ -44,20 +60,20 @@ export function App() {
           )}
         </div>
       </header>
-      <div className="app-shell">
-        <aside className="module-sidebar" aria-label="Módulos">
-          <p className="module-sidebar__title">Propriedade</p>
-          <nav aria-label="Módulos de propriedade">
-            {MODULES.map((item) => (
-              <button key={item.key} type="button" aria-current={item.key === active.key ? 'true' : undefined} onClick={() => selectModule(item.key)}>
-                <strong>{item.name}</strong>
-                <span>{item.property}</span>
-                <small>{item.description}</small>
-              </button>
-            ))}
-          </nav>
-          <p className="module-sidebar__note">Cada módulo corrige um método rápido para uma propriedade. Novos módulos aparecem aqui.</p>
-        </aside>
+      <div className={`app-shell${sidebarOpen ? '' : ' app-shell--collapsed'}`}>
+        {sidebarOpen && (
+          <aside id="module-sidebar" className="module-sidebar" aria-label="Módulos">
+            <p className="module-sidebar__title">Módulos</p>
+            <nav aria-label="Módulos de propriedade">
+              {MODULES.map((item) => (
+                <button key={item.key} type="button" title={item.description} aria-current={item.key === active.key ? 'true' : undefined} onClick={() => selectModule(item.key)}>
+                  <strong>{item.name}</strong>
+                  <span>{item.property}</span>
+                </button>
+              ))}
+            </nav>
+          </aside>
+        )}
         <main>
           {topTab.children && (
             <nav className="submenu" aria-label={`Submenu de ${topTab.label}`}>
