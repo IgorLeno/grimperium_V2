@@ -19,7 +19,7 @@ LEGACY_STATE_ONLY_COLUMNS = [
 ]
 
 
-def test_batch_csv_manager_creates_legacy_thermo_pm7_with_61_columns(
+def test_batch_csv_manager_creates_legacy_thermo_pm7_with_62_columns(
     tmp_path: Path,
 ) -> None:
     csv_path = tmp_path / "thermo_pm7.csv"
@@ -28,7 +28,7 @@ def test_batch_csv_manager_creates_legacy_thermo_pm7_with_61_columns(
     manager.create_empty_csv()
 
     df = pd.read_csv(csv_path)
-    assert len(df.columns) == 61
+    assert len(df.columns) == 62
     assert list(df.columns) == EXPECTED_COLUMNS
 
 
@@ -58,11 +58,11 @@ def test_state_only_columns_are_present_in_batch_state_csv(tmp_path: Path) -> No
         assert column in BATCH_STATE_COLUMNS
 
 
-def test_legacy_schema_matches_existing_61_column_contract() -> None:
+def test_legacy_schema_matches_62_column_contract() -> None:
     schema = BatchCSVManager(csv_path=None).get_schema()
 
     assert schema == EXPECTED_COLUMNS
-    assert len(schema) == 61
+    assert len(schema) == 62
 
 
 def test_mark_success_persists_scientific_columns_without_state_columns(

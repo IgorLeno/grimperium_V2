@@ -21,7 +21,7 @@ class TestCSVSchema:
         return BatchCSVManager(tmp_path / "test.csv")
 
     def test_schema_length(self, manager: BatchCSVManager) -> None:
-        """Verify schema has expected 61-column count.
+        """Verify schema has expected 62-column count.
 
         - 3 identity columns
         - 8 molecular property columns
@@ -31,13 +31,14 @@ class TestCSVSchema:
         - 13 MOPAC columns
         - 4 batch config columns
         - 2 prediction output columns
-        Total: 3+8+4+15+12+13+4+2 = 61
+        - 1 protocol column
+        Total: 3+8+4+15+12+13+4+2+1 = 62
         """
         schema = manager.get_schema()
-        assert len(schema) == 61, f"Expected 61 columns, got {len(schema)}"
+        assert len(schema) == 62, f"Expected 62 columns, got {len(schema)}"
 
     def test_schema_exact_order(self, manager: BatchCSVManager) -> None:
-        """Verify schema matches target 61-column order exactly."""
+        """Verify schema matches target 62-column order exactly."""
         schema = manager.get_schema()
         expected = [
             "mol_id",
@@ -101,6 +102,7 @@ class TestCSVSchema:
             "assigned_mopac_timeout",
             "H298_predicted",
             "delta_correction",
+            "protocol",
         ]
         assert schema == expected
 

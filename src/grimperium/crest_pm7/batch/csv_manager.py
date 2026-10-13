@@ -52,7 +52,7 @@ class BatchCSVManager:
         df: Pandas DataFrame with molecule data (loaded lazily)
     """
 
-    # ── Column group definitions (61 columns total) ──
+    # ── Column group definitions (62 columns total) ──
 
     DEFAULT_MAX_RERUNS: int = 3
 
@@ -129,6 +129,9 @@ class BatchCSVManager:
 
     PREDICTION_OUTPUT_COLUMNS = ["H298_predicted", "delta_correction"]
 
+    PROTOCOL_COLUMNS = ["protocol"]
+    """Which protocol produced the row: "1" legacy crest_pm7, "2" canonical."""
+
     # Result columns that are cleared when resetting a batch
     RESULT_COLUMNS = [
         "crest_status",
@@ -178,7 +181,7 @@ class BatchCSVManager:
         """Get the full CSV schema with all column names.
 
         Returns:
-            List of 61 column names in order:
+            List of 62 column names in order:
             - Identity (3): mol_id, status, smiles
             - Molecular properties (8): multiplicity, charge, nheavy, H298_cbs, etc.
             - Batch info (4): batch_id, timestamp, total_time, reruns
@@ -187,6 +190,7 @@ class BatchCSVManager:
             - MOPAC (13): mopac_status, k_selected_pm7, etc.
             - Batch config (4): batch_order, batch_failure_policy, etc.
             - Prediction outputs (2): H298_predicted, delta_correction
+            - Protocol provenance (1): protocol
         """
         return (
             self.IDENTITY_COLUMNS
@@ -197,6 +201,7 @@ class BatchCSVManager:
             + self.MOPAC_COLUMNS
             + self.BATCH_CONFIG_COLUMNS
             + self.PREDICTION_OUTPUT_COLUMNS
+            + self.PROTOCOL_COLUMNS
         )
 
     def create_empty_csv(self) -> pd.DataFrame:
@@ -231,6 +236,7 @@ class BatchCSVManager:
         "batch_failure_policy": str,
         "crest_status": str,
         "mopac_status": str,
+        "protocol": str,
         # Force string type for timestamp to avoid float64 issues
         "timestamp": str,
     }

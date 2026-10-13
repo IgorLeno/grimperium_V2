@@ -1,4 +1,4 @@
-"""Tests for CSV schema (61 columns, matching BatchCSVManager.get_schema())."""
+"""Tests for CSV schema (62 columns, matching BatchCSVManager.get_schema())."""
 
 from pathlib import Path
 
@@ -75,10 +75,16 @@ EXPECTED_COLUMNS = [
     # Prediction outputs (59-61)
     "H298_predicted",
     "delta_correction",
+    # Protocol provenance (62)
+    "protocol",
 ]
 
 
 _CSV_PATH = Path("data/thermo_pm7.csv")
+
+#: ``data/thermo_pm7.csv`` stays in the 61-column layout until the protocol
+#: migration (``python -m semi_imperium.training migrate --apply``) is applied.
+_PRE_MIGRATION_COLUMNS = EXPECTED_COLUMNS[:-1]
 
 
 @pytest.mark.skipif(
@@ -88,8 +94,9 @@ _CSV_PATH = Path("data/thermo_pm7.csv")
 def test_csv_has_expected_columns() -> None:
     """Test that CSV output has the expected column count."""
     df = pd.read_csv(_CSV_PATH)
-    assert len(df.columns) == len(
-        EXPECTED_COLUMNS
+    assert len(df.columns) in (
+        len(EXPECTED_COLUMNS),
+        len(_PRE_MIGRATION_COLUMNS),
     ), f"Expected {len(EXPECTED_COLUMNS)} columns, got {len(df.columns)}"
 
 
@@ -101,7 +108,7 @@ def test_csv_column_order() -> None:
         df = pd.read_csv(csv_path)
         if len(df.columns) < 50:
             pytest.skip("CSV not yet regenerated with new schema")
-        assert list(df.columns) == EXPECTED_COLUMNS
+        assert list(df.columns) in (EXPECTED_COLUMNS, _PRE_MIGRATION_COLUMNS)
     else:
         pytest.skip("CSV file does not exist yet")
 
@@ -160,3 +167,32 @@ def test_csv_has_new_columns() -> None:
         assert "opt_lvl" in df.columns
     else:
         pytest.skip("CSV file does not exist yet")
+
+
+def test_protocol_column_round_trips_as_text(tmp_path: Path) -> None:
+    from grimperium.crest_pm7.batch.csv_manager import BatchCSVManager
+
+    csv_path = tmp_path / "thermo_pm7.csv"
+    manager = BatchCSVManager(csv_path)
+    manager.create_empty_csv()
+    frame = pd.DataFrame(
+        [
+            {
+                "mol_id": "a",
+                "status": "OK",
+                "smiles": "C",
+                "nheavy": 1,
+                "protocol": "1",
+            },
+            {
+                "mol_id": "b",
+                "status": "Pending",
+                "smiles": "CC",
+                "nheavy": 2,
+                "protocol": "",
+            },
+        ]
+    )
+    frame.to_csv(csv_path, index=False)
+    loaded = BatchCSVManager(csv_path).load_csv()
+    assert loaded["protocol"].fillna("").tolist() == ["1", ""]
