@@ -1,15 +1,14 @@
-"""FastAPI app of the local dashboard: read-only, GET endpoints only."""
+"""Local dashboard API: reads the datasets and launches the training routine."""
 
 from __future__ import annotations
 
 from pathlib import Path
 from typing import Literal
 
-from fastapi import FastAPI, Query, Request
+from fastapi import Depends, FastAPI, HTTPException, Query, Request
 from fastapi.responses import JSONResponse
 
-from grimperium.webapi import profiles, readers
-from grimperium.webapi.catalog import routine_catalog
+from grimperium.webapi import profiles, readers, training
 from grimperium.webapi.config import DashboardPaths
 from grimperium.webapi.models import (
     DatasetProfile,
@@ -17,16 +16,21 @@ from grimperium.webapi.models import (
     ExperimentalComparison,
     ExperimentalSummary,
     Health,
-    RoutineCatalog,
     TablePage,
+    TrainingStartRequest,
+    TrainingStatus,
 )
 
 TableKey = Literal["exp", "cbs", "pm7"]
 
 
-def create_app(paths: DashboardPaths | None = None) -> FastAPI:
+def create_app(
+    paths: DashboardPaths | None = None,
+    launcher: training.Launcher | None = None,
+) -> FastAPI:
     """Build the app; ``paths`` defaults to the datasets of this checkout."""
     files = paths or DashboardPaths.default()
+    dispatch = launcher or training.default_launcher
     app = FastAPI(title="Grimperium dashboard API", version="0.1.0")
 
     @app.exception_handler(readers.DataUnavailable)
@@ -41,7 +45,7 @@ def create_app(paths: DashboardPaths | None = None) -> FastAPI:
 
     @app.get("/api/health")
     def health() -> Health:
-        return Health(status="ok", read_only=True)
+        return Health(status="ok", can_dispatch=True)
 
     @app.get("/api/dataset/progress")
     def dataset_progress() -> DatasetProgress:
@@ -84,8 +88,28 @@ def create_app(paths: DashboardPaths | None = None) -> FastAPI:
             descending=desc,
         )
 
-    @app.get("/api/routines/catalog")
-    def catalog() -> RoutineCatalog:
-        return routine_catalog()
+    allowed_origins = {
+        f"http://{host}:{port}"
+        for host in ("localhost", "127.0.0.1")
+        for port in (5173, 4173, 8000)
+    }
+
+    def require_local_origin(request: Request) -> None:
+        """Refuse browser POSTs from pages that are not the local dashboard."""
+        origin = request.headers.get("origin")
+        if origin is not None and origin not in allowed_origins:
+            raise HTTPException(403, "Origem não permitida.")
+
+    @app.get("/api/training/status")
+    def training_status() -> TrainingStatus:
+        return training.build_status(files)
+
+    @app.post("/api/training/start", dependencies=[Depends(require_local_origin)])
+    def training_start(body: TrainingStartRequest) -> TrainingStatus:
+        return training.start(files, body, dispatch)
+
+    @app.post("/api/training/stop", dependencies=[Depends(require_local_origin)])
+    def training_stop() -> TrainingStatus:
+        return training.stop(files)
 
     return app

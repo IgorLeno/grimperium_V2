@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -22,9 +23,14 @@ class DashboardPaths:
     """CHON CBS reference table; ``None`` reports it as not configured."""
 
     @classmethod
-    def default(cls, root: Path = _REPO_ROOT) -> DashboardPaths:
-        """Paths of the active datasets under ``root/data``."""
-        data = root / "data"
+    def default(cls, root: Path | None = None) -> DashboardPaths:
+        """Paths of the active datasets under ``root/data``.
+
+        ``GRIMPERIUM_ROOT`` points the API at another checkout-shaped folder
+        (used to rehearse the routine on a copy of the data).
+        """
+        base = root or Path(os.environ.get("GRIMPERIUM_ROOT", _REPO_ROOT))
+        data = base / "data"
         return cls(
             pm7_csv=data / "thermo_pm7.csv",
             semi_imperium_store=data / "semi_imperium",

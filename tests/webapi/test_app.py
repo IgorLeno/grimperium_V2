@@ -115,10 +115,10 @@ def _seed_store(root: Path) -> None:
     )
 
 
-def test_health_reports_read_only(paths: DashboardPaths) -> None:
+def test_health_reports_dispatch_capability(paths: DashboardPaths) -> None:
     response = _client(paths).get("/api/health")
     assert response.status_code == 200
-    assert response.json() == {"status": "ok", "read_only": True}
+    assert response.json() == {"status": "ok", "can_dispatch": True}
 
 
 def test_progress_counts_legacy_rows_and_labels_protocol(
@@ -237,15 +237,15 @@ def test_non_numeric_value_is_reported(paths: DashboardPaths) -> None:
     assert "H298_cbs" in response.json()["detail"]
 
 
-def test_only_get_routes_are_exposed(paths: DashboardPaths) -> None:
+def test_only_the_training_routes_accept_writes(paths: DashboardPaths) -> None:
     app = create_app(paths)
-    methods = {
-        method
+    writers = {
+        getattr(route, "path", "")
         for route in app.routes
         if getattr(route, "path", "").startswith("/api/")
-        for method in getattr(route, "methods", set())
+        and getattr(route, "methods", set()) - {"GET", "HEAD"}
     }
-    assert methods <= {"GET", "HEAD"}
+    assert writers == {"/api/training/start", "/api/training/stop"}
 
 
 # --------------------------------------------------- table profiles & rows
@@ -334,18 +334,3 @@ def test_unknown_table_and_missing_cbs(paths: DashboardPaths) -> None:
     response = client.get("/api/tables/cbs/profile")
     assert response.status_code == 503
     assert response.json()["detail"] == "table path not configured"
-
-
-def test_routine_catalog_mirrors_semi_imperium_defaults(paths: DashboardPaths) -> None:
-    body = _client(paths).get("/api/routines/catalog").json()
-
-    assert body["dispatch_enabled"] is False
-    assert [p["key"] for p in body["properties"]] == ["standard_enthalpy_of_formation"]
-    assert [m["key"] for m in body["input_modes"]] == ["smiles", "name", "manual"]
-    programs = {p["key"]: p for p in body["programs"]}
-    assert list(programs) == ["rdkit", "crest", "confpass", "mopac"]
-    mopac = {p["key"]: p for p in programs["mopac"]["parameters"]}
-    assert mopac["hamiltonian"]["default"] == "PM7"
-    assert mopac["hamiltonian"]["choices"] == ["AM1", "PM3", "PM7"]
-    crest = {p["key"]: p for p in programs["crest"]["parameters"]}
-    assert crest["quick_mode"]["choices"] == ["off", "quick", "squick", "mquick"]

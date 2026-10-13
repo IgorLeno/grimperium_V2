@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 LEGACY_PROTOCOL = "crest_pm7"
 """Protocol that produced ``thermo_pm7.csv``; the canonical one is
@@ -14,7 +14,7 @@ BLANK_LABEL = "unset"
 
 class Health(BaseModel):
     status: str
-    read_only: bool
+    can_dispatch: bool
 
 
 class LegacyDatasetProgress(BaseModel):
@@ -152,46 +152,49 @@ class TablePage(BaseModel):
     rows: list[dict[str, str | float | int | bool | None]]
 
 
-# --------------------------------------------------------- routine catalog
+# ------------------------------------------------------------------ training
 
 
-class RoutineParameter(BaseModel):
-    key: str
-    label: str
-    kind: str
-    """``int``, ``float``, ``bool``, ``choice`` or ``text``."""
-    default: str | float | int | bool | None
-    choices: list[str] = []
-    unit: str = ""
-    help: str = ""
-    minimum: float | None = None
-    maximum: float | None = None
+class TrainingProgress(BaseModel):
+    total: int
+    protocol2: int
+    protocol1: int
+    ok_unmarked: int
+    pending: int
+    selected: int
+    rerun: int
+    running: int
+    skipped: int
+    migrated: bool
 
 
-class RoutineProgram(BaseModel):
-    key: str
-    label: str
-    role: str
-    description: str
-    executable: str | None
-    available: bool | None
-    """Whether the executable is on PATH now; ``None`` for Python libraries."""
-    experimental: bool = False
-    parameters: list[RoutineParameter]
+class TrainingJob(BaseModel):
+    state: str
+    pid: int | None
+    started_at: str | None
+    heartbeat_at: str | None
+    finished_at: str | None
+    workers: int
+    limit: int | None
+    done: int
+    failed: int
+    message: str
+    stop_requested: bool
 
 
-class RoutineProperty(BaseModel):
-    key: str
-    label: str
-    unit: str
-    description: str
-    available: bool
+class TrainingFailure(BaseModel):
+    mol_id: str
+    reason: str
+    at: str
 
 
-class RoutineCatalog(BaseModel):
-    dispatch_enabled: bool
-    """Routines can be designed now; launching them needs the job backend."""
-    properties: list[RoutineProperty]
-    input_modes: list[RoutineProgram]
-    programs: list[RoutineProgram]
-    outputs: list[RoutineProgram]
+class TrainingStatus(BaseModel):
+    progress: TrainingProgress
+    job: TrainingJob
+    geometries: int
+    failures: list[TrainingFailure]
+
+
+class TrainingStartRequest(BaseModel):
+    workers: int = Field(3, ge=1, le=8)
+    limit: int | None = Field(None, ge=1)
