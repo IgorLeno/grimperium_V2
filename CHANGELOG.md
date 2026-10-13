@@ -66,9 +66,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     5e-7 só em colunas que o writer arredonda a 6 casas); 1 molécula pela CLI
     (HCN, ΔHf PM7 29,85 kcal/mol, frequência mais baixa 977 cm⁻¹, mínimo
     confirmado, geometria no SQLite, artefatos apagados); início e parada pelo
-    painel verificados. **Não verificado:** `migrate --apply` e execução no
-    `data/thermo_pm7.csv` real (aguardam confirmação), o porte do CONFPASS
-    contra a especificação e o lote completo.
+    painel verificados.
+  - Dados reais (2026-10-13, com confirmação do usuário): `migrate --apply` no
+    `data/thermo_pm7.csv` (cópia `.pre-protocol-*.bak`): 8.232 marcadas como
+    protocolo 1, 4.427 `Selected` devolvidas a `Pending`; só `status` e
+    `protocol` mudaram (demais colunas: diferença máxima 5e-7, arredondamento
+    do writer). 1 molécula pelo painel (1 em paralelo, limite 1): `mol_19891`
+    (HCN), `OK`, `protocol=2`, ΔHf PM7 29,85 kcal/mol, geometria no SQLite,
+    frequência mais baixa 977 cm⁻¹, mínimo confirmado, `artifacts/` vazio.
+    **Não verificado:** o porte do CONFPASS contra a especificação e o lote
+    completo (~21 mil moléculas), que não foi executado.
 - **Dashboard: shell Delta Chemistry com barra lateral de módulos** (2026-10-12)
   - `apps/dashboard/src/modules.ts`: registro de módulos (um por propriedade);
     `GrimperiumModule.tsx` agrupa as cinco telas existentes (entalpia de
