@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Removed
+- Construtor de rotinas do dashboard (`RoutinesView`, `routines.ts`) e
+  `GET /api/routines/catalog`: as rotinas vivem no back-end e o painel só as
+  aciona e acompanha.
+
 ### Changed
 - **Dashboard: Delta Chemistry como hub e Grimperium como módulo** (2026-10-12)
   - `apps/dashboard/src/modules.ts`, `DeltaModule.tsx`: a tela principal passa
@@ -31,6 +36,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     Comportamento, acessibilidade e persistência inalterados.
 
 ### Added
+- **Delta Entalpia: rotina de treinamento Semi-Imperium (protocolo 2)** (2026-10-13)
+  - `src/semi_imperium/training/`: protocolo 2 (CONFPASS + filtro de
+    dobramento, PM7, verificação de mínimo exigida), migração do CSV, ledger
+    com escritor único, tabela SQLite de geometrias finais
+    (`data/semi_imperium/training.sqlite3`), estado do job com batimento,
+    coordenador retomável com processos em paralelo e CLI
+    `python -m semi_imperium.training status|migrate|run|stop`.
+  - `thermo_pm7.csv` passa a 62 colunas (`protocol`: `"1"` preliminar do
+    `crest_pm7`, `"2"` canônico). A migração (ensaio por padrão, `--apply` com
+    cópia `.pre-protocol-*.bak`) marca as `OK` como protocolo 1 e devolve
+    `Selected` a `Pending`.
+  - `ExecutionOutcome.geometry` carrega a geometria final do conformer.
+  - API: `GET /api/training/status`, `POST /api/training/start|stop` (só
+    origens locais); `Health.can_dispatch`; `GRIMPERIUM_ROOT`.
+  - Dashboard: módulo **Delta Entalpia** (Treinamento funcional; Delta
+    Learning e Cálculo "em breve").
+  - Verificação (2026-10-13): `tests/webapi` 18/18 na linha de base (sem
+    travar); suíte completa `pytest tests/ -n 4` 2000 passed, 36 skipped, mas o
+    piso de cobertura de 85% não é atingido (69,5% em `src/grimperium`, medido
+    nesta branch; não comparado com a `main`); `ruff` limpo; `mypy --strict`
+    com 3 erros preexistentes (`GetAtoms`, rdkit) em `core/descriptors.py` e
+    `crest_pm7/molecule_processor.py`; `black --check` aponta 6 arquivos
+    preexistentes fora do escopo; dashboard: lint, typecheck, 24 testes e build
+    ok.
+  - Ensaio com ferramentas reais (xtb/crest/mopac) numa **cópia** dos dados
+    (`/tmp/grimperium-rehearsal`): a migração marcou 8.232 como protocolo 1 e
+    devolveu 4.427 `Selected` a `Pending`, sem alterar valores (diferença máxima
+    5e-7 só em colunas que o writer arredonda a 6 casas); 1 molécula pela CLI
+    (HCN, ΔHf PM7 29,85 kcal/mol, frequência mais baixa 977 cm⁻¹, mínimo
+    confirmado, geometria no SQLite, artefatos apagados); início e parada pelo
+    painel verificados. **Não verificado:** `migrate --apply` e execução no
+    `data/thermo_pm7.csv` real (aguardam confirmação), o porte do CONFPASS
+    contra a especificação e o lote completo.
 - **Dashboard: shell Delta Chemistry com barra lateral de módulos** (2026-10-12)
   - `apps/dashboard/src/modules.ts`: registro de módulos (um por propriedade);
     `GrimperiumModule.tsx` agrupa as cinco telas existentes (entalpia de

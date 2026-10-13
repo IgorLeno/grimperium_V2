@@ -35,16 +35,19 @@ a partir de dados de métodos mais precisos. A **barra lateral** tem dois grupos
 
 | Item | O que é |
 |------|---------|
-| **Delta Chemistry** (hub, tela principal) | Rotinas, Resumos e Sobre — nada específico de uma propriedade |
-| **Grimperium** (módulo) | Entalpia de formação no estado padrão (PM7 corrigido com CBS) |
+| **Delta Chemistry** (hub, tela principal) | Resumos e Sobre — nada específico de uma propriedade |
+| **Delta Entalpia** (módulo) | Entalpia de formação no estado padrão (PM7 corrigido com CBS): Resumo, Dados, Treinamento, Delta Learning e Cálculo |
 
-O menu superior mostra só as abas do item ativo: as telas do Grimperium
-(Resumo, Dados, Calcular, Treinar) existem apenas dentro do módulo. O botão
-**Menu**, que oculta/mostra a barra lateral, fica numa barra abaixo do
-cabeçalho; o cabeçalho guarda só a marca e o menu superior.
+O menu superior mostra só as abas do item ativo: as telas do Delta Entalpia
+existem apenas dentro do módulo. O botão **Menu**, que oculta/mostra a barra
+lateral, fica numa barra abaixo do cabeçalho; o cabeçalho guarda só a marca e o
+menu superior.
+
+As rotinas são construídas e mantidas no back-end Python e rodam também pela
+linha de comando. O painel **só aciona e acompanha**; não monta rotinas.
 
 Para adicionar um módulo, crie o componente de telas (modelo:
-`src/GrimperiumModule.tsx`) e inclua uma entrada em `MODULES`
+`src/DeltaEnthalpyModule.tsx`) e inclua uma entrada em `MODULES`
 (`src/modules.ts`) com nome, propriedade e abas. O hub é `HUB` no mesmo
 arquivo (componente `src/DeltaModule.tsx`).
 
@@ -52,11 +55,10 @@ arquivo (componente `src/DeltaModule.tsx`).
 
 | Menu | O que mostra |
 |------|--------------|
-| **Rotinas** (primeira) | Menu de rotinas e assistente em 5 passos, onde se escolhe a propriedade. É o mesmo componente da aba *Calcular* do Grimperium (`src/RoutinesView.tsx`) e usa o mesmo armazenamento local, então as rotinas aparecem nas duas. |
-| **Resumos** | Compilado dos resultados obtidos pelas rotinas. Ainda sem back-end de jobs não há resultados: a tela mostra o estado vazio. |
+| **Resumos** | Compilado dos resultados obtidos pelas rotinas. Ainda não há resultados consolidados: a tela mostra o estado vazio e aponta para o Treinamento. |
 | **Sobre** (última) | Explica o hub: a ideia do Δ-learning em três passos, como o hub se organiza, módulos disponíveis, escopo atual e glossário. |
 
-## Telas do módulo Grimperium
+## Telas do módulo Delta Entalpia
 
 Menu superior com submenu (definido em `src/modules.ts`):
 
@@ -66,38 +68,46 @@ Menu superior com submenu (definido em `src/modules.ts`):
 | **Dados** | **Experimental** | O que é a tabela; distribuições; comparação CBS × experimental (concordância, paridade, erro por tamanho e fonte); tabela completa pesquisável. | `data/thermo_exp_hf.csv`, `data/thermo_exp_hf_vs_cbs.csv` |
 | | **CBS** | O que é a referência CBS; entalpia, tamanho, elementos, correção CBS − B3LYP, spin/carga, SMILES repetidos; tabela completa. | `data/thermo_cbs_chon.csv` |
 | | **PM7** | Tabela legada `crest_pm7`: andamento, erro Δ = CBS − PM7, paridade, resultado do CREST/MOPAC, tempos; tabela completa. | `data/thermo_pm7.csv` |
-| **Calcular** | — | Menu de rotinas e assistente em 5 passos (nome, propriedade, pipeline, configuração, saída) com parâmetros lidos do Semi-Imperium. | `/api/routines/catalog` |
-| **Treinar** | — | Explica as etapas do treino do modelo Δ e o portão de qualidade. Ainda sem execução: depende do back-end de jobs. | — |
+| **Treinamento** | — | Rotina Semi-Imperium (protocolo 2): barra de andamento com denominador explícito, iniciar/parar com moléculas em paralelo e limite, falhas recentes com o motivo. Atualiza a cada 5 s. | `/api/training/status`, `/api/training/start`, `/api/training/stop` |
+| **Delta Learning** | — | Explica as etapas do treino do modelo Δ e o portão de qualidade. Ainda sem execução no painel. | — |
+| **Cálculo** | — | "Em breve": cálculo de uma molécula pelo nome (Grimperium), depende do Delta Learning. | — |
 
 Cada gráfico traz um bloco **“Como ler”** em linguagem simples. Os CSVs CBS
 e PM7 ficam fora do Git; sem eles, a aba correspondente explica onde copiar o
 arquivo. Tema claro/escuro segue o sistema operacional.
 
-## Rotinas (painel de controle)
+## Treinamento (Delta Entalpia)
 
-O dashboard **não executa cálculos**: ele monta a especificação da rotina
-(`RoutineSpec`, versão 1, em `src/routines.ts`) e, quando o back-end de jobs
-existir, apenas a dispara. Neste momento:
+O painel aciona e acompanha a rotina; o cálculo roda no back-end e também pelo terminal:
 
-- rotinas ficam salvas no armazenamento local do navegador e podem ser
-  exportadas em JSON;
-- o botão **Disparar** fica desativado (`dispatch_enabled: false` no catálogo);
-- o catálogo (`GET /api/routines/catalog`) lê padrões e opções de
-  `semi_imperium` (CREST, seleção/CONFPASS, MOPAC, RDKit) e verifica se
-  `crest`/`mopac` estão no PATH, sem executar nada.
+```bash
+poetry run python -m semi_imperium.training status
+poetry run python -m semi_imperium.training migrate            # ensaio
+poetry run python -m semi_imperium.training migrate --apply    # grava (cria cópia .pre-protocol-*.bak)
+poetry run python -m semi_imperium.training run --workers 3 --limit 10
+poetry run python -m semi_imperium.training stop
+```
 
-## API (somente leitura)
+A migração é feita uma vez: marca as moléculas do protocolo 1 e devolve
+`Selected` à fila. Enquanto o CSV não for migrado, o botão **Iniciar
+treinamento** fica desabilitado e a tela mostra o comando. A API inicia a rotina
+como subprocesso do mesmo comando (`run`); o estado fica em
+`data/semi_imperium/training.sqlite3`. `GRIMPERIUM_ROOT` aponta a API para outra
+pasta no formato do repositório (usado para ensaiar em uma cópia dos dados).
+
+## API
 
 | Rota | Conteúdo |
 |------|----------|
-| `GET /api/health` | Saúde da API |
+| `GET /api/health` | Saúde da API e se ela pode acionar a rotina (`can_dispatch`) |
 | `GET /api/dataset/progress` | Estados do CSV PM7 e store Semi-Imperium |
 | `GET /api/experimental/summary` · `/comparison` | Fontes/flags e pares CBS × experimental |
 | `GET /api/tables/{exp,cbs,pm7}/profile` | Distribuições: tamanho, composição CHON, histogramas (99% central; extremos contados à parte), categorias, erro por tamanho e nuvem de paridade (até 4.000 pontos) |
 | `GET /api/tables/{exp,cbs,pm7}/rows?q=&offset=&limit=&sort=&desc=` | Linhas paginadas (máx. 200) com busca e ordenação |
-| `GET /api/routines/catalog` | Propriedades, modos de entrada, programas e saídas das rotinas |
+| `GET /api/training/status` | Andamento (CSV), estado do job, geometrias guardadas e falhas recentes |
+| `POST /api/training/start` · `/stop` | Inicia (`workers` 1–8, `limit` opcional) ou pede parada; só origens locais; 409 se o CSV não foi migrado ou já há job vivo |
 
-Todas as rotas são `GET`; `tests/webapi/test_app.py` garante isso.
+Fora `POST /api/training/start` e `/stop`, todas as rotas são `GET`; `tests/webapi/test_app.py` garante isso.
 
 ## Verificação
 
