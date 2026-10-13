@@ -1,6 +1,6 @@
 import type { ComponentType } from 'react'
 import { DeltaModule } from './DeltaModule'
-import { GrimperiumModule } from './GrimperiumModule'
+import { DeltaEnthalpyModule } from './DeltaEnthalpyModule'
 
 /** Contrato que toda tela de módulo recebe do shell do Delta Chemistry. */
 export interface ModuleViewProps {
@@ -31,14 +31,13 @@ export interface ModuleDef {
   Component: ComponentType<ModuleViewProps>
 }
 
-/** Tela principal: rotinas, resumos e a explicação do projeto. */
+/** Tela principal: resumos e a explicação do projeto. */
 export const HUB: ModuleDef = {
   key: 'delta-chemistry',
   name: 'Delta Chemistry',
-  property: 'Rotinas, resumos e sobre',
+  property: 'Resumos e sobre',
   description: 'Hub de rotinas de cálculo de propriedades com métodos rápidos corrigidos por machine learning.',
   tabs: [
-    { key: 'routines', label: 'Rotinas', hint: 'Monta rotinas de cálculo de propriedades' },
     { key: 'results', label: 'Resumos', hint: 'Resultados obtidos pelas rotinas' },
     { key: 'about', label: 'Sobre', hint: 'O que é o Delta Chemistry' },
   ],
@@ -47,16 +46,16 @@ export const HUB: ModuleDef = {
 
 /**
  * Um módulo é um método rápido corrigido por Δ-learning para UMA propriedade.
- * Para adicionar um módulo: crie o componente de telas (como `GrimperiumModule`)
+ * Para adicionar um módulo: crie o componente de telas (como `DeltaEnthalpyModule`)
  * e acrescente uma entrada aqui; a barra lateral e o menu superior passam a
  * reconhecê-lo sem outras alterações no shell.
  */
 export const MODULES: ModuleDef[] = [
   {
-    key: 'grimperium',
-    name: 'Grimperium',
+    key: 'delta-enthalpy',
+    name: 'Delta Entalpia',
     property: 'Entalpia de formação (estado padrão)',
-    description: 'PM7 corrigido por Δ-learning a partir de cálculos CBS.',
+    description: 'PM7 corrigido por Δ-learning a partir de cálculos CBS: treinamento, Delta Learning e cálculo.',
     tabs: [
       { key: 'summary', label: 'Resumo', hint: 'Visão geral do módulo' },
       {
@@ -67,10 +66,11 @@ export const MODULES: ModuleDef[] = [
           { key: 'pm7', label: 'PM7', hint: 'Cálculo rápido (legado)' },
         ],
       },
-      { key: 'routines', label: 'Calcular', hint: 'Monta rotinas de cálculo' },
-      { key: 'train', label: 'Treinar', hint: 'Treino do modelo de correção Δ' },
+      { key: 'training', label: 'Treinamento', hint: 'Semi-Imperium: calcula as moléculas PM7 do treino' },
+      { key: 'learning', label: 'Delta Learning', hint: 'Treina o modelo de correção Δ' },
+      { key: 'calc', label: 'Cálculo', hint: 'Grimperium: calcula uma molécula pelo nome' },
     ],
-    Component: GrimperiumModule,
+    Component: DeltaEnthalpyModule,
   },
 ]
 

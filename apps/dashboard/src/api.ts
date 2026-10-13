@@ -1,6 +1,6 @@
 export interface Health {
   status: string
-  read_only: boolean
+  can_dispatch: boolean
 }
 
 export interface DatasetProgress {
@@ -57,12 +57,12 @@ export interface ExperimentalComparison {
   points: ComparisonPoint[]
 }
 
-export async function getJson<T>(path: string, signal: AbortSignal): Promise<T> {
+async function requestJson<T>(path: string, init: RequestInit): Promise<T> {
   let response: Response
   try {
-    response = await fetch(path, { signal })
+    response = await fetch(path, init)
   } catch (error) {
-    if (signal.aborted) throw error
+    if (init.signal?.aborted) throw error
     throw new Error(`Não foi possível conectar à API (${path}). Verifique se o servidor está ativo.`, { cause: error })
   }
 
@@ -82,6 +82,18 @@ export async function getJson<T>(path: string, signal: AbortSignal): Promise<T> 
     throw new Error(`${path}: ${response.status} — ${detail}${file}${hint}`)
   }
   return (await response.json()) as T
+}
+
+export function getJson<T>(path: string, signal: AbortSignal): Promise<T> {
+  return requestJson<T>(path, { signal })
+}
+
+export function postJson<T>(path: string, body: unknown = {}): Promise<T> {
+  return requestJson<T>(path, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
 }
 
 export type TableKey = 'exp' | 'cbs' | 'pm7'
@@ -151,41 +163,38 @@ export interface TablePage {
   rows: Record<string, Cell>[]
 }
 
-export interface RoutineParameter {
-  key: string
-  label: string
-  kind: 'int' | 'float' | 'bool' | 'choice' | 'text'
-  default: string | number | boolean | null
-  choices: string[]
-  unit: string
-  help: string
-  minimum: number | null
-  maximum: number | null
+export interface TrainingProgress {
+  total: number
+  protocol2: number
+  protocol1: number
+  ok_unmarked: number
+  pending: number
+  selected: number
+  rerun: number
+  running: number
+  skipped: number
+  migrated: boolean
 }
 
-export interface RoutineProgram {
-  key: string
-  label: string
-  role: string
-  description: string
-  executable: string | null
-  available: boolean | null
-  experimental: boolean
-  parameters: RoutineParameter[]
+export interface TrainingJob {
+  state: 'idle' | 'running' | 'stopping' | 'finished' | 'failed' | 'stale'
+  pid: number | null
+  started_at: string | null
+  heartbeat_at: string | null
+  finished_at: string | null
+  workers: number
+  limit: number | null
+  done: number
+  failed: number
+  message: string
+  stop_requested: boolean
 }
 
-export interface RoutineProperty {
-  key: string
-  label: string
-  unit: string
-  description: string
-  available: boolean
-}
+export interface TrainingFailure { mol_id: string; reason: string; at: string }
 
-export interface RoutineCatalog {
-  dispatch_enabled: boolean
-  properties: RoutineProperty[]
-  input_modes: RoutineProgram[]
-  programs: RoutineProgram[]
-  outputs: RoutineProgram[]
+export interface TrainingStatus {
+  progress: TrainingProgress
+  job: TrainingJob
+  geometries: number
+  failures: TrainingFailure[]
 }

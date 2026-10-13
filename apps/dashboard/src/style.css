@@ -707,3 +707,18 @@ button.choice-card:hover:not(:disabled) { transform: translateY(-2px); border-co
   .about-list li { grid-template-columns: 1fr; gap: .2rem; }
   .results-empty { flex-direction: column; }
 }
+
+/* Delta Entalpia · Treinamento */
+.training-bar { display: flex; height: 14px; border-radius: 7px; overflow: hidden; background: var(--surface-3); margin: 12px 0; }
+.training-bar span { display: block; height: 100%; }
+.training-bar__p2 { background: var(--status-good); }
+.training-bar__p1 { background: var(--series-3); }
+.training-bar__run { background: var(--status-warning); }
+.training-bar__queue { background: var(--status-neutral); }
+.training-bar__skip { background: var(--status-critical); }
+.training-legend { list-style: none; padding: 0; display: grid; gap: 4px; }
+.training-legend i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 8px; }
+.training-controls { display: flex; flex-wrap: wrap; gap: 12px; align-items: end; }
+.training-controls label { display: grid; gap: 4px; font-size: 0.9rem; }
+.training-failures { list-style: none; padding: 0; display: grid; gap: 6px; }
+.training-failures li { display: flex; gap: 10px; flex-wrap: wrap; }

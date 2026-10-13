@@ -5,7 +5,7 @@ import { PageHero, SectionHeading } from './StoryVisuals'
  * Ainda não há back-end de jobs nem resultados, então a tela não mostra
  * números: apenas explica o que vai aparecer aqui.
  */
-export function ResultsView({ onNavigate }: { onNavigate: (view: string) => void }) {
+export function ResultsView() {
   return (
     <div className="view">
       <PageHero
@@ -20,8 +20,7 @@ export function ResultsView({ onNavigate }: { onNavigate: (view: string) => void
           <span className="results-empty__icon" aria-hidden="true">Δ</span>
           <div>
             <strong>Quando uma rotina rodar, os valores aparecem aqui.</strong>
-            <p>O resumo reunirá, por propriedade, as moléculas calculadas, o valor rápido e o valor corrigido pelo modelo. O painel só exibe o que o back-end já calculou.</p>
-            <button type="button" className="primary-button" onClick={() => onNavigate('routines')}>Ir para Rotinas</button>
+            <p>O resumo reunirá, por propriedade, as moléculas calculadas, o valor rápido e o valor corrigido pelo modelo. Acompanhe o treinamento em Delta Entalpia → Treinamento, na barra lateral.</p>
           </div>
         </div>
       </section>

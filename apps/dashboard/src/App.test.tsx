@@ -56,19 +56,11 @@ const pm7Profile = profile('pm7', 4, {
 const rows = (key: string) => ({ key, columns: ['mol_id', 'smiles', 'H298_cbs'], total: 2, matched: 2, offset: 0, limit: 25,
   rows: [{ mol_id: `${key}_row_1`, smiles: 'C', H298_cbs: -17.8 }, { mol_id: `${key}_row_2`, smiles: 'CCO', H298_cbs: -56.2 }] })
 
-const catalog = {
-  dispatch_enabled: false,
-  properties: [{ key: 'standard_enthalpy_of_formation', label: 'Entalpia de formação (ΔHf° 298 K)', unit: 'kcal/mol', description: 'ΔHf', available: true }],
-  input_modes: [
-    { key: 'smiles', label: 'SMILES', role: 'input', description: 'Uma por linha', executable: null, available: null, experimental: false, parameters: [] },
-    { key: 'name', label: 'Nome da molécula (PubChem)', role: 'input', description: 'PubChem', executable: null, available: null, experimental: false, parameters: [] },
-  ],
-  programs: ['rdkit', 'crest', 'confpass', 'mopac'].map((key) => ({
-    key, label: key.toUpperCase(), role: 'step', description: key, executable: key === 'crest' || key === 'mopac' ? key : null,
-    available: key === 'crest' ? false : null, experimental: key === 'confpass',
-    parameters: key === 'mopac' ? [{ key: 'hamiltonian', label: 'Hamiltoniano', kind: 'choice', default: 'PM7', choices: ['AM1', 'PM3', 'PM7'], unit: '', help: '', minimum: null, maximum: null }] : [],
-  })),
-  outputs: [{ key: 'spreadsheet', label: 'Planilha', role: 'output', description: 'CSV', executable: null, available: null, experimental: false, parameters: [] }],
+const trainingStatus = {
+  progress: { total: 29568, protocol2: 10, protocol1: 8232, ok_unmarked: 0, pending: 21000, selected: 0, rerun: 3, running: 1, skipped: 29, migrated: true },
+  job: { state: 'idle', pid: null, started_at: null, heartbeat_at: null, finished_at: null, workers: 0, limit: null, done: 0, failed: 0, message: '', stop_requested: false },
+  geometries: 10,
+  failures: [],
 }
 
 function json(data: unknown, status = 200): Response {
@@ -77,14 +69,14 @@ function json(data: unknown, status = 200): Response {
 
 function mockApi(overrides: Record<string, () => Response> = {}) {
   const routes: Record<string, () => Response> = {
-    '/api/health': () => json({ status: 'ok', read_only: true }),
+    '/api/health': () => json({ status: 'ok', can_dispatch: true }),
     '/api/dataset/progress': () => json(progress),
     '/api/experimental/summary': () => json(summary),
     '/api/experimental/comparison': () => json(comparison),
     '/api/tables/exp/profile': () => json(expProfile),
     '/api/tables/cbs/profile': () => json(cbsProfile),
     '/api/tables/pm7/profile': () => json(pm7Profile),
-    '/api/routines/catalog': () => json(catalog),
+    '/api/training/status': () => json(trainingStatus),
     ...overrides,
   }
   const fetchMock = vi.fn((input: RequestInfo | URL) => {
@@ -106,10 +98,10 @@ function openTab(name: RegExp) {
   fireEvent.click(within(screen.getByRole('navigation', { name: 'Submenu de Dados' })).getByRole('button', { name }))
 }
 
-/** O app abre no hub Delta Chemistry; as telas de dados vivem no módulo Grimperium. */
-function renderGrimperium() {
+/** O app abre no hub Delta Chemistry; as telas de dados vivem no módulo Delta Entalpia. */
+function renderDeltaEnthalpy() {
   const view = render(<App />)
-  fireEvent.click(within(screen.getByRole('navigation', { name: 'Módulos de propriedade' })).getByRole('button', { name: /Grimperium/ }))
+  fireEvent.click(within(screen.getByRole('navigation', { name: 'Módulos de propriedade' })).getByRole('button', { name: /Delta Entalpia/ }))
   return view
 }
 
@@ -118,9 +110,9 @@ afterEach(() => { cleanup(); vi.unstubAllGlobals() })
 
 test('resumo escreve o estado do projeto com números reais', async () => {
   mockApi()
-  renderGrimperium()
+  renderDeltaEnthalpy()
   expect(await screen.findByText('Protocolo legado: crest_pm7')).toBeInTheDocument()
-  expect(screen.getByText('API ativa · somente leitura')).toBeInTheDocument()
+  expect(screen.getByText('API ativa')).toBeInTheDocument()
   const text = screen.getByRole('region', { name: 'Resumo em texto' })
   await within(text).findByText('10')
   expect(text).toHaveTextContent(/reúne 10 geometrias/)
@@ -136,11 +128,11 @@ test('resumo escreve o estado do projeto com números reais', async () => {
 
 test('informa quando a API está indisponível e permite reconectar', async () => {
   let calls = 0
-  const fetchMock = mockApi({ '/api/health': () => (calls++ === 0 ? json({ detail: 'unavailable' }, 503) : json({ status: 'ok', read_only: true })) })
+  const fetchMock = mockApi({ '/api/health': () => (calls++ === 0 ? json({ detail: 'unavailable' }, 503) : json({ status: 'ok', can_dispatch: true })) })
   render(<App />)
   expect(await screen.findByText('API indisponível')).toBeInTheDocument()
   fireEvent.click(screen.getByRole('button', { name: 'Reconectar' }))
-  expect(await screen.findByText('API ativa · somente leitura')).toBeInTheDocument()
+  expect(await screen.findByText('API ativa')).toBeInTheDocument()
   expect(fetchMock.mock.calls.filter(([path]) => path === '/api/health')).toHaveLength(2)
 })
 
@@ -149,14 +141,14 @@ test('mostra estados vazios do dataset legado e do store', async () => {
     legacy: { ...progress.legacy, total: 0, status: {}, cbs_quality_flag: {} },
     semi_imperium: { ...progress.semi_imperium, exists: false, calculations: 0, states: {} },
   }) })
-  renderGrimperium()
+  renderDeltaEnthalpy()
   expect(await screen.findByText('Nenhuma linha no dataset.')).toBeInTheDocument()
   expect(screen.getByText(/Store ainda não existe/)).toBeInTheDocument()
 })
 
 test('aba experimental filtra validação, conflito e busca ID', async () => {
   const fetchMock = mockApi()
-  renderGrimperium()
+  renderDeltaEnthalpy()
   openTab(/Experimental/)
   expect(await screen.findByText('Paridade CBS × experimental')).toBeInTheDocument()
   expect(screen.getByText('Erro por tamanho da molécula')).toBeInTheDocument()
@@ -175,7 +167,7 @@ test('aba experimental filtra validação, conflito e busca ID', async () => {
 
 test('aba experimental mantém contagens se a comparação falha', async () => {
   mockApi({ '/api/experimental/comparison': () => json({ detail: 'file not found', path: '/data/vs_cbs.csv' }, 503) })
-  renderGrimperium()
+  renderDeltaEnthalpy()
   openTab(/Experimental/)
   expect(await screen.findByText('4', { selector: '.metric' })).toBeInTheDocument()
   const alerts = await screen.findAllByRole('alert')
@@ -184,7 +176,7 @@ test('aba experimental mantém contagens se a comparação falha', async () => {
 
 test('aba CBS explica a tabela e permite ordenar a tabela completa', async () => {
   const fetchMock = mockApi()
-  renderGrimperium()
+  renderDeltaEnthalpy()
   openTab(/CBS/)
   expect(await screen.findByText('O que é a tabela CBS?')).toBeInTheDocument()
   expect(await screen.findByText('Dobbelaere et al. 2024')).toBeInTheDocument()
@@ -196,14 +188,14 @@ test('aba CBS explica a tabela e permite ordenar a tabela completa', async () =>
 
 test('aba CBS explica quando o CSV não está no computador', async () => {
   mockApi({ '/api/tables/cbs/profile': () => json({ detail: 'file not found', path: '/data/thermo_cbs_chon.csv' }, 503) })
-  renderGrimperium()
+  renderDeltaEnthalpy()
   openTab(/CBS/)
   expect(await screen.findByRole('region', { name: 'Arquivo não encontrado' })).toHaveTextContent('data/thermo_cbs_chon.csv')
 })
 
 test('aba PM7 mostra andamento e erro do cálculo rápido', async () => {
   mockApi()
-  renderGrimperium()
+  renderDeltaEnthalpy()
   openTab(/PM7/)
   expect(await screen.findByText('O que é a tabela PM7?')).toBeInTheDocument()
   expect(await screen.findByRole('img', { name: /Moléculas concluídas: 50%/ })).toBeInTheDocument()
@@ -211,72 +203,46 @@ test('aba PM7 mostra andamento e erro do cálculo rápido', async () => {
   expect(screen.getByText('Protocolo legado: crest_pm7')).toBeInTheDocument()
 })
 
-test('rotinas: monta, valida e salva uma rotina sem disparar', async () => {
-  mockApi()
-  renderGrimperium()
-  openTab(/Calcular/)
-  fireEvent.click((await screen.findAllByRole('button', { name: /Criar nova rotina/ }))[0])
-  fireEvent.change(screen.getByLabelText('Nome da rotina'), { target: { value: 'Teste álcoois' } })
-  fireEvent.click(screen.getByRole('button', { name: /Pipeline/ }))
-  fireEvent.change(screen.getByLabelText(/Estruturas/), { target: { value: 'CCO\nCCCO' } })
-  expect(screen.getByText('2 molécula(s) informada(s).')).toBeInTheDocument()
-  fireEvent.click(screen.getByRole('checkbox', { name: 'MOPAC' }))
-  expect(screen.getByText('O MOPAC é obrigatório para calcular a entalpia de formação.')).toBeInTheDocument()
-  fireEvent.click(screen.getByRole('button', { name: /Direto no PM7/ }))
-  expect(screen.getByText('✓ Ordem válida para o pipeline Semi-Imperium.')).toBeInTheDocument()
-  fireEvent.click(screen.getByRole('button', { name: /Revisão/ }))
-  expect(screen.getByRole('button', { name: /Disparar/ })).toBeDisabled()
-  fireEvent.click(screen.getByRole('button', { name: 'Salvar rotina' }))
-  expect(await screen.findByText('Rotina “Teste álcoois” salva.')).toBeInTheDocument()
-  const menu = screen.getByRole('complementary', { name: 'Menu de rotinas' })
-  expect(within(menu).getByText('Teste álcoois')).toBeInTheDocument()
-  expect(JSON.parse(window.localStorage.getItem('grimperium.routines.v1') ?? '[]')[0].steps).toEqual(['rdkit', 'mopac'])
-})
-
-test('abre no hub Delta Chemistry: Rotinas, Resumos e Sobre, sem as abas do Grimperium', async () => {
+test('abre no hub Delta Chemistry: Resumos e Sobre, sem as abas do módulo', async () => {
   mockApi()
   render(<App />)
   const menu = within(screen.getByRole('navigation', { name: 'Telas' }))
-  expect(menu.getAllByRole('button').map((button) => button.textContent)).toEqual(['Rotinas', 'Resumos', 'Sobre'])
-  expect(menu.getByRole('button', { name: 'Rotinas' })).toHaveAttribute('aria-current', 'page')
-  expect(await screen.findByText('Rotinas · Painel de controle')).toBeInTheDocument()
-  expect(menu.queryByRole('button', { name: /Dados|Calcular|Treinar/ })).not.toBeInTheDocument()
-  fireEvent.click(menu.getByRole('button', { name: 'Resumos' }))
+  expect(menu.getAllByRole('button').map((button) => button.textContent)).toEqual(['Resumos', 'Sobre'])
+  expect(menu.getByRole('button', { name: 'Resumos' })).toHaveAttribute('aria-current', 'page')
   expect(await screen.findByText('Nenhum resultado ainda')).toBeInTheDocument()
-  fireEvent.click(screen.getByRole('button', { name: 'Ir para Rotinas' }))
-  expect(await screen.findByText('Rotinas · Painel de controle')).toBeInTheDocument()
+  expect(menu.queryByRole('button', { name: /Dados|Treinamento|Delta Learning|Cálculo/ })).not.toBeInTheDocument()
   fireEvent.click(menu.getByRole('button', { name: 'Sobre' }))
   expect(await screen.findByText('Rapidez com precisão, em três passos')).toBeInTheDocument()
   expect(screen.getByText(/Hoje só existe o módulo de entalpia de formação/)).toBeInTheDocument()
 })
 
-test('barra lateral: hub Delta Chemistry e módulo Grimperium, que traz as telas de dados', async () => {
+test('barra lateral: hub Delta Chemistry e módulo Delta Entalpia, que traz as telas de dados', async () => {
   mockApi()
   render(<App />)
   const sidebar = screen.getByRole('complementary', { name: 'Navegação lateral' })
   const hub = within(within(sidebar).getByRole('navigation', { name: 'Hub' })).getByRole('button', { name: /Delta Chemistry/ })
   expect(hub).toHaveAttribute('aria-current', 'true')
-  const module = within(within(sidebar).getByRole('navigation', { name: 'Módulos de propriedade' })).getByRole('button', { name: /Grimperium/ })
+  const module = within(within(sidebar).getByRole('navigation', { name: 'Módulos de propriedade' })).getByRole('button', { name: /Delta Entalpia/ })
   expect(module).toHaveTextContent('Entalpia de formação (estado padrão)')
   expect(module).not.toHaveAttribute('aria-current')
   expect(within(sidebar).getAllByRole('button')).toHaveLength(2)
   fireEvent.click(module)
   expect(module).toHaveAttribute('aria-current', 'true')
   expect(hub).not.toHaveAttribute('aria-current')
-  expect(screen.getByLabelText('Local atual')).toHaveTextContent('Delta Chemistry/Grimperium')
+  expect(screen.getByLabelText('Local atual')).toHaveTextContent('Delta Chemistry/Delta Entalpia')
   openTab(/CBS/)
   expect(await screen.findByText('O que é a tabela CBS?')).toBeInTheDocument()
   fireEvent.click(module)
   expect(within(screen.getByRole('navigation', { name: 'Submenu de Dados' })).getByRole('button', { name: 'CBS' })).toHaveAttribute('aria-current', 'page')
   fireEvent.click(hub)
-  expect(within(screen.getByRole('navigation', { name: 'Telas' })).getAllByRole('button').map((button) => button.textContent)).toEqual(['Rotinas', 'Resumos', 'Sobre'])
+  expect(within(screen.getByRole('navigation', { name: 'Telas' })).getAllByRole('button').map((button) => button.textContent)).toEqual(['Resumos', 'Sobre'])
 })
 
-test('módulo Grimperium: Resumo, Dados com submenu, Calcular e Treinar', async () => {
+test('módulo Delta Entalpia: Resumo, Dados, Treinamento, Delta Learning e Cálculo', async () => {
   mockApi()
-  renderGrimperium()
+  renderDeltaEnthalpy()
   const menu = within(screen.getByRole('navigation', { name: 'Telas' }))
-  expect(menu.getAllByRole('button').map((button) => button.textContent?.replace('▾', ''))).toEqual(['Resumo', 'Dados', 'Calcular', 'Treinar'])
+  expect(menu.getAllByRole('button').map((button) => button.textContent?.replace('▾', ''))).toEqual(['Resumo', 'Dados', 'Treinamento', 'Delta Learning', 'Cálculo'])
   expect(screen.queryByRole('navigation', { name: 'Submenu de Dados' })).not.toBeInTheDocument()
   fireEvent.click(menu.getByRole('button', { name: /Dados/ }))
   const sub = within(screen.getByRole('navigation', { name: 'Submenu de Dados' }))
@@ -285,9 +251,13 @@ test('módulo Grimperium: Resumo, Dados com submenu, Calcular e Treinar', async 
   fireEvent.click(sub.getByRole('button', { name: 'PM7' }))
   expect(await screen.findByText('O que é a tabela PM7?')).toBeInTheDocument()
   expect(menu.getByRole('button', { name: /Dados/ })).toHaveAttribute('aria-current', 'page')
-  fireEvent.click(menu.getByRole('button', { name: 'Treinar' }))
+  fireEvent.click(menu.getByRole('button', { name: 'Delta Learning' }))
   expect(await screen.findByText('Cinco etapas, sem vazamento de dados')).toBeInTheDocument()
   expect(screen.queryByRole('navigation', { name: 'Submenu de Dados' })).not.toBeInTheDocument()
+  fireEvent.click(menu.getByRole('button', { name: 'Cálculo' }))
+  expect(await screen.findByText('Em breve')).toBeInTheDocument()
+  fireEvent.click(menu.getByRole('button', { name: 'Treinamento' }))
+  expect(await screen.findByRole('img', { name: /Andamento do treinamento/ })).toBeInTheDocument()
 })
 
 test('cabeçalho só tem a marca; o botão do menu lateral fica abaixo dele', () => {

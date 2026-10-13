@@ -6,13 +6,19 @@ type ApiState<T> =
   | { status: 'error'; message: string }
   | { status: 'ready'; data: T }
 
-export function useApi<T>(path: string): { state: ApiState<T>; reload: () => void } {
+interface Options {
+  /** Atualiza a cada `pollMs` ms sem voltar ao estado "carregando". */
+  pollMs?: number
+}
+
+export function useApi<T>(path: string, options: Options = {}): { state: ApiState<T>; reload: () => void } {
+  const { pollMs } = options
   const [state, setState] = useState<ApiState<T>>({ status: 'loading' })
   const [revision, setRevision] = useState(0)
 
   useEffect(() => {
     const controller = new AbortController()
-    getJson<T>(path, controller.signal).then(
+    const load = () => getJson<T>(path, controller.signal).then(
       (data) => setState({ status: 'ready', data }),
       (error: unknown) => {
         if (!controller.signal.aborted) {
@@ -20,8 +26,13 @@ export function useApi<T>(path: string): { state: ApiState<T>; reload: () => voi
         }
       },
     )
-    return () => controller.abort()
-  }, [path, revision])
+    void load()
+    const timer = pollMs ? window.setInterval(() => { void load() }, pollMs) : undefined
+    return () => {
+      controller.abort()
+      if (timer !== undefined) window.clearInterval(timer)
+    }
+  }, [path, revision, pollMs])
 
   const reload = useCallback(() => {
     setState({ status: 'loading' })

@@ -6,7 +6,7 @@ const GLOSSARY = [
   { term: 'Método de referência', definition: 'Cálculo mais preciso e bem mais caro (por exemplo, o CBS). Serve de gabarito para medir o erro do método rápido.' },
   { term: 'Δ-learning', definition: 'A IA aprende só a diferença entre a referência e o método rápido (Δ), e não o valor inteiro. Precisa de menos dados.' },
   { term: 'Módulo', definition: 'Um método rápido corrigido para uma propriedade específica, com seus próprios dados e validações.' },
-  { term: 'Rotina', definition: 'Receita de cálculo montada no hub: propriedade, moléculas, programas e saída. O back-end é quem executa.' },
+  { term: 'Rotina', definition: 'Receita de cálculo pronta, construída e mantida no back-end. O painel só escolhe, aciona e acompanha; ela também roda pela linha de comando.' },
 ]
 
 /** Sobre: explica o Delta Chemistry de forma geral, sem depender de dados ao vivo. */
@@ -31,9 +31,8 @@ export function AboutView() {
       </section>
 
       <section className="panel" aria-label="Como o hub se organiza">
-        <SectionHeading eyebrow="Como o hub se organiza" title="Rotinas, resumos e módulos" />
+        <SectionHeading eyebrow="Como o hub se organiza" title="Resumos e módulos" />
         <ul className="about-list">
-          <li><strong>Rotinas</strong><span>Onde se monta a receita de cálculo de uma propriedade. O painel descreve a rotina; quem calcula é o back-end.</span></li>
           <li><strong>Resumos</strong><span>O compilado das propriedades obtidas pelas rotinas.</span></li>
           <li><strong>Módulos</strong><span>Cada propriedade tem o seu módulo na barra lateral, com dados, treino e validação próprios.</span></li>
         </ul>

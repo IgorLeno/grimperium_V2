@@ -1,7 +1,6 @@
 import { expect, test } from 'vitest'
 import type { ComparisonPoint } from './api'
 import { niceTicks } from './helpers'
-import { pipelineProblems, presetOf } from './routines'
 import { byHeavyAtoms, bySource, cumulativeAccuracy, histogram, summarize, thresholdFor, tierCounts } from './stats'
 
 function point(error: number, nheavy = 3, source = 'atct'): ComparisonPoint {
@@ -49,13 +48,4 @@ test('grouping by source and by size', () => {
 test('niceTicks picks round steps', () => {
   expect(niceTicks(-200, 160, 6)).toEqual([-200, -150, -100, -50, 0, 50, 100, 150])
   expect(niceTicks(0, 1, 5)).toEqual([0, 0.2, 0.4, 0.6, 0.8, 1])
-})
-
-test('pipeline rules follow the Semi-Imperium order', () => {
-  expect(pipelineProblems(['rdkit', 'crest', 'confpass', 'mopac'])).toEqual([])
-  expect(pipelineProblems(['rdkit', 'mopac'])).toEqual([])
-  expect(pipelineProblems(['rdkit', 'confpass', 'mopac'])).toContain('A seleção de conformações precisa do CREST antes dela.')
-  expect(pipelineProblems(['crest', 'rdkit', 'mopac'])).toContain('O RDKit deve ser o primeiro passo.')
-  expect(presetOf(['rdkit', 'mopac'])).toBe('direct_pm7')
-  expect(presetOf(['rdkit', 'crest', 'mopac'])).toBe('custom')
 })

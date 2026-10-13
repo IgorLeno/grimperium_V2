@@ -57,8 +57,8 @@ export function App() {
         <div className="api-health" role="status">
           {health.state.status === 'loading' && 'Conectando à API…'}
           {health.state.status === 'ready' && (
-            health.state.data.status === 'ok' && health.state.data.read_only
-              ? 'API ativa · somente leitura'
+            health.state.data.status === 'ok' && health.state.data.can_dispatch
+              ? 'API ativa'
               : 'Resposta inesperada da API'
           )}
           {health.state.status === 'error' && (
@@ -115,7 +115,7 @@ export function App() {
           </Suspense>
         </main>
       </div>
-      <footer className="app-footer">Delta Chemistry · dados lidos dos arquivos locais em <code>data/</code> · o painel apenas dispara processos; os cálculos rodam no back-end</footer>
+      <footer className="app-footer">Delta Chemistry · dados lidos dos arquivos locais em <code>data/</code> · o painel aciona e acompanha as rotinas; os cálculos rodam no back-end</footer>
     </>
   )
 }
