@@ -194,3 +194,7 @@ coord
 
 # Delta Entalpia: estado e geometrias do treinamento (SQLite + WAL)
 data/semi_imperium/*.sqlite3*
+# Delta Entalpia: log, cópias de segurança da migração e registros de cálculo gerados pela rotina
+data/semi_imperium/training.log
+data/semi_imperium/calculations/
+data/*.pre-protocol-*.bak
