@@ -556,6 +556,14 @@ def test_conformer_boundaries_and_hamiltonian_surfaces_remain_independent(
         "PM3": CalculationState.UNVERIFIED,
         "PM7": CalculationState.SADDLE,
     }
+    for name in ("AM1", "PM3", "PM7"):
+        hamiltonian_result = result.minima.for_hamiltonian(name)
+        chosen = {a.attempt_id: a for a in hamiltonian_result.attempts}[
+            hamiltonian_result.verified_attempt_id
+            or hamiltonian_result.provisional_lowest_attempt_id
+        ]
+        assert projected[name].geometry is not None
+        assert projected[name].geometry == chosen.optimized_geometry
     journal = json.loads((tmp_path / "workflow.json").read_text(encoding="utf-8"))
     assert set(journal["hamiltonian_results"]) == {"AM1", "PM3", "PM7"}
 

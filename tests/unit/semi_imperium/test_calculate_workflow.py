@@ -792,3 +792,7 @@ def test_stored_records_round_trip_through_the_store(
     assert payload["molecule"]["canonical_smiles"] == "CCO"
     assert payload["provenance"]["source"] == "semi_imperium"
     assert CalculationRecord.from_dict(payload) == records[0]
+
+
+def test_failed_execution_outcome_carries_no_geometry() -> None:
+    assert ExecutionOutcome(state=CalculationState.FAILED).geometry is None

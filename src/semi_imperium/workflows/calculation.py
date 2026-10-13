@@ -29,7 +29,7 @@ from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
-from typing import Protocol
+from typing import TYPE_CHECKING, Protocol
 
 from semi_imperium import __version__ as SEMI_IMPERIUM_VERSION
 from semi_imperium.domain import (
@@ -57,6 +57,9 @@ from semi_imperium.molecules.validation import ComputationalPath
 from semi_imperium.mopac.models import SUPPORTED_HAMILTONIANS
 from semi_imperium.persistence import SemiImperiumStore
 from semi_imperium.settings import SemiImperiumSettings
+
+if TYPE_CHECKING:
+    from semi_imperium.conformers import ConformerGeometry
 
 #: What a freshly added row asks for until the user says otherwise.
 DEFAULT_HAMILTONIANS: tuple[str, ...] = ("PM7",)
@@ -832,6 +835,8 @@ class ExecutionOutcome:
     verification: VerificationOutcome = VerificationOutcome.NOT_REQUESTED
     result: CalculationResultData | None = None
     error_message: str | None = None
+    geometry: ConformerGeometry | None = None
+    """Final optimized geometry of the chosen conformer; ``None`` on failure."""
 
 
 class CalculationExecutor(Protocol):

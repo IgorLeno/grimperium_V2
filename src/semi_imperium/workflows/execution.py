@@ -206,18 +206,21 @@ def outcome_from_hamiltonian_result(
             state=CalculationState.VERIFIED,
             verification=VerificationOutcome.MINIMUM_CONFIRMED,
             result=data,
+            geometry=chosen.optimized_geometry,
         )
     if result.state is CandidateState.SADDLE_DETECTED:
         return ExecutionOutcome(
             state=CalculationState.SADDLE,
             verification=VerificationOutcome.SADDLE_POINT,
             result=data,
+            geometry=chosen.optimized_geometry,
         )
     if result.state is CandidateState.VERIFICATION_FAILED:
         return ExecutionOutcome(
             state=CalculationState.UNVERIFIED,
             verification=VerificationOutcome.FAILED,
             result=data,
+            geometry=chosen.optimized_geometry,
         )
     return ExecutionOutcome(
         state=CalculationState.UNVERIFIED,
@@ -227,6 +230,7 @@ def outcome_from_hamiltonian_result(
             else VerificationOutcome.INCONCLUSIVE
         ),
         result=data,
+        geometry=chosen.optimized_geometry,
     )
 
 
