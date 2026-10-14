@@ -65,7 +65,7 @@ async def _claim(client: AsyncClient) -> tuple[str, str]:
 async def test_sync_results_duplicate_result_id_is_not_applied_twice(
     tmp_path: Path,
 ) -> None:
-    csv_path = tmp_path / "thermo_pm7.csv"
+    csv_path = tmp_path / "pm7_fila_pipeline.csv"
     _write_csv(csv_path)
 
     async with await _client(csv_path) as client:
@@ -100,7 +100,7 @@ async def test_sync_results_duplicate_result_id_is_not_applied_twice(
 async def test_sync_results_legacy_fallback_without_result_id_is_stable(
     tmp_path: Path,
 ) -> None:
-    csv_path = tmp_path / "thermo_pm7.csv"
+    csv_path = tmp_path / "pm7_fila_pipeline.csv"
     _write_csv(csv_path)
 
     async with await _client(csv_path) as client:
@@ -133,7 +133,7 @@ async def test_sync_results_legacy_fallback_without_result_id_is_stable(
 async def test_sync_results_conflicting_result_id_returns_conflict_item(
     tmp_path: Path,
 ) -> None:
-    csv_path = tmp_path / "thermo_pm7.csv"
+    csv_path = tmp_path / "pm7_fila_pipeline.csv"
     _write_csv(csv_path)
 
     async with await _client(csv_path) as client:
@@ -166,7 +166,7 @@ async def test_sync_results_conflicting_result_id_returns_conflict_item(
 
 @pytest.mark.anyio
 async def test_sync_results_updates_worker_registry_once(tmp_path: Path) -> None:
-    csv_path = tmp_path / "thermo_pm7.csv"
+    csv_path = tmp_path / "pm7_fila_pipeline.csv"
     _write_csv(csv_path)
 
     async with await _client(csv_path) as client:
@@ -202,7 +202,7 @@ async def test_sync_results_updates_worker_registry_once(tmp_path: Path) -> None
 async def test_sync_results_recovers_prepared_without_duplicating(
     tmp_path: Path,
 ) -> None:
-    csv_path = tmp_path / "thermo_pm7.csv"
+    csv_path = tmp_path / "pm7_fila_pipeline.csv"
     _write_csv(csv_path)
     app = create_app(
         ServerConfig(
@@ -250,7 +250,7 @@ async def test_sync_results_recovers_prepared_without_duplicating(
 
 @pytest.mark.anyio
 async def test_sync_results_failure_and_skip_update_registry(tmp_path: Path) -> None:
-    csv_path = tmp_path / "thermo_pm7.csv"
+    csv_path = tmp_path / "pm7_fila_pipeline.csv"
     pd.DataFrame(
         [
             {
@@ -317,7 +317,7 @@ async def test_sync_results_failure_and_skip_update_registry(tmp_path: Path) -> 
 
 @pytest.mark.anyio
 async def test_sync_results_marks_failed_when_apply_raises(tmp_path: Path) -> None:
-    csv_path = tmp_path / "thermo_pm7.csv"
+    csv_path = tmp_path / "pm7_fila_pipeline.csv"
     _write_csv(csv_path)
     app = create_app(
         ServerConfig(
@@ -374,7 +374,7 @@ async def test_sync_results_marks_failed_when_apply_raises(tmp_path: Path) -> No
 @pytest.mark.anyio
 async def test_second_result_same_attempt_is_stale_after_ok(tmp_path: Path) -> None:
     """R1 applies; R1 resend is duplicate; R2 same attempt is stale_attempt."""
-    csv_path = tmp_path / "thermo_pm7.csv"
+    csv_path = tmp_path / "pm7_fila_pipeline.csv"
     _write_csv(csv_path)
 
     async with await _client(csv_path) as client:
@@ -415,7 +415,7 @@ async def test_second_result_same_attempt_is_stale_after_ok(tmp_path: Path) -> N
 @pytest.mark.anyio
 async def test_second_result_same_attempt_is_stale_after_skip(tmp_path: Path) -> None:
     """Terminal Skip: second success and second failure are stale_attempt."""
-    csv_path = tmp_path / "thermo_pm7.csv"
+    csv_path = tmp_path / "pm7_fila_pipeline.csv"
     _write_csv(csv_path)
     app = create_app(
         ServerConfig(
@@ -494,7 +494,7 @@ async def test_second_result_same_attempt_is_stale_after_skip(tmp_path: Path) ->
 @pytest.mark.anyio
 async def test_prepared_stale_after_reclaim_and_new_claim(tmp_path: Path) -> None:
     """PREPARED for A, reclaim, claim B, retry A → stale; B stays Assigned."""
-    csv_path = tmp_path / "thermo_pm7.csv"
+    csv_path = tmp_path / "pm7_fila_pipeline.csv"
     _write_csv(csv_path)
     app = create_app(
         ServerConfig(
@@ -571,7 +571,7 @@ async def test_prepared_resume_same_lease_assigned_or_running(
     tmp_path: Path,
 ) -> None:
     """PREPARED with matching lease on Assigned/Running resumes dual-write."""
-    csv_path = tmp_path / "thermo_pm7.csv"
+    csv_path = tmp_path / "pm7_fila_pipeline.csv"
     _write_csv(csv_path)
     app = create_app(
         ServerConfig(
@@ -652,7 +652,7 @@ async def test_force_skip_prepared_recovery_without_metric_duplication(
     tmp_path: Path,
 ) -> None:
     """Crash after dual-write before commit: recover commits, no re-apply/metrics."""
-    csv_path = tmp_path / "thermo_pm7.csv"
+    csv_path = tmp_path / "pm7_fila_pipeline.csv"
     _write_csv(csv_path)
     app = create_app(
         ServerConfig(
@@ -721,7 +721,7 @@ async def test_force_skip_prepared_recovery_without_metric_duplication(
 @pytest.mark.anyio
 async def test_force_skip_keeps_reruns_and_metrics_once(tmp_path: Path) -> None:
     """force_skip → Skip with unchanged reruns; duplicate does not bump metrics."""
-    csv_path = tmp_path / "thermo_pm7.csv"
+    csv_path = tmp_path / "pm7_fila_pipeline.csv"
     _write_csv(csv_path)
     app = create_app(
         ServerConfig(
@@ -770,7 +770,7 @@ async def test_legacy_new_result_id_on_ok_without_attempt_is_stale(
     tmp_path: Path,
 ) -> None:
     """Novo result_id legado sem attempt_id não altera molécula OK."""
-    csv_path = tmp_path / "thermo_pm7.csv"
+    csv_path = tmp_path / "pm7_fila_pipeline.csv"
     _write_csv(csv_path)
 
     async with await _client(csv_path) as client:
@@ -823,7 +823,7 @@ async def test_legacy_new_result_id_on_ok_without_attempt_is_stale(
 async def test_legacy_new_result_id_on_skip_without_attempt_is_stale(
     tmp_path: Path,
 ) -> None:
-    csv_path = tmp_path / "thermo_pm7.csv"
+    csv_path = tmp_path / "pm7_fila_pipeline.csv"
     _write_csv(csv_path)
     app = create_app(
         ServerConfig(
@@ -882,7 +882,7 @@ async def test_legacy_new_result_id_on_skip_without_attempt_is_stale(
 
 @pytest.mark.anyio
 async def test_legacy_same_result_id_on_ok_still_duplicate(tmp_path: Path) -> None:
-    csv_path = tmp_path / "thermo_pm7.csv"
+    csv_path = tmp_path / "pm7_fila_pipeline.csv"
     _write_csv(csv_path)
 
     async with await _client(csv_path) as client:
@@ -914,7 +914,7 @@ async def test_legacy_same_result_id_on_ok_still_duplicate(tmp_path: Path) -> No
 async def test_prepared_normal_resume_via_force_skip_conflicts(
     tmp_path: Path,
 ) -> None:
-    csv_path = tmp_path / "thermo_pm7.csv"
+    csv_path = tmp_path / "pm7_fila_pipeline.csv"
     _write_csv(csv_path)
     app = create_app(
         ServerConfig(
@@ -975,7 +975,7 @@ async def test_legacy_prepared_force_skip_resumes_as_skip_not_rerun(
     tmp_path: Path,
 ) -> None:
     """Journal legado PREPARED force_skip retoma como Skip sem incrementar reruns."""
-    csv_path = tmp_path / "thermo_pm7.csv"
+    csv_path = tmp_path / "pm7_fila_pipeline.csv"
     _write_csv(csv_path)
     app = create_app(
         ServerConfig(
@@ -1052,7 +1052,7 @@ async def test_legacy_prepared_force_skip_resumes_as_skip_not_rerun(
 async def test_legacy_prepared_force_skip_resume_via_force_skip_endpoint(
     tmp_path: Path,
 ) -> None:
-    csv_path = tmp_path / "thermo_pm7.csv"
+    csv_path = tmp_path / "pm7_fila_pipeline.csv"
     _write_csv(csv_path)
     app = create_app(
         ServerConfig(
@@ -1117,7 +1117,7 @@ async def test_legacy_prepared_force_skip_resume_via_force_skip_endpoint(
 
 @pytest.mark.anyio
 async def test_ambiguous_legacy_prepared_not_auto_resumed(tmp_path: Path) -> None:
-    csv_path = tmp_path / "thermo_pm7.csv"
+    csv_path = tmp_path / "pm7_fila_pipeline.csv"
     _write_csv(csv_path)
     app = create_app(
         ServerConfig(

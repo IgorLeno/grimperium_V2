@@ -155,7 +155,7 @@
   "output_sha256": "56686e0ef0eb369e023c1fb1889865119e5f6874bc0386a7e9dec0746ae10dc1",
   "all_sources_sha256": "6860d30430b2265a8400faf20bbe16dc819fc621fcde4e1aad89fd50ef2f28e2",
   "cbs_comparison": {
-    "cbs_csv": "data/thermo_cbs_chon_v2.csv",
+    "cbs_csv": "data/cbs_referencia.csv",
     "cbs_sha256": "82272f1909f376b9a0952e660d37964665fbcd197435c31909866fcd2e75d9d6",
     "overlap_inchikey": 722,
     "overlap_skeleton_only": 178,
@@ -406,7 +406,7 @@
         "conflict_flag": true
       }
     ],
-    "comparison_csv": "data/thermo_exp_hf_vs_cbs.csv",
+    "comparison_csv": "data/experimental_vs_cbs.csv",
     "comparison_sha256": "68cfeb4e59c0986fb0b7368434579b7e75c2d3a691a68364f71c5534ea27d825"
   }
 }

@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- `data/` limpo e renomeado: `cbs_referencia.csv` (era `thermo_cbs_chon_v2.csv`),
+  `pm7_fila_pipeline.csv` (era `thermo_pm7.csv`), `experimental.csv`,
+  `experimental_todas_fontes.csv`, `experimental_vs_cbs.csv` e
+  `experimental.manifest.json`; referências atualizadas em código, testes e docs.
+  Removidos backups `.bak`, `pre-unit-repair`, `other_databases/`, `smiles/` e
+  o arquivo de trava do LibreOffice.
+
+### Fixed
+- Dashboard: a referência CBS aparecia como "arquivo não encontrado".
+  `DashboardPaths.default` apontava para `data/thermo_cbs_chon.csv`, nome que
+  não existe mais; agora usa `data/thermo_cbs_chon_v2.csv` (27.760 linhas).
+
 ### Removed
 - Construtor de rotinas do dashboard (`RoutinesView`, `routines.ts`) e
   `GET /api/routines/catalog`: as rotinas vivem no back-end e o painel só as

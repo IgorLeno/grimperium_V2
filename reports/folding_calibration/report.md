@@ -5,7 +5,7 @@ Especificação: `docs/plans/2026-10-03-conformer-selection-spec.md`, seção 4.
 
 ## Entrada
 
-- Arquivo: `data/thermo_cbs_chon_v2.csv`
+- Arquivo: `data/cbs_referencia.csv`
 - SHA-256: `20693a0d7c2b6c66052a263687124321f761888e4773fe2edf72e61a4831ffa8`
 - Linhas: 27760
 

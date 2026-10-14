@@ -45,7 +45,7 @@ def pm7_csv(tmp_path: Path) -> Path:
             "status": ["OK"] * 5,
         }
     )
-    csv_path = tmp_path / "thermo_pm7.csv"
+    csv_path = tmp_path / "pm7_fila_pipeline.csv"
     df.to_csv(csv_path, index=False)
     return csv_path
 
@@ -53,11 +53,11 @@ def pm7_csv(tmp_path: Path) -> Path:
 def test_pm7_baseline_menu_appears_with_columns(tmp_path: Path) -> None:
     """PM7 Baseline option visible when H298_pm7 and H298_cbs columns exist."""
     df = pd.DataFrame({"H298_cbs": [-100.0], "H298_pm7": [-105.0], "status": ["OK"]})
-    df.to_csv(tmp_path / "thermo_pm7.csv", index=False)
+    df.to_csv(tmp_path / "pm7_fila_pipeline.csv", index=False)
 
     view, _ = _create_view_with_registry(tmp_path)
     view.selected_db = MagicMock()
-    view.selected_db.csv_path = "thermo_pm7.csv"
+    view.selected_db.csv_path = "pm7_fila_pipeline.csv"
 
     with patch("grimperium.cli.views.databases_view.DATA_DIR", tmp_path):
         options = view.get_detail_menu_options()
@@ -69,11 +69,11 @@ def test_pm7_baseline_menu_appears_with_columns(tmp_path: Path) -> None:
 def test_pm7_baseline_menu_hidden_without_columns(tmp_path: Path) -> None:
     """PM7 Baseline option NOT shown when columns are missing."""
     df = pd.DataFrame({"H298_cbs": [-100.0], "other": [1.0], "status": ["OK"]})
-    df.to_csv(tmp_path / "thermo_pm7.csv", index=False)
+    df.to_csv(tmp_path / "pm7_fila_pipeline.csv", index=False)
 
     view, _ = _create_view_with_registry(tmp_path)
     view.selected_db = MagicMock()
-    view.selected_db.csv_path = "thermo_pm7.csv"
+    view.selected_db.csv_path = "pm7_fila_pipeline.csv"
 
     with patch("grimperium.cli.views.databases_view.DATA_DIR", tmp_path):
         options = view.get_detail_menu_options()
@@ -110,7 +110,7 @@ def test_pm7_baseline_computation_known_values(tmp_path: Path, pm7_csv: Path) ->
     """Verify exact metric values with 5-molecule fixture."""
     view, buf = _create_view_with_registry(tmp_path)
     view.selected_db = MagicMock()
-    view.selected_db.csv_path = "thermo_pm7.csv"
+    view.selected_db.csv_path = "pm7_fila_pipeline.csv"
     view.selected_db.alias = "PM7"
 
     with patch("grimperium.cli.views.databases_view.DATA_DIR", pm7_csv.parent):
@@ -137,12 +137,12 @@ def test_pm7_baseline_excludes_zero_cbs(tmp_path: Path) -> None:
             "H298_pm7": [5.0, -105.0, -190.0],
         }
     )
-    csv_path = tmp_path / "thermo_pm7.csv"
+    csv_path = tmp_path / "pm7_fila_pipeline.csv"
     df.to_csv(csv_path, index=False)
 
     view, buf = _create_view_with_registry(tmp_path)
     view.selected_db = MagicMock()
-    view.selected_db.csv_path = "thermo_pm7.csv"
+    view.selected_db.csv_path = "pm7_fila_pipeline.csv"
     view.selected_db.alias = "PM7"
 
     with patch("grimperium.cli.views.databases_view.DATA_DIR", tmp_path):
@@ -161,12 +161,12 @@ def test_pm7_baseline_filters_nan_rows(tmp_path: Path) -> None:
             "H298_pm7": [-105.0, -195.0, np.nan],
         }
     )
-    csv_path = tmp_path / "thermo_pm7.csv"
+    csv_path = tmp_path / "pm7_fila_pipeline.csv"
     df.to_csv(csv_path, index=False)
 
     view, buf = _create_view_with_registry(tmp_path)
     view.selected_db = MagicMock()
-    view.selected_db.csv_path = "thermo_pm7.csv"
+    view.selected_db.csv_path = "pm7_fila_pipeline.csv"
     view.selected_db.alias = "PM7"
 
     with patch("grimperium.cli.views.databases_view.DATA_DIR", tmp_path):
@@ -181,7 +181,7 @@ def test_pm7_baseline_interpretation_text(tmp_path: Path, pm7_csv: Path) -> None
     """Interpretation panel contains formatted metric values."""
     view, buf = _create_view_with_registry(tmp_path)
     view.selected_db = MagicMock()
-    view.selected_db.csv_path = "thermo_pm7.csv"
+    view.selected_db.csv_path = "pm7_fila_pipeline.csv"
     view.selected_db.alias = "PM7"
 
     with patch("grimperium.cli.views.databases_view.DATA_DIR", pm7_csv.parent):
@@ -204,12 +204,12 @@ def test_pm7_baseline_percentage_thresholds(tmp_path: Path) -> None:
             "H298_pm7": [-201.0, -103.0, -107.0, -112.0, -120.0],
         }
     )
-    csv_path = tmp_path / "thermo_pm7.csv"
+    csv_path = tmp_path / "pm7_fila_pipeline.csv"
     df.to_csv(csv_path, index=False)
 
     view, buf = _create_view_with_registry(tmp_path)
     view.selected_db = MagicMock()
-    view.selected_db.csv_path = "thermo_pm7.csv"
+    view.selected_db.csv_path = "pm7_fila_pipeline.csv"
     view.selected_db.alias = "PM7"
 
     with patch("grimperium.cli.views.databases_view.DATA_DIR", tmp_path):

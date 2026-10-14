@@ -23,7 +23,9 @@ def _build_parser() -> argparse.ArgumentParser:
         prog="python -m semi_imperium.training",
         description="Delta Entalpia: rotina de treinamento (Semi-Imperium, protocolo 2).",
     )
-    parser.add_argument("--csv", type=Path, default=_ROOT / "data" / "thermo_pm7.csv")
+    parser.add_argument(
+        "--csv", type=Path, default=_ROOT / "data" / "pm7_fila_pipeline.csv"
+    )
     parser.add_argument("--store", type=Path, default=_ROOT / "data" / "semi_imperium")
     parser.add_argument(
         "--work-dir",

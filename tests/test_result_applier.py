@@ -44,7 +44,7 @@ def _write_state_csv(path: Path, *, reruns: int = 0) -> None:
 
 
 def _applier(tmp_path: Path, *, reruns: int = 0) -> BatchResultApplier:
-    csv_path = tmp_path / "thermo_pm7.csv"
+    csv_path = tmp_path / "pm7_fila_pipeline.csv"
     state_path = tmp_path / "batch_state.csv"
     _write_scientific_csv(csv_path)
     _write_state_csv(state_path, reruns=reruns)
@@ -63,7 +63,7 @@ def test_apply_success_updates_state_first_and_mirrors_scientific_csv(
 
     assert decision.final_status == MoleculeStatus.OK.value
     state = pd.read_csv(tmp_path / "batch_state.csv", keep_default_na=False)
-    scientific = pd.read_csv(tmp_path / "thermo_pm7.csv")
+    scientific = pd.read_csv(tmp_path / "pm7_fila_pipeline.csv")
     assert state.loc[0, "status"] == MoleculeStatus.OK.value
     assert state.loc[0, "assigned_worker"] == ""
     assert state.loc[0, "worker_status"] == WorkerStatus.UNASSIGNED.value
@@ -82,7 +82,7 @@ def test_apply_failure_lets_state_decide_rerun_and_csv_only_mirrors(
     assert decision.final_status == MoleculeStatus.RERUN.value
     assert decision.reruns == 1
     state = pd.read_csv(tmp_path / "batch_state.csv", keep_default_na=False)
-    scientific = pd.read_csv(tmp_path / "thermo_pm7.csv")
+    scientific = pd.read_csv(tmp_path / "pm7_fila_pipeline.csv")
     assert state.loc[0, "status"] == MoleculeStatus.RERUN.value
     assert state.loc[0, "assigned_worker"] == ""
     assert scientific.loc[0, "status"] == MoleculeStatus.RERUN.value
@@ -96,7 +96,7 @@ def test_apply_failure_mirrors_skip_after_retry_limit(tmp_path: Path) -> None:
 
     assert decision.final_status == MoleculeStatus.SKIP.value
     assert decision.reruns == 3
-    scientific = pd.read_csv(tmp_path / "thermo_pm7.csv")
+    scientific = pd.read_csv(tmp_path / "pm7_fila_pipeline.csv")
     assert scientific.loc[0, "status"] == MoleculeStatus.SKIP.value
     assert int(scientific.loc[0, "reruns"]) == 3
 
@@ -109,7 +109,7 @@ def test_apply_failure_force_skip_keeps_reruns_unchanged(tmp_path: Path) -> None
     assert decision.final_status == MoleculeStatus.SKIP.value
     assert decision.reruns == 1
     state = pd.read_csv(tmp_path / "batch_state.csv", keep_default_na=False)
-    scientific = pd.read_csv(tmp_path / "thermo_pm7.csv")
+    scientific = pd.read_csv(tmp_path / "pm7_fila_pipeline.csv")
     assert state.loc[0, "status"] == MoleculeStatus.SKIP.value
     assert int(state.loc[0, "reruns"]) == 1
     assert scientific.loc[0, "status"] == MoleculeStatus.SKIP.value

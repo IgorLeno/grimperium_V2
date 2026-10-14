@@ -161,7 +161,7 @@ unless the current task explicitly provides that context.
 - MOPAC descriptor extraction currently reads `.out` files via
   `src/grimperium/crest_pm7/mopac_descriptors.py`. Do not reintroduce `.aux`
   parsing assumptions without checking the current code and tests.
-- Active dataset names are `data/thermo_cbs_chon.csv` and `data/thermo_pm7.csv`.
+- Active dataset names are `data/cbs_referencia.csv` and `data/pm7_fila_pipeline.csv`.
   Removed dataset names can appear in historical docs and changelog entries, but
   they are not current workflow authority.
 - CLI changes must preserve `BaseView` navigation, visible Rich feedback for

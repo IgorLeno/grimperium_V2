@@ -35,7 +35,7 @@ FIXTURE_PRED = [-101.0, -198.0, -303.0, -399.0, -505.0]
 def known_csv(tmp_path: Path) -> Path:
     """Create CSV with known 5-molecule fixture."""
     df = pd.DataFrame({"H298_cbs": FIXTURE_CBS, "H298_predicted": FIXTURE_PRED})
-    csv_path = tmp_path / "thermo_pm7.csv"
+    csv_path = tmp_path / "pm7_fila_pipeline.csv"
     df.to_csv(csv_path, index=False)
     return csv_path
 
@@ -69,7 +69,7 @@ def test_detailed_metrics_no_csv(tmp_path: Path) -> None:
 
 def test_detailed_metrics_no_predicted_column(tmp_path: Path) -> None:
     """CSV with reference only → scientific summary (no false comparative metrics)."""
-    csv_path = tmp_path / "thermo_pm7.csv"
+    csv_path = tmp_path / "pm7_fila_pipeline.csv"
     df = pd.DataFrame({"H298_cbs": [-100.0], "other_col": [1.0]})
     df.to_csv(csv_path, index=False)
 
@@ -84,7 +84,7 @@ def test_detailed_metrics_no_predicted_column(tmp_path: Path) -> None:
 
 def test_detailed_metrics_computation_perfect(tmp_path: Path) -> None:
     """When predicted == cbs, MAE=0 and R²=1."""
-    csv_path = tmp_path / "thermo_pm7.csv"
+    csv_path = tmp_path / "pm7_fila_pipeline.csv"
     values = [-100.0, -200.0, -300.0]
     df = pd.DataFrame({"H298_cbs": values, "H298_predicted": values})
     df.to_csv(csv_path, index=False)
@@ -120,7 +120,7 @@ def test_detailed_metrics_computation_known_values(known_csv: Path) -> None:
 
 def test_detailed_metrics_filters_nan_rows(tmp_path: Path) -> None:
     """Rows with NaN in predicted or cbs are excluded from computation."""
-    csv_path = tmp_path / "thermo_pm7.csv"
+    csv_path = tmp_path / "pm7_fila_pipeline.csv"
     df = pd.DataFrame(
         {
             "H298_cbs": [-100.0, -200.0, np.nan, -400.0],
@@ -140,7 +140,7 @@ def test_detailed_metrics_filters_nan_rows(tmp_path: Path) -> None:
 
 def test_detailed_metrics_bias_direction(tmp_path: Path) -> None:
     """Positive bias when predictions consistently overestimate."""
-    csv_path = tmp_path / "thermo_pm7.csv"
+    csv_path = tmp_path / "pm7_fila_pipeline.csv"
     # pred > cbs → positive error → positive bias
     df = pd.DataFrame(
         {
@@ -162,7 +162,7 @@ def test_detailed_metrics_bias_direction(tmp_path: Path) -> None:
 
 def test_detailed_metrics_percentages(tmp_path: Path) -> None:
     """Verify percentage within thresholds with custom dataset."""
-    csv_path = tmp_path / "thermo_pm7.csv"
+    csv_path = tmp_path / "pm7_fila_pipeline.csv"
     # Errors: [0.5, 1.5, 2.5, 4.0, 6.0]
     # ±1: 1/5=20%, ±2: 2/5=40%, ±5: 4/5=80%
     df = pd.DataFrame(

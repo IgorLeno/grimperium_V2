@@ -213,7 +213,7 @@ def test_reset_stuck_assigned_clears_old_assignments(tmp_path: Path) -> None:
 
 def test_state_manager_uses_batch_state_csv_not_thermo_pm7(tmp_path: Path) -> None:
     state_path = tmp_path / "batch_state.csv"
-    legacy_path = tmp_path / "thermo_pm7.csv"
+    legacy_path = tmp_path / "pm7_fila_pipeline.csv"
     _write_state_csv(state_path, [_row("state-mol")])
     _write_state_csv(legacy_path, [_row("legacy-mol")])
     before_legacy = legacy_path.read_text(encoding="utf-8")

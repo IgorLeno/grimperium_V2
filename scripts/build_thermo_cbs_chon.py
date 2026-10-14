@@ -6,7 +6,7 @@ Zenodo 10.5281/zenodo.11409710, CC-BY 4.0.
 
 Why this script exists:
 
-* the previous cut (``thermo_cbs_chon.csv``) filtered on SMILES text and
+* the previous cut (``cbs_referencia.csv``) filtered on SMILES text and
   let 1808 molecules with aromatic sulfur, selenium or boron through;
   elements are now read from the reference ``xyz`` block instead;
 * the previous cut dropped the reference geometry, entropy and heat
@@ -138,7 +138,7 @@ def main(argv: list[str] | None = None) -> int:
         "--legacy",
         type=Path,
         default=None,
-        help="previous thermo_cbs_chon.csv, to record legacy_mol_id",
+        help="previous cbs_referencia.csv, to record legacy_mol_id",
     )
     args = parser.parse_args(argv)
 

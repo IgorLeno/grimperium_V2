@@ -9,7 +9,7 @@
 
 ### Description
 
-13 molecules in `thermo_pm7.csv` carry `H298_cbs` values in the range of
+13 molecules in `pm7_fila_pipeline.csv` carry `H298_cbs` values in the range of
 −17,000 to −145,000 kcal/mol. A CHON molecule with 7–11 heavy atoms has a
 physically plausible H298_cbs range of roughly −300 to +50 kcal/mol.
 
@@ -44,7 +44,7 @@ analysis and training.
 
 ```python
 import pandas as pd
-df = pd.read_csv("data/thermo_pm7.csv")
+df = pd.read_csv("data/pm7_fila_pipeline.csv")
 suspects = df[df["cbs_quality_flag"] == "SUSPECT"][
     ["mol_id", "smiles", "nheavy", "H298_cbs"]
 ]

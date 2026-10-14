@@ -28,7 +28,7 @@ Texto que deve permanecer idêntico.
 
 def test_collect_pm7_stats_ok(tmp_path: Path) -> None:
     """collect_pm7_stats returns filtered absolute-error metrics."""
-    csv_path = tmp_path / "thermo_pm7.csv"
+    csv_path = tmp_path / "pm7_fila_pipeline.csv"
     pd.DataFrame(
         {
             "status": ["OK", "OK", "FAILED", "FAILED", "OK"],
@@ -114,7 +114,7 @@ def test_update_readme_dry_run(tmp_path: Path) -> None:
     readme_path = tmp_path / "README.md"
     readme_path.write_text(README_FIXTURE, encoding="utf-8")
 
-    csv_path = tmp_path / "thermo_pm7.csv"
+    csv_path = tmp_path / "pm7_fila_pipeline.csv"
     pd.DataFrame(
         {
             "status": ["OK", "OK"],
@@ -144,7 +144,7 @@ def test_update_readme_preserves_other_sections(tmp_path: Path) -> None:
     readme_path = tmp_path / "README.md"
     readme_path.write_text(README_FIXTURE, encoding="utf-8")
 
-    csv_path = tmp_path / "thermo_pm7.csv"
+    csv_path = tmp_path / "pm7_fila_pipeline.csv"
     pd.DataFrame(
         {
             "status": ["OK"],

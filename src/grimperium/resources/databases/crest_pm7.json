@@ -12,7 +12,7 @@
     "model_training",
     "reference_values"
   ],
-  "path": "thermo_pm7.csv",
+  "path": "pm7_fila_pipeline.csv",
   "metadata": {
     "name": "CREST PM7",
     "alias": "PM7",

@@ -65,7 +65,7 @@ def test_batch_view_wires_output_under_runs_root(
 ) -> None:
     runs_root = tmp_path / "runs"
     monkeypatch.setenv("GRIMPERIUM_RUNS_DIR", str(runs_root))
-    csv_path = tmp_path / "thermo_pm7.csv"
+    csv_path = tmp_path / "pm7_fila_pipeline.csv"
     _pending_csv(csv_path)
     service = RunService(runs_root)
     view = _view(tmp_path, csv_path, service)
@@ -86,7 +86,7 @@ def test_batch_view_manifest_and_canonical_share_run_id(
 ) -> None:
     runs_root = tmp_path / "runs"
     monkeypatch.setenv("GRIMPERIUM_RUNS_DIR", str(runs_root))
-    csv_path = tmp_path / "thermo_pm7.csv"
+    csv_path = tmp_path / "pm7_fila_pipeline.csv"
     _pending_csv(csv_path)
     service = RunService(runs_root)
     view = _view(tmp_path, csv_path, service)
@@ -104,7 +104,7 @@ def test_batch_view_serialized_paths_relative_and_reloadable(
 ) -> None:
     runs_root = tmp_path / "runs"
     monkeypatch.setenv("GRIMPERIUM_RUNS_DIR", str(runs_root))
-    csv_path = tmp_path / "thermo_pm7.csv"
+    csv_path = tmp_path / "pm7_fila_pipeline.csv"
     _pending_csv(csv_path)
     service = RunService(runs_root)
     view = _view(tmp_path, csv_path, service)
@@ -140,7 +140,7 @@ def test_batch_view_empty_batch_cancels_run(
 ) -> None:
     runs_root = tmp_path / "runs"
     monkeypatch.setenv("GRIMPERIUM_RUNS_DIR", str(runs_root))
-    csv_path = tmp_path / "thermo_pm7.csv"
+    csv_path = tmp_path / "pm7_fila_pipeline.csv"
     _ok_csv(csv_path)
     service = RunService(runs_root)
     view = _view(tmp_path, csv_path, service)
@@ -160,7 +160,7 @@ def test_batch_view_no_orphan_scientific_dirs_outside_run(
 ) -> None:
     runs_root = tmp_path / "runs"
     monkeypatch.setenv("GRIMPERIUM_RUNS_DIR", str(runs_root))
-    csv_path = tmp_path / "thermo_pm7.csv"
+    csv_path = tmp_path / "pm7_fila_pipeline.csv"
     _pending_csv(csv_path)
     service = RunService(runs_root)
     view = _view(tmp_path, csv_path, service)
@@ -196,7 +196,7 @@ def test_create_run_failure_restores_prior_pending(
 ) -> None:
     runs_root = tmp_path / "runs"
     monkeypatch.setenv("GRIMPERIUM_RUNS_DIR", str(runs_root))
-    csv_path = tmp_path / "thermo_pm7.csv"
+    csv_path = tmp_path / "pm7_fila_pipeline.csv"
     _pending_csv(csv_path)
     service = RunService(runs_root)
     view = _view(tmp_path, csv_path, service)
@@ -219,7 +219,7 @@ def test_create_run_failure_preserves_rerun(
 ) -> None:
     runs_root = tmp_path / "runs"
     monkeypatch.setenv("GRIMPERIUM_RUNS_DIR", str(runs_root))
-    csv_path = tmp_path / "thermo_pm7.csv"
+    csv_path = tmp_path / "pm7_fila_pipeline.csv"
     pd.DataFrame(
         [
             {
@@ -251,7 +251,7 @@ def test_finalize_attach_failure_marks_run_failed(
 ) -> None:
     runs_root = tmp_path / "runs"
     monkeypatch.setenv("GRIMPERIUM_RUNS_DIR", str(runs_root))
-    csv_path = tmp_path / "thermo_pm7.csv"
+    csv_path = tmp_path / "pm7_fila_pipeline.csv"
     _pending_csv(csv_path)
     service = RunService(runs_root)
     view = _view(tmp_path, csv_path, service)

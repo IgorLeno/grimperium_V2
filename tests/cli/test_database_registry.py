@@ -47,7 +47,7 @@ def test_availability_is_computed_from_filesystem(
             "smiles": ["C", "CC", "CCC"],
             "status": ["OK", "PENDING", "OK"],
         }
-    ).to_csv(data_dir / "thermo_pm7.csv", index=False)
+    ).to_csv(data_dir / "pm7_fila_pipeline.csv", index=False)
     registry = _registry(tmp_path, monkeypatch)
 
     pm7 = registry.get_by_id("official.crest_pm7")
@@ -63,7 +63,9 @@ def test_invalid_schema_status_is_computed(
 ) -> None:
     data_dir = tmp_path / "data"
     data_dir.mkdir()
-    pd.DataFrame({"energy": [-1.0]}).to_csv(data_dir / "thermo_pm7.csv", index=False)
+    pd.DataFrame({"energy": [-1.0]}).to_csv(
+        data_dir / "pm7_fila_pipeline.csv", index=False
+    )
     registry = _registry(tmp_path, monkeypatch)
 
     pm7 = registry.get_by_id("official.crest_pm7")
@@ -174,7 +176,7 @@ def test_experimental_manifest_points_at_exp_table(
     data_dir = tmp_path / "data"
     data_dir.mkdir()
     pd.DataFrame({"smiles": ["C", "CCO"], "H298_exp": [-17.8, -56.1]}).to_csv(
-        data_dir / "thermo_exp_hf.csv", index=False
+        data_dir / "experimental.csv", index=False
     )
     registry = _registry(tmp_path, monkeypatch)
 
@@ -182,7 +184,7 @@ def test_experimental_manifest_points_at_exp_table(
 
     assert exp is not None
     assert exp.alias == "EXP"
-    assert exp.path == data_dir / "thermo_exp_hf.csv"
+    assert exp.path == data_dir / "experimental.csv"
     assert exp.status == "available"
     assert exp.molecules == 2
     assert exp.has_capability("reference_values")

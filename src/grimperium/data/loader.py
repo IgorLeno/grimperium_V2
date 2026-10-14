@@ -33,12 +33,12 @@ from sklearn.model_selection import train_test_split
 # Module-level constants for dataset paths
 # PRIMARY dataset (CHON molecules only - delta-learning optimized)
 THERMO_CBS_CHON_PATH = (
-    "data/thermo_cbs_chon.csv"  # Primary: 29,568 molecules (CHON only)
+    "data/cbs_referencia.csv"  # Primary: 29,568 molecules (CHON only)
 )
 
 # SECONDARY dataset (PM7 optimization results)
 THERMO_PM7_PATH = (
-    "data/thermo_pm7.csv"  # Secondary: PM7-optimized results from CREST pipeline
+    "data/pm7_fila_pipeline.csv"  # Secondary: PM7-optimized results from CREST pipeline
 )
 
 # DEPRECATED paths (kept for reference only - DO NOT USE)
@@ -358,7 +358,7 @@ class ChemperiumLoader:
     ) -> pd.DataFrame:
         """Load PM7-optimized results dataset (secondary).
 
-        File: thermo_pm7.csv
+        File: pm7_fila_pipeline.csv
         Size: Results from CREST + PM7 optimization pipeline
 
         Properties:
@@ -384,7 +384,7 @@ class ChemperiumLoader:
             pd.DataFrame: PM7 properties and conformer data
 
         Raises:
-            FileNotFoundError: If data/thermo_pm7.csv not found
+            FileNotFoundError: If data/pm7_fila_pipeline.csv not found
             ValueError: If CSV format is invalid
 
         See Also:
@@ -400,7 +400,7 @@ class ChemperiumLoader:
             raise FileNotFoundError(
                 f"Secondary dataset not found: {THERMO_PM7_PATH}\n"
                 f"This file contains PM7-optimized results from CREST pipeline\n"
-                f"Note: thermo_batch_final.csv was renamed to thermo_pm7.csv"
+                f"Note: thermo_batch_final.csv was renamed to pm7_fila_pipeline.csv"
             )
 
         loader = cls(validate=validate)
@@ -415,7 +415,7 @@ class ChemperiumLoader:
     ) -> pd.DataFrame:
         """Load CHON thermochemistry dataset (primary).
 
-        File: thermo_cbs_chon.csv
+        File: cbs_referencia.csv
         Size: 29,568 molecules
         Composition: C, H, O, N only (no halogens, sulfur, or rare heteroatoms)
 
@@ -454,7 +454,7 @@ class ChemperiumLoader:
                           Shape: (29568, M) where M = 5+ columns
 
         Raises:
-            FileNotFoundError: If data/thermo_cbs_chon.csv not found
+            FileNotFoundError: If data/cbs_referencia.csv not found
             ValueError: If CSV format is invalid
 
         See Also:

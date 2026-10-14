@@ -20,7 +20,7 @@ def evaluate(
 
     Args:
         learner (DeltaLearner): A fitted DeltaLearner instance.
-        csv_path (Path): Path to thermo_pm7.csv.
+        csv_path (Path): Path to pm7_fila_pipeline.csv.
         pipeline (FeaturePipeline | None): Pre-fitted feature pipeline obtained
             during training. Required to avoid fitting on evaluation data.
 
@@ -32,12 +32,12 @@ def evaluate(
         >>> from pathlib import Path
         >>> from grimperium.ml.trainer import train
         >>> learner, _, _, pipeline = train(
-        ...     Path("thermo_pm7.csv"),
+        ...     Path("pm7_fila_pipeline.csv"),
         ...     return_pipeline=True,
         ... )
         >>> metrics = evaluate(
         ...     learner,
-        ...     Path("thermo_pm7.csv"),
+        ...     Path("pm7_fila_pipeline.csv"),
         ...     pipeline=pipeline,
         ... )
         >>> sorted(metrics.keys())

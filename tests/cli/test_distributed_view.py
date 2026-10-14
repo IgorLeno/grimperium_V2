@@ -20,7 +20,7 @@ def view(tmp_path: Path) -> DatabasesView:
     controller.console = Console(force_terminal=False, no_color=True)
     v = DatabasesView(controller)
     db = MagicMock()
-    db.csv_path = "thermo_pm7.csv"
+    db.csv_path = "pm7_fila_pipeline.csv"
     v.selected_db = db
     return v
 

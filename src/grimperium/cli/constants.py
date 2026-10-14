@@ -118,7 +118,7 @@ DATA_DIR = _PROJECT_ROOT / "data"
 # Available CBS Reference datasets
 AVAILABLE_DATASETS = {
     "CBS Reference (CHON-only)": {
-        "file": DATA_DIR / "thermo_cbs_chon.csv",
+        "file": DATA_DIR / "cbs_referencia.csv",
         "molecules": 29568,
         "last_updated": "2026-01-15",
         "status": "Ready",

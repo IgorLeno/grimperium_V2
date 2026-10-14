@@ -16,10 +16,10 @@ CsvFactory = Callable[[list[dict[str, Any]]], Path]
 
 @pytest.fixture
 def make_csv(tmp_path: Path) -> CsvFactory:
-    """Write a ``thermo_pm7.csv``-shaped file with the given rows."""
+    """Write a ``pm7_fila_pipeline.csv``-shaped file with the given rows."""
 
     def _make(rows: list[dict[str, Any]]) -> Path:
-        csv_path = tmp_path / "thermo_pm7.csv"
+        csv_path = tmp_path / "pm7_fila_pipeline.csv"
         schema = BatchCSVManager(csv_path=None).get_schema()
         frame = pd.DataFrame(rows).reindex(columns=schema)
         frame.to_csv(csv_path, index=False)

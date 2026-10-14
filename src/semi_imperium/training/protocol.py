@@ -1,7 +1,7 @@
 """Protocol 2: the canonical Semi-Imperium protocol behind the training data.
 
 Protocol 1 is the legacy ``crest_pm7`` pipeline that produced the first 8,232
-rows of ``thermo_pm7.csv``. Protocol 2 selects conformers with CONFPASS plus
+rows of ``pm7_fila_pipeline.csv``. Protocol 2 selects conformers with CONFPASS plus
 the folding filter (specification 2026-10-03) and demands a frequency check
 that confirms a minimum. Both choices are part of the calculation signature,
 so a number computed under another configuration is never mistaken for it.

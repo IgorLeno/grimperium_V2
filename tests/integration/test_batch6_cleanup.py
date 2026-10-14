@@ -26,15 +26,17 @@ class TestBatch6Cleanup:
         """Verify required CSV files still exist."""
         if not HAS_REAL_DATASET or not HAS_PM7_DATASET:
             pytest.skip("Required dataset CSVs not available in this environment")
-        assert Path("data/thermo_cbs_chon.csv").exists(), "Primary dataset missing"
-        assert Path("data/thermo_pm7.csv").exists(), "Secondary dataset (PM7) missing"
+        assert Path("data/cbs_referencia.csv").exists(), "Primary dataset missing"
+        assert Path(
+            "data/pm7_fila_pipeline.csv"
+        ).exists(), "Secondary dataset (PM7) missing"
 
     def test_csv_count_exactly_two(self):
         """Verify exactly 2 CSV files in data/ (no orphaned CSVs)."""
         if not HAS_REAL_DATASET or not HAS_PM7_DATASET:
             pytest.skip("Required dataset CSVs not available in this environment")
         csv_files = list(Path("data").glob("*.csv"))
-        expected = {"thermo_cbs_chon.csv", "thermo_pm7.csv"}
+        expected = {"cbs_referencia.csv", "pm7_fila_pipeline.csv"}
         actual = {f.name for f in csv_files}
         assert actual == expected, (
             f"Expected {expected}, got {actual}. "

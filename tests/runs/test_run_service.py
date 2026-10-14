@@ -88,7 +88,7 @@ def test_invalidated_run_keeps_artifact_paths(
         method_version="1.0.0",
         method_snapshot={"method_id": "crest_pm7"},
         execution_overrides={"batch_size": 2},
-        dataset_ref={"path": "data/thermo_pm7.csv"},
+        dataset_ref={"path": "data/pm7_fila_pipeline.csv"},
         model_ref=None,
         molecule_count=2,
     )

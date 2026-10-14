@@ -43,7 +43,7 @@ def test_get_databases_enriches_pm7_from_csv(tmp_path: Path, monkeypatch) -> Non
     )
     data_dir = tmp_path / "data"
     data_dir.mkdir()
-    df.to_csv(data_dir / "thermo_pm7.csv", index=False)
+    df.to_csv(data_dir / "pm7_fila_pipeline.csv", index=False)
 
     view = _create_view_with_registry(tmp_path, monkeypatch)
     databases = view.get_databases()
@@ -60,7 +60,7 @@ def test_get_databases_pm7_empty_csv_is_available(
     data_dir = tmp_path / "data"
     data_dir.mkdir()
     pd.DataFrame(columns=["mol_id", "status", "smiles"]).to_csv(
-        data_dir / "thermo_pm7.csv",
+        data_dir / "pm7_fila_pipeline.csv",
         index=False,
     )
 
@@ -126,11 +126,11 @@ def test_refresh_databases_from_filesystem_finds_known_csvs(
 ) -> None:
     data_dir = tmp_path / "data"
     data_dir.mkdir()
-    (data_dir / "thermo_cbs_chon.csv").write_text(
+    (data_dir / "cbs_referencia.csv").write_text(
         "smiles,H298_cbs\nCCO,-100.5\nCC,-50.2\n",
         encoding="utf-8",
     )
-    (data_dir / "thermo_pm7.csv").write_text(
+    (data_dir / "pm7_fila_pipeline.csv").write_text(
         "smiles,H298_pm7,status\nCCO,-100.3,OK\n",
         encoding="utf-8",
     )

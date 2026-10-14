@@ -66,7 +66,7 @@ class CSVDataLoader:
     **AJUSTE v2.2:** Duplicate mol_ids always fail (even in permissive mode)
 
     Usage:
-        >>> loader = CSVDataLoader(Path("data/thermo_pm7.csv"), strict=False)
+        >>> loader = CSVDataLoader(Path("data/pm7_fila_pipeline.csv"), strict=False)
         >>> df = loader.load_dataframe()
         >>> report = loader.get_validation_report()
         >>> if report.total_errors > 0:
@@ -355,7 +355,7 @@ class BatchDataManager:
     to Molecule dataclass instances.
 
     Usage:
-        >>> manager = BatchDataManager(Path("data/thermo_pm7.csv"), strict=False)
+        >>> manager = BatchDataManager(Path("data/pm7_fila_pipeline.csv"), strict=False)
         >>> molecules = manager.load_batch()
         >>> report = manager.loader.get_validation_report()
     """

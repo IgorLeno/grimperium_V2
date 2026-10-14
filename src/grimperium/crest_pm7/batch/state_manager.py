@@ -34,7 +34,7 @@ class BatchStateManager:
     """Manage operational batch state separately from scientific output.
 
     This manager operates exclusively on the PR6A ``batch_state.csv`` schema. It
-    does not read or write the legacy ``thermo_pm7.csv`` file owned by
+    does not read or write the legacy ``pm7_fila_pipeline.csv`` file owned by
     ``BatchCSVManager`` during the transition.
     """
 

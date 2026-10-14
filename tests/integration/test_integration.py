@@ -19,7 +19,7 @@ from tests.fixtures.real_data import (
 
 pytestmark = pytest.mark.skipif(
     not HAS_REAL_DATASET,
-    reason="Real dataset not available (data/thermo_cbs_chon.csv)",
+    reason="Real dataset not available (data/cbs_referencia.csv)",
 )
 
 

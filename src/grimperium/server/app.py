@@ -184,7 +184,7 @@ def create_app(config: ServerConfig) -> FastAPI:
     app.state.csv_manager = csv_manager
 
     # Build operational state manager and reconcile batch_state.csv against the
-    # scientific CSV. The scientific CSV (thermo_pm7.csv) is the source of truth
+    # scientific CSV. The scientific CSV (pm7_fila_pipeline.csv) is the source of truth
     # for which molecules exist and their legacy status; the operational CSV
     # (batch_state.csv) owns assignment state that no longer lives in the
     # scientific schema. Reconciliation copies each molecule's legacy status only

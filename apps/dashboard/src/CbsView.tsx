@@ -57,7 +57,7 @@ export function CbsView() {
         ]}
       />
       {state.status === 'loading' && <p role="status" className="loading-state">Carregando tabela CBS…</p>}
-      {state.status === 'error' && <MissingTable message={state.message} retry={reload} file="data/thermo_cbs_chon.csv" />}
+      {state.status === 'error' && <MissingTable message={state.message} retry={reload} file="data/cbs_referencia.csv" />}
       {profile && (
         <>
           <div className="metric-grid metric-grid--four">

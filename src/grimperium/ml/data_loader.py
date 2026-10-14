@@ -26,7 +26,7 @@ def load_ml_data(
         2. Drops rows where H298_cbs or H298_pm7 is NaN
 
     Args:
-        csv_path: Path to thermo_pm7.csv
+        csv_path: Path to pm7_fila_pipeline.csv
         strict: If True, raise on validation errors; False = skip invalid rows
 
     Returns:
@@ -38,7 +38,7 @@ def load_ml_data(
     Example:
         >>> from pathlib import Path
         >>> df, y_cbs, y_pm7 = load_ml_data(
-        ...     csv_path=Path("thermo_pm7.csv"),
+        ...     csv_path=Path("pm7_fila_pipeline.csv"),
         ...     strict=False,
         ... )
         >>> df.shape[0] == len(y_cbs) == len(y_pm7)

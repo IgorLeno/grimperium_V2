@@ -32,9 +32,9 @@ class DashboardPaths:
         base = root or Path(os.environ.get("GRIMPERIUM_ROOT", _REPO_ROOT))
         data = base / "data"
         return cls(
-            pm7_csv=data / "thermo_pm7.csv",
+            pm7_csv=data / "pm7_fila_pipeline.csv",
             semi_imperium_store=data / "semi_imperium",
-            exp_csv=data / "thermo_exp_hf.csv",
-            exp_vs_cbs_csv=data / "thermo_exp_hf_vs_cbs.csv",
-            cbs_csv=data / "thermo_cbs_chon.csv",
+            exp_csv=data / "experimental.csv",
+            exp_vs_cbs_csv=data / "experimental_vs_cbs.csv",
+            cbs_csv=data / "cbs_referencia.csv",
         )

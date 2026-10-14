@@ -65,9 +65,9 @@ Menu superior com submenu (definido em `src/modules.ts`):
 | Menu | Submenu | O que mostra | Fonte |
 |------|---------|--------------|-------|
 | **Resumo** | — | Resumo em texto com números ao vivo, pipeline em 5 passos, mapa das três tabelas, fila CREST + PM7, store Semi-Imperium, ideia do Δ-learning e glossário. | `/api/dataset/progress`, perfis das tabelas, comparação |
-| **Dados** | **Experimental** | O que é a tabela; distribuições; comparação CBS × experimental (concordância, paridade, erro por tamanho e fonte); tabela completa pesquisável. | `data/thermo_exp_hf.csv`, `data/thermo_exp_hf_vs_cbs.csv` |
-| | **CBS** | O que é a referência CBS; entalpia, tamanho, elementos, correção CBS − B3LYP, spin/carga, SMILES repetidos; tabela completa. | `data/thermo_cbs_chon.csv` |
-| | **PM7** | Tabela legada `crest_pm7`: andamento, erro Δ = CBS − PM7, paridade, resultado do CREST/MOPAC, tempos; tabela completa. | `data/thermo_pm7.csv` |
+| **Dados** | **Experimental** | O que é a tabela; distribuições; comparação CBS × experimental (concordância, paridade, erro por tamanho e fonte); tabela completa pesquisável. | `data/experimental.csv`, `data/experimental_vs_cbs.csv` |
+| | **CBS** | O que é a referência CBS; entalpia, tamanho, elementos, correção CBS − B3LYP, spin/carga, SMILES repetidos; tabela completa. | `data/cbs_referencia.csv` |
+| | **PM7** | Tabela legada `crest_pm7`: andamento, erro Δ = CBS − PM7, paridade, resultado do CREST/MOPAC, tempos; tabela completa. | `data/pm7_fila_pipeline.csv` |
 | **Treinamento** | — | Rotina Semi-Imperium (protocolo 2): barra de andamento com denominador explícito, iniciar/parar com moléculas em paralelo e limite, falhas recentes com o motivo. Atualiza a cada 5 s. | `/api/training/status`, `/api/training/start`, `/api/training/stop` |
 | **Delta Learning** | — | Explica as etapas do treino do modelo Δ e o portão de qualidade. Ainda sem execução no painel. | — |
 | **Cálculo** | — | "Em breve": cálculo de uma molécula pelo nome (Grimperium), depende do Delta Learning. | — |

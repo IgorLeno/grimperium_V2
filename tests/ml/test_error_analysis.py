@@ -1,6 +1,6 @@
 """Tests for src/grimperium/ml/error_analysis.py.
 
-All tests use synthetic DataFrames — never read data/thermo_pm7.csv.
+All tests use synthetic DataFrames — never read data/pm7_fila_pipeline.csv.
 """
 
 from __future__ import annotations

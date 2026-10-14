@@ -42,7 +42,7 @@ The sections below detail the existing architecture and some older design decisi
 │  ├─ MoleculePersister (atomic writes)               │
 │  └─ BatchReporter (summaries)                       │
 │  ↓                                                  │
-│  CSV Backend (thermo_pm7.csv)                       │
+│  CSV Backend (pm7_fila_pipeline.csv)                       │
 │  ↓                                                  │
 │  ~/.grimperium/config.toml (settings)               │
 │  ~/.grimperium/validation_errors.log (audit)        │
@@ -608,7 +608,7 @@ crest_timeout_minutes = 30
 
 [database]
 data_dir = "data"
-csv_file = "thermo_pm7.csv"
+csv_file = "pm7_fila_pipeline.csv"
 ```
 
 ---
@@ -705,7 +705,7 @@ A: NO. Not safe. Will corrupt CSV. Refactor Phase 1 required.
 A: YES, but: 1) Stop grimperium, 2) Edit, 3) Run grimperium validate --strict to check, 4) Resume.
 
 **Q: How do I back up?**
-A: CSV is your source. Commit to git. Or: `cp data/thermo_pm7.csv data/thermo_pm7.csv.backup.$(date +%s)`
+A: CSV is your source. Commit to git. Or: `cp data/pm7_fila_pipeline.csv data/pm7_fila_pipeline.csv.backup.$(date +%s)`
 
 **Q: What if molecule has delta_1=0.0?**
 A: Valid! v2.2 handles correctly (not converted to None).

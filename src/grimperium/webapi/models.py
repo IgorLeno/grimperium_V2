@@ -5,7 +5,7 @@ from __future__ import annotations
 from pydantic import BaseModel, Field
 
 LEGACY_PROTOCOL = "crest_pm7"
-"""Protocol that produced ``thermo_pm7.csv``; the canonical one is
+"""Protocol that produced ``pm7_fila_pipeline.csv``; the canonical one is
 Semi-Imperium, so these rows are shown as legacy, never as training v2."""
 
 BLANK_LABEL = "unset"

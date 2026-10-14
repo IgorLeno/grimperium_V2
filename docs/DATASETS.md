@@ -4,12 +4,12 @@
 
 Grimperium uses two primary datasets for delta-learning and semiempirical optimization:
 
-1. **thermo_cbs_chon.csv** - Primary thermochemistry reference (CHON molecules only)
-2. **thermo_pm7.csv** - Semiempirical optimization results (PM7 method)
+1. **cbs_referencia.csv** - Primary thermochemistry reference (CHON molecules only)
+2. **pm7_fila_pipeline.csv** - Semiempirical optimization results (PM7 method)
 
 ---
 
-## thermo_cbs_chon.csv (Primary)
+## cbs_referencia.csv (Primary)
 
 ### What is it?
 
@@ -78,7 +78,7 @@ Starting from the original CBS dataset of 52,837 molecules:
 
 ---
 
-## thermo_pm7.csv (Secondary)
+## pm7_fila_pipeline.csv (Secondary)
 
 ### What is it?
 
@@ -118,7 +118,7 @@ full details, quantified impact, and reproduction steps.
 
 ❌ **Not suitable for:**
 - High-accuracy thermochemistry (use CBS dataset)
-- Training machine learning models (use thermo_cbs_chon.csv)
+- Training machine learning models (use cbs_referencia.csv)
 
 ---
 
@@ -127,7 +127,7 @@ full details, quantified impact, and reproduction steps.
 ### thermo_cbs_clean.csv ❌
 
 **Status:** REMOVED (January 18, 2026)
-**Replaced by:** `thermo_cbs_chon.csv`
+**Replaced by:** `cbs_referencia.csv`
 **Reason:** CHON-only is more descriptive of actual content (30,026 → 29,568 molecules after rare heteroatom removal)
 
 **Migration:**
@@ -144,7 +144,7 @@ df = loader.load_thermo_cbs_chon()
 ### thermo_cbs_opt.csv ❌
 
 **Status:** REMOVED (January 18, 2026)
-**Reason:** Not used in current workflow; `thermo_cbs_chon.csv` is sufficient
+**Reason:** Not used in current workflow; `cbs_referencia.csv` is sufficient
 
 **Note:** Original unfiltered dataset (52,837 molecules) is no longer maintained in the active codebase.
 
@@ -188,10 +188,10 @@ print(f"Loaded {len(df)} PM7 results")
 from grimperium.data import THERMO_CBS_CHON_PATH, THERMO_PM7_PATH
 
 print(f"Primary dataset: {THERMO_CBS_CHON_PATH}")
-# Output: Primary dataset: data/thermo_cbs_chon.csv
+# Output: Primary dataset: data/cbs_referencia.csv
 
 print(f"Secondary dataset: {THERMO_PM7_PATH}")
-# Output: Secondary dataset: data/thermo_pm7.csv
+# Output: Secondary dataset: data/pm7_fila_pipeline.csv
 ```
 
 ---
@@ -213,7 +213,7 @@ print(f"Secondary dataset: {THERMO_PM7_PATH}")
 If you see `FileNotFoundError` mentioning old dataset names:
 
 ```
-FileNotFoundError: Primary dataset not found: data/thermo_cbs_chon.csv
+FileNotFoundError: Primary dataset not found: data/cbs_referencia.csv
 Expected: 29,568 CHON molecules with CBS and B3LYP enthalpies
 Note: thermo_cbs_clean.csv and thermo_cbs_opt.csv are no longer used
 ```
@@ -224,7 +224,7 @@ Note: thermo_cbs_clean.csv and thermo_cbs_opt.csv are no longer used
 
 ## Dataset Statistics
 
-### thermo_cbs_chon.csv
+### cbs_referencia.csv
 
 ```
 Total molecules:        29,568
@@ -236,7 +236,7 @@ Quality:                High (curated, homogeneous chemical space)
 File size:              ~1.5 MB (CSV)
 ```
 
-### thermo_pm7.csv
+### pm7_fila_pipeline.csv
 
 ```
 Total molecules:        Varies (CREST pipeline output)
@@ -251,8 +251,8 @@ File size:              ~2 MB (CSV, with metadata)
 
 ```
 data/
-├── thermo_cbs_chon.csv   ← Primary dataset (29,568 CHON molecules)
-└── thermo_pm7.csv         ← Secondary dataset (PM7 optimization results)
+├── cbs_referencia.csv   ← Primary dataset (29,568 CHON molecules)
+└── pm7_fila_pipeline.csv         ← Secondary dataset (PM7 optimization results)
 ```
 
 **Note:** Only these two CSV files should exist in `data/`. Any additional CSVs indicate orphaned files from previous versions.
@@ -268,8 +268,8 @@ data/
 ls -lh data/*.csv
 
 # Expected output:
-# -rw-rw-r-- 1 user user 1.5M data/thermo_cbs_chon.csv
-# -rw-rw-r-- 1 user user 2.0M data/thermo_pm7.csv
+# -rw-rw-r-- 1 user user 1.5M data/cbs_referencia.csv
+# -rw-rw-r-- 1 user user 2.0M data/pm7_fila_pipeline.csv
 ```
 
 ### Programmatic validation:
@@ -319,7 +319,7 @@ print(f"✓ Loaded {len(df_pm7)} PM7 results")
 
 ### Q: What happened to `thermo_cbs_clean.csv`?
 
-**A:** Renamed to `thermo_cbs_chon.csv` to be more descriptive. After removing rare heteroatoms, the dataset decreased from 30,026 → 29,568 molecules.
+**A:** Renamed to `cbs_referencia.csv` to be more descriptive. After removing rare heteroatoms, the dataset decreased from 30,026 → 29,568 molecules.
 
 ### Q: How do I test with real data in CI?
 
@@ -358,7 +358,7 @@ apenas aprender a magnitude da correção para cada tipo de molécula.
 
 ### Tratamento de outliers CBS_SUSPECT
 
-13 moléculas no `thermo_pm7.csv` apresentam valores de H298_cbs na faixa de
+13 moléculas no `pm7_fila_pipeline.csv` apresentam valores de H298_cbs na faixa de
 −17.000 a −145.000 kcal/mol — fisicamente impossíveis para moléculas CHON com
 7–11 átomos pesados (faixa plausível: −300 a +50 kcal/mol). A causa mais
 provável é que a energia total em Hartrees do CBS-QB3 foi armazenada sem

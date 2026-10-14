@@ -21,7 +21,7 @@ def test_results_view_does_not_embed_legacy_model_names() -> None:
     assert "KRR + XGBoost Ensemble" not in source
     assert "Models > Predict Batch" not in source
     assert "Predict Batch" not in source
-    assert "data/thermo_pm7.csv" not in source
+    assert "data/pm7_fila_pipeline.csv" not in source
     assert "Analyze Active Source" in source
     assert "Select Saved Run" in source
 

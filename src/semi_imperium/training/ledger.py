@@ -1,6 +1,6 @@
 """The CSV side of the training routine.
 
-``thermo_pm7.csv`` stays the dataset (the ML loaders read it), so the routine
+``pm7_fila_pipeline.csv`` stays the dataset (the ML loaders read it), so the routine
 writes its results there, through ``BatchCSVManager`` and from a single
 process: the coordinator. Workers never touch the file.
 """
@@ -104,7 +104,7 @@ class TrainingLedger:
         frame = self._manager.load_csv()
         if PROTOCOL_COLUMN not in frame.columns:
             raise NotMigratedError(
-                "thermo_pm7.csv has no 'protocol' column; run "
+                "pm7_fila_pipeline.csv has no 'protocol' column; run "
                 "'python -m semi_imperium.training migrate --apply' first"
             )
         frame[PROTOCOL_COLUMN] = frame[PROTOCOL_COLUMN].fillna("").astype(str)

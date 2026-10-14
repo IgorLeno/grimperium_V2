@@ -89,8 +89,8 @@ class TestLoadCSVRecoversFromBackup:
     """0-byte CSV + valid .bak -> auto-recovery."""
 
     def test_zero_byte_csv_recovered(self, tmp_path: Path) -> None:
-        csv_path = tmp_path / "thermo_pm7.csv"
-        bak_path = tmp_path / "thermo_pm7.csv.bak"
+        csv_path = tmp_path / "pm7_fila_pipeline.csv"
+        bak_path = tmp_path / "pm7_fila_pipeline.csv.bak"
 
         # Create valid backup
         df = _make_df(4)
@@ -112,7 +112,7 @@ class TestOrphanTmpFilesCleaned:
     """Stale .tmp files from interrupted writes are removed on load."""
 
     def test_tmp_files_removed_on_load(self, tmp_path: Path) -> None:
-        csv_path = tmp_path / "thermo_pm7.csv"
+        csv_path = tmp_path / "pm7_fila_pipeline.csv"
         df = _make_df(3)
         df.to_csv(csv_path, index=False)
 
@@ -130,8 +130,8 @@ class TestBothCSVAndBackupCorrupted:
     """Raises CSVCorruptedError with actionable message."""
 
     def test_raises_csv_corrupted_error(self, tmp_path: Path) -> None:
-        csv_path = tmp_path / "thermo_pm7.csv"
-        bak_path = tmp_path / "thermo_pm7.csv.bak"
+        csv_path = tmp_path / "pm7_fila_pipeline.csv"
+        bak_path = tmp_path / "pm7_fila_pipeline.csv.bak"
 
         # Both empty
         csv_path.write_text("")
@@ -142,7 +142,7 @@ class TestBothCSVAndBackupCorrupted:
             mgr.load_csv()
 
     def test_raises_when_no_backup_exists(self, tmp_path: Path) -> None:
-        csv_path = tmp_path / "thermo_pm7.csv"
+        csv_path = tmp_path / "pm7_fila_pipeline.csv"
         csv_path.write_text("")  # 0-byte, no .bak
 
         mgr = BatchCSVManager(csv_path=csv_path)
@@ -154,7 +154,7 @@ class TestDataFidelityAcrossCycles:
     """Float precision and all columns persist across 10 save/load cycles."""
 
     def test_ten_cycles_preserve_precision(self, tmp_path: Path) -> None:
-        csv_path = tmp_path / "thermo_pm7.csv"
+        csv_path = tmp_path / "pm7_fila_pipeline.csv"
 
         df = _make_df(5)
         df["h298_pm7"] = [
@@ -200,8 +200,8 @@ class TestAtomicToCsvEdgeCases:
         assert len(pd.read_csv(deep)) == 2
 
     def test_missing_primary_csv_recovered_from_backup(self, tmp_path: Path) -> None:
-        csv_path = tmp_path / "thermo_pm7.csv"
-        bak_path = tmp_path / "thermo_pm7.csv.bak"
+        csv_path = tmp_path / "pm7_fila_pipeline.csv"
+        bak_path = tmp_path / "pm7_fila_pipeline.csv.bak"
 
         # Only backup exists, primary is missing entirely
         df = _make_df(3)

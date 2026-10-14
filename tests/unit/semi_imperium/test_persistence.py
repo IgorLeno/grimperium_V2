@@ -267,7 +267,7 @@ def test_store_writes_only_inside_its_own_root(tmp_path: Path) -> None:
     store_root = tmp_path / "store"
     untouched = tmp_path / "grimperium_data"
     untouched.mkdir()
-    dataset = untouched / "thermo_pm7.csv"
+    dataset = untouched / "pm7_fila_pipeline.csv"
     dataset.write_text("smiles,H298_pm7\nCCO,-56.0\n")
     before = dataset.read_text()
 

@@ -8,7 +8,7 @@
     "readable",
     "reference_values"
   ],
-  "path": "thermo_exp_hf.csv",
+  "path": "experimental.csv",
   "metadata": {
     "name": "Experimental ΔHf",
     "alias": "EXP",

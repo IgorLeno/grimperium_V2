@@ -1,6 +1,6 @@
 """Dataset manager for source-of-truth CSV synchronization.
 
-Manages synchronization between the canonical source CSV (thermo_cbs_chon.csv)
+Manages synchronization between the canonical source CSV (cbs_referencia.csv)
 and the working CSV used for batch processing.
 """
 
@@ -16,7 +16,7 @@ LOG = logging.getLogger(__name__)
 
 
 class DatasetManager:
-    """Manage source-of-truth synchronization with thermo_cbs_chon.csv.
+    """Manage source-of-truth synchronization with cbs_referencia.csv.
 
     Follows BatchCSVManager patterns for consistency in CSV handling.
     The source CSV contains reference molecular data, while the working CSV

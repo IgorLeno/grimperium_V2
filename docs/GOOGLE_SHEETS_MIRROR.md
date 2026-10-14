@@ -13,10 +13,10 @@ está publicado.
 
 | Aba da planilha | Origem | Observação |
 |-----------------|--------|------------|
-| `Experimental` | `data/thermo_exp_hf.csv` | **Excluir ou isolar linhas NIST**: os termos do NIST SRD 69 são “all rights reserved” (ver `NIST_TERMS` em `scripts/build_experimental_hf.py`). Publicar só fontes com licença compatível, ou manter a planilha privada. |
-| `CBS` | `data/thermo_cbs_chon.csv` | ThermoCBS é CC-BY 4.0: manter a citação no cabeçalho. ~27,8 mil linhas cabem no limite de 10 milhões de células. Sem a coluna `xyz` (pesada). |
-| `PM7` | `data/thermo_pm7.csv` | Rotulada como legado `crest_pm7`. |
-| `Comparação` | `data/thermo_exp_hf_vs_cbs.csv` | Mesma regra de licença da aba Experimental. |
+| `Experimental` | `data/experimental.csv` | **Excluir ou isolar linhas NIST**: os termos do NIST SRD 69 são “all rights reserved” (ver `NIST_TERMS` em `scripts/build_experimental_hf.py`). Publicar só fontes com licença compatível, ou manter a planilha privada. |
+| `CBS` | `data/cbs_referencia.csv` | ThermoCBS é CC-BY 4.0: manter a citação no cabeçalho. ~27,8 mil linhas cabem no limite de 10 milhões de células. Sem a coluna `xyz` (pesada). |
+| `PM7` | `data/pm7_fila_pipeline.csv` | Rotulada como legado `crest_pm7`. |
+| `Comparação` | `data/experimental_vs_cbs.csv` | Mesma regra de licença da aba Experimental. |
 | `Leia-me` | gerada | Data da publicação, sha256 de cada CSV, citações e aviso “somente leitura”. |
 
 ## Mecânica

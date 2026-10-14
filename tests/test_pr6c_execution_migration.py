@@ -257,7 +257,7 @@ def test_execute_batch_records_batch_method_metadata_when_molecule_starts(
 def test_create_execution_manager_wires_state_manager_from_state_csv_path(
     tmp_path: Path,
 ) -> None:
-    csv_path = tmp_path / "thermo_pm7.csv"
+    csv_path = tmp_path / "pm7_fila_pipeline.csv"
     state_csv_path = tmp_path / "batch_state.csv"
     detail_dir = tmp_path / "details"
 

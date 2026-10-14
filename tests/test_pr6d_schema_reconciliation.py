@@ -22,7 +22,7 @@ LEGACY_STATE_ONLY_COLUMNS = [
 def test_batch_csv_manager_creates_legacy_thermo_pm7_with_62_columns(
     tmp_path: Path,
 ) -> None:
-    csv_path = tmp_path / "thermo_pm7.csv"
+    csv_path = tmp_path / "pm7_fila_pipeline.csv"
     manager = BatchCSVManager(csv_path)
 
     manager.create_empty_csv()
@@ -33,7 +33,7 @@ def test_batch_csv_manager_creates_legacy_thermo_pm7_with_62_columns(
 
 
 def test_legacy_thermo_pm7_excludes_state_only_columns(tmp_path: Path) -> None:
-    csv_path = tmp_path / "thermo_pm7.csv"
+    csv_path = tmp_path / "pm7_fila_pipeline.csv"
     BatchCSVManager(csv_path).create_empty_csv()
 
     df = pd.read_csv(csv_path)
@@ -68,7 +68,7 @@ def test_legacy_schema_matches_62_column_contract() -> None:
 def test_mark_success_persists_scientific_columns_without_state_columns(
     tmp_path: Path,
 ) -> None:
-    csv_path = tmp_path / "thermo_pm7.csv"
+    csv_path = tmp_path / "pm7_fila_pipeline.csv"
     manager = BatchCSVManager(csv_path)
     schema = manager.get_schema() + LEGACY_STATE_ONLY_COLUMNS
     row = dict.fromkeys(schema)

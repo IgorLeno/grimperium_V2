@@ -1288,7 +1288,7 @@ class DatabasesView(BaseView):
         csv_path = (
             self._database_path(self.selected_db)
             if self.selected_db is not None
-            else DATA_DIR / "thermo_pm7.csv"
+            else DATA_DIR / "pm7_fila_pipeline.csv"
         )
         detail_dir = DATA_DIR / "molecules_pm7" / "conformer_details"
 
@@ -1902,7 +1902,7 @@ class DatabasesView(BaseView):
         return table
 
     def _state_config_menu(self) -> str | None:
-        csv_path = DATA_DIR / "thermo_pm7.csv"
+        csv_path = DATA_DIR / "pm7_fila_pipeline.csv"
         server_port = 8000
         server_url = f"http://localhost:{server_port}"
 

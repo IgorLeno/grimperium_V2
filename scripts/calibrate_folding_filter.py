@@ -432,7 +432,7 @@ def parse_ints(text: str) -> tuple[int, ...]:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument(
-        "--input", type=Path, required=True, help="thermo_cbs_chon_v2.csv"
+        "--input", type=Path, required=True, help="cbs_referencia.csv"
     )
     parser.add_argument("--output-dir", type=Path, required=True)
     parser.add_argument("--k", type=parse_ints, default=DEFAULT_K)

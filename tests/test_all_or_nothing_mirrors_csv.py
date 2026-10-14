@@ -46,7 +46,7 @@ class _FakeProcessor:
 def test_all_or_nothing_reset_mirrors_pending_to_scientific_csv(
     tmp_path: Path,
 ) -> None:
-    csv_path = tmp_path / "thermo_pm7.csv"
+    csv_path = tmp_path / "pm7_fila_pipeline.csv"
     pd.DataFrame(
         [
             {

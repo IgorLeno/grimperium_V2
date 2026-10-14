@@ -173,7 +173,7 @@ def real_data_1k_filtered() -> tuple[np.ndarray, np.ndarray, np.ndarray]:
         ...     # Train/test split will have similar distributions
     """
     if not HAS_REAL_DATASET:
-        pytest.skip("Real dataset not available (data/thermo_cbs_chon.csv)")
+        pytest.skip("Real dataset not available (data/cbs_referencia.csv)")
 
     from grimperium.data.loader import ChemperiumLoader
 
@@ -262,7 +262,7 @@ def real_data_1k_extreme() -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     References: ChemperiumLoader, load_thermo_cbs_chon
     """
     if not HAS_REAL_DATASET:
-        pytest.skip("Real dataset not available (data/thermo_cbs_chon.csv)")
+        pytest.skip("Real dataset not available (data/cbs_referencia.csv)")
 
     from grimperium.data.loader import ChemperiumLoader
 
@@ -276,7 +276,7 @@ def real_data_1k_extreme() -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     if len(df) < 1000:
         raise ValueError(
             f"Dataset too small for stress tests: {len(df)} molecules\n"
-            f"Expected: >= 1000 molecules from data/thermo_cbs_chon.csv"
+            f"Expected: >= 1000 molecules from data/cbs_referencia.csv"
         )
 
     h_mean = df["H298_cbs"].mean()

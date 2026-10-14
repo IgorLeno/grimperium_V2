@@ -68,7 +68,7 @@ class _FakeProcessor:
 def test_batch_e2e_fake_pipeline_dual_write_canonical_and_recovery(
     tmp_path: Path,
 ) -> None:
-    csv_path = tmp_path / "thermo_pm7.csv"
+    csv_path = tmp_path / "pm7_fila_pipeline.csv"
     pd.DataFrame(
         [
             {

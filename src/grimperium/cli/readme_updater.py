@@ -76,7 +76,9 @@ class ReadmeUpdater:
 
     console: Console = field(default_factory=Console)
     readme_path: Path = field(default_factory=lambda: Path.cwd() / "README.md")
-    pm7_csv_path: Path = field(default_factory=lambda: Path("data/thermo_pm7.csv"))
+    pm7_csv_path: Path = field(
+        default_factory=lambda: Path("data/pm7_fila_pipeline.csv")
+    )
     model_bundle_path: Path = field(default_factory=lambda: Path("models/"))
 
     def _resolve_path(self, path: Path) -> Path:
@@ -309,7 +311,7 @@ class ReadmeUpdater:
         return "\n".join(diff_lines)
 
     def collect_pm7_stats(self) -> PM7Stats:
-        """Collect PM7 baseline metrics from ``data/thermo_pm7.csv``.
+        """Collect PM7 baseline metrics from ``data/pm7_fila_pipeline.csv``.
 
         Returns:
             PM7Stats with row counts and absolute-error metrics. If the CSV is

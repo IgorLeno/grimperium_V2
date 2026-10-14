@@ -48,7 +48,7 @@ def predict_batch(
     Non-eligible rows get NaN for both new columns.
 
     Args:
-        csv_path: Path to thermo_pm7.csv (will be overwritten with new columns).
+        csv_path: Path to pm7_fila_pipeline.csv (will be overwritten with new columns).
         model_path: Path to the trained ``.joblib`` model bundle.
         return_stats: If True, return ``(df, stats_dict)`` instead of just ``df``.
 

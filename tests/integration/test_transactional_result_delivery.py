@@ -93,7 +93,7 @@ async def _claim(client: AsyncClient, worker_id: str = "w1") -> tuple[str, str]:
 @pytest.mark.anyio
 async def test_lost_http_response_does_not_double_apply(tmp_path: Path) -> None:
     """Servidor aplica; cliente perde ACK; reenvio via sync não duplica efeito."""
-    csv_path = tmp_path / "thermo_pm7.csv"
+    csv_path = tmp_path / "pm7_fila_pipeline.csv"
     _write_csv(csv_path)
     queue = OfflineResultQueue(tmp_path / "offline.jsonl")
 
@@ -150,7 +150,7 @@ async def test_lost_http_response_does_not_double_apply(tmp_path: Path) -> None:
 
 @pytest.mark.anyio
 async def test_sync_items_distinguish_partial_batch(tmp_path: Path) -> None:
-    csv_path = tmp_path / "thermo_pm7.csv"
+    csv_path = tmp_path / "pm7_fila_pipeline.csv"
     _write_csv(csv_path, [("mol_001", "CCO"), ("mol_002", "CCC")])
 
     async with await _client(csv_path) as client:
@@ -218,7 +218,7 @@ async def test_sync_items_distinguish_partial_batch(tmp_path: Path) -> None:
 
 @pytest.mark.anyio
 async def test_conflict_keeps_operational_state_unchanged(tmp_path: Path) -> None:
-    csv_path = tmp_path / "thermo_pm7.csv"
+    csv_path = tmp_path / "pm7_fila_pipeline.csv"
     _write_csv(csv_path)
 
     async with await _client(csv_path) as client:
@@ -254,7 +254,7 @@ async def test_conflict_keeps_operational_state_unchanged(tmp_path: Path) -> Non
 
 @pytest.mark.anyio
 async def test_prepared_pending_not_committed_on_startup(tmp_path: Path) -> None:
-    csv_path = tmp_path / "thermo_pm7.csv"
+    csv_path = tmp_path / "pm7_fila_pipeline.csv"
     _write_csv(csv_path)
     app = create_app(
         ServerConfig(
@@ -312,7 +312,7 @@ async def test_prepared_pending_not_committed_on_startup(tmp_path: Path) -> None
 
 @pytest.mark.anyio
 async def test_prepared_success_verified_commits_on_startup(tmp_path: Path) -> None:
-    csv_path = tmp_path / "thermo_pm7.csv"
+    csv_path = tmp_path / "pm7_fila_pipeline.csv"
     _write_csv(csv_path)
     app = create_app(
         ServerConfig(
@@ -470,7 +470,7 @@ async def test_concurrent_same_result_id_applies_once(tmp_path: Path) -> None:
     """Duas requisições concorrentes com o mesmo result_id → efeito único."""
     import asyncio
 
-    csv_path = tmp_path / "thermo_pm7.csv"
+    csv_path = tmp_path / "pm7_fila_pipeline.csv"
     _write_csv(csv_path)
 
     async with await _client(csv_path) as client:
@@ -508,7 +508,7 @@ async def test_concurrent_same_result_id_applies_once(tmp_path: Path) -> None:
 async def test_concurrent_same_id_different_fingerprint_conflicts(
     tmp_path: Path,
 ) -> None:
-    csv_path = tmp_path / "thermo_pm7.csv"
+    csv_path = tmp_path / "pm7_fila_pipeline.csv"
     _write_csv(csv_path)
 
     async with await _client(csv_path) as client:
@@ -545,7 +545,7 @@ async def test_concurrent_same_id_different_fingerprint_conflicts(
 async def test_stale_attempt_after_reclaim_does_not_affect_new_claim(
     tmp_path: Path,
 ) -> None:
-    csv_path = tmp_path / "thermo_pm7.csv"
+    csv_path = tmp_path / "pm7_fila_pipeline.csv"
     _write_csv(csv_path)
 
     async with await _client(csv_path) as client:
@@ -625,7 +625,7 @@ async def test_stale_attempt_after_reclaim_does_not_affect_new_claim(
 async def test_mixed_batch_with_conflict_returns_200_per_item(
     tmp_path: Path,
 ) -> None:
-    csv_path = tmp_path / "thermo_pm7.csv"
+    csv_path = tmp_path / "pm7_fila_pipeline.csv"
     _write_csv(csv_path, [("mol_001", "CCO"), ("mol_002", "CCC")])
     queue = OfflineResultQueue(tmp_path / "offline.jsonl")
 
@@ -738,7 +738,7 @@ async def test_scenario_a_all_or_nothing_clears_attempt_rejects_late_result(
     tmp_path: Path,
 ) -> None:
     """AoN reset limpa attempt_id; resultado atrasado → stale_attempt; Pending intacto."""
-    csv_path = tmp_path / "thermo_pm7.csv"
+    csv_path = tmp_path / "pm7_fila_pipeline.csv"
     _write_csv(csv_path)
     science_before = csv_path.read_text(encoding="utf-8")
     app = create_app(
@@ -798,7 +798,7 @@ async def test_scenario_b_second_result_id_same_attempt_rejected(
     tmp_path: Path,
 ) -> None:
     """Uma attempt_id produz no máximo um resultado terminal."""
-    csv_path = tmp_path / "thermo_pm7.csv"
+    csv_path = tmp_path / "pm7_fila_pipeline.csv"
     _write_csv(csv_path)
     app = create_app(
         ServerConfig(
@@ -885,7 +885,7 @@ async def test_scenario_b_second_result_id_same_attempt_rejected(
 @pytest.mark.anyio
 async def test_scenario_c_prepared_old_lease_vs_new_claim(tmp_path: Path) -> None:
     """PREPARED da tentativa A não retoma após reclaim + claim B."""
-    csv_path = tmp_path / "thermo_pm7.csv"
+    csv_path = tmp_path / "pm7_fila_pipeline.csv"
     _write_csv(csv_path)
     app = create_app(
         ServerConfig(
@@ -962,7 +962,7 @@ async def test_scenario_c_prepared_old_lease_vs_new_claim(tmp_path: Path) -> Non
 @pytest.mark.anyio
 async def test_scenario_d_force_skip_crash_recovery(tmp_path: Path) -> None:
     """force_skip: dual-write + crash antes do commit → retry sem reaplicar."""
-    csv_path = tmp_path / "thermo_pm7.csv"
+    csv_path = tmp_path / "pm7_fila_pipeline.csv"
     _write_csv(csv_path)
     app = create_app(
         ServerConfig(
@@ -1106,7 +1106,7 @@ def test_scenario_f_batch_view_portable_runs(
     """BatchView cria Run, grava sob runs/<run_id>/ e manifest recarrega outputs."""
     runs_root = tmp_path / "runs"
     monkeypatch.setenv("GRIMPERIUM_RUNS_DIR", str(runs_root))
-    csv_path = tmp_path / "thermo_pm7.csv"
+    csv_path = tmp_path / "pm7_fila_pipeline.csv"
     _write_csv(csv_path)
     service = RunService(runs_root)
     controller = SimpleNamespace(
@@ -1157,7 +1157,7 @@ def test_scenario_f_batch_view_portable_runs(
 @pytest.mark.anyio
 async def test_cenario_1_legacy_on_terminal_ok(tmp_path: Path) -> None:
     """R1 OK → R2 legado sem attempt_id → stale; CSV/reruns intactos."""
-    csv_path = tmp_path / "thermo_pm7.csv"
+    csv_path = tmp_path / "pm7_fila_pipeline.csv"
     _write_csv(csv_path)
     async with await _client(csv_path) as client:
         mol_id, attempt_id = await _claim(client)
@@ -1204,7 +1204,7 @@ async def test_cenario_1_legacy_on_terminal_ok(tmp_path: Path) -> None:
 
 @pytest.mark.anyio
 async def test_cenario_2_operation_kind_conflict(tmp_path: Path) -> None:
-    csv_path = tmp_path / "thermo_pm7.csv"
+    csv_path = tmp_path / "pm7_fila_pipeline.csv"
     _write_csv(csv_path)
     app = create_app(
         ServerConfig(
@@ -1282,7 +1282,7 @@ def test_cenario_3_finalize_attach_failure(
 ) -> None:
     runs_root = tmp_path / "runs"
     monkeypatch.setenv("GRIMPERIUM_RUNS_DIR", str(runs_root))
-    csv_path = tmp_path / "thermo_pm7.csv"
+    csv_path = tmp_path / "pm7_fila_pipeline.csv"
     _write_csv(csv_path)
     service = RunService(runs_root)
     controller = SimpleNamespace(
@@ -1333,7 +1333,7 @@ def test_cenario_4_selection_compensated_on_create_run_failure(
 ) -> None:
     runs_root = tmp_path / "runs"
     monkeypatch.setenv("GRIMPERIUM_RUNS_DIR", str(runs_root))
-    csv_path = tmp_path / "thermo_pm7.csv"
+    csv_path = tmp_path / "pm7_fila_pipeline.csv"
     _write_csv(csv_path)
     service = RunService(runs_root)
     controller = SimpleNamespace(

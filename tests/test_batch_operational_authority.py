@@ -26,7 +26,7 @@ def test_state_manager_marks_selected_without_worker_assignment(tmp_path: Path) 
 
 
 def test_csv_selection_can_be_mirrored_into_batch_state(tmp_path: Path) -> None:
-    csv_path = tmp_path / "thermo_pm7.csv"
+    csv_path = tmp_path / "pm7_fila_pipeline.csv"
     pd.DataFrame(
         [
             {

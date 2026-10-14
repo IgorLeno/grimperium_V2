@@ -10,7 +10,7 @@ is [`CLAUDE.md`](/home/igor/Projetos/grimperium/CLAUDE.md).
 - Core package layout:
   `src/grimperium/{cli,crest_pm7,core,data,ml,models,utils}`.
 - Active datasets in `data/`:
-  `thermo_cbs_chon.csv` and `thermo_pm7.csv`.
+  `cbs_referencia.csv` and `pm7_fila_pipeline.csv`.
 
 ## Pipeline Notes
 

@@ -12,7 +12,7 @@ from grimperium.core.delta_learning import DeltaLearner
 from grimperium.ml.data_loader import load_ml_data
 from grimperium.ml.features import FEATURE_COLUMNS, FeaturePipeline
 
-# Default feature columns matching thermo_pm7.csv
+# Default feature columns matching pm7_fila_pipeline.csv
 DEFAULT_FEATURE_COLS = tuple(FEATURE_COLUMNS)
 
 
@@ -55,7 +55,7 @@ def train(
     to prevent data leakage through imputation statistics.
 
     Args:
-        csv_path: Path to `thermo_pm7.csv`.
+        csv_path: Path to `pm7_fila_pipeline.csv`.
         feature_cols: Feature column names. If None, uses
             `DEFAULT_FEATURE_COLS`.
         test_size: Fraction of data for the test split. Must satisfy
@@ -71,7 +71,7 @@ def train(
     Example:
         >>> from pathlib import Path
         >>> learner, train_metrics, test_metrics = train(
-        ...     Path("thermo_pm7.csv"),
+        ...     Path("pm7_fila_pipeline.csv"),
         ...     test_size=0.2,
         ...     random_state=42,
         ... )

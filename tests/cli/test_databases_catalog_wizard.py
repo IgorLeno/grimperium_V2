@@ -110,7 +110,9 @@ def test_use_as_session_dataset_updates_controller_session(
 ) -> None:
     data_dir = tmp_path / "data"
     data_dir.mkdir()
-    (data_dir / "thermo_pm7.csv").write_text("smiles,status\nC,OK\n", encoding="utf-8")
+    (data_dir / "pm7_fila_pipeline.csv").write_text(
+        "smiles,status\nC,OK\n", encoding="utf-8"
+    )
     view = _view(tmp_path, monkeypatch)
     view.selected_db = view.registry.get_by_id("official.crest_pm7")
 
@@ -118,7 +120,7 @@ def test_use_as_session_dataset_updates_controller_session(
 
     assert view.controller.session.dataset is not None
     assert view.controller.session.dataset.database_id == "official.crest_pm7"
-    assert view.controller.current_csv_path == data_dir / "thermo_pm7.csv"
+    assert view.controller.current_csv_path == data_dir / "pm7_fila_pipeline.csv"
 
 
 def test_detail_actions_validate_capabilities(

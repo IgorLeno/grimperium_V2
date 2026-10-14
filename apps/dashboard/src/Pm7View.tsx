@@ -62,7 +62,7 @@ export function Pm7View() {
         <DeltaExplainer />
       </section>
       {state.status === 'loading' && <p role="status" className="loading-state">Carregando tabela PM7…</p>}
-      {state.status === 'error' && <MissingTable message={state.message} retry={reload} file="data/thermo_pm7.csv" />}
+      {state.status === 'error' && <MissingTable message={state.message} retry={reload} file="data/pm7_fila_pipeline.csv" />}
       {profile && (
         <>
           <section className="panel" aria-label="Andamento do pipeline">

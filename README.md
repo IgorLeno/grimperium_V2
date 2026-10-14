@@ -296,7 +296,7 @@ print(f"Moléculas PM7 processadas: {len(df_pm7)}")
 from grimperium.core.delta_learning import DeltaLearner
 
 learner = DeltaLearner()
-learner.load_data("data/thermo_cbs_chon.csv", "data/thermo_pm7.csv")
+learner.load_data("data/cbs_referencia.csv", "data/pm7_fila_pipeline.csv")
 learner.compute_features()
 learner.train()
 
@@ -324,8 +324,8 @@ grimperium_V2/
 │   └── utils/                   # Logging, validação, helpers
 ├── tests/                       # Testes unitários e de integração
 ├── data/
-│   ├── thermo_cbs_chon.csv      # 29.568 moléculas CHON — referência CBS-QB3
-│   └── thermo_pm7.csv           # Resultados PM7 acumulados pelo pipeline
+│   ├── cbs_referencia.csv      # 29.568 moléculas CHON — referência CBS-QB3
+│   └── pm7_fila_pipeline.csv           # Resultados PM7 acumulados pelo pipeline
 └── docs/                        # Documentação técnica detalhada
 ```
 

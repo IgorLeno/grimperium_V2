@@ -4,7 +4,7 @@ Commands::
 
     # 1. Draw the versioned sample (reads the dataset only).
     poetry run python scripts/conformer_validation sample \
-        --dataset data/thermo_cbs_chon_v2.csv --size 200 --seed 20261004 \
+        --dataset data/cbs_referencia.csv --size 200 --seed 20261004 \
         --out reports/conformer_validation/sample.csv
 
     # 2. Plan, then run CREST once per molecule and arms A/B/C on it.
@@ -63,7 +63,7 @@ from conformer_validation.summarize import (  # noqa: E402
     write_outputs,
 )
 
-DEFAULT_DATASET = Path("data/thermo_cbs_chon_v2.csv")
+DEFAULT_DATASET = Path("data/cbs_referencia.csv")
 
 
 def _sample(args: argparse.Namespace) -> int:

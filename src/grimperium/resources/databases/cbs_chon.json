@@ -10,7 +10,7 @@
     "model_training",
     "reference_values"
   ],
-  "path": "thermo_cbs_chon.csv",
+  "path": "cbs_referencia.csv",
   "metadata": {
     "name": "CBS Reference (CHON-only)",
     "alias": "CBS",

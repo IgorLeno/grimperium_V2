@@ -20,13 +20,13 @@ def test_session_context_derives_analysis_path_from_dataset() -> None:
         database_id="official.crest_pm7",
         alias="PM7",
         name="CREST PM7",
-        path=Path("data/thermo_pm7.csv"),
+        path=Path("data/pm7_fila_pipeline.csv"),
         role="crest_pm7",
         capabilities=frozenset({"readable", "analysis_input"}),
     )
     session = SessionContext(dataset=dataset)
 
-    assert session.analysis_path == Path("data/thermo_pm7.csv")
+    assert session.analysis_path == Path("data/pm7_fila_pipeline.csv")
 
     session.analysis_source = AnalysisSourceRef(
         source_type="csv",

@@ -80,9 +80,9 @@ EXPECTED_COLUMNS = [
 ]
 
 
-_CSV_PATH = Path("data/thermo_pm7.csv")
+_CSV_PATH = Path("data/pm7_fila_pipeline.csv")
 
-#: ``data/thermo_pm7.csv`` stays in the 61-column layout until the protocol
+#: ``data/pm7_fila_pipeline.csv`` stays in the 61-column layout until the protocol
 #: migration (``python -m semi_imperium.training migrate --apply``) is applied.
 _PRE_MIGRATION_COLUMNS = EXPECTED_COLUMNS[:-1]
 
@@ -102,7 +102,7 @@ def test_csv_has_expected_columns() -> None:
 
 def test_csv_column_order() -> None:
     """Test that CSV columns are in correct order."""
-    csv_path = Path("data/thermo_pm7.csv")
+    csv_path = Path("data/pm7_fila_pipeline.csv")
 
     if csv_path.exists():
         df = pd.read_csv(csv_path)
@@ -115,7 +115,7 @@ def test_csv_column_order() -> None:
 
 def test_csv_no_old_columns() -> None:
     """Test that old column names are removed."""
-    csv_path = Path("data/thermo_pm7.csv")
+    csv_path = Path("data/pm7_fila_pipeline.csv")
 
     if csv_path.exists():
         df = pd.read_csv(csv_path)
@@ -142,7 +142,7 @@ def test_csv_no_old_columns() -> None:
 
 def test_csv_has_new_columns() -> None:
     """Test that new columns are present."""
-    csv_path = Path("data/thermo_pm7.csv")
+    csv_path = Path("data/pm7_fila_pipeline.csv")
 
     if csv_path.exists():
         df = pd.read_csv(csv_path)
@@ -172,7 +172,7 @@ def test_csv_has_new_columns() -> None:
 def test_protocol_column_round_trips_as_text(tmp_path: Path) -> None:
     from grimperium.crest_pm7.batch.csv_manager import BatchCSVManager
 
-    csv_path = tmp_path / "thermo_pm7.csv"
+    csv_path = tmp_path / "pm7_fila_pipeline.csv"
     manager = BatchCSVManager(csv_path)
     manager.create_empty_csv()
     frame = pd.DataFrame(

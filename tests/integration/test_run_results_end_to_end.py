@@ -251,7 +251,7 @@ def test_batch_pm7_real_output_opens_in_results_as_baseline_summary(
     run_service = RunService.from_environment()
     controller = _controller(run_service)
     view = DatabasesView(controller)
-    csv_path = tmp_path / "thermo_pm7.csv"
+    csv_path = tmp_path / "pm7_fila_pipeline.csv"
     pd.DataFrame(
         [
             {

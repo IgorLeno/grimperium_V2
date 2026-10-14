@@ -106,7 +106,7 @@ class BatchOrchestrator:
     See: docs/ARCHITECTURE.md → "If You Need to Parallelize"
 
     Usage:
-        >>> orch = BatchOrchestrator(Path("data/thermo_pm7.csv"), strict=False)
+        >>> orch = BatchOrchestrator(Path("data/pm7_fila_pipeline.csv"), strict=False)
         >>> summary = orch.run()
         >>> print(f"Completed: {summary.complete}")
     """

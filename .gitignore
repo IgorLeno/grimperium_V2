@@ -124,9 +124,9 @@ reports/conformer_validation/results.jsonl
 # Experimental ΔHf table, its per-source long table and the per-molecule CBS
 # comparison are versioned with the manifest; the raw source files under
 # data/raw/ stay local.
-!data/thermo_exp_hf.csv
-!data/thermo_exp_hf_all_sources.csv
-!data/thermo_exp_hf_vs_cbs.csv
+!data/experimental.csv
+!data/experimental_todas_fontes.csv
+!data/experimental_vs_cbs.csv
 
 # PM7/MOPAC outputs
 *.mop

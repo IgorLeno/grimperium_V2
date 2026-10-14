@@ -117,7 +117,9 @@ class ModelsView(BaseView):
 
     def _get_data_path(self) -> Path:
         """Resolve data path from env var (read fresh on each call)."""
-        return Path(os.environ.get("GRIMPERIUM_DATA_PATH", "data/thermo_pm7.csv"))
+        return Path(
+            os.environ.get("GRIMPERIUM_DATA_PATH", "data/pm7_fila_pipeline.csv")
+        )
 
     def _discover_models(self) -> list[dict[str, Any]]:
         """Discover all .joblib model files in the models/ directory."""

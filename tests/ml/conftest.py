@@ -77,7 +77,7 @@ def synthetic_csv_path(tmp_path: Path) -> Path:
     Returns:
         Path: Path to the created synthetic CSV file.
     """
-    csv_file = tmp_path / "thermo_pm7.csv"
+    csv_file = tmp_path / "pm7_fila_pipeline.csv"
     csv_file.write_text(_SYNTHETIC_CSV)
     return csv_file
 
@@ -94,7 +94,7 @@ def synthetic_csv_path_mixed(tmp_path: Path) -> Path:
 def _module_csv(tmp_path_factory: pytest.TempPathFactory) -> Path:
     """Write the synthetic CSV once per module for read-only model training tests."""
     base = tmp_path_factory.mktemp("ml_module")
-    csv_file = base / "thermo_pm7.csv"
+    csv_file = base / "pm7_fila_pipeline.csv"
     csv_file.write_text(_SYNTHETIC_CSV)
     return csv_file
 

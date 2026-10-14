@@ -187,10 +187,10 @@ test('aba CBS explica a tabela e permite ordenar a tabela completa', async () =>
 })
 
 test('aba CBS explica quando o CSV não está no computador', async () => {
-  mockApi({ '/api/tables/cbs/profile': () => json({ detail: 'file not found', path: '/data/thermo_cbs_chon.csv' }, 503) })
+  mockApi({ '/api/tables/cbs/profile': () => json({ detail: 'file not found', path: '/data/cbs_referencia.csv' }, 503) })
   renderDeltaEnthalpy()
   openTab(/CBS/)
-  expect(await screen.findByRole('region', { name: 'Arquivo não encontrado' })).toHaveTextContent('data/thermo_cbs_chon.csv')
+  expect(await screen.findByRole('region', { name: 'Arquivo não encontrado' })).toHaveTextContent('data/cbs_referencia.csv')
 })
 
 test('aba PM7 mostra andamento e erro do cálculo rápido', async () => {

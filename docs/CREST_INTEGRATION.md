@@ -41,8 +41,8 @@
 
 ### Database Files
 
-- `thermo_cbs_chon.csv` - Primary (29,568 CHON-only molecules, CBS-QB3 level)
-- `thermo_pm7.csv` - PM7 optimization results for batch processing
+- `cbs_referencia.csv` - Primary (29,568 CHON-only molecules, CBS-QB3 level)
+- `pm7_fila_pipeline.csv` - PM7 optimization results for batch processing
 
 ---
 
@@ -275,7 +275,7 @@ crest complex.xyz --cmetal 0.05
           |
           v
 5. Aggregate to CSV
-   thermo_pm7.csv
+   pm7_fila_pipeline.csv
 ```
 
 ### Why Both CREST + PM7?
