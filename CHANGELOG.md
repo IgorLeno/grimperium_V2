@@ -8,6 +8,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Fila atômica com leases (células distribuídas, Lote 1)** (2026-10-20)
+  - `src/semi_imperium/training/db.py`: migração idempotente em `connect()`
+    adiciona `cell_id`, `attempt_id` e `lease_until` a `training_queue` (linhas
+    existentes intactas) e cria `training_attempt`, o log de cada tentativa
+    (aceita, falhou, devolvida, descartada).
+  - `src/semi_imperium/training/molecule_queue.py`: `claim` atômico
+    (`UPDATE … RETURNING`) por célula; `renew` do lease; `release` manual
+    (sem devolução automática por prazo); `accept_success`/`accept_failure`
+    idempotentes por `attempt_id` — primeiro resultado válido vence, inclusive
+    de tentativa devolvida; resultado tardio de molécula já `ok` é descartado
+    e registrado. Geometria e linha da fila na mesma transação. Saem
+    `queue()`, `mark_running`, `record_success`, `record_failure`.
+  - `src/semi_imperium/training/runner.py`: a rotina local é a célula
+    `central` e usa o mesmo caminho; ao iniciar, recomeça o que a central
+    segurava. Uma tentativa por molécula por rodada, como antes.
+  - Dashboard: cada molécula em execução traz `cell_id`.
+  - Migração testada em cópia do banco real; o banco de produção migra no
+    primeiro acesso do código novo.
+  - Verification: `poetry run pytest tests/training tests/webapi
+    tests/unit/semi_imperium tests/cli tests/test_csv_schema.py -q`
 - **Nova logo Delta Bridge e favicon** (2026-10-20)
   - `apps/dashboard/public/favicon.svg`: logo "Delta Bridge" (Δ aberto em
     gradiente menta com a ponte âmbar na base), servida como favicon via

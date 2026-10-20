@@ -51,3 +51,7 @@ Rule: document the HTTP startup path next to every new Vite scaffold before invi
 [2026-10-11] Context: adding the health endpoint to a dashboard with separate data requests
 Mistake: a retry test used a global sequence of mocked fetch responses; the new health request consumed the response intended for the dataset.
 Rule: mock responses by endpoint when testing a page that makes multiple requests, and count retries for the specific endpoint under test.
+
+[2026-10-20] Context: formatting during the distributed-cells queue batch (Lote 1)
+Mistake: running `black` on whole directories (`src/semi_imperium`) reformatted four unrelated files that were already unformatted in the branch, mixing them into the working tree.
+Rule: run `black`/`ruff --fix` only on the files the batch touched (`git diff --name-only` plus new files); use the directory-wide `--check` only as the gate, and compare its count against the baseline before committing.
