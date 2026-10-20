@@ -296,3 +296,30 @@ def test_the_token_is_never_written_anywhere(
             assert token not in path.read_text(errors="replace"), path
     state = json.loads((tmp_path / "celula" / "state.json").read_text())
     assert "token" not in state
+
+
+def test_each_heartbeat_refreshes_the_last_contact_on_disk(
+    tmp_path: Path, central: Central, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import itertools
+
+    from semi_imperium.cell import loop as loop_module
+
+    ticks = itertools.count()
+    monkeypatch.setattr(loop_module, "_now", lambda: f"t{next(ticks):06d}")
+    _cell_id, token = central.new_cell()
+    tasks = Tasks(threading.Event(), stop_after=2)
+    tasks.gate = threading.Event()  # both workers stay busy: no claims
+    loop, client = _loop(tmp_path, central, token, tasks)
+    contacts: list[str] = []
+
+    def watch(name: str, _reply: Any) -> None:
+        if name == "heartbeat" and len(client.calls[-1][1]) == 2:
+            contacts.append(read_state(tmp_path / "celula")["last_contact_at"])
+            if len(contacts) == 3:
+                tasks.gate.set()  # type: ignore[union-attr]
+
+    client.on_call = watch
+
+    assert loop.run() == EXIT_OK
+    assert len(set(contacts)) == 3  # written after every heartbeat, not only claims

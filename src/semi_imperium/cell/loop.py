@@ -205,7 +205,9 @@ class CellLoop:
         atomic_write_json(self.config.root / STATE_FILENAME, self._state)
 
     def _contact(self) -> None:
-        self._state["last_contact_at"] = _now()
+        # Written at once: while every worker is busy no claim rewrites the
+        # state, and ``status`` must still show a live heartbeat.
+        self._set(last_contact_at=_now())
 
     def _end(self, code: int, phase: str, error: str | None = None) -> int:
         if error:

@@ -162,3 +162,11 @@ def test_backoff_grows_to_a_cap_with_jitter() -> None:
         ceiling = min(300.0, 5.0 * 2 ** (failures - 1))
         assert ceiling / 2 <= delay <= ceiling
     assert max(delays) <= 300.0 and delays[-1] >= 150.0
+
+
+def test_files_are_readable_utf8_for_whoever_opens_them(tmp_path: Path) -> None:
+    from semi_imperium.cell.outbox import atomic_write_json
+
+    atomic_write_json(tmp_path / "state.json", {"phase": "em admissão"})
+
+    assert "em admissão" in (tmp_path / "state.json").read_text(encoding="utf-8")
