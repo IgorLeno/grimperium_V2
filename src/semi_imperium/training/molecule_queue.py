@@ -23,6 +23,7 @@ from pathlib import Path
 import pandas as pd
 
 from semi_imperium.training.db import connect
+from semi_imperium.training.geometry_store import GeometryRecord, insert_geometry
 
 #: Columns read from the CBS CSV (``xyz`` and the heat-capacity fits are skipped).
 CBS_COLUMNS = (
@@ -53,6 +54,13 @@ CENTRAL_CELL = "central"
 #: nothing returns a molecule when its lease lapses (decision of 2026-10-20);
 #: the dashboard uses it to tell a quiet cell from a working one.
 DEFAULT_LEASE_S = 300.0
+
+
+#: Outcomes of reporting a result for an attempt (besides ``rerun``/``skip``).
+ACCEPTED = "accepted"
+DUPLICATE = "duplicate"
+DISCARDED = "discarded"
+_FINAL_OUTCOMES = (ACCEPTED, "failed", DISCARDED)
 
 
 class CbsReadError(ValueError):
@@ -413,6 +421,125 @@ class TrainingQueue:
                 (now, *params),
             ).fetchall()
         return sorted(str(r["mol_id"]) for r in rows)
+
+    def accept_success(
+        self,
+        attempt_id: str,
+        *,
+        geometry: GeometryRecord,
+        conformers_evaluated: int,
+        elapsed_s: float,
+        batch_id: str,
+    ) -> str:
+        """Record a protocol-2 result of ``attempt_id``; first valid result wins.
+
+        ``accepted``: stored with its geometry in one transaction, also when
+        the attempt had been released, as long as the molecule is not ``ok``.
+        ``discarded``: another attempt already completed it; logged in
+        ``training_attempt``. ``duplicate``: this attempt was already settled,
+        nothing changes (a cell resending after a network drop).
+        """
+        hof = geometry.hof_kcal_mol
+        if hof is None or not math.isfinite(hof):
+            raise ValueError(f"non-finite PM7 value for {geometry.mol_id}: {hof}")
+        with self._write() as connection:
+            attempt = self._attempt(connection, attempt_id)
+            if attempt["outcome"] in _FINAL_OUTCOMES:
+                return DUPLICATE
+            mol_id = str(attempt["mol_id"])
+            if geometry.mol_id != mol_id:
+                raise ValueError(
+                    f"attempt {attempt_id} is for mol_id {mol_id},"
+                    f" result is for {geometry.mol_id}"
+                )
+            current = connection.execute(
+                "SELECT status, attempt_id FROM training_queue WHERE mol_id = ?",
+                (mol_id,),
+            ).fetchone()
+            if current["status"] == OK:
+                self._settle(
+                    connection,
+                    attempt_id,
+                    DISCARDED,
+                    f"já concluída pela tentativa {current['attempt_id']}",
+                )
+                return DISCARDED
+            insert_geometry(connection, geometry)
+            connection.execute(
+                "UPDATE training_queue SET status = 'ok', h298_pm7 = ?,"
+                " delta_kcal_mol = h298_cbs - ?, conformers_evaluated = ?,"
+                " elapsed_s = ?, batch_id = ?, cell_id = ?, attempt_id = ?,"
+                " lease_until = NULL, updated_at = ? WHERE mol_id = ?",
+                (
+                    hof,
+                    hof,
+                    conformers_evaluated,
+                    elapsed_s,
+                    batch_id,
+                    attempt["cell_id"],
+                    attempt_id,
+                    _now(),
+                    mol_id,
+                ),
+            )
+            self._settle(connection, attempt_id, ACCEPTED, None)
+        return ACCEPTED
+
+    def accept_failure(self, attempt_id: str, reason: str) -> str:
+        """Record a failed ``attempt_id``: ``rerun``/``skip``, or no effect.
+
+        Only the attempt that currently holds the molecule spends a rerun. A
+        failure of a released or superseded attempt is ``discarded`` (logged,
+        the molecule untouched); a settled attempt gives ``duplicate``.
+        """
+        with self._write() as connection:
+            attempt = self._attempt(connection, attempt_id)
+            if attempt["outcome"] in _FINAL_OUTCOMES:
+                return DUPLICATE
+            current = connection.execute(
+                "SELECT status, attempt_id, reruns FROM training_queue"
+                " WHERE mol_id = ?",
+                (attempt["mol_id"],),
+            ).fetchone()
+            if current["status"] != RUNNING or current["attempt_id"] != attempt_id:
+                self._settle(
+                    connection, attempt_id, DISCARDED, f"falha tardia: {reason}"
+                )
+                return DISCARDED
+            reruns = int(current["reruns"]) + 1
+            status = SKIP if reruns >= self._max_reruns else RERUN
+            connection.execute(
+                "UPDATE training_queue SET status = ?, reruns = ?, cell_id = NULL,"
+                " attempt_id = NULL, lease_until = NULL, updated_at = ?"
+                " WHERE mol_id = ?",
+                (status, reruns, _now(), attempt["mol_id"]),
+            )
+            self._settle(connection, attempt_id, "failed", reason)
+        return status
+
+    @staticmethod
+    def _attempt(connection: sqlite3.Connection, attempt_id: str) -> sqlite3.Row:
+        found: sqlite3.Row | None = connection.execute(
+            "SELECT mol_id, cell_id, outcome FROM training_attempt"
+            " WHERE attempt_id = ?",
+            (attempt_id,),
+        ).fetchone()
+        if found is None:
+            raise KeyError(attempt_id)
+        return found
+
+    @staticmethod
+    def _settle(
+        connection: sqlite3.Connection,
+        attempt_id: str,
+        outcome: str,
+        note: str | None,
+    ) -> None:
+        connection.execute(
+            "UPDATE training_attempt SET outcome = ?, note = ?, finished_at = ?"
+            " WHERE attempt_id = ?",
+            (outcome, note, _now(), attempt_id),
+        )
 
     def mark_running(self, mol_id: str) -> None:
         """Flag ``mol_id`` as in flight (persisted immediately)."""

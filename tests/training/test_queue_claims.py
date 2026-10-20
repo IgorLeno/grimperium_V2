@@ -11,6 +11,7 @@ from pathlib import Path
 import pytest
 
 from semi_imperium.training.db import database_path
+from semi_imperium.training.geometry_store import GeometryRecord, GeometryStore
 from semi_imperium.training.molecule_queue import TrainingQueue
 from tests.training.conftest import CbsFactory, row
 
@@ -220,3 +221,179 @@ def test_release_can_take_back_legacy_rows_with_no_cell(
     assert queue.release("central", include_unowned=True) == ["mid"]
     assert _row(tmp_path, "mid")["status"] == "pending"
     assert _row(tmp_path, "tiny")["cell_id"] == "cell-b"
+
+
+# ---------------------------------------------------------------- acceptance
+
+
+def _geometry(mol_id: str, hof: float = -15.0) -> GeometryRecord:
+    return GeometryRecord(
+        mol_id=mol_id,
+        smiles=f"smiles-{mol_id}",
+        hamiltonian="PM7",
+        protocol="2",
+        signature="sig",
+        calculation_id=f"calc-{mol_id}-{hof}",
+        conformer_index=1,
+        elements=("C",),
+        coordinates=((0.0, 0.0, 0.0),),
+        hof_kcal_mol=hof,
+        lowest_frequency_cm1=100.0,
+        minimum_confirmed=True,
+    )
+
+
+def _succeed(queue: TrainingQueue, attempt_id: str, mol_id: str, hof: float) -> str:
+    return queue.accept_success(
+        attempt_id,
+        geometry=_geometry(mol_id, hof),
+        conformers_evaluated=3,
+        elapsed_s=90.0,
+        batch_id="b1",
+    )
+
+
+def _attempt(tmp_path: Path, attempt_id: str) -> sqlite3.Row:
+    (found,) = [a for a in _attempts(tmp_path) if a["attempt_id"] == attempt_id]
+    return found
+
+
+def test_a_valid_result_is_accepted_with_its_geometry(
+    tmp_path: Path, make_cbs: CbsFactory
+) -> None:
+    queue = _seeded(tmp_path, make_cbs([row("a", H298_cbs=-20.0)]))
+    (claimed,) = queue.claim("cell-a", 1)
+
+    assert _succeed(queue, claimed.attempt_id, "a", -15.0) == "accepted"
+
+    stored = _row(tmp_path, "a")
+    assert (stored["status"], stored["h298_pm7"], stored["delta_kcal_mol"]) == (
+        "ok",
+        -15.0,
+        -5.0,  # delta = CBS - PM7
+    )
+    assert (stored["conformers_evaluated"], stored["elapsed_s"]) == (3, 90.0)
+    assert (stored["batch_id"], stored["cell_id"], stored["attempt_id"]) == (
+        "b1",
+        "cell-a",
+        claimed.attempt_id,
+    )
+    assert stored["lease_until"] is None
+    geometry = GeometryStore(_db(tmp_path)).get("a")
+    assert geometry is not None and geometry.hof_kcal_mol == -15.0
+    assert _attempt(tmp_path, claimed.attempt_id)["outcome"] == "accepted"
+
+
+def test_the_same_attempt_reported_twice_changes_nothing(
+    tmp_path: Path, make_cbs: CbsFactory
+) -> None:
+    queue = _seeded(tmp_path, make_cbs([row("a")]))
+    (claimed,) = queue.claim("cell-a", 1)
+    _succeed(queue, claimed.attempt_id, "a", -15.0)
+
+    assert _succeed(queue, claimed.attempt_id, "a", -99.0) == "duplicate"
+    assert queue.accept_failure(claimed.attempt_id, "late") == "duplicate"
+
+    assert _row(tmp_path, "a")["h298_pm7"] == -15.0
+    geometry = GeometryStore(_db(tmp_path)).get("a")
+    assert geometry is not None and geometry.hof_kcal_mol == -15.0
+
+
+def test_a_result_after_release_is_accepted_while_the_molecule_is_open(
+    tmp_path: Path, make_cbs: CbsFactory
+) -> None:
+    queue = _seeded(tmp_path, make_cbs([row("a")]))
+    (claimed,) = queue.claim("cell-a", 1)
+    queue.release("cell-a")
+
+    assert _succeed(queue, claimed.attempt_id, "a", -15.0) == "accepted"
+    assert _row(tmp_path, "a")["status"] == "ok"
+    assert queue.claim("cell-b", 1) == []
+
+
+def test_the_first_valid_result_wins_and_the_late_one_is_logged(
+    tmp_path: Path, make_cbs: CbsFactory
+) -> None:
+    queue = _seeded(tmp_path, make_cbs([row("a")]))
+    (first,) = queue.claim("cell-a", 1)
+    queue.release("cell-a")
+    (second,) = queue.claim("cell-b", 1)
+
+    assert _succeed(queue, second.attempt_id, "a", -15.0) == "accepted"
+    assert _succeed(queue, first.attempt_id, "a", -16.0) == "discarded"
+
+    stored = _row(tmp_path, "a")
+    assert (stored["h298_pm7"], stored["cell_id"]) == (-15.0, "cell-b")
+    late = _attempt(tmp_path, first.attempt_id)
+    assert late["outcome"] == "discarded" and late["finished_at"]
+    assert second.attempt_id in late["note"]
+
+
+def test_a_released_attempt_can_beat_the_cell_that_took_over(
+    tmp_path: Path, make_cbs: CbsFactory
+) -> None:
+    queue = _seeded(tmp_path, make_cbs([row("a")]))
+    (first,) = queue.claim("cell-a", 1)
+    queue.release("cell-a")
+    (second,) = queue.claim("cell-b", 1)
+
+    assert _succeed(queue, first.attempt_id, "a", -16.0) == "accepted"
+    assert queue.accept_failure(second.attempt_id, "crest timeout") == "discarded"
+    assert _succeed(queue, second.attempt_id, "a", -15.0) == "duplicate"
+
+    stored = _row(tmp_path, "a")
+    assert (stored["status"], stored["h298_pm7"], stored["reruns"]) == (
+        "ok",
+        -16.0,
+        0,
+    )
+
+
+def test_a_failure_of_the_current_attempt_spends_a_rerun_then_skips(
+    tmp_path: Path, make_cbs: CbsFactory
+) -> None:
+    queue = _seeded(tmp_path, make_cbs([row("a")]), max_reruns=2)
+    (claimed,) = queue.claim("cell-a", 1)
+    assert queue.accept_failure(claimed.attempt_id, "saddle") == "rerun"
+    stored = _row(tmp_path, "a")
+    assert (stored["status"], stored["reruns"], stored["cell_id"]) == (
+        "rerun",
+        1,
+        None,
+    )
+    failed = _attempt(tmp_path, claimed.attempt_id)
+    assert (failed["outcome"], failed["note"]) == ("failed", "saddle")
+
+    (again,) = queue.claim("cell-a", 1)
+    assert queue.accept_failure(again.attempt_id, "saddle") == "skip"
+    assert queue.claim("cell-a", 1) == []
+
+
+def test_a_failure_of_a_released_attempt_spends_nothing(
+    tmp_path: Path, make_cbs: CbsFactory
+) -> None:
+    queue = _seeded(tmp_path, make_cbs([row("a")]))
+    (claimed,) = queue.claim("cell-a", 1)
+    queue.release("cell-a")
+
+    assert queue.accept_failure(claimed.attempt_id, "power cut") == "discarded"
+
+    stored = _row(tmp_path, "a")
+    assert (stored["status"], stored["reruns"]) == ("pending", 0)
+    assert "power cut" in _attempt(tmp_path, claimed.attempt_id)["note"]
+
+
+def test_unknown_attempts_and_inconsistent_results_are_refused(
+    tmp_path: Path, make_cbs: CbsFactory
+) -> None:
+    queue = _seeded(tmp_path, make_cbs([row("a"), row("b")]))
+    (claimed,) = queue.claim("cell-a", 1)
+    with pytest.raises(KeyError):
+        _succeed(queue, "nope", "a", -15.0)
+    with pytest.raises(KeyError):
+        queue.accept_failure("nope", "x")
+    with pytest.raises(ValueError, match="mol_id"):
+        _succeed(queue, claimed.attempt_id, "b", -15.0)
+    with pytest.raises(ValueError, match="non-finite"):
+        _succeed(queue, claimed.attempt_id, "a", float("nan"))
+    assert _row(tmp_path, "a")["status"] == "running"

@@ -7,6 +7,7 @@ holds coordinates. ``to_xyz`` exports one molecule for other programs.
 from __future__ import annotations
 
 import json
+import sqlite3
 from contextlib import closing
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -45,6 +46,38 @@ class GeometryRecord:
         return "\n".join(lines) + "\n"
 
 
+def insert_geometry(connection: sqlite3.Connection, record: GeometryRecord) -> None:
+    """Insert or replace ``record`` on an open connection.
+
+    Lets the queue store the geometry and mark the molecule ``ok`` in one
+    transaction, so an accepted molecule always has its geometry.
+    """
+    created_at = record.created_at or datetime.now(timezone.utc).isoformat()
+    connection.execute(
+        "INSERT OR REPLACE INTO final_geometry (mol_id, smiles, hamiltonian,"
+        " protocol, signature, calculation_id, conformer_index, n_atoms,"
+        " elements, coordinates, hof_kcal_mol, lowest_frequency_cm1,"
+        " minimum_confirmed, created_at)"
+        " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        (
+            record.mol_id,
+            record.smiles,
+            record.hamiltonian,
+            record.protocol,
+            record.signature,
+            record.calculation_id,
+            record.conformer_index,
+            len(record.elements),
+            json.dumps(list(record.elements)),
+            json.dumps([list(point) for point in record.coordinates]),
+            record.hof_kcal_mol,
+            record.lowest_frequency_cm1,
+            int(record.minimum_confirmed),
+            created_at,
+        ),
+    )
+
+
 class GeometryStore:
     """SQLite-backed table of final geometries (see :mod:`...training.db`)."""
 
@@ -53,31 +86,8 @@ class GeometryStore:
 
     def save(self, record: GeometryRecord) -> None:
         """Insert or replace the row of ``record.mol_id``."""
-        created_at = record.created_at or datetime.now(timezone.utc).isoformat()
         with closing(connect(self._path)) as connection:
-            connection.execute(
-                "INSERT OR REPLACE INTO final_geometry (mol_id, smiles, hamiltonian,"
-                " protocol, signature, calculation_id, conformer_index, n_atoms,"
-                " elements, coordinates, hof_kcal_mol, lowest_frequency_cm1,"
-                " minimum_confirmed, created_at)"
-                " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                (
-                    record.mol_id,
-                    record.smiles,
-                    record.hamiltonian,
-                    record.protocol,
-                    record.signature,
-                    record.calculation_id,
-                    record.conformer_index,
-                    len(record.elements),
-                    json.dumps(list(record.elements)),
-                    json.dumps([list(point) for point in record.coordinates]),
-                    record.hof_kcal_mol,
-                    record.lowest_frequency_cm1,
-                    int(record.minimum_confirmed),
-                    created_at,
-                ),
-            )
+            insert_geometry(connection, record)
 
     def get(self, mol_id: str) -> GeometryRecord | None:
         """Return the stored geometry of ``mol_id``, or ``None``."""
