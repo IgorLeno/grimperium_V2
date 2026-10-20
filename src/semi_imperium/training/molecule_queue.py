@@ -12,9 +12,11 @@ Only the coordinator writes here; workers never touch the database.
 from __future__ import annotations
 
 import math
-from contextlib import closing
+import sqlite3
+from collections.abc import Iterator
+from contextlib import closing, contextmanager
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pandas as pd
@@ -43,6 +45,15 @@ SKIP = "skip"
 QUEUE_STATUSES = (PENDING, RERUN, RUNNING)
 
 
+#: The cell that runs on the central machine itself (the local routine).
+CENTRAL_CELL = "central"
+
+#: How far ahead a claim or renewal pushes ``lease_until``. Informative only:
+#: nothing returns a molecule when its lease lapses (decision of 2026-10-20);
+#: the dashboard uses it to tell a quiet cell from a working one.
+DEFAULT_LEASE_S = 300.0
+
+
 class CbsReadError(ValueError):
     """The CBS CSV cannot be read as the queue expects."""
 
@@ -57,6 +68,13 @@ class QueuedMolecule:
     multiplicity: int
     nheavy: int
     h298_cbs: float
+
+
+@dataclass(frozen=True)
+class ClaimedMolecule(QueuedMolecule):
+    """A molecule reserved to one cell; ``attempt_id`` names this try."""
+
+    attempt_id: str
 
 
 @dataclass(frozen=True)
@@ -285,6 +303,59 @@ class TrainingQueue:
             for r in rows
         ]
 
+    def claim(
+        self, cell_id: str, count: int, *, lease_s: float = DEFAULT_LEASE_S
+    ) -> list[ClaimedMolecule]:
+        """Reserve up to ``count`` queued molecules to ``cell_id``, smallest first.
+
+        One ``UPDATE … RETURNING`` under the write lock, so two claimers (the
+        central routine and a cell API request) never get the same molecule.
+        Each reserved row gets a fresh ``attempt_id``, also logged in
+        ``training_attempt``.
+        """
+        if not cell_id:
+            raise ValueError("cell_id must not be empty")
+        if count < 0:
+            raise ValueError(f"count must be >= 0, got {count}")
+        if count == 0:
+            return []
+        now = datetime.now(timezone.utc)
+        lease_until = (now + timedelta(seconds=lease_s)).isoformat()
+        with self._write() as connection:
+            rows = connection.execute(
+                "UPDATE training_queue SET status = 'running', cell_id = ?,"
+                " attempt_id = lower(hex(randomblob(16))), lease_until = ?,"
+                " updated_at = ? WHERE mol_id IN ("
+                "  SELECT mol_id FROM training_queue"
+                "  WHERE status IN ('pending', 'rerun')"
+                "  ORDER BY nheavy, mol_id LIMIT ?)"
+                " RETURNING mol_id, smiles, charge, multiplicity, nheavy, h298_cbs,"
+                " attempt_id",
+                (cell_id, lease_until, now.isoformat(), count),
+            ).fetchall()
+            connection.executemany(
+                "INSERT INTO training_attempt (attempt_id, mol_id, cell_id, claimed_at)"
+                " VALUES (?, ?, ?, ?)",
+                [
+                    (r["attempt_id"], r["mol_id"], cell_id, now.isoformat())
+                    for r in rows
+                ],
+            )
+        claimed = [
+            ClaimedMolecule(
+                mol_id=r["mol_id"],
+                smiles=r["smiles"],
+                charge=r["charge"],
+                multiplicity=r["multiplicity"],
+                nheavy=r["nheavy"],
+                h298_cbs=r["h298_cbs"],
+                attempt_id=r["attempt_id"],
+            )
+            for r in rows
+        ]
+        # RETURNING has no defined order; keep the queue's.
+        return sorted(claimed, key=lambda m: (m.nheavy, m.mol_id))
+
     def mark_running(self, mol_id: str) -> None:
         """Flag ``mol_id`` as in flight (persisted immediately)."""
         self._expect_one(
@@ -348,6 +419,18 @@ class TrainingQueue:
                 connection.execute("ROLLBACK")
                 raise
         return status
+
+    @contextmanager
+    def _write(self) -> Iterator[sqlite3.Connection]:
+        """One write transaction, taken up front so readers never see half of it."""
+        with closing(connect(self._db_path)) as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            try:
+                yield connection
+                connection.execute("COMMIT")
+            except BaseException:
+                connection.execute("ROLLBACK")
+                raise
 
     def _expect_one(self, sql: str, params: tuple[object, ...], mol_id: str) -> None:
         with closing(connect(self._db_path)) as connection:
