@@ -2,7 +2,8 @@
 
 Several processes touch this file at once (the coordinator, the dashboard API
 and the CLI), so every call opens a short-lived connection instead of sharing
-one, and the schema is created idempotently on connect.
+one, and the schema is created idempotently on connect. Columns added after a
+database already held data are migrated there too (see ``_migrate``).
 """
 
 from __future__ import annotations
@@ -60,6 +61,17 @@ CREATE TABLE IF NOT EXISTS training_job (
     message TEXT NOT NULL DEFAULT '',
     stop_requested INTEGER NOT NULL DEFAULT 0
 );
+CREATE TABLE IF NOT EXISTS training_attempt (
+    attempt_id TEXT PRIMARY KEY,
+    mol_id TEXT NOT NULL,
+    cell_id TEXT NOT NULL,
+    claimed_at TEXT NOT NULL,
+    released_at TEXT,
+    finished_at TEXT,
+    outcome TEXT,
+    note TEXT
+);
+CREATE INDEX IF NOT EXISTS training_attempt_mol ON training_attempt (mol_id);
 CREATE TABLE IF NOT EXISTS training_failure (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     mol_id TEXT NOT NULL,
@@ -67,6 +79,14 @@ CREATE TABLE IF NOT EXISTS training_failure (
     at TEXT NOT NULL
 );
 """
+
+#: ``training_queue`` columns that arrived after the table held real data; a
+#: ``CREATE TABLE IF NOT EXISTS`` cannot add them, so ``_migrate`` does.
+_QUEUE_COLUMNS = (
+    ("cell_id", "TEXT"),
+    ("attempt_id", "TEXT"),
+    ("lease_until", "TEXT"),
+)
 
 
 def database_path(store_root: Path) -> Path:
@@ -82,4 +102,35 @@ def connect(path: Path) -> sqlite3.Connection:
     connection.execute("PRAGMA journal_mode=WAL")
     connection.execute("PRAGMA busy_timeout=30000")
     connection.executescript(_SCHEMA)
+    _migrate(connection)
     return connection
+
+
+def _migrate(connection: sqlite3.Connection) -> None:
+    """Add the missing ``training_queue`` columns, keeping every row.
+
+    The check is repeated under the write lock: the dashboard and the
+    coordinator may connect at the same moment, and the second ``ALTER``
+    would otherwise fail with a duplicate column.
+    """
+    if not _missing_columns(connection):
+        return
+    connection.execute("BEGIN IMMEDIATE")
+    try:
+        for name, kind in _missing_columns(connection):
+            connection.execute(f"ALTER TABLE training_queue ADD COLUMN {name} {kind}")
+        connection.execute(
+            "CREATE INDEX IF NOT EXISTS training_queue_cell"
+            " ON training_queue (cell_id)"
+        )
+        connection.execute("COMMIT")
+    except BaseException:
+        connection.execute("ROLLBACK")
+        raise
+
+
+def _missing_columns(connection: sqlite3.Connection) -> list[tuple[str, str]]:
+    present = {
+        str(r["name"]) for r in connection.execute("PRAGMA table_info(training_queue)")
+    }
+    return [(name, kind) for name, kind in _QUEUE_COLUMNS if name not in present]
