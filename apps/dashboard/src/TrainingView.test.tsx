@@ -3,10 +3,7 @@ import { afterEach, expect, test, vi } from 'vitest'
 import { TrainingView } from './TrainingView'
 import type { TrainingStatus } from './api'
 
-const progress = {
-  total: 29568, protocol2: 10, protocol1: 8232, ok_unmarked: 0, pending: 21000,
-  selected: 0, rerun: 3, running: 1, skipped: 29, migrated: true,
-}
+const progress = { total: 27335, ok: 10, pending: 21000, rerun: 3, running: 1, skipped: 29 }
 const idle: TrainingStatus['job'] = { state: 'idle', pid: null, started_at: null, heartbeat_at: null, finished_at: null, workers: 0, limit: null, done: 0, failed: 0, message: '', stop_requested: false }
 
 function status(overrides: Partial<TrainingStatus> = {}): TrainingStatus {
@@ -33,9 +30,10 @@ test('mostra as contagens com denominador explícito', async () => {
   mock(() => status())
   render(<TrainingView />)
   const bar = await screen.findByRole('img', { name: /Andamento do treinamento/ })
-  expect(bar).toHaveAccessibleName(/Protocolo 2: 10 de 29\.568/)
-  expect(screen.getAllByText(/8\.232 preliminares/).length).toBeGreaterThan(0)
+  expect(bar).toHaveAccessibleName(/Concluídas: 10 de 27\.335/)
   expect(screen.getAllByText(/21\.003 na fila/).length).toBeGreaterThan(0)
+  expect(screen.getByText(/10 de 27\.335 moléculas concluídas/)).toBeInTheDocument()
+  expect(screen.queryByText(/preliminar|protocolo 1|migra/i)).not.toBeInTheDocument()
 })
 
 test('inicia com workers e limite e mostra o estado do job', async () => {
@@ -54,14 +52,6 @@ test('inicia com workers e limite e mostra o estado do job', async () => {
   expect(await screen.findByText(/Em execução com 2 em paralelo/)).toBeInTheDocument()
   expect(screen.getByRole('button', { name: 'Parar' })).toBeEnabled()
   expect(screen.getByRole('button', { name: 'Iniciar treinamento' })).toBeDisabled()
-})
-
-test('bloqueia o início quando o CSV não foi migrado e mostra o comando', async () => {
-  mock(() => status({ progress: { ...progress, migrated: false, ok_unmarked: 8232 } }))
-  render(<TrainingView />)
-  await screen.findByRole('img', { name: /Andamento do treinamento/ })
-  expect(screen.getByRole('button', { name: 'Iniciar treinamento' })).toBeDisabled()
-  expect(screen.getByText(/semi_imperium\.training migrate --apply/)).toBeInTheDocument()
 })
 
 test('lista as falhas recentes com o motivo', async () => {

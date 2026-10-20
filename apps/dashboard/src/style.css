@@ -221,7 +221,6 @@ main { max-width: 84rem; margin: 0 auto; padding: 0 1.25rem 4rem; }
 }
 .hero--exp { --hero-from: #123a4a; }
 .hero--cbs { --hero-from: #1f2f55; }
-.hero--pm7 { --hero-from: #3d2c1d; }
 .hero--control { --hero-from: #2b2449; }
 .hero__copy, .hero__art { position: relative; z-index: 1; }
 .hero__copy { max-width: 46rem; }
@@ -434,11 +433,11 @@ main { max-width: 84rem; margin: 0 auto; padding: 0 1.25rem 4rem; }
 .summary-text__body { display: grid; gap: .3rem; font-size: 1.04rem; max-width: 62rem; }
 .summary-text__body p { margin: 0 0 .6rem; color: var(--text-secondary); line-height: 1.75; }
 .summary-text__body strong { color: var(--text-primary); }
-.data-map { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: .75rem; }
+.data-map { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: .75rem; }
 .data-node { display: flex; flex-direction: column; gap: .3rem; text-align: left; padding: 1.25rem; border-radius: var(--radius); border: 1px solid var(--border); background: var(--surface-2); transition: transform .2s, box-shadow .2s, border-color .2s; }
 .data-node:hover { transform: translateY(-3px); box-shadow: var(--shadow-md); border-color: var(--border-strong); }
 .data-node__title { font-size: .76rem; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; }
-.data-node--exp .data-node__title { color: var(--series-3); } .data-node--cbs .data-node__title { color: var(--series-1); } .data-node--pm7 .data-node__title { color: var(--series-2); }
+.data-node--exp .data-node__title { color: var(--series-3); } .data-node--cbs .data-node__title { color: var(--series-1); }
 .data-node strong { font-size: 2rem; font-weight: 800; letter-spacing: -.04em; }
 .data-node__caption { color: var(--text-secondary); font-size: .82rem; }
 .data-node__open { margin-top: .4rem; color: var(--brand); font-size: .8rem; font-weight: 700; }
@@ -711,8 +710,7 @@ button.choice-card:hover:not(:disabled) { transform: translateY(-2px); border-co
 /* Delta Entalpia · Treinamento */
 .training-bar { display: flex; height: 14px; border-radius: 7px; overflow: hidden; background: var(--surface-3); margin: 12px 0; }
 .training-bar span { display: block; height: 100%; }
-.training-bar__p2 { background: var(--status-good); }
-.training-bar__p1 { background: var(--series-3); }
+.training-bar__ok { background: var(--status-good); }
 .training-bar__run { background: var(--status-warning); }
 .training-bar__queue { background: var(--status-neutral); }
 .training-bar__skip { background: var(--status-critical); }

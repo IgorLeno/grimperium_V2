@@ -63,7 +63,6 @@ export const MODULES: ModuleDef[] = [
         children: [
           { key: 'experimental', label: 'Experimental', hint: 'Medidas de laboratório' },
           { key: 'cbs', label: 'CBS', hint: 'Referência de alta precisão' },
-          { key: 'pm7', label: 'PM7', hint: 'Cálculo rápido (legado)' },
         ],
       },
       { key: 'training', label: 'Treinamento', hint: 'Semi-Imperium: calcula as moléculas PM7 do treino' },

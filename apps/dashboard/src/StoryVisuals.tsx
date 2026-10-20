@@ -290,7 +290,7 @@ export function PageHero({ eyebrow, title, accent, lead, onRefresh, art, variant
   lead: ReactNode
   onRefresh?: () => void
   art?: ReactNode
-  variant?: 'default' | 'exp' | 'cbs' | 'pm7' | 'control'
+  variant?: 'default' | 'exp' | 'cbs' | 'control'
 }) {
   return (
     <div className={`hero hero--${variant}`}>

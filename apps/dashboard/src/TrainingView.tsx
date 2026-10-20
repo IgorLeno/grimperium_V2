@@ -69,10 +69,9 @@ interface ReadyProps {
 
 function Ready({ data, busy, workers, limit, actionError, onWorkers, onLimit, onStart, onStop }: ReadyProps) {
   const { progress, job } = data
-  const queued = progress.pending + progress.selected + progress.rerun
+  const queued = progress.pending + progress.rerun
   const segments = [
-    { key: 'p2', label: 'Protocolo 2', count: progress.protocol2, className: 'training-bar__p2' },
-    { key: 'p1', label: 'Preliminar (protocolo 1)', count: progress.protocol1, className: 'training-bar__p1' },
+    { key: 'ok', label: 'Concluídas', count: progress.ok, className: 'training-bar__ok' },
     { key: 'run', label: 'Em execução', count: progress.running, className: 'training-bar__run' },
     { key: 'queue', label: 'Na fila', count: queued, className: 'training-bar__queue' },
     { key: 'skip', label: 'Descartadas', count: progress.skipped, className: 'training-bar__skip' },
@@ -80,14 +79,14 @@ function Ready({ data, busy, workers, limit, actionError, onWorkers, onLimit, on
   const active = job.state === 'running' || job.state === 'stopping'
   const share = (count: number) => (progress.total === 0 ? 0 : (100 * count) / progress.total)
   const summary = `Andamento do treinamento: ${segments.map((s) => `${s.label}: ${number.format(s.count)} de ${number.format(progress.total)}`).join('; ')}`
-  const canStart = !active && progress.migrated && !busy
+  const canStart = !active && !busy
 
   return (
     <>
       <section className="panel" aria-label="Andamento do treinamento">
-        <SectionHeading eyebrow="Andamento" title={`${number.format(progress.protocol2)} de ${number.format(progress.total)} moléculas no protocolo 2`}
+        <SectionHeading eyebrow="Andamento" title={`${number.format(progress.ok)} de ${number.format(progress.total)} moléculas concluídas`}
           badge={JOB_LABEL[job.state] ?? job.state}>
-          {number.format(progress.protocol1)} preliminares do protocolo 1 ficam como verificação até serem recalculadas; {number.format(queued)} na fila.
+          Fila de treinamento: uma molécula por SMILES da referência CBS, todas no protocolo 2; {number.format(queued)} ainda na fila.
         </SectionHeading>
         <div className="training-bar" role="img" aria-label={summary}>
           {segments.map((s) => s.count > 0 && <span key={s.key} className={s.className} style={{ width: `${share(s.count)}%` }} />)}
@@ -95,7 +94,7 @@ function Ready({ data, busy, workers, limit, actionError, onWorkers, onLimit, on
         <ul className="training-legend">
           {segments.map((s) => (
             <li key={s.key}><i className={s.className} aria-hidden="true" />
-              {s.key === 'p1' ? `${number.format(s.count)} preliminares` : s.key === 'queue' ? `${number.format(s.count)} na fila` : `${s.label}: ${number.format(s.count)}`}
+              {s.key === 'queue' ? `${number.format(s.count)} na fila` : `${s.label}: ${number.format(s.count)}`}
               {' '}<small>({percent.format(share(s.count))}% de {number.format(progress.total)})</small>
             </li>
           ))}
@@ -104,9 +103,6 @@ function Ready({ data, busy, workers, limit, actionError, onWorkers, onLimit, on
 
       <section className="panel" aria-label="Controle do treinamento">
         <SectionHeading eyebrow="Controle" title="Iniciar ou parar" />
-        {!progress.migrated && (
-          <p className="train-note">O CSV ainda não foi migrado para o protocolo 2. Rode no terminal: <code>poetry run python -m semi_imperium.training migrate --apply</code></p>
-        )}
         <div className="training-controls">
           <label>Moléculas em paralelo
             <input type="number" min={1} max={8} value={workers} onChange={(e) => onWorkers(e.target.value)} disabled={active} />

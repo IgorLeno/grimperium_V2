@@ -15,8 +15,7 @@ vi.mock('recharts', () => {
 })
 
 const progress = {
-  legacy: { protocol: 'crest_pm7', path: '/data/pm7.csv', total: 4,
-    status: { OK: 2, Pending: 1, Failed: 1 }, cbs_quality_flag: { OK: 2, SUSPECT: 1, unset: 1 } },
+  queue: { total: 4, ok: 2, pending: 1, rerun: 0, running: 0, skipped: 1 },
   semi_imperium: { path: '/data/store', exists: true, molecules: 1, runs: 2,
     calculations: 3, states: { pending: 1, running: 0, verified: 0, unverified: 0, saddle: 0, failed: 2 } },
 }
@@ -47,17 +46,11 @@ const cbsProfile = profile('cbs', 10, {
   histograms: [histogram('H298_cbs', 'Entalpia CBS', 10), histogram('cbs_b3', 'Correção', 10)],
   manifest: { source_citation: 'Dobbelaere et al. 2024' },
 })
-const pm7Profile = profile('pm7', 4, {
-  categories: { status: { OK: 2, Pending: 1, Failed: 1 }, cbs_quality_flag: { OK: 2, unset: 2 } },
-  histograms: [histogram('delta_cbs_pm7', 'Erro', 2)],
-  by_nheavy: [{ nheavy: 1, n: 1, mean: -2, mean_abs: 2 }],
-  pairs: [{ id: 'a', x: -17, y: -15, nheavy: 1 }], pairs_total: 1,
-})
 const rows = (key: string) => ({ key, columns: ['mol_id', 'smiles', 'H298_cbs'], total: 2, matched: 2, offset: 0, limit: 25,
   rows: [{ mol_id: `${key}_row_1`, smiles: 'C', H298_cbs: -17.8 }, { mol_id: `${key}_row_2`, smiles: 'CCO', H298_cbs: -56.2 }] })
 
 const trainingStatus = {
-  progress: { total: 29568, protocol2: 10, protocol1: 8232, ok_unmarked: 0, pending: 21000, selected: 0, rerun: 3, running: 1, skipped: 29, migrated: true },
+  progress: { total: 27335, ok: 10, pending: 27000, rerun: 3, running: 1, skipped: 21 },
   job: { state: 'idle', pid: null, started_at: null, heartbeat_at: null, finished_at: null, workers: 0, limit: null, done: 0, failed: 0, message: '', stop_requested: false },
   geometries: 10,
   failures: [],
@@ -75,7 +68,6 @@ function mockApi(overrides: Record<string, () => Response> = {}) {
     '/api/experimental/comparison': () => json(comparison),
     '/api/tables/exp/profile': () => json(expProfile),
     '/api/tables/cbs/profile': () => json(cbsProfile),
-    '/api/tables/pm7/profile': () => json(pm7Profile),
     '/api/training/status': () => json(trainingStatus),
     ...overrides,
   }
@@ -111,17 +103,18 @@ afterEach(() => { cleanup(); vi.unstubAllGlobals() })
 test('resumo escreve o estado do projeto com números reais', async () => {
   mockApi()
   renderDeltaEnthalpy()
-  expect(await screen.findByText('Protocolo legado: crest_pm7')).toBeInTheDocument()
-  expect(screen.getByText('API ativa')).toBeInTheDocument()
+  expect(await screen.findByText('API ativa')).toBeInTheDocument()
   const text = screen.getByRole('region', { name: 'Resumo em texto' })
   await within(text).findByText('10')
   expect(text).toHaveTextContent(/reúne 10 geometrias/)
   expect(text).toHaveTextContent(/tem 4 moléculas medidas/)
   expect(text).toHaveTextContent(/das quais 2 também têm valor CBS/)
-  expect(text).toHaveTextContent(/concluiu 2 de 4 moléculas \(50%\)/)
-  expect(screen.getByText('Flag de qualidade, independente do estado do cálculo')).toBeInTheDocument()
-  const legacy = screen.getByRole('region', { name: 'Dataset PM7' })
-  expect(within(legacy).getByRole('img', { name: /Estados do dataset PM7/ })).toHaveAccessibleName(/Na fila \(Pending\): 1/)
+  expect(text).toHaveTextContent(/concluiu 2 de 4 moléculas da fila \(50%\)/)
+  expect(screen.queryByText(/legado/i)).not.toBeInTheDocument()
+  expect(screen.queryByText('PM7 concluído')).not.toBeInTheDocument()
+  expect(screen.queryByText('PM7 (legado)')).not.toBeInTheDocument()
+  const queue = screen.getByRole('region', { name: 'Fila do treinamento' })
+  expect(within(queue).getByRole('img', { name: /Estados da fila/ })).toHaveAccessibleName(/Na fila \(pending\): 1/)
   const store = screen.getByRole('region', { name: 'Semi-Imperium' })
   expect(within(store).getByRole('img', { name: /Estado mais recente/ })).toHaveAccessibleName(/Falhou: 2/)
 })
@@ -136,13 +129,13 @@ test('informa quando a API está indisponível e permite reconectar', async () =
   expect(fetchMock.mock.calls.filter(([path]) => path === '/api/health')).toHaveLength(2)
 })
 
-test('mostra estados vazios do dataset legado e do store', async () => {
+test('mostra estados vazios da fila e do store', async () => {
   mockApi({ '/api/dataset/progress': () => json({
-    legacy: { ...progress.legacy, total: 0, status: {}, cbs_quality_flag: {} },
+    queue: { total: 0, ok: 0, pending: 0, rerun: 0, running: 0, skipped: 0 },
     semi_imperium: { ...progress.semi_imperium, exists: false, calculations: 0, states: {} },
   }) })
   renderDeltaEnthalpy()
-  expect(await screen.findByText('Nenhuma linha no dataset.')).toBeInTheDocument()
+  expect(await screen.findByText('A fila está vazia.')).toBeInTheDocument()
   expect(screen.getByText(/Store ainda não existe/)).toBeInTheDocument()
 })
 
@@ -193,16 +186,6 @@ test('aba CBS explica quando o CSV não está no computador', async () => {
   expect(await screen.findByRole('region', { name: 'Arquivo não encontrado' })).toHaveTextContent('data/cbs_referencia.csv')
 })
 
-test('aba PM7 mostra andamento e erro do cálculo rápido', async () => {
-  mockApi()
-  renderDeltaEnthalpy()
-  openTab(/PM7/)
-  expect(await screen.findByText('O que é a tabela PM7?')).toBeInTheDocument()
-  expect(await screen.findByRole('img', { name: /Moléculas concluídas: 50%/ })).toBeInTheDocument()
-  expect(screen.getByText('Paridade CBS × PM7')).toBeInTheDocument()
-  expect(screen.getByText('Protocolo legado: crest_pm7')).toBeInTheDocument()
-})
-
 test('abre no hub Delta Chemistry: Resumos e Sobre, sem as abas do módulo', async () => {
   mockApi()
   render(<App />)
@@ -246,10 +229,10 @@ test('módulo Delta Entalpia: Resumo, Dados, Treinamento, Delta Learning e Cálc
   expect(screen.queryByRole('navigation', { name: 'Submenu de Dados' })).not.toBeInTheDocument()
   fireEvent.click(menu.getByRole('button', { name: /Dados/ }))
   const sub = within(screen.getByRole('navigation', { name: 'Submenu de Dados' }))
-  expect(sub.getAllByRole('button').map((button) => button.textContent)).toEqual(['Experimental', 'CBS', 'PM7'])
+  expect(sub.getAllByRole('button').map((button) => button.textContent)).toEqual(['Experimental', 'CBS'])
   expect(await screen.findByText('Paridade CBS × experimental')).toBeInTheDocument()
-  fireEvent.click(sub.getByRole('button', { name: 'PM7' }))
-  expect(await screen.findByText('O que é a tabela PM7?')).toBeInTheDocument()
+  fireEvent.click(sub.getByRole('button', { name: 'CBS' }))
+  expect(await screen.findByText('O que é a tabela CBS?')).toBeInTheDocument()
   expect(menu.getByRole('button', { name: /Dados/ })).toHaveAttribute('aria-current', 'page')
   fireEvent.click(menu.getByRole('button', { name: 'Delta Learning' }))
   expect(await screen.findByText('Cinco etapas, sem vazamento de dados')).toBeInTheDocument()

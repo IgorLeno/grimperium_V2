@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 import type { DatasetProfile, DatasetProgress, ExperimentalComparison } from './api'
-import { statusSegments } from './helpers'
+import { queueSegments } from './helpers'
 import { summarize } from './stats'
 import {
   DeltaExplainer, Glossary, MetricCard, PageHero, PipelineDiagram, ProportionBar, RingGauge, SectionHeading,
@@ -8,7 +8,7 @@ import {
 import { formatNumber, formatPercent, formatSigned, series, statusColor } from './theme'
 import { useApi } from './useApi'
 
-export type ViewKey = 'summary' | 'experimental' | 'cbs' | 'pm7' | 'training' | 'learning' | 'calc'
+export type ViewKey = 'summary' | 'experimental' | 'cbs' | 'training' | 'learning' | 'calc'
 
 const CORE_GLOSSARY = [
   { term: 'Entalpia de formação (ΔHf°)', definition: 'A energia de “montar” a molécula a partir dos elementos. É a propriedade que o Grimperium prevê.' },
@@ -16,7 +16,7 @@ const CORE_GLOSSARY = [
   { term: 'CBS', definition: 'Cálculo lento e muito preciso; serve de gabarito.' },
   { term: 'Experimental', definition: 'Valor medido em laboratório; confere se os cálculos batem com a realidade.' },
   { term: 'Δ-learning', definition: 'Estratégia em que a IA aprende só o erro do PM7 (Δ = CBS − PM7), e não a energia inteira. Precisa de menos dados.' },
-  { term: 'Semi-Imperium', definition: 'O novo pipeline canônico de cálculo (RDKit → CREST → seleção → MOPAC), com registro completo de proveniência.' },
+  { term: 'Semi-Imperium', definition: 'O pipeline canônico de cálculo (RDKit → CREST → seleção → MOPAC), com registro completo de proveniência.' },
 ]
 
 function n(value: number | null): string {
@@ -42,7 +42,7 @@ function TableNode({ title, value, caption, tone, onOpen, unavailable }: {
   title: string
   value: string
   caption: string
-  tone: 'exp' | 'cbs' | 'pm7'
+  tone: 'exp' | 'cbs'
   onOpen: () => void
   unavailable: boolean
 }) {
@@ -65,19 +65,14 @@ export function SummaryView({ onNavigate }: { onNavigate: (view: ViewKey) => voi
   const exp = useApi<DatasetProfile>('/api/tables/exp/profile')
   const cbs = useApi<DatasetProfile>('/api/tables/cbs/profile')
   const comparison = useApi<ExperimentalComparison>('/api/experimental/comparison')
-  const pm7 = useApi<DatasetProfile>('/api/tables/pm7/profile')
 
   const expRows = exp.state.status === 'ready' ? exp.state.data.rows : null
   const cbsRows = cbs.state.status === 'ready' ? cbs.state.data.rows : null
-  const legacy = progress.state.status === 'ready' ? progress.state.data.legacy : null
+  const queue = progress.state.status === 'ready' ? progress.state.data.queue : null
   const store = progress.state.status === 'ready' ? progress.state.data.semi_imperium : null
-  const pm7Profile = pm7.state.status === 'ready' ? pm7.state.data : null
-  const pm7Total = legacy?.total ?? pm7Profile?.rows ?? null
-  const pm7Done = legacy?.status.OK ?? pm7Profile?.categories.status?.OK ?? null
   const stats = comparison.state.status === 'ready' ? summarize(comparison.state.data.points) : null
-  const delta = pm7Profile?.histograms.find((item) => item.column === 'delta_cbs_pm7')
 
-  const reloadAll = () => { progress.reload(); exp.reload(); cbs.reload(); comparison.reload(); pm7.reload() }
+  const reloadAll = () => { progress.reload(); exp.reload(); cbs.reload(); comparison.reload() }
 
   return (
     <div className="view">
@@ -103,9 +98,8 @@ export function SummaryView({ onNavigate }: { onNavigate: (view: ViewKey) => voi
             </p>
           )}
           <p>
-            O pipeline legado <strong>CREST + PM7</strong> {pm7Total === null ? 'não tem CSV disponível neste computador' : <>concluiu <strong>{n(pm7Done)}</strong> de <strong>{n(pm7Total)}</strong> moléculas ({formatPercent(pm7Total ? (pm7Done ?? 0) / pm7Total : null)})</>}
-            {delta && delta.n > 0 && <>; nelas, a correção típica que o modelo precisa aprender é de {formatNumber(delta.median !== null ? Math.abs(delta.median) : null, 1)} kcal/mol</>}.
-            {' '}O novo pipeline <strong>Semi-Imperium</strong> {store === null ? 'não pôde ser consultado' : store.exists ? <>registra <strong>{n(store.molecules)}</strong> moléculas e <strong>{n(store.calculations)}</strong> cálculos</> : 'ainda não tem execuções registradas'}.
+            O pipeline <strong>Semi-Imperium</strong> (protocolo 2: RDKit → CREST → seleção → MOPAC PM7) {queue === null ? 'não pôde ser consultado' : <>concluiu <strong>{n(queue.ok)}</strong> de <strong>{n(queue.total)}</strong> moléculas da fila ({formatPercent(queue.total ? queue.ok / queue.total : null)})</>}
+            {store === null ? '' : store.exists ? <>; o store registra <strong>{n(store.molecules)}</strong> moléculas e <strong>{n(store.calculations)}</strong> cálculos</> : '; ainda não há execuções registradas no store'}.
           </p>
         </div>
       </section>
@@ -116,43 +110,34 @@ export function SummaryView({ onNavigate }: { onNavigate: (view: ViewKey) => voi
       </section>
 
       <section className="panel" aria-label="Mapa dos dados">
-        <SectionHeading eyebrow="Mapa dos dados" title="Três tabelas, uma pergunta">Cada tabela tem um papel. Clique para explorar.</SectionHeading>
+        <SectionHeading eyebrow="Mapa dos dados" title="Duas tabelas, uma pergunta">Cada tabela tem um papel. Clique para explorar.</SectionHeading>
         <div className="data-map">
           <TableNode title="Experimental" value={n(expRows)} caption="moléculas medidas" tone="exp" onOpen={() => onNavigate('experimental')} unavailable={exp.state.status === 'error'} />
           <Link>{stats ? `${n(stats.n)} pares comparados` : 'comparação'}<br /><small>valida o CBS</small></Link>
           <TableNode title="Referência CBS" value={n(cbsRows)} caption="geometrias de alta precisão" tone="cbs" onOpen={() => onNavigate('cbs')} unavailable={cbs.state.status === 'error'} />
-          <Link>Δ = CBS − PM7<br /><small>alvo do modelo</small></Link>
-          <TableNode title="PM7 (legado)" value={n(pm7Total)} caption="moléculas na fila do pipeline" tone="pm7" onOpen={() => onNavigate('pm7')} unavailable={pm7Total === null && pm7.state.status === 'error'} />
         </div>
       </section>
 
-      <div className="metric-grid metric-grid--four">
+      <div className="metric-grid">
         <MetricCard label="Medidas experimentais" value={n(expRows)} note="Gabarito do mundo real" icon="🧪" accent />
         <MetricCard label="Referência CBS" value={n(cbsRows)} note="Gabarito calculado" icon="🏛" />
         <MetricCard label="Erro CBS × experimento" value={formatNumber(stats?.mae ?? null, 1)} unit="kcal/mol" note="Erro absoluto médio" icon="⚖" />
-        <MetricCard label="PM7 concluído" value={formatPercent(pm7Total ? (pm7Done ?? 0) / pm7Total : null)} note={`${n(pm7Done)} de ${n(pm7Total)} moléculas`} icon="⚡" />
       </div>
 
       <div className="chart-grid">
-        <section className="panel" aria-label="Dataset PM7">
-          <SectionHeading eyebrow="Pipeline legado" title="Fila do CREST + PM7" badge={legacy ? `Protocolo legado: ${legacy.protocol}` : undefined} />
+        <section className="panel" aria-label="Fila do treinamento">
+          <SectionHeading eyebrow="Pipeline canônico" title="Fila do treinamento">Uma molécula por SMILES, tirada da referência CBS.</SectionHeading>
           {progress.state.status === 'loading' && <p role="status" className="loading-state">Carregando progresso…</p>}
           {progress.state.status === 'error' && <p className="empty-state" role="alert">{progress.state.message}</p>}
-          {legacy && (legacy.total === 0 ? <p className="empty-state">Nenhuma linha no dataset.</p> : (
+          {queue && (queue.total === 0 ? <p className="empty-state">A fila está vazia.</p> : (
             <div className="progress-layout progress-layout--stack">
-              <RingGauge share={legacy.total ? (legacy.status.OK ?? 0) / legacy.total : null} label="Concluídas" caption={`${(legacy.status.OK ?? 0).toLocaleString('pt-BR')} de ${legacy.total.toLocaleString('pt-BR')} linhas`} color={statusColor.good} />
-              <ProportionBar segments={statusSegments(legacy.status)} total={legacy.total} label="Estados do dataset PM7" />
-              <h4 className="mini-heading">Qualidade da referência CBS</h4>
-              <p className="subtle">Flag de qualidade, independente do estado do cálculo</p>
-              <ProportionBar label="Flag de qualidade CBS" segments={Object.entries(legacy.cbs_quality_flag).map(([key, value]) => ({
-                key, label: key === 'unset' ? 'sem flag' : key, count: value,
-                color: key === 'OK' ? statusColor.good : key === 'SUSPECT' ? statusColor.warning : statusColor.neutral,
-              }))} />
+              <RingGauge share={queue.ok / queue.total} label="Concluídas" caption={`${n(queue.ok)} de ${n(queue.total)} moléculas`} color={statusColor.good} />
+              <ProportionBar segments={queueSegments(queue)} total={queue.total} label="Estados da fila" />
             </div>
           ))}
         </section>
         <section className="panel" aria-label="Semi-Imperium">
-          <SectionHeading eyebrow="Pipeline canônico" title="Store Semi-Imperium">Contagens separadas do CSV legado.</SectionHeading>
+          <SectionHeading eyebrow="Pipeline canônico" title="Store Semi-Imperium">Registro de execuções e cálculos com proveniência.</SectionHeading>
           {store && (!store.exists ? <p className="empty-state">Store ainda não existe. A primeira rotina executada cria o registro.</p> : (
             <>
               <div className="mini-metrics">

@@ -1,4 +1,4 @@
-import type { DatasetProfile, Histogram } from './api'
+import type { DatasetProfile, Histogram, TrainingProgress } from './api'
 import type { Segment } from './StoryVisuals'
 import { series, statusColor } from './theme'
 
@@ -31,25 +31,16 @@ export function median(counts: Record<string, number>): number | null {
   return null
 }
 
-/** Batch states (crest_pm7.batch.enums.MoleculeStatus) in pipeline order. */
-export const STATUS_INFO: { key: string; label: string; color: string; icon: string; text: string }[] = [
-  { key: 'OK', label: 'Concluída', color: statusColor.good, icon: '✓', text: 'CREST e MOPAC terminaram com sucesso' },
-  { key: 'Running', label: 'Rodando', color: statusColor.info, icon: '▶', text: 'Em cálculo agora' },
-  { key: 'Selected', label: 'Selecionada', color: series[2], icon: '◆', text: 'Escolhida para o próximo lote' },
-  { key: 'Pending', label: 'Na fila', color: statusColor.neutral, icon: '…', text: 'Ainda não processada' },
-  { key: 'Rerun', label: 'Repetir', color: statusColor.warning, icon: '↻', text: 'Falhou e será tentada de novo' },
-  { key: 'Skip', label: 'Pulada', color: statusColor.serious, icon: '⤼', text: 'Excedeu o máximo de tentativas' },
-  { key: 'Failed', label: 'Falhou', color: statusColor.critical, icon: '✕', text: 'Erro sem nova tentativa' },
-]
-
-export function statusSegments(counts: Record<string, number>): Segment[] {
-  const known = STATUS_INFO.map((info) => ({
-    key: info.key, label: `${info.label} (${info.key})`, count: counts[info.key] ?? 0, color: info.color, icon: info.icon, description: info.text,
-  }))
-  const others = Object.entries(counts)
-    .filter(([key]) => !STATUS_INFO.some((info) => info.key === key))
-    .map(([key, count]) => ({ key, label: key, count, color: 'var(--status-neutral)' }))
-  return [...known.filter((segment) => segment.count > 0), ...others]
+/** Estados da fila de treinamento (semi_imperium.training.molecule_queue) em ordem de pipeline. */
+export function queueSegments(queue: TrainingProgress): Segment[] {
+  const segments: Segment[] = [
+    { key: 'ok', label: 'Concluída (ok)', count: queue.ok, color: statusColor.good, icon: '✓', description: 'Protocolo 2 terminou e o mínimo foi confirmado' },
+    { key: 'running', label: 'Rodando (running)', count: queue.running, color: statusColor.info, icon: '▶', description: 'Em cálculo agora' },
+    { key: 'pending', label: 'Na fila (pending)', count: queue.pending, color: statusColor.neutral, icon: '…', description: 'Ainda não processada' },
+    { key: 'rerun', label: 'Repetir (rerun)', count: queue.rerun, color: statusColor.warning, icon: '↻', description: 'Falhou e será tentada de novo' },
+    { key: 'skip', label: 'Pulada (skip)', count: queue.skipped, color: statusColor.serious, icon: '⤼', description: 'Excedeu o máximo de tentativas' },
+  ]
+  return segments.filter((segment) => segment.count > 0)
 }
 
 /** Plain-language header and help text for every column the API can return. */
@@ -72,15 +63,6 @@ export const COLUMN_INFO: Record<string, { label: string; help?: string; signed?
   H298_b3: { label: 'ΔHf B3LYP', help: 'kcal/mol, etapa intermediária do CBS' },
   cbs_b3: { label: 'CBS − B3LYP', help: 'Correção que o CBS aplica', signed: true },
   smiles_count: { label: 'Cópias', help: 'Linhas com o mesmo SMILES (conformações distintas)' },
-  status: { label: 'Estado' },
-  H298_pm7: { label: 'ΔHf PM7', help: 'kcal/mol, cálculo rápido' },
-  delta_cbs_pm7: { label: 'Δ (CBS − PM7)', help: 'O erro que o modelo aprende', signed: true },
-  cbs_quality_flag: { label: 'Qualidade CBS' },
-  crest_status: { label: 'CREST' },
-  mopac_status: { label: 'MOPAC' },
-  crest_conformers_generated: { label: 'Conformações' },
-  crest_time_s: { label: 'CREST (s)' },
-  mopac_time_s: { label: 'MOPAC (s)' },
 }
 
 /** Round tick positions (1, 2, 2.5 or 5 × 10^k) spanning [lo, hi]. */

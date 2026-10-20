@@ -4,13 +4,7 @@ export interface Health {
 }
 
 export interface DatasetProgress {
-  legacy: {
-    protocol: string
-    path: string
-    total: number
-    status: Record<string, number>
-    cbs_quality_flag: Record<string, number>
-  }
+  queue: TrainingProgress
   semi_imperium: {
     path: string
     exists: boolean
@@ -96,7 +90,7 @@ export function postJson<T>(path: string, body: unknown = {}): Promise<T> {
   })
 }
 
-export type TableKey = 'exp' | 'cbs' | 'pm7'
+export type TableKey = 'exp' | 'cbs'
 
 export interface HistogramBin {
   start: number
@@ -163,17 +157,14 @@ export interface TablePage {
   rows: Record<string, Cell>[]
 }
 
+/** Moléculas da fila de treinamento por etapa; `total` é o denominador. */
 export interface TrainingProgress {
   total: number
-  protocol2: number
-  protocol1: number
-  ok_unmarked: number
+  ok: number
   pending: number
-  selected: number
   rerun: number
   running: number
   skipped: number
-  migrated: boolean
 }
 
 export interface TrainingJob {
