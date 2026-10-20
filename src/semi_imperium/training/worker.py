@@ -55,6 +55,10 @@ class WorkerTask:
     crest_timeout_s: float
     mopac_timeout_s: float
     keep_artifacts: bool
+    # Captured once by the coordinator so every record of the run names the
+    # same binaries; pairs instead of a dict to keep the task hashable.
+    program_versions: tuple[tuple[str, str], ...] = ()
+    hostname: str | None = None
 
 
 @dataclass(frozen=True)
@@ -122,7 +126,11 @@ def run_task(
         run_id=task.run_id,
         molecule=identity,
         signature=signature,
-        provenance=build_provenance(settings),
+        provenance=build_provenance(
+            settings,
+            hostname=task.hostname,
+            program_versions=dict(task.program_versions),
+        ),
     ).transition_to(CalculationState.RUNNING)
     store.save_calculation(record)
 

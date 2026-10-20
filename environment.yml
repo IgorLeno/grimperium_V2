@@ -1,0 +1,17 @@
+# Programas de química do protocolo 2 (CREST, xtb, MOPAC), com versões fixas.
+#
+# Só os binários externos vivem aqui; o Python do projeto continua no Poetry.
+# A central e todas as células usam o mesmo `conda-lock.yml`, gerado deste
+# arquivo, para que um `dnf upgrade` ou outra fonte não troque a versão em
+# silêncio. Mudar uma versão = editar aqui, regerar o lock e recalcular as
+# moléculas de referência antes de aceitar novos resultados.
+#
+#   conda-lock lock -f environment.yml -p linux-64
+#   micromamba create -n grimperium-quimica -f conda-lock.yml
+name: grimperium-quimica
+channels:
+  - conda-forge
+dependencies:
+  - crest ==3.0.2
+  - xtb ==6.7.1
+  - mopac ==23.2.2

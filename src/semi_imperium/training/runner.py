@@ -11,6 +11,7 @@ from __future__ import annotations
 import multiprocessing
 import os
 import signal
+import socket
 import threading
 import uuid
 from collections import deque
@@ -32,6 +33,7 @@ from semi_imperium.training.db import database_path
 from semi_imperium.training.geometry_store import GeometryRecord, GeometryStore
 from semi_imperium.training.job_state import JobState
 from semi_imperium.training.molecule_queue import QueuedMolecule, TrainingQueue
+from semi_imperium.training.program_info import ProgramProbe, probe_programs
 from semi_imperium.training.protocol import (
     CANONICAL_PROTOCOL,
     HAMILTONIAN,
@@ -96,6 +98,7 @@ def run_training(
     pool_factory: PoolFactory = _spawn_pool,
     task_fn: TaskFn = run_task,
     install_signals: bool = True,
+    probe: ProgramProbe = probe_programs,
 ) -> RunSummary:
     """Run the queue to exhaustion (or to ``limit``, or until stopped)."""
     db_path = database_path(settings.store_root)
@@ -115,11 +118,21 @@ def run_training(
     run_id = _run_id()
     batch_id = f"protocol{CANONICAL_PROTOCOL}-{run_id}"
     sem_settings = canonical_settings()
+    hostname = socket.gethostname()
+    versions = probe(
+        {
+            "crest": settings.crest_executable,
+            "xtb": settings.xtb_executable,
+            "mopac": settings.mopac_executable,
+        }
+    )
     store = SemiImperiumStore(settings.store_root)
     run = RunRecord(
         run_id=run_id,
         configuration=canonical_configuration(sem_settings),
-        provenance=build_provenance(sem_settings),
+        provenance=build_provenance(
+            sem_settings, hostname=hostname, program_versions=versions
+        ),
         label="delta-entalpia-treinamento",
     )
     store.save_run(run)
@@ -142,7 +155,10 @@ def run_training(
                     molecule = pending.popleft()
                     work.mark_running(molecule.mol_id)
                     in_flight[
-                        pool.submit(task_fn, _task(settings, run_id, molecule))
+                        pool.submit(
+                            task_fn,
+                            _task(settings, run_id, molecule, versions, hostname),
+                        )
                     ] = molecule
                     attempted += 1
                 if not in_flight:
@@ -175,7 +191,13 @@ def run_training(
     return RunSummary(attempted=attempted, ok=ok, failed=failed, stopped=stopped)
 
 
-def _task(settings: RunSettings, run_id: str, molecule: QueuedMolecule) -> WorkerTask:
+def _task(
+    settings: RunSettings,
+    run_id: str,
+    molecule: QueuedMolecule,
+    versions: dict[str, str],
+    hostname: str,
+) -> WorkerTask:
     return WorkerTask(
         mol_id=molecule.mol_id,
         smiles=molecule.smiles,
@@ -191,6 +213,8 @@ def _task(settings: RunSettings, run_id: str, molecule: QueuedMolecule) -> Worke
         crest_timeout_s=settings.crest_timeout_s,
         mopac_timeout_s=settings.mopac_timeout_s,
         keep_artifacts=settings.keep_artifacts,
+        program_versions=tuple(sorted(versions.items())),
+        hostname=hostname,
     )
 
 

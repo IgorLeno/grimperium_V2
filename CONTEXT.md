@@ -11,6 +11,11 @@ is [`CLAUDE.md`](/home/igor/Projetos/grimperium/CLAUDE.md).
   `src/grimperium/{cli,crest_pm7,core,data,ml,models,utils}`.
 - Active dataset in `data/`: `cbs_referencia.csv` (read only). The training queue
   lives in `data/semi_imperium/training.sqlite3`, seeded from it.
+- CREST, xtb and MOPAC are pinned by `environment.yml` + `conda-lock.yml`
+  (env `grimperium-quimica`, created with
+  `micromamba create -n grimperium-quimica -f conda-lock.yml`). The training
+  routine uses that env by default (`--bin-dir` overrides) and records each
+  program's version, sha256 and path plus the hostname in the provenance.
 
 ## Pipeline Notes
 
