@@ -55,3 +55,7 @@ Rule: mock responses by endpoint when testing a page that makes multiple request
 [2026-10-20] Context: formatting during the distributed-cells queue batch (Lote 1)
 Mistake: running `black` on whole directories (`src/semi_imperium`) reformatted four unrelated files that were already unformatted in the branch, mixing them into the working tree.
 Rule: run `black`/`ruff --fix` only on the files the batch touched (`git diff --name-only` plus new files); use the directory-wide `--check` only as the gate, and compare its count against the baseline before committing.
+
+[2026-10-20] Context: gating the cell's outbox commit (Lote 3)
+Mistake: `poetry run mypy … | tail -1 && git commit` committed with a mypy error, because the pipeline's exit status was `tail`'s, not mypy's.
+Rule: never pipe a gate into `tail`/`grep` in a `&&` chain that commits; run the gate bare (or with `set -o pipefail`) and commit in a separate step after reading its exit code.

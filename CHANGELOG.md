@@ -8,6 +8,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Programa da célula (células distribuídas, Lote 3)** (2026-10-20)
+  - `src/semi_imperium/cell/`: o programa que roda em cada computador
+    remoto (WSL2), `celula start | status | update` (script `celula` ou
+    `python -m semi_imperium.cell`). Config em
+    `~/grimperium-celula/config.json` (URL da central + token), recusado se
+    não for `chmod 600`; o token só vai no header `Authorization` e nunca
+    aparece em log, `repr`, `state.json` ou `status`.
+  - `loop.py`: registra (programas + assinatura do protocolo 2), pede um
+    trabalho por worker livre (`workers = núcleos ÷ crest_threads`), calcula
+    com o mesmo `run_task` da central e envia por `attempt_id`, com um
+    heartbeat a cada 30 s com as tentativas de todos os workers. Reinício =
+    recomeço: limpa `work/` e envia resultados prontos antes de registrar.
+    Versão divergente (409) e token recusado (401) encerram com códigos 5 e
+    4; em admissão (403) espera. 1º sinal termina o que roda; 2º aborta.
+  - `outbox.py`: fila offline em disco, um arquivo por tentativa (escrita
+    atômica), reenvio com espera crescente (5 s → 300 s, jitter) em queda de
+    rede ou 5xx; 4xx (exceto 401) vai para `dead-letter/` com o motivo.
+  - `src/semi_imperium/training/program_info.py`: `probe_programs` grava
+    `environment_sha256` (lista `conda-meta` do ambiente de crest/xtb/mopac),
+    que o registro compara com a central: cobre `libmopac.so` e openblas,
+    que o sha256 dos executáveis não cobre. Reinicie o app das células para
+    a central sondar de novo.
+  - Verification: `poetry run pytest tests/cell -q` (63 testes contra o app
+    real das células via `TestClient`). E2E com dashboard + app das células
+    em uvicorn sobre uma cópia do banco real e CREST/MOPAC reais.
 - **API das células (células distribuídas, Lote 2)** (2026-10-20)
   - `src/semi_imperium/training/db.py`, `cells.py`: tabela `cells` criada de
     forma idempotente em `connect()` (tabela nova, sem `ALTER`) e
