@@ -87,7 +87,7 @@ class FlushReport:
     last_error: str = ""
 
 
-def _atomic_write(path: Path, payload: dict[str, Any]) -> None:
+def atomic_write_json(path: Path, payload: dict[str, Any]) -> None:
     descriptor, temporary = tempfile.mkstemp(
         dir=path.parent, prefix=f".{path.name}.", suffix=".tmp"
     )
@@ -125,7 +125,7 @@ class Outbox:
 
     def put(self, attempt_id: str, mol_id: str, request: dict[str, Any]) -> None:
         """Keep ``request`` (the ``/api/cell/result`` body) until it is settled."""
-        _atomic_write(
+        atomic_write_json(
             self.pending_dir / self._name(attempt_id),
             {
                 "attempt_id": attempt_id,
@@ -154,7 +154,7 @@ class Outbox:
 
     def kill(self, entry: Entry, reply: Reply) -> None:
         """Move ``entry`` to the dead letter with the central's refusal."""
-        _atomic_write(
+        atomic_write_json(
             self.dead_dir / self._name(entry.attempt_id),
             {
                 "attempt_id": entry.attempt_id,
