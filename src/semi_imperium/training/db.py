@@ -29,6 +29,23 @@ CREATE TABLE IF NOT EXISTS final_geometry (
     minimum_confirmed INTEGER NOT NULL,
     created_at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS training_queue (
+    mol_id TEXT PRIMARY KEY,
+    smiles TEXT NOT NULL,
+    charge INTEGER NOT NULL,
+    multiplicity INTEGER NOT NULL,
+    nheavy INTEGER NOT NULL,
+    h298_cbs REAL NOT NULL,
+    status TEXT NOT NULL DEFAULT 'pending',
+    reruns INTEGER NOT NULL DEFAULT 0,
+    h298_pm7 REAL,
+    delta_kcal_mol REAL,
+    conformers_evaluated INTEGER,
+    elapsed_s REAL,
+    batch_id TEXT,
+    updated_at TEXT
+);
+CREATE INDEX IF NOT EXISTS training_queue_status ON training_queue (status);
 CREATE TABLE IF NOT EXISTS training_job (
     id INTEGER PRIMARY KEY CHECK (id = 1),
     state TEXT NOT NULL,

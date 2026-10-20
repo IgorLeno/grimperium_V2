@@ -10,7 +10,6 @@ from semi_imperium.settings import RuntimeSettings, SemiImperiumSettings
 from semi_imperium.training.protocol import (
     CANONICAL_PROTOCOL,
     HAMILTONIAN,
-    LEGACY_PROTOCOL,
     canonical_configuration,
     canonical_settings,
     canonical_signature,
@@ -18,7 +17,7 @@ from semi_imperium.training.protocol import (
 
 
 def test_protocol_labels_are_strings() -> None:
-    assert (LEGACY_PROTOCOL, CANONICAL_PROTOCOL, HAMILTONIAN) == ("1", "2", "PM7")
+    assert (CANONICAL_PROTOCOL, HAMILTONIAN) == ("2", "PM7")
 
 
 def test_canonical_settings_select_with_confpass_and_folding_filter() -> None:

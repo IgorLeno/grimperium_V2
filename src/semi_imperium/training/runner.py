@@ -1,9 +1,9 @@
 """Coordinator of the training routine: the single writer.
 
 It reads the queue, dispatches one molecule per free worker, and records each
-finished molecule: first the geometry (SQLite), then the CSV row, so a row
-marked ``OK`` always has its geometry. Stopping is cooperative: no new
-molecule is dispatched, in-flight ones finish, untouched rows stay ``Pending``.
+finished molecule: first the geometry, then the queue row, so a molecule
+marked ``ok`` always has its geometry. Stopping is cooperative: no new
+molecule is dispatched, in-flight ones finish, untouched molecules stay ``pending``.
 """
 
 from __future__ import annotations
@@ -31,7 +31,7 @@ from semi_imperium.persistence import SemiImperiumStore
 from semi_imperium.training.db import database_path
 from semi_imperium.training.geometry_store import GeometryRecord, GeometryStore
 from semi_imperium.training.job_state import JobState
-from semi_imperium.training.ledger import QueuedMolecule, TrainingLedger
+from semi_imperium.training.molecule_queue import QueuedMolecule, TrainingQueue
 from semi_imperium.training.protocol import (
     CANONICAL_PROTOCOL,
     HAMILTONIAN,
@@ -49,7 +49,7 @@ TaskFn = Callable[[WorkerTask], WorkerResult]
 class RunSettings:
     """Inputs of one training run (execution knobs, not scientific choices)."""
 
-    csv_path: Path
+    cbs_csv: Path
     store_root: Path
     work_dir: Path
     workers: int = 3
@@ -98,11 +98,11 @@ def run_training(
     install_signals: bool = True,
 ) -> RunSummary:
     """Run the queue to exhaustion (or to ``limit``, or until stopped)."""
-    ledger = TrainingLedger(settings.csv_path, max_reruns=settings.max_reruns)
-    ledger.load()  # raises NotMigratedError before any state is touched
-    queue = ledger.queue(settings.limit)
-
     db_path = database_path(settings.store_root)
+    work = TrainingQueue(db_path, settings.cbs_csv, max_reruns=settings.max_reruns)
+    work.ensure_seeded()  # reads the CBS before any job state is touched
+    queue = work.queue(settings.limit)
+
     job = JobState(db_path)
     geometries = GeometryStore(db_path)
     job.begin(pid=os.getpid(), workers=settings.workers, limit=settings.limit)
@@ -140,7 +140,7 @@ def run_training(
                     job.mark_stopping()
                 while pending and len(in_flight) < settings.workers and not halt:
                     molecule = pending.popleft()
-                    ledger.mark_running(molecule.mol_id)
+                    work.mark_running(molecule.mol_id)
                     in_flight[
                         pool.submit(task_fn, _task(settings, run_id, molecule))
                     ] = molecule
@@ -150,7 +150,7 @@ def run_training(
                 done, _ = wait(in_flight, timeout=30.0, return_when=FIRST_COMPLETED)
                 for future in done:
                     molecule = in_flight.pop(future)
-                    if _record(ledger, geometries, job, molecule, future, batch_id):
+                    if _record(work, geometries, job, molecule, future, batch_id):
                         ok += 1
                     else:
                         failed += 1
@@ -195,7 +195,7 @@ def _task(settings: RunSettings, run_id: str, molecule: QueuedMolecule) -> Worke
 
 
 def _record(
-    ledger: TrainingLedger,
+    work: TrainingQueue,
     geometries: GeometryStore,
     job: JobState,
     molecule: QueuedMolecule,
@@ -207,11 +207,11 @@ def _record(
         result = future.result()
     except Exception as exc:  # worker process died or was killed
         reason = f"{type(exc).__name__}: {exc}"
-        ledger.record_failure(molecule.mol_id, reason)
+        work.record_failure(molecule.mol_id, reason)
         job.record_failure(molecule.mol_id, reason)
         return False
     if not result.ok or result.hof_kcal_mol is None:
-        ledger.record_failure(molecule.mol_id, result.error or result.state)
+        work.record_failure(molecule.mol_id, result.error or result.state)
         job.record_failure(molecule.mol_id, result.error or result.state)
         return False
     geometries.save(
@@ -230,7 +230,7 @@ def _record(
             minimum_confirmed=True,
         )
     )
-    ledger.record_success(
+    work.record_success(
         result.mol_id,
         hof_kcal_mol=result.hof_kcal_mol,
         conformers_evaluated=result.conformers_evaluated,

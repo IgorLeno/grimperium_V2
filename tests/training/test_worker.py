@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+from dataclasses import replace
 from pathlib import Path
 
 from semi_imperium.conformers import ConformerGeometry
@@ -23,14 +25,32 @@ GEOMETRY = ConformerGeometry(
 )
 
 
+def _with_outputs(
+    store: Path, request: ExecutionRequest, outcome: ExecutionOutcome
+) -> ExecutionOutcome:
+    """Leave the two MOPAC outputs of a verified result where MOPAC would."""
+    if outcome.state is not CalculationState.VERIFIED or outcome.result is None:
+        return outcome
+    folder = store / "artifacts" / request.calculation_id / "mopac"
+    folder.mkdir(parents=True, exist_ok=True)
+    (folder / "opt.out").write_text("OPT")
+    (folder / "freq.out").write_text("FREQ")
+    base = f"artifacts/{request.calculation_id}/mopac"
+    paths = (f"{base}/opt.out", f"{base}/freq.out")
+    return replace(outcome, result=replace(outcome.result, artifact_paths=paths))
+
+
 class FakeExecutor:
-    def __init__(self, outcome: ExecutionOutcome) -> None:
+    def __init__(self, outcome: ExecutionOutcome, *, store: Path | None = None) -> None:
         self.outcome = outcome
+        self.store = store
         self.requests: list[ExecutionRequest] = []
 
     def execute(self, request: ExecutionRequest) -> ExecutionOutcome:
         self.requests.append(request)
-        return self.outcome
+        if self.store is None:
+            return self.outcome
+        return _with_outputs(self.store, request, self.outcome)
 
 
 def _task(tmp_path: Path, **overrides: object) -> WorkerTask:
@@ -69,7 +89,7 @@ def _verified() -> ExecutionOutcome:
 
 
 def test_verified_minimum_is_ok_and_carries_the_geometry(tmp_path: Path) -> None:
-    executor = FakeExecutor(_verified())
+    executor = FakeExecutor(_verified(), store=tmp_path / "store")
     result = run_task(_task(tmp_path), executor=executor)
     assert result.ok is True and result.state == "verified"
     assert result.hof_kcal_mol == -17.9 and result.conformers_evaluated == 3
@@ -82,7 +102,7 @@ def test_verified_minimum_is_ok_and_carries_the_geometry(tmp_path: Path) -> None
 
 
 def test_charge_and_multiplicity_reach_the_identity(tmp_path: Path) -> None:
-    executor = FakeExecutor(_verified())
+    executor = FakeExecutor(_verified(), store=tmp_path / "store")
     run_task(_task(tmp_path, smiles="[CH3]", multiplicity=2), executor=executor)
     identity = executor.requests[0].identity
     assert (identity.charge, identity.multiplicity) == (0, 2)
@@ -123,7 +143,7 @@ def test_success_removes_artifacts_but_failure_keeps_them(tmp_path: Path) -> Non
             folder = store / "artifacts" / request.calculation_id
             folder.mkdir(parents=True)
             (folder / "trace.out").write_text("x")
-            return self.outcome
+            return _with_outputs(store, request, self.outcome)
 
     ok = run_task(_task(tmp_path), executor=Leaves(_verified()))
     assert not (store / "artifacts" / ok.calculation_id).exists()
@@ -140,8 +160,51 @@ def test_success_removes_artifacts_but_failure_keeps_them(tmp_path: Path) -> Non
 def test_the_calculation_record_is_persisted_in_the_store(tmp_path: Path) -> None:
     from semi_imperium.persistence import SemiImperiumStore
 
-    result = run_task(_task(tmp_path), executor=FakeExecutor(_verified()))
+    result = run_task(
+        _task(tmp_path),
+        executor=FakeExecutor(_verified(), store=tmp_path / "store"),
+    )
     records = SemiImperiumStore(tmp_path / "store").list_calculations()
     assert [r.calculation_id for r in records] == [result.calculation_id]
     assert records[0].state is CalculationState.VERIFIED
     assert records[0].result is not None and records[0].result.artifact_paths == ()
+
+
+def test_success_keeps_the_chosen_conformer_outputs_outside_the_workdir(
+    tmp_path: Path,
+) -> None:
+    store = tmp_path / "store"
+    result = run_task(_task(tmp_path), executor=FakeExecutor(_verified(), store=store))
+    folder = store / "geometrias" / "mol_00001"
+    assert sorted(p.name for p in folder.iterdir()) == [
+        "mol_00001.freq.out",
+        "mol_00001.json",
+        "mol_00001.out",
+        "mol_00001.xyz",
+    ]
+    data = json.loads((folder / "mol_00001.json").read_text())
+    assert (data["conformer_index"], data["hof_kcal_mol"]) == (2, -17.9)
+    assert data["lowest_frequency_cm1"] == 1306.0
+    assert data["calculation_id"] == result.calculation_id
+    assert not (store / "artifacts" / result.calculation_id).exists()
+
+
+def test_a_saddle_or_failure_keeps_no_final_outputs(tmp_path: Path) -> None:
+    outcome = ExecutionOutcome(
+        state=CalculationState.SADDLE,
+        verification=VerificationOutcome.SADDLE_POINT,
+        result=CalculationResultData(energy_hof_kcal_mol=-10.0),
+        geometry=GEOMETRY,
+    )
+    run_task(_task(tmp_path), executor=FakeExecutor(outcome, store=tmp_path / "store"))
+    assert not (tmp_path / "store" / "geometrias").exists()
+
+
+def test_missing_mopac_outputs_turn_a_verified_result_into_a_failure(
+    tmp_path: Path,
+) -> None:
+    # No store given: the executor leaves no .out files behind.
+    result = run_task(_task(tmp_path), executor=FakeExecutor(_verified()))
+    assert result.ok is False and result.state == "failed"
+    assert "MOPAC" in (result.error or "")
+    assert not (tmp_path / "store" / "geometrias" / "mol_00001").exists()

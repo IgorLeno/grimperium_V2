@@ -5,15 +5,14 @@ from collections.abc import Callable
 from concurrent.futures import Executor, ThreadPoolExecutor
 from pathlib import Path
 
-import pandas as pd
 import pytest
 
 from semi_imperium.training.geometry_store import GeometryStore
 from semi_imperium.training.job_state import JobAlreadyRunning, JobState
-from semi_imperium.training.ledger import NotMigratedError
+from semi_imperium.training.molecule_queue import CbsReadError, read_progress
 from semi_imperium.training.runner import RunSettings, run_training
 from semi_imperium.training.worker import WorkerResult, WorkerTask
-from tests.training.conftest import CsvFactory, row
+from tests.training.conftest import CbsFactory, row
 
 
 def _threads(workers: int) -> Executor:
@@ -45,9 +44,9 @@ def _fake(fail: set[str] | None = None) -> Callable[[WorkerTask], WorkerResult]:
     return task_fn
 
 
-def _settings(tmp_path: Path, csv: Path, **overrides: object) -> RunSettings:
+def _settings(tmp_path: Path, cbs: Path, **overrides: object) -> RunSettings:
     values: dict[str, object] = {
-        "csv_path": csv,
+        "cbs_csv": cbs,
         "store_root": tmp_path / "store",
         "work_dir": tmp_path / "work",
         "workers": 2,
@@ -56,23 +55,20 @@ def _settings(tmp_path: Path, csv: Path, **overrides: object) -> RunSettings:
     return RunSettings(**values)  # type: ignore[arg-type]
 
 
-def _csv(make_csv: CsvFactory) -> Path:
-    return make_csv(
-        [
-            row("a", "Pending", nheavy=1, protocol=""),
-            row("b", "Pending", nheavy=2, protocol=""),
-            row("c", "Pending", nheavy=3, protocol=""),
-            row("old", "OK", nheavy=1, protocol="1", H298_pm7=-3.83),
-        ]
-    )
+def _cbs(make_cbs: CbsFactory) -> Path:
+    return make_cbs([row("a", nheavy=1), row("b", nheavy=2), row("c", nheavy=3)])
 
 
-def test_run_records_results_in_csv_geometry_store_and_job(
-    tmp_path: Path, make_csv: CsvFactory
+def _db(tmp_path: Path) -> Path:
+    return tmp_path / "store" / "training.sqlite3"
+
+
+def test_run_records_results_in_queue_geometry_store_and_job(
+    tmp_path: Path, make_cbs: CbsFactory
 ) -> None:
-    csv = _csv(make_csv)
+    cbs = _cbs(make_cbs)
     summary = run_training(
-        _settings(tmp_path, csv),
+        _settings(tmp_path, cbs),
         pool_factory=_threads,
         task_fn=_fake(),
         install_signals=False,
@@ -83,54 +79,106 @@ def test_run_records_results_in_csv_geometry_store_and_job(
         0,
         False,
     )
-    saved = pd.read_csv(csv, dtype=str, keep_default_na=False).set_index("mol_id")
-    assert [saved.loc[m, "protocol"] for m in ("a", "b", "c")] == ["2", "2", "2"]
-    assert saved.loc["old", "protocol"] == "1"
-    store = GeometryStore(tmp_path / "store" / "training.sqlite3")
+    progress = read_progress(_db(tmp_path), cbs)
+    assert (progress.total, progress.ok, progress.pending) == (3, 3, 0)
+    store = GeometryStore(_db(tmp_path))
     assert store.mol_ids() == {"a", "b", "c"}
-    job = JobState(tmp_path / "store" / "training.sqlite3").snapshot()
+    job = JobState(_db(tmp_path)).snapshot()
     assert job.state == "finished" and job.done == 3 and job.failed == 0
 
 
+def test_the_cbs_csv_is_never_written(tmp_path: Path, make_cbs: CbsFactory) -> None:
+    cbs = _cbs(make_cbs)
+    before = (cbs.read_bytes(), cbs.stat().st_mtime_ns)
+    run_training(
+        _settings(tmp_path, cbs),
+        pool_factory=_threads,
+        task_fn=_fake(),
+        install_signals=False,
+    )
+    assert (cbs.read_bytes(), cbs.stat().st_mtime_ns) == before
+
+
 def test_limit_caps_the_number_of_molecules(
-    tmp_path: Path, make_csv: CsvFactory
+    tmp_path: Path, make_cbs: CbsFactory
 ) -> None:
-    csv = _csv(make_csv)
+    cbs = _cbs(make_cbs)
     summary = run_training(
-        _settings(tmp_path, csv, limit=1),
+        _settings(tmp_path, cbs, limit=1),
         pool_factory=_threads,
         task_fn=_fake(),
         install_signals=False,
     )
     assert summary.attempted == 1
-    saved = pd.read_csv(csv, dtype=str, keep_default_na=False).set_index("mol_id")
-    assert saved.loc["a", "status"] == "OK"
-    assert saved.loc["b", "status"] == "Pending"
+    progress = read_progress(_db(tmp_path), cbs)
+    assert (progress.ok, progress.pending) == (1, 2)
+    assert GeometryStore(_db(tmp_path)).mol_ids() == {"a"}
+
+
+def test_a_second_run_continues_where_the_first_stopped(
+    tmp_path: Path, make_cbs: CbsFactory
+) -> None:
+    cbs = _cbs(make_cbs)
+    for expected_ok in (1, 1, 1, 0):
+        summary = run_training(
+            _settings(tmp_path, cbs, limit=1),
+            pool_factory=_threads,
+            task_fn=_fake(),
+            install_signals=False,
+        )
+        assert summary.ok == expected_ok
+    assert GeometryStore(_db(tmp_path)).mol_ids() == {"a", "b", "c"}
 
 
 def test_failure_goes_to_rerun_and_its_reason_is_kept(
-    tmp_path: Path, make_csv: CsvFactory
+    tmp_path: Path, make_cbs: CbsFactory
 ) -> None:
-    csv = _csv(make_csv)
+    cbs = _cbs(make_cbs)
     summary = run_training(
-        _settings(tmp_path, csv),
+        _settings(tmp_path, cbs),
         pool_factory=_threads,
         task_fn=_fake(fail={"b"}),
         install_signals=False,
     )
     assert (summary.ok, summary.failed) == (2, 1)
-    saved = pd.read_csv(csv, dtype=str, keep_default_na=False).set_index("mol_id")
-    assert (saved.loc["b", "status"], saved.loc["b", "protocol"]) == ("Rerun", "")
-    store = GeometryStore(tmp_path / "store" / "training.sqlite3")
-    assert "b" not in store.mol_ids()
-    failures = JobState(tmp_path / "store" / "training.sqlite3").recent_failures()
+    progress = read_progress(_db(tmp_path), cbs)
+    assert (progress.ok, progress.rerun) == (2, 1)
+    assert "b" not in GeometryStore(_db(tmp_path)).mol_ids()
+    failures = JobState(_db(tmp_path)).recent_failures()
     assert failures[0][0] == "b" and "saddle" in failures[0][1]
 
 
-def test_orphan_running_rows_are_requeued(tmp_path: Path, make_csv: CsvFactory) -> None:
-    csv = make_csv([row("orphan", "Running", nheavy=1, protocol="")])
+def test_repeated_failures_end_in_skip(tmp_path: Path, make_cbs: CbsFactory) -> None:
+    cbs = make_cbs([row("a")])
+    for _ in range(3):
+        run_training(
+            _settings(tmp_path, cbs, max_reruns=3),
+            pool_factory=_threads,
+            task_fn=_fake(fail={"a"}),
+            install_signals=False,
+        )
+    progress = read_progress(_db(tmp_path), cbs)
+    assert (progress.skipped, progress.rerun) == (1, 0)
+    again = run_training(
+        _settings(tmp_path, cbs),
+        pool_factory=_threads,
+        task_fn=_fake(),
+        install_signals=False,
+    )
+    assert again.attempted == 0
+
+
+def test_orphan_running_molecules_are_requeued(
+    tmp_path: Path, make_cbs: CbsFactory
+) -> None:
+    from semi_imperium.training.molecule_queue import TrainingQueue
+
+    cbs = make_cbs([row("orphan")])
+    seeded = TrainingQueue(_db(tmp_path), cbs)
+    seeded.ensure_seeded()
+    seeded.mark_running("orphan")  # a previous run died while it was in flight
     summary = run_training(
-        _settings(tmp_path, csv),
+        _settings(tmp_path, cbs),
         pool_factory=_threads,
         task_fn=_fake(),
         install_signals=False,
@@ -139,60 +187,46 @@ def test_orphan_running_rows_are_requeued(tmp_path: Path, make_csv: CsvFactory) 
 
 
 def test_stop_request_prevents_new_dispatch(
-    tmp_path: Path, make_csv: CsvFactory
+    tmp_path: Path, make_cbs: CbsFactory
 ) -> None:
-    csv = _csv(make_csv)
-    state = JobState(tmp_path / "store" / "training.sqlite3")
+    cbs = _cbs(make_cbs)
+    state = JobState(_db(tmp_path))
 
     def stopping_task(task: WorkerTask) -> WorkerResult:
         state.request_stop()  # the first molecule asks the job to stop
         return _fake()(task)
 
     summary = run_training(
-        _settings(tmp_path, csv, workers=1),
+        _settings(tmp_path, cbs, workers=1),
         pool_factory=_threads,
         task_fn=stopping_task,
         install_signals=False,
     )
     assert summary.stopped is True and summary.attempted == 1
-    saved = pd.read_csv(csv, dtype=str, keep_default_na=False).set_index("mol_id")
-    assert saved.loc["b", "status"] == "Pending"
+    assert read_progress(_db(tmp_path), cbs).pending == 2
 
 
-def test_a_live_job_blocks_a_second_run(tmp_path: Path, make_csv: CsvFactory) -> None:
-    csv = _csv(make_csv)
-    JobState(tmp_path / "store" / "training.sqlite3").begin(
-        pid=os.getpid(), workers=1, limit=None
-    )
+def test_a_live_job_blocks_a_second_run(tmp_path: Path, make_cbs: CbsFactory) -> None:
+    cbs = _cbs(make_cbs)
+    JobState(_db(tmp_path)).begin(pid=os.getpid(), workers=1, limit=None)
     with pytest.raises(JobAlreadyRunning):
         run_training(
-            _settings(tmp_path, csv),
+            _settings(tmp_path, cbs),
             pool_factory=_threads,
             task_fn=_fake(),
             install_signals=False,
         )
 
 
-def test_unmigrated_csv_is_refused_before_any_work(
-    tmp_path: Path, make_csv: CsvFactory
+def test_an_unreadable_cbs_is_refused_before_any_job_state(
+    tmp_path: Path, make_cbs: CbsFactory
 ) -> None:
-    csv = make_csv([row("a", "OK"), row("b", "Pending")])
-    with pytest.raises(NotMigratedError):
+    cbs = make_cbs([{"mol_id": "a", "smiles": "C"}])  # no CBS columns
+    with pytest.raises(CbsReadError):
         run_training(
-            _settings(tmp_path, csv),
+            _settings(tmp_path, cbs),
             pool_factory=_threads,
             task_fn=_fake(),
             install_signals=False,
         )
-    assert JobState(tmp_path / "store" / "training.sqlite3").snapshot().state == "idle"
-
-
-def test_empty_queue_finishes_cleanly(tmp_path: Path, make_csv: CsvFactory) -> None:
-    csv = make_csv([row("old", "OK", protocol="1")])
-    summary = run_training(
-        _settings(tmp_path, csv),
-        pool_factory=_threads,
-        task_fn=_fake(),
-        install_signals=False,
-    )
-    assert summary.attempted == 0
+    assert JobState(_db(tmp_path)).snapshot().state == "idle"

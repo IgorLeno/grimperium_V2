@@ -21,7 +21,9 @@ from semi_imperium.domain import (
 )
 from semi_imperium.persistence import SemiImperiumStore
 from semi_imperium.settings import RuntimeSettings, SemiImperiumSettings
+from semi_imperium.training.final_outputs import FinalOutputError, export_final_outputs
 from semi_imperium.training.protocol import (
+    CANONICAL_PROTOCOL,
     HAMILTONIAN,
     canonical_configuration,
     canonical_settings,
@@ -149,6 +151,30 @@ def run_task(
         and outcome.geometry is not None
     )
     artifacts = Path(task.store_root) / ARTIFACTS_DIRNAME / record.calculation_id
+    if accepted and outcome.result is not None and outcome.geometry is not None:
+        # The working directory is disposable; keep the chosen conformer's
+        # evidence first. A molecule whose outputs cannot be kept is a failure,
+        # not a silent success without files.
+        try:
+            export_final_outputs(
+                store_root=Path(task.store_root),
+                mol_id=task.mol_id,
+                smiles=task.smiles,
+                hamiltonian=HAMILTONIAN,
+                protocol=CANONICAL_PROTOCOL,
+                calculation_id=record.calculation_id,
+                signature=signature.digest,
+                geometry=outcome.geometry,
+                result=outcome.result,
+            )
+        except FinalOutputError as exc:
+            accepted = False
+            outcome = ExecutionOutcome(
+                state=CalculationState.FAILED,
+                verification=VerificationOutcome.FAILED,
+                result=outcome.result,
+                error_message=str(exc),
+            )
     result_data = outcome.result
     if accepted and not task.keep_artifacts:
         shutil.rmtree(artifacts, ignore_errors=True)

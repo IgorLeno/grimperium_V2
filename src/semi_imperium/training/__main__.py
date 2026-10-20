@@ -10,8 +10,7 @@ from pathlib import Path
 
 from semi_imperium.training.db import database_path
 from semi_imperium.training.job_state import JobAlreadyRunning, JobState
-from semi_imperium.training.ledger import NotMigratedError, read_progress
-from semi_imperium.training.migration import migrate
+from semi_imperium.training.molecule_queue import CbsReadError, read_progress
 from semi_imperium.training.runner import RunSettings, run_training
 
 # src/semi_imperium/training/__main__.py -> repository root
@@ -24,7 +23,10 @@ def _build_parser() -> argparse.ArgumentParser:
         description="Delta Entalpia: rotina de treinamento (Semi-Imperium, protocolo 2).",
     )
     parser.add_argument(
-        "--csv", type=Path, default=_ROOT / "data" / "pm7_fila_pipeline.csv"
+        "--csv",
+        type=Path,
+        default=_ROOT / "data" / "cbs_referencia.csv",
+        help="referência CBS (somente leitura) de onde a fila é semeada",
     )
     parser.add_argument("--store", type=Path, default=_ROOT / "data" / "semi_imperium")
     parser.add_argument(
@@ -34,10 +36,6 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     commands = parser.add_subparsers(dest="command", required=True)
     commands.add_parser("status", help="mostra o progresso e o estado do job")
-    mig = commands.add_parser(
-        "migrate", help="marca o protocolo 1 e devolve Selected à fila"
-    )
-    mig.add_argument("--apply", action="store_true", help="grava (padrão: ensaio)")
     run = commands.add_parser("run", help="processa a fila com o protocolo 2")
     run.add_argument("--workers", type=int, default=3)
     run.add_argument("--limit", type=int, default=None)
@@ -50,23 +48,23 @@ def _build_parser() -> argparse.ArgumentParser:
 
 
 def _status(args: argparse.Namespace) -> int:
-    progress = read_progress(args.csv)
+    try:
+        progress = read_progress(database_path(args.store), args.csv)
+    except (FileNotFoundError, CbsReadError) as exc:
+        print(f"erro: {exc}", file=sys.stderr)
+        return 2
     total = progress.total
 
     def line(label: str, count: int) -> str:
         share = 0.0 if total == 0 else 100.0 * count / total
         return f"  {label}: {count} de {total} ({share:.1f}%)"
 
-    print(f"Progresso de {args.csv}")
-    print(line("protocolo 2 (canônico)", progress.protocol2))
-    print(line("protocolo 1 (preliminar)", progress.protocol1))
-    print(line("na fila (Pending)", progress.pending))
-    print(line("selecionadas (Selected)", progress.selected))
-    print(line("para repetir (Rerun)", progress.rerun))
-    print(line("em execução (Running)", progress.running))
-    print(line("descartadas (Skip)", progress.skipped))
-    if not progress.migrated:
-        print("  CSV ainda não migrado: rode 'migrate --apply'.")
+    print(f"Fila de treinamento (protocolo 2) a partir de {args.csv}")
+    print(line("concluídas (ok)", progress.ok))
+    print(line("na fila (pending)", progress.pending))
+    print(line("para repetir (rerun)", progress.rerun))
+    print(line("em execução (running)", progress.running))
+    print(line("descartadas (skip)", progress.skipped))
     job = JobState(database_path(args.store)).snapshot()
     label = {"idle": "ocioso"}.get(job.state, job.state)
     print(
@@ -75,21 +73,9 @@ def _status(args: argparse.Namespace) -> int:
     return 0
 
 
-def _migrate(args: argparse.Namespace) -> int:
-    report = migrate(args.csv, apply=args.apply)
-    mode = "aplicado" if report.applied else "ensaio (nada foi gravado)"
-    print(f"Migração {mode}: {report.rows} linhas")
-    print(f"  marcadas como protocolo 1: {report.legacy_marked}")
-    print(f"  Selected devolvidas a Pending: {report.selected_reset}")
-    print(f"  já marcadas: {report.already_marked}")
-    if report.backup_path is not None:
-        print(f"  cópia de segurança: {report.backup_path}")
-    return 0
-
-
 def _run(args: argparse.Namespace) -> int:
     settings = RunSettings(
-        csv_path=args.csv,
+        cbs_csv=args.csv,
         store_root=args.store,
         work_dir=args.work_dir,
         workers=args.workers,
@@ -101,7 +87,7 @@ def _run(args: argparse.Namespace) -> int:
     )
     try:
         summary = run_training(settings)
-    except NotMigratedError as exc:
+    except (FileNotFoundError, CbsReadError) as exc:
         print(f"erro: {exc}", file=sys.stderr)
         return 2
     except JobAlreadyRunning as exc:
@@ -125,7 +111,7 @@ def _stop(args: argparse.Namespace) -> int:
 def main(argv: Sequence[str] | None = None) -> int:
     """Entry point; returns the process exit code."""
     args = _build_parser().parse_args(argv)
-    handlers = {"status": _status, "migrate": _migrate, "run": _run, "stop": _stop}
+    handlers = {"status": _status, "run": _run, "stop": _stop}
     return handlers[args.command](args)
 
 
