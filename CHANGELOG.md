@@ -8,6 +8,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **API das células (células distribuídas, Lote 2)** (2026-10-20)
+  - `src/semi_imperium/training/db.py`, `cells.py`: tabela `cells` criada de
+    forma idempotente em `connect()` (tabela nova, sem `ALTER`) e
+    `CellRegistry`. O token (`secrets.token_urlsafe(32)`) é mostrado uma
+    única vez e só o seu sha256 fica no banco. Revogar zera o hash. Admissão
+    `pending`/`passed`/`blocked`. Estado pela hora da central: `online`
+    (< 90 s), `late` (até 5 min), `silent`, `never_seen`,
+    `version_mismatch`, `blocked`, `revoked`.
+  - `src/grimperium/webapi/cells.py`: `create_cell_app`, um app separado do
+    dashboard, servido em porta própria no IP do Tailscale
+    (`uvicorn grimperium.webapi.cells:create_cell_app --factory --host
+    <tailscale-ip> --port 8100`), com `register`, `claim`, `heartbeat` e
+    `result` por `Authorization: Bearer`. O registro recusa (409) versão ou
+    sha256 de crest/xtb/mopac, ou assinatura do protocolo, diferentes da
+    central, e devolve à fila o que a célula segurava. `claim` exige
+    admissão `passed`, respeita os workers livres e não repete molécula que
+    a própria célula já falhou. `result` confere dono da tentativa,
+    assinatura e números finitos.
+  - `src/semi_imperium/training/molecule_queue.py`:
+    `claim(avoid_own_failures=)`, `held_attempts`, `attempt_owner`.
+    `program_info.program_mismatches` compara a sonda da célula com a da
+    central sem considerar os caminhos.
+  - Dashboard (`src/grimperium/webapi/app.py`, só local): `GET/POST
+    /api/cells` e `POST /api/cells/{id}/rename|release|revoke`.
+  - Banco: migração testada numa cópia do banco real. O banco de produção
+    migra no primeiro acesso do código novo.
+  - Verification: `poetry run pytest tests/training tests/webapi
+    tests/unit/semi_imperium tests/cli tests/test_csv_schema.py -q`. E2E com
+    os dois apps em uvicorn sobre uma cópia do banco real.
 - **Fila atômica com leases (células distribuídas, Lote 1)** (2026-10-20)
   - `src/semi_imperium/training/db.py`: migração idempotente em `connect()`
     adiciona `cell_id`, `attempt_id` e `lease_until` a `training_queue` (linhas
