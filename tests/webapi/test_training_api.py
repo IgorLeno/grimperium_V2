@@ -82,11 +82,11 @@ def test_status_with_a_missing_cbs_is_503(tmp_path: Path) -> None:
 def test_start_launches_with_the_requested_limits(tmp_path: Path) -> None:
     recorder = Recorder()
     response = _client(_paths(tmp_path), recorder).post(
-        "/api/training/start", json={"workers": 2, "limit": 5}
+        "/api/training/start", json={"workers": 2, "crest_threads": 6, "limit": 5}
     )
     assert response.status_code == 200
     (launch,) = recorder.launches
-    assert (launch.workers, launch.limit) == (2, 5)
+    assert (launch.workers, launch.crest_threads, launch.limit) == (2, 6, 5)
     assert launch.cbs_csv == tmp_path / "cbs.csv"
 
 
@@ -114,7 +114,50 @@ def test_a_stale_job_does_not_block_start(tmp_path: Path) -> None:
     assert len(recorder.launches) == 1
 
 
-@pytest.mark.parametrize("body", [{"workers": 0}, {"workers": 9}, {"limit": 0}])
+def test_start_defaults_to_four_crest_threads(tmp_path: Path) -> None:
+    recorder = Recorder()
+    _client(_paths(tmp_path), recorder).post("/api/training/start", json={})
+    assert recorder.launches[0].crest_threads == 4
+
+
+def test_status_reports_activity_and_cpu_count(tmp_path: Path) -> None:
+    paths = _paths(tmp_path)
+    queue = TrainingQueue(database_path(paths.semi_imperium_store), paths.cbs_csv)
+    queue.ensure_seeded()
+    JobState(database_path(paths.semi_imperium_store)).begin(
+        pid=os.getpid(), workers=2, limit=None
+    )
+    queue.mark_running("b")
+    queue.mark_running("a")
+    queue.record_success(
+        "a", hof_kcal_mol=-20.0, conformers_evaluated=3, elapsed_s=12.0, batch_id="x"
+    )
+    body = _client(paths, Recorder()).get("/api/training/status").json()
+    activity = body["activity"]
+    assert [m["mol_id"] for m in activity["in_flight"]] == ["b"]
+    assert activity["in_flight"][0]["smiles"] == "smiles-b"
+    (done,) = activity["recent"]
+    assert (done["mol_id"], done["h298_pm7"], done["elapsed_s"]) == ("a", -20.0, 12.0)
+    assert done["delta_kcal_mol"] == pytest.approx(-17.8 + 20.0)
+    assert activity["mean_elapsed_s"] == 12.0
+    assert body["cpu_count"] >= 1
+
+
+def test_status_activity_is_empty_without_a_database(tmp_path: Path) -> None:
+    body = _client(_paths(tmp_path), Recorder()).get("/api/training/status").json()
+    assert body["activity"] == {"in_flight": [], "recent": [], "mean_elapsed_s": None}
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        {"workers": 0},
+        {"workers": 9},
+        {"limit": 0},
+        {"crest_threads": 0},
+        {"crest_threads": 65},
+    ],
+)
 def test_start_validates_bounds(tmp_path: Path, body: dict[str, int]) -> None:
     recorder = Recorder()
     response = _client(_paths(tmp_path), recorder).post(

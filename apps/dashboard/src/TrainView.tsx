@@ -12,7 +12,7 @@ export function TrainView() {
   return (
     <div className="view">
       <PageHero
-        variant="control" eyebrow="Delta Learning · Modelo de correção Δ" title="Ensine a IA a corrigir" accent="o cálculo rápido."
+        variant="control" eyebrow="Treinar modelo · Delta Learning" title="Ensine a IA a corrigir" accent="o cálculo rápido."
         lead="Aqui ficará o treino do modelo que soma ao PM7 a correção aprendida com os cálculos CBS. Por enquanto o treino roda pela linha de comando; esta tela explica o caminho."
       />
       <section className="panel" aria-label="Etapas do treino">
@@ -22,7 +22,7 @@ export function TrainView() {
             <li key={step.title}><span aria-hidden="true">{index + 1}</span><div><strong>{step.title}</strong><p>{step.text}</p></div></li>
           ))}
         </ol>
-        <p className="train-note">O painel aciona e acompanha as rotinas: quando o Delta Learning existir no back-end, o treino será configurado e acompanhado daqui, como o Treinamento.</p>
+        <p className="train-note">O painel aciona e acompanha as rotinas: quando o Delta Learning existir no back-end, o treino será configurado e acompanhado daqui, como em Calcular PM7.</p>
       </section>
     </div>
   )

@@ -54,6 +54,8 @@ const trainingStatus = {
   job: { state: 'idle', pid: null, started_at: null, heartbeat_at: null, finished_at: null, workers: 0, limit: null, done: 0, failed: 0, message: '', stop_requested: false },
   geometries: 10,
   failures: [],
+  activity: { in_flight: [], recent: [], mean_elapsed_s: null },
+  cpu_count: 16,
 }
 
 function json(data: unknown, status = 200): Response {
@@ -143,7 +145,8 @@ test('aba experimental filtra validação, conflito e busca ID', async () => {
   const fetchMock = mockApi()
   renderDeltaEnthalpy()
   openTab(/Experimental/)
-  expect(await screen.findByText('Paridade CBS × experimental')).toBeInTheDocument()
+  // Primeiro carregamento do chunk lazy (gráficos) passa de 1 s no jsdom quando nenhum teste anterior o aqueceu.
+  expect(await screen.findByText('Paridade CBS × experimental', {}, { timeout: 5000 })).toBeInTheDocument()
   expect(screen.getByText('Erro por tamanho da molécula')).toBeInTheDocument()
   expect(screen.getByText('O que é a tabela experimental?')).toBeInTheDocument()
   expect(screen.getByRole('img', { name: /Moléculas por família de fonte/ })).toHaveAccessibleName(/atct: 2; nist: 2/)
@@ -193,7 +196,7 @@ test('abre no hub Delta Chemistry: Resumos e Sobre, sem as abas do módulo', asy
   expect(menu.getAllByRole('button').map((button) => button.textContent)).toEqual(['Resumos', 'Sobre'])
   expect(menu.getByRole('button', { name: 'Resumos' })).toHaveAttribute('aria-current', 'page')
   expect(await screen.findByText('Nenhum resultado ainda')).toBeInTheDocument()
-  expect(menu.queryByRole('button', { name: /Dados|Treinamento|Delta Learning|Cálculo/ })).not.toBeInTheDocument()
+  expect(menu.queryByRole('button', { name: /Dados|Calcular PM7|Treinar modelo|Prever ΔH/ })).not.toBeInTheDocument()
   fireEvent.click(menu.getByRole('button', { name: 'Sobre' }))
   expect(await screen.findByText('Rapidez com precisão, em três passos')).toBeInTheDocument()
   expect(screen.getByText(/Hoje só existe o módulo de entalpia de formação/)).toBeInTheDocument()
@@ -221,11 +224,11 @@ test('barra lateral: hub Delta Chemistry e módulo Delta Entalpia, que traz as t
   expect(within(screen.getByRole('navigation', { name: 'Telas' })).getAllByRole('button').map((button) => button.textContent)).toEqual(['Resumos', 'Sobre'])
 })
 
-test('módulo Delta Entalpia: Resumo, Dados, Treinamento, Delta Learning e Cálculo', async () => {
+test('módulo Delta Entalpia: Resumo, Calcular PM7, Treinar modelo, Prever ΔH e Dados', async () => {
   mockApi()
   renderDeltaEnthalpy()
   const menu = within(screen.getByRole('navigation', { name: 'Telas' }))
-  expect(menu.getAllByRole('button').map((button) => button.textContent?.replace('▾', ''))).toEqual(['Resumo', 'Dados', 'Treinamento', 'Delta Learning', 'Cálculo'])
+  expect(menu.getAllByRole('button').map((button) => button.textContent?.replace('▾', ''))).toEqual(['Resumo', 'Calcular PM7', 'Treinar modelo', 'Prever ΔH', 'Dados'])
   expect(screen.queryByRole('navigation', { name: 'Submenu de Dados' })).not.toBeInTheDocument()
   fireEvent.click(menu.getByRole('button', { name: /Dados/ }))
   const sub = within(screen.getByRole('navigation', { name: 'Submenu de Dados' }))
@@ -234,12 +237,12 @@ test('módulo Delta Entalpia: Resumo, Dados, Treinamento, Delta Learning e Cálc
   fireEvent.click(sub.getByRole('button', { name: 'CBS' }))
   expect(await screen.findByText('O que é a tabela CBS?')).toBeInTheDocument()
   expect(menu.getByRole('button', { name: /Dados/ })).toHaveAttribute('aria-current', 'page')
-  fireEvent.click(menu.getByRole('button', { name: 'Delta Learning' }))
+  fireEvent.click(menu.getByRole('button', { name: 'Treinar modelo' }))
   expect(await screen.findByText('Cinco etapas, sem vazamento de dados')).toBeInTheDocument()
   expect(screen.queryByRole('navigation', { name: 'Submenu de Dados' })).not.toBeInTheDocument()
-  fireEvent.click(menu.getByRole('button', { name: 'Cálculo' }))
+  fireEvent.click(menu.getByRole('button', { name: 'Prever ΔH' }))
   expect(await screen.findByText('Em breve')).toBeInTheDocument()
-  fireEvent.click(menu.getByRole('button', { name: 'Treinamento' }))
+  fireEvent.click(menu.getByRole('button', { name: 'Calcular PM7' }))
   expect(await screen.findByRole('img', { name: /Andamento do treinamento/ })).toBeInTheDocument()
 })
 

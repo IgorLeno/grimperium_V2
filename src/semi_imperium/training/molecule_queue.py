@@ -132,6 +132,93 @@ def read_progress(db_path: Path, cbs_csv: Path) -> TrainingProgress:
     )
 
 
+@dataclass(frozen=True)
+class InFlightMolecule:
+    """A molecule flagged ``running``; ``started_at`` is when it was dispatched."""
+
+    mol_id: str
+    smiles: str
+    nheavy: int
+    started_at: str | None
+
+
+@dataclass(frozen=True)
+class CompletedMolecule:
+    """A molecule accepted under protocol 2, as the progress feed shows it."""
+
+    mol_id: str
+    smiles: str
+    h298_pm7: float
+    delta_kcal_mol: float | None
+    elapsed_s: float | None
+    conformers_evaluated: int | None
+    finished_at: str
+
+
+@dataclass(frozen=True)
+class TrainingActivity:
+    """What is computing now and what finished last; never written by readers."""
+
+    in_flight: tuple[InFlightMolecule, ...]
+    recent: tuple[CompletedMolecule, ...]
+    #: Mean worker time of the molecules accepted since ``since`` (``None``
+    #: when none finished yet), so a fresh run does not inherit old timings.
+    mean_elapsed_s: float | None
+
+
+def read_activity(
+    db_path: Path, *, since: str | None = None, recent: int = 8
+) -> TrainingActivity:
+    """In-flight molecules, latest successes and mean time since ``since``.
+
+    ``updated_at`` is an ISO-8601 UTC string written by :func:`_now`, so the
+    ``>=`` comparison is chronological.
+    """
+    if not db_path.exists():
+        return TrainingActivity((), (), None)
+    with closing(connect(db_path)) as connection:
+        running = connection.execute(
+            "SELECT mol_id, smiles, nheavy, updated_at FROM training_queue"
+            " WHERE status = ? ORDER BY updated_at",
+            (RUNNING,),
+        ).fetchall()
+        done = connection.execute(
+            "SELECT mol_id, smiles, h298_pm7, delta_kcal_mol, elapsed_s,"
+            " conformers_evaluated, updated_at FROM training_queue"
+            " WHERE status = ? ORDER BY updated_at DESC LIMIT ?",
+            (OK, recent),
+        ).fetchall()
+        mean = connection.execute(
+            "SELECT AVG(elapsed_s) AS mean FROM training_queue"
+            " WHERE status = ? AND elapsed_s IS NOT NULL AND updated_at >= ?",
+            (OK, since or ""),
+        ).fetchone()
+    return TrainingActivity(
+        in_flight=tuple(
+            InFlightMolecule(
+                mol_id=str(r["mol_id"]),
+                smiles=str(r["smiles"]),
+                nheavy=int(r["nheavy"]),
+                started_at=r["updated_at"],
+            )
+            for r in running
+        ),
+        recent=tuple(
+            CompletedMolecule(
+                mol_id=str(r["mol_id"]),
+                smiles=str(r["smiles"]),
+                h298_pm7=float(r["h298_pm7"]),
+                delta_kcal_mol=r["delta_kcal_mol"],
+                elapsed_s=r["elapsed_s"],
+                conformers_evaluated=r["conformers_evaluated"],
+                finished_at=str(r["updated_at"]),
+            )
+            for r in done
+        ),
+        mean_elapsed_s=None if mean["mean"] is None else float(mean["mean"]),
+    )
+
+
 class TrainingQueue:
     """Seeding, queue order and state transitions of the training molecules."""
 

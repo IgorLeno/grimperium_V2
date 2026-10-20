@@ -20,7 +20,7 @@ export function ResultsView() {
           <span className="results-empty__icon" aria-hidden="true">Δ</span>
           <div>
             <strong>Quando uma rotina rodar, os valores aparecem aqui.</strong>
-            <p>O resumo reunirá, por propriedade, as moléculas calculadas, o valor rápido e o valor corrigido pelo modelo. Acompanhe o treinamento em Delta Entalpia → Treinamento, na barra lateral.</p>
+            <p>O resumo reunirá, por propriedade, as moléculas calculadas, o valor rápido e o valor corrigido pelo modelo. Acompanhe o cálculo das moléculas em Delta Entalpia → Calcular PM7, na barra lateral.</p>
           </div>
         </div>
       </section>

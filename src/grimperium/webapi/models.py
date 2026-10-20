@@ -174,13 +174,41 @@ class TrainingFailure(BaseModel):
     at: str
 
 
+class TrainingInFlight(BaseModel):
+    mol_id: str
+    smiles: str
+    nheavy: int
+    started_at: str | None
+
+
+class TrainingCompleted(BaseModel):
+    mol_id: str
+    smiles: str
+    h298_pm7: float
+    delta_kcal_mol: float | None
+    elapsed_s: float | None
+    conformers_evaluated: int | None
+    finished_at: str
+
+
+class TrainingActivity(BaseModel):
+    """What the workers compute now and the latest accepted molecules."""
+
+    in_flight: list[TrainingInFlight]
+    recent: list[TrainingCompleted]
+    mean_elapsed_s: float | None
+
+
 class TrainingStatus(BaseModel):
     progress: TrainingProgress
     job: TrainingJob
     geometries: int
     failures: list[TrainingFailure]
+    activity: TrainingActivity
+    cpu_count: int
 
 
 class TrainingStartRequest(BaseModel):
     workers: int = Field(3, ge=1, le=8)
+    crest_threads: int = Field(4, ge=1, le=64)
     limit: int | None = Field(None, ge=1)

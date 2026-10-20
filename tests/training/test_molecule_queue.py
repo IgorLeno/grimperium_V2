@@ -10,6 +10,7 @@ from semi_imperium.training.db import database_path
 from semi_imperium.training.molecule_queue import (
     CbsReadError,
     TrainingQueue,
+    read_activity,
     read_progress,
     select_reference_rows,
 )
@@ -176,3 +177,51 @@ def test_progress_counts_each_bucket_from_the_database(
     progress = read_progress(database_path(tmp_path / "store"), cbs)
     assert (progress.total, progress.ok, progress.running) == (5, 1, 1)
     assert (progress.pending, progress.rerun, progress.skipped) == (2, 0, 1)
+
+
+# ------------------------------------------------------------------ activity
+
+
+def test_activity_without_a_database_is_empty(tmp_path: Path) -> None:
+    activity = read_activity(database_path(tmp_path / "store"))
+    assert (activity.in_flight, activity.recent, activity.mean_elapsed_s) == (
+        (),
+        (),
+        None,
+    )
+    assert not database_path(tmp_path / "store").exists()
+
+
+def test_activity_mean_only_counts_molecules_since_the_run_started(
+    tmp_path: Path, make_cbs: CbsFactory
+) -> None:
+    queue = _queue(tmp_path, _cbs(make_cbs))
+    queue.ensure_seeded()
+    queue.record_success(
+        "tiny",
+        hof_kcal_mol=-1.0,
+        conformers_evaluated=1,
+        elapsed_s=100.0,
+        batch_id="old",
+    )
+    db = database_path(tmp_path / "store")
+    with closing(sqlite3.connect(db)) as connection, connection:
+        connection.execute(
+            "UPDATE training_queue SET updated_at = '2000-01-01T00:00:00+00:00'"
+            " WHERE mol_id = 'tiny'"
+        )
+    since = "2020-01-01T00:00:00+00:00"
+    queue.record_success(
+        "small",
+        hof_kcal_mol=-2.0,
+        conformers_evaluated=2,
+        elapsed_s=10.0,
+        batch_id="new",
+    )
+    queue.mark_running("mid")
+    activity = read_activity(db, since=since, recent=5)
+    assert activity.mean_elapsed_s == 10.0
+    assert [m.mol_id for m in activity.recent] == ["small", "tiny"]  # newest first
+    (running,) = activity.in_flight
+    assert (running.mol_id, running.nheavy) == ("mid", 5)
+    assert running.started_at is not None

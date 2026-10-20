@@ -8,6 +8,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Painel Calcular PM7: rodada, workers e threads** (2026-10-20)
+  - `apps/dashboard`: barra da rodada atual (processadas / limite ou fila
+    restante), decorrido, ETA e ritmo pelo relógio de parede, tempo médio,
+    taxa de falha, sinal de vida do coordenador (alerta após 90 s sem
+    heartbeat), um cartão por worker com a molécula em cálculo e cronômetro,
+    e feed das últimas concluídas/falhas. A barra da fila completa fica em
+    segundo plano.
+  - Campo "Threads por molécula" (CREST `--crest-threads`, padrão 4) com o
+    orçamento `workers × threads` contra os núcleos da máquina.
+  - `src/grimperium/webapi`: `/api/training/status` ganha `activity`
+    (`in_flight`, `recent`, `mean_elapsed_s` desde o início da rodada) e
+    `cpu_count`; `/api/training/start` aceita `crest_threads` (1–64).
+  - `src/semi_imperium/training/molecule_queue.py`: `read_activity`, só leitura.
+  - Verification: `poetry run pytest tests/training tests/webapi -q`;
+    `npm run lint && npm run typecheck && npm test` em `apps/dashboard`
 - **Fila de treinamento no SQLite, semeada do CBS** (2026-10-14)
   - `src/semi_imperium/training/molecule_queue.py` e tabela `training_queue` em
     `db.py`: a fila nasce de `data/cbs_referencia.csv` (somente leitura), uma
@@ -23,6 +38,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Verification: `poetry run pytest tests/training tests/webapi -q`
 
 ### Changed
+- **Menu do módulo Delta Entalpia orientado a ação** (2026-10-20)
+  - Resumo · Calcular PM7 · Treinar modelo · Prever ΔH · Dados (antes:
+    Resumo · Dados · Treinamento · Delta Learning · Cálculo). Chaves das telas
+    não mudam.
 - **Um protocolo só (protocolo 2)** (2026-10-14)
   - `python -m semi_imperium.training`: `--csv` passa a apontar para o CBS;
     `status` conta contra a fila; o comando `migrate` e a coluna `protocol` do

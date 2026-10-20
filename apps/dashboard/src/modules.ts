@@ -55,9 +55,13 @@ export const MODULES: ModuleDef[] = [
     key: 'delta-enthalpy',
     name: 'Delta Entalpia',
     property: 'Entalpia de formação (estado padrão)',
-    description: 'PM7 corrigido por Δ-learning a partir de cálculos CBS: treinamento, Delta Learning e cálculo.',
+    description: 'PM7 corrigido por Δ-learning a partir de cálculos CBS: calcular PM7, treinar o modelo e prever ΔH.',
+    // Abas na ordem do fluxo (calcular → treinar → prever); Dados fica por último.
     tabs: [
       { key: 'summary', label: 'Resumo', hint: 'Visão geral do módulo' },
+      { key: 'training', label: 'Calcular PM7', hint: 'Semi-Imperium: calcula as moléculas PM7 que ensinam o modelo' },
+      { key: 'learning', label: 'Treinar modelo', hint: 'Delta Learning: treina o modelo de correção Δ' },
+      { key: 'calc', label: 'Prever ΔH', hint: 'Grimperium: PM7 + correção do modelo para uma molécula' },
       {
         key: 'data', label: 'Dados', hint: 'Tabelas usadas pelo módulo',
         children: [
@@ -65,9 +69,6 @@ export const MODULES: ModuleDef[] = [
           { key: 'cbs', label: 'CBS', hint: 'Referência de alta precisão' },
         ],
       },
-      { key: 'training', label: 'Treinamento', hint: 'Semi-Imperium: calcula as moléculas PM7 do treino' },
-      { key: 'learning', label: 'Delta Learning', hint: 'Treina o modelo de correção Δ' },
-      { key: 'calc', label: 'Cálculo', hint: 'Grimperium: calcula uma molécula pelo nome' },
     ],
     Component: DeltaEnthalpyModule,
   },

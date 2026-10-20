@@ -7,6 +7,7 @@ the dashboard then polls ``status``.
 
 from __future__ import annotations
 
+import os
 import subprocess
 import sys
 from collections.abc import Callable
@@ -18,7 +19,10 @@ from fastapi import HTTPException
 from grimperium.webapi import readers
 from grimperium.webapi.config import DashboardPaths
 from grimperium.webapi.models import (
+    TrainingActivity,
+    TrainingCompleted,
     TrainingFailure,
+    TrainingInFlight,
     TrainingJob,
     TrainingStartRequest,
     TrainingStatus,
@@ -32,6 +36,7 @@ class TrainingLaunch:
     cbs_csv: Path
     store_root: Path
     workers: int
+    crest_threads: int
     limit: int | None
 
 
@@ -51,6 +56,8 @@ def default_launcher(launch: TrainingLaunch) -> None:
         "run",
         "--workers",
         str(launch.workers),
+        "--crest-threads",
+        str(launch.crest_threads),
     ]
     if launch.limit is not None:
         command += ["--limit", str(launch.limit)]
@@ -70,11 +77,13 @@ def build_status(paths: DashboardPaths) -> TrainingStatus:
     from semi_imperium.training.db import database_path
     from semi_imperium.training.geometry_store import GeometryStore
     from semi_imperium.training.job_state import JobState
+    from semi_imperium.training.molecule_queue import read_activity
 
     progress = readers.queue_progress(paths.semi_imperium_store, paths.cbs_csv)
     db = database_path(paths.semi_imperium_store)
     state = JobState(db)
     snapshot = state.snapshot()
+    activity = read_activity(db, since=snapshot.started_at)
     return TrainingStatus(
         progress=progress,
         job=TrainingJob(
@@ -95,6 +104,12 @@ def build_status(paths: DashboardPaths) -> TrainingStatus:
             TrainingFailure(mol_id=mol, reason=reason, at=at)
             for mol, reason, at in state.recent_failures()
         ],
+        activity=TrainingActivity(
+            in_flight=[TrainingInFlight(**vars(m)) for m in activity.in_flight],
+            recent=[TrainingCompleted(**vars(m)) for m in activity.recent],
+            mean_elapsed_s=activity.mean_elapsed_s,
+        ),
+        cpu_count=os.cpu_count() or 1,
     )
 
 
@@ -110,6 +125,7 @@ def start(
             cbs_csv=paths.cbs_csv,
             store_root=paths.semi_imperium_store,
             workers=body.workers,
+            crest_threads=body.crest_threads,
             limit=body.limit,
         )
     )

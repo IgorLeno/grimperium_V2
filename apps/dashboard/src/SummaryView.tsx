@@ -164,7 +164,7 @@ export function SummaryView({ onNavigate }: { onNavigate: (view: ViewKey) => voi
       <section className="panel roadmap" aria-label="Próximos passos">
         <SectionHeading eyebrow="Em construção" title="O que vem a seguir" />
         <ol>
-          <li><strong>Treinamento em lote.</strong> A tela Treinamento já aciona e acompanha a rotina; o lote completo das moléculas pendentes ainda depende da validação do protocolo 2.</li>
+          <li><strong>Treinamento em lote.</strong> A tela Calcular PM7 já aciona e acompanha a rotina; o lote completo das moléculas pendentes ainda depende da validação do protocolo 2.</li>
           <li><strong>Planilha online.</strong> Espelho somente leitura das tabelas no Google Sheets, atualizado a partir dos CSVs locais.</li>
           <li><strong>Treino e avaliação.</strong> Painel do modelo Δ-learning com o quality gate (MAE ≤ 3,5, R² ≥ 0,97, RMSE ≤ 5,0 kcal/mol).</li>
         </ol>

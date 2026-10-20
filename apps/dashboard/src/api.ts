@@ -183,9 +183,31 @@ export interface TrainingJob {
 
 export interface TrainingFailure { mol_id: string; reason: string; at: string }
 
+/** Molécula marcada como em cálculo; `started_at` é quando foi despachada. */
+export interface TrainingInFlight { mol_id: string; smiles: string; nheavy: number; started_at: string | null }
+
+export interface TrainingCompleted {
+  mol_id: string
+  smiles: string
+  h298_pm7: number
+  delta_kcal_mol: number | null
+  elapsed_s: number | null
+  conformers_evaluated: number | null
+  finished_at: string
+}
+
+export interface TrainingActivity {
+  in_flight: TrainingInFlight[]
+  recent: TrainingCompleted[]
+  /** Tempo médio por molécula aceita desde o início da rodada. */
+  mean_elapsed_s: number | null
+}
+
 export interface TrainingStatus {
   progress: TrainingProgress
   job: TrainingJob
   geometries: number
   failures: TrainingFailure[]
+  activity: TrainingActivity
+  cpu_count: number
 }
