@@ -5,6 +5,10 @@ and a conda-forge build all say ``xtb 6.7.1``), so each program is recorded
 by its reported version *and* the sha256 of the file that actually ran.
 A program that cannot be found or does not report a version is recorded as
 such, never omitted: the run itself decides whether it can proceed.
+
+The binaries' hashes miss the shared libraries they load (``libmopac.so``,
+openblas), so the conda environment around them is recorded too, by its
+package list (``conda-meta``: name, version and build of each package).
 """
 
 from __future__ import annotations
@@ -51,9 +55,31 @@ def _reported_version(executable: str) -> str:
     return match.group(1) if match else UNKNOWN
 
 
+def _environment_sha256(binaries: list[Path]) -> str:
+    """Hash of the package list of the conda environment(s) holding ``binaries``.
+
+    Built from file names only (``<name>-<version>-<build>.json``), never from
+    their contents, which embed the install prefix: the same lockfile in
+    another home folder gives the same hash.
+    """
+    packages: set[str] = set()
+    for binary in binaries:
+        meta = binary.parent.parent / "conda-meta"
+        if meta.is_dir():
+            packages.update(p.name for p in meta.glob("*.json"))
+    if not packages:
+        return UNAVAILABLE
+    return hashlib.sha256("\n".join(sorted(packages)).encode()).hexdigest()
+
+
 def probe_programs(executables: Mapping[str, str]) -> dict[str, str]:
-    """Map each program name to its version, plus ``<name>_sha256`` and ``<name>_path``."""
+    """Map each program name to its version, plus ``<name>_sha256`` and ``<name>_path``.
+
+    ``environment_sha256`` names the conda environment of the programs
+    (``unavailable`` outside one).
+    """
     info: dict[str, str] = {}
+    found: list[Path] = []
     for name, executable in executables.items():
         resolved = shutil.which(executable)
         if resolved is None:
@@ -61,9 +87,11 @@ def probe_programs(executables: Mapping[str, str]) -> dict[str, str]:
             info[f"{name}_path"] = executable
             continue
         path = Path(resolved)
+        found.append(path)
         info[name] = _reported_version(resolved)
         info[f"{name}_sha256"] = _sha256(path)
         info[f"{name}_path"] = str(path)
+    info["environment_sha256"] = _environment_sha256(found)
     return info
 
 
