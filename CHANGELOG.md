@@ -7,6 +7,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Fila de treinamento no SQLite, semeada do CBS** (2026-10-14)
+  - `src/semi_imperium/training/molecule_queue.py` e tabela `training_queue` em
+    `db.py`: a fila nasce de `data/cbs_referencia.csv` (somente leitura), uma
+    molécula por SMILES (27.335 de 27.760 linhas), escolhendo o conformer de
+    referência (menor `conformer_rank_by_h298`, que é o de menor H298; empate
+    por `H298_cbs` e `mol_id`). Estado (`pending`, `running`, `ok`, `rerun`,
+    `skip`), tentativas, valor PM7, Δ = CBS − PM7 e proveniência ficam no
+    SQLite; reexecutar continua de onde parou.
+  - `src/semi_imperium/training/final_outputs.py`: cada molécula aceita grava
+    `data/semi_imperium/geometrias/<mol_id>/` com `.xyz`, `.out` (otimização
+    MOPAC), `.freq.out` (verificação) e `.json`; falha na cópia vira falha da
+    molécula.
+  - Verification: `poetry run pytest tests/training tests/webapi -q`
+
+### Changed
+- **Um protocolo só (protocolo 2)** (2026-10-14)
+  - `python -m semi_imperium.training`: `--csv` passa a apontar para o CBS;
+    `status` conta contra a fila; o comando `migrate` e a coluna `protocol` do
+    CSV deixam de existir.
+  - `src/grimperium/webapi`: `/api/dataset/progress` devolve `{queue,
+    semi_imperium}` (progresso contra o total da fila); `/api/training/status`
+    sem `protocol1`/`migrated`; `DashboardPaths` sem `pm7_csv` e com `cbs_csv`
+    obrigatório.
+  - Dashboard: o progresso do Resumo e do Treinamento é o do Semi-Imperium
+    contra a fila.
+
+### Removed
+- **Protocolo legado fora do treinamento e do painel** (2026-10-14)
+  - `src/semi_imperium/training/ledger.py` e `migration.py` (ledger em CSV via
+    `BatchCSVManager`), `LEGACY_PROTOCOL`, e seus testes.
+  - Webapi: bloco `legacy`, tabela/perfil `pm7` (`/api/tables/pm7/*`).
+  - Dashboard: aba **PM7** (`Pm7View.tsx`), "PM7 (legado)" no Mapa dos dados e o
+    card "PM7 concluído" no Resumo.
+  - `data/pm7_fila_pipeline.csv`, `data/molecules_pm7/` e o conteúdo antigo de
+    `data/semi_imperium/` (backup temporário fora do repositório).
+
 ### Changed
 - `data/` limpo e renomeado: `cbs_referencia.csv` (era `thermo_cbs_chon_v2.csv`),
   `pm7_fila_pipeline.csv` (era `thermo_pm7.csv`), `experimental.csv`,

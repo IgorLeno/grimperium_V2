@@ -64,16 +64,15 @@ Menu superior com submenu (definido em `src/modules.ts`):
 
 | Menu | Submenu | O que mostra | Fonte |
 |------|---------|--------------|-------|
-| **Resumo** | — | Resumo em texto com números ao vivo, pipeline em 5 passos, mapa das três tabelas, fila CREST + PM7, store Semi-Imperium, ideia do Δ-learning e glossário. | `/api/dataset/progress`, perfis das tabelas, comparação |
+| **Resumo** | — | Resumo em texto com números ao vivo, pipeline em 5 passos, mapa das duas tabelas, fila do treinamento (Semi-Imperium contra o total da fila), store Semi-Imperium, ideia do Δ-learning e glossário. | `/api/dataset/progress`, perfis das tabelas, comparação |
 | **Dados** | **Experimental** | O que é a tabela; distribuições; comparação CBS × experimental (concordância, paridade, erro por tamanho e fonte); tabela completa pesquisável. | `data/experimental.csv`, `data/experimental_vs_cbs.csv` |
 | | **CBS** | O que é a referência CBS; entalpia, tamanho, elementos, correção CBS − B3LYP, spin/carga, SMILES repetidos; tabela completa. | `data/cbs_referencia.csv` |
-| | **PM7** | Tabela legada `crest_pm7`: andamento, erro Δ = CBS − PM7, paridade, resultado do CREST/MOPAC, tempos; tabela completa. | `data/pm7_fila_pipeline.csv` |
-| **Treinamento** | — | Rotina Semi-Imperium (protocolo 2): barra de andamento com denominador explícito, iniciar/parar com moléculas em paralelo e limite, falhas recentes com o motivo. Atualiza a cada 5 s. | `/api/training/status`, `/api/training/start`, `/api/training/stop` |
+| **Treinamento** | — | Rotina Semi-Imperium (protocolo 2): barra de andamento contra o total da fila (uma molécula por SMILES do CBS), iniciar/parar com moléculas em paralelo e limite, falhas recentes com o motivo. Atualiza a cada 5 s. | `/api/training/status`, `/api/training/start`, `/api/training/stop` |
 | **Delta Learning** | — | Explica as etapas do treino do modelo Δ e o portão de qualidade. Ainda sem execução no painel. | — |
 | **Cálculo** | — | "Em breve": cálculo de uma molécula pelo nome (Grimperium), depende do Delta Learning. | — |
 
-Cada gráfico traz um bloco **“Como ler”** em linguagem simples. Os CSVs CBS
-e PM7 ficam fora do Git; sem eles, a aba correspondente explica onde copiar o
+Cada gráfico traz um bloco **“Como ler”** em linguagem simples. Os CSVs
+ficam fora do Git; sem eles, a aba correspondente explica onde copiar o
 arquivo. Tema claro/escuro segue o sistema operacional.
 
 ## Treinamento (Delta Entalpia)
@@ -82,30 +81,32 @@ O painel aciona e acompanha a rotina; o cálculo roda no back-end e também pelo
 
 ```bash
 poetry run python -m semi_imperium.training status
-poetry run python -m semi_imperium.training migrate            # ensaio
-poetry run python -m semi_imperium.training migrate --apply    # grava (cria cópia .pre-protocol-*.bak)
 poetry run python -m semi_imperium.training run --workers 3 --limit 10
 poetry run python -m semi_imperium.training stop
 ```
 
-A migração é feita uma vez: marca as moléculas do protocolo 1 e devolve
-`Selected` à fila. Enquanto o CSV não for migrado, o botão **Iniciar
-treinamento** fica desabilitado e a tela mostra o comando. A API inicia a rotina
-como subprocesso do mesmo comando (`run`); o estado fica em
-`data/semi_imperium/training.sqlite3`. `GRIMPERIUM_ROOT` aponta a API para outra
-pasta no formato do repositório (usado para ensaiar em uma cópia dos dados).
+A fila nasce de `data/cbs_referencia.csv` (somente leitura; `--csv` aponta outro
+arquivo): uma molécula por SMILES, a do conformer de referência (menor
+`conformer_rank_by_h298`, que é o de menor H298), 27.335 moléculas. Ela é
+semeada na primeira execução em `data/semi_imperium/training.sqlite3`, que
+guarda o estado de cada molécula (`pending`, `running`, `ok`, `rerun`, `skip`),
+as tentativas e o resultado; reexecutar continua de onde parou. Cada molécula
+aceita grava `data/semi_imperium/geometrias/<mol_id>/` com o `.xyz`, o `.out` da
+otimização, o `.freq.out` da verificação e um `.json`. A API inicia a rotina
+como subprocesso do mesmo comando (`run`). `GRIMPERIUM_ROOT` aponta a API para
+outra pasta no formato do repositório (usado para ensaiar em uma cópia dos dados).
 
 ## API
 
 | Rota | Conteúdo |
 |------|----------|
 | `GET /api/health` | Saúde da API e se ela pode acionar a rotina (`can_dispatch`) |
-| `GET /api/dataset/progress` | Estados do CSV PM7 e store Semi-Imperium |
+| `GET /api/dataset/progress` | Andamento da fila de treinamento (contra o total da fila) e store Semi-Imperium |
 | `GET /api/experimental/summary` · `/comparison` | Fontes/flags e pares CBS × experimental |
-| `GET /api/tables/{exp,cbs,pm7}/profile` | Distribuições: tamanho, composição CHON, histogramas (99% central; extremos contados à parte), categorias, erro por tamanho e nuvem de paridade (até 4.000 pontos) |
-| `GET /api/tables/{exp,cbs,pm7}/rows?q=&offset=&limit=&sort=&desc=` | Linhas paginadas (máx. 200) com busca e ordenação |
-| `GET /api/training/status` | Andamento (CSV), estado do job, geometrias guardadas e falhas recentes |
-| `POST /api/training/start` · `/stop` | Inicia (`workers` 1–8, `limit` opcional) ou pede parada; só origens locais; 409 se o CSV não foi migrado ou já há job vivo |
+| `GET /api/tables/{exp,cbs}/profile` | Distribuições: tamanho, composição CHON, histogramas (99% central; extremos contados à parte), categorias, erro por tamanho e nuvem de paridade (até 4.000 pontos) |
+| `GET /api/tables/{exp,cbs}/rows?q=&offset=&limit=&sort=&desc=` | Linhas paginadas (máx. 200) com busca e ordenação |
+| `GET /api/training/status` | Andamento da fila (SQLite), estado do job, geometrias guardadas e falhas recentes |
+| `POST /api/training/start` · `/stop` | Inicia (`workers` 1–8, `limit` opcional) ou pede parada; só origens locais; 409 se já há job vivo |
 
 Fora `POST /api/training/start` e `/stop`, todas as rotas são `GET`; `tests/webapi/test_app.py` garante isso.
 

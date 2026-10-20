@@ -9,8 +9,8 @@ is [`CLAUDE.md`](/home/igor/Projetos/grimperium/CLAUDE.md).
   delta-learning.
 - Core package layout:
   `src/grimperium/{cli,crest_pm7,core,data,ml,models,utils}`.
-- Active datasets in `data/`:
-  `cbs_referencia.csv` and `pm7_fila_pipeline.csv`.
+- Active dataset in `data/`: `cbs_referencia.csv` (read only). The training queue
+  lives in `data/semi_imperium/training.sqlite3`, seeded from it.
 
 ## Pipeline Notes
 

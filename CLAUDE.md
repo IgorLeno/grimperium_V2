@@ -161,9 +161,11 @@ unless the current task explicitly provides that context.
 - MOPAC descriptor extraction currently reads `.out` files via
   `src/grimperium/crest_pm7/mopac_descriptors.py`. Do not reintroduce `.aux`
   parsing assumptions without checking the current code and tests.
-- Active dataset names are `data/cbs_referencia.csv` and `data/pm7_fila_pipeline.csv`.
-  Removed dataset names can appear in historical docs and changelog entries, but
-  they are not current workflow authority.
+- The active dataset is `data/cbs_referencia.csv` (read only); the training queue
+  lives in `data/semi_imperium/training.sqlite3`. `data/pm7_fila_pipeline.csv` was
+  removed (legacy `crest_pm7` code may still mention it). Removed dataset names can
+  appear in historical docs and changelog entries, but they are not current
+  workflow authority.
 - CLI changes must preserve `BaseView` navigation, visible Rich feedback for
   state changes, and graceful cancellation paths.
 - Scientific or data-pipeline changes need grounded verification across adjacent
