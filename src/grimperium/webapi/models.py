@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, FiniteFloat, model_validator
 
 BLANK_LABEL = "unset"
 """Count key for empty cells, so a blank flag is visible, not dropped."""
@@ -213,3 +213,98 @@ class TrainingStartRequest(BaseModel):
     workers: int = Field(3, ge=1, le=8)
     crest_threads: int = Field(4, ge=1, le=64)
     limit: int | None = Field(None, ge=1)
+
+
+# --------------------------------------------------------------------- cells
+# Bodies of the cell API (``grimperium.webapi.cells``), called by the cells.
+
+
+class CellRegisterRequest(BaseModel):
+    host: str = Field(min_length=1, max_length=255)
+    cores: int = Field(ge=1, le=1024)
+    workers: int = Field(ge=1, le=256)
+    crest_threads: int = Field(ge=1, le=256)
+    #: ``probe_programs`` output on the cell (version, sha256, path per program).
+    program_versions: dict[str, str]
+    protocol_signature: str
+
+
+class CellRegisterResponse(BaseModel):
+    cell_id: str
+    name: str
+    admission: str
+    #: Molecules the cell held before this registration, back in the queue.
+    released: list[str]
+    lease_s: float
+    #: How often the cell should send a heartbeat (well under 90 s).
+    heartbeat_s: float
+
+
+class CellClaimRequest(BaseModel):
+    count: int = Field(ge=1, le=256)
+
+
+class CellMolecule(BaseModel):
+    attempt_id: str
+    mol_id: str
+    smiles: str
+    charge: int
+    multiplicity: int
+    nheavy: int
+
+
+class CellClaimResponse(BaseModel):
+    molecules: list[CellMolecule]
+    lease_s: float
+
+
+class CellHeartbeatRequest(BaseModel):
+    attempt_ids: list[str] = Field(default_factory=list, max_length=256)
+
+
+class CellHeartbeatResponse(BaseModel):
+    renewed: int
+    #: Attempts the cell reported that it no longer holds (released or settled).
+    not_held: list[str]
+
+
+class CellGeometry(BaseModel):
+    """A protocol-2 result, as ``WorkerResult`` holds it on the cell."""
+
+    mol_id: str
+    smiles: str
+    signature: str
+    calculation_id: str
+    conformer_index: int | None
+    elements: list[str] = Field(min_length=1)
+    coordinates: list[tuple[FiniteFloat, FiniteFloat, FiniteFloat]]
+    hof_kcal_mol: FiniteFloat
+    lowest_frequency_cm1: FiniteFloat | None
+    conformers_evaluated: int = Field(ge=0)
+    elapsed_s: FiniteFloat = Field(ge=0)
+
+    @model_validator(mode="after")
+    def _one_position_per_atom(self) -> CellGeometry:
+        if len(self.elements) != len(self.coordinates):
+            raise ValueError(
+                f"{len(self.elements)} elementos e {len(self.coordinates)} posições"
+            )
+        return self
+
+
+class CellResultRequest(BaseModel):
+    """Exactly one of ``result`` (success) or ``failure`` (reason)."""
+
+    attempt_id: str
+    result: CellGeometry | None = None
+    failure: str | None = Field(None, min_length=1, max_length=2000)
+
+    @model_validator(mode="after")
+    def _exactly_one(self) -> CellResultRequest:
+        if (self.result is None) == (self.failure is None):
+            raise ValueError("envie result ou failure, um dos dois")
+        return self
+
+
+class CellResultResponse(BaseModel):
+    outcome: str

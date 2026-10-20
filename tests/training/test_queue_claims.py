@@ -122,6 +122,37 @@ def test_claim_skips_excluded_molecules(tmp_path: Path, make_cbs: CbsFactory) ->
     assert [m.mol_id for m in claimed] == ["small", "big"]
 
 
+def test_a_remote_claim_avoids_what_the_same_cell_already_failed(
+    tmp_path: Path, make_cbs: CbsFactory
+) -> None:
+    # A broken cell can spend at most one rerun per molecule: the next try
+    # goes to another cell, the central, or nobody.
+    queue = _seeded(tmp_path, _cbs(make_cbs))
+    (first,) = queue.claim("cell-a", 1)
+    assert queue.accept_failure(first.attempt_id, "crest timeout") == "rerun"
+    again = queue.claim("cell-a", 1, avoid_own_failures=True)
+    assert [m.mol_id for m in again] == ["small"]
+    queue.release("cell-a")
+    (other,) = queue.claim("cell-b", 1, avoid_own_failures=True)
+    assert other.mol_id == "tiny"
+    queue.release("cell-b")
+    # Without the flag (the central's own rule) the rerun is first again.
+    assert [m.mol_id for m in queue.claim("cell-a", 1)] == ["tiny"]
+
+
+def test_held_attempts_and_attempt_owner(tmp_path: Path, make_cbs: CbsFactory) -> None:
+    queue = _seeded(tmp_path, _cbs(make_cbs))
+    mine = queue.claim("cell-a", 2)
+    queue.claim("cell-b", 1)
+    assert queue.held_attempts("cell-a") == {m.attempt_id for m in mine}
+    assert queue.attempt_owner(mine[0].attempt_id) == (mine[0].mol_id, "cell-a")
+    queue.release("cell-a")
+    assert queue.held_attempts("cell-a") == set()
+    assert queue.attempt_owner(mine[0].attempt_id)[1] == "cell-a"  # the log stays
+    with pytest.raises(KeyError):
+        queue.attempt_owner("nope")
+
+
 def test_claim_of_zero_is_empty_and_negative_is_refused(
     tmp_path: Path, make_cbs: CbsFactory
 ) -> None:

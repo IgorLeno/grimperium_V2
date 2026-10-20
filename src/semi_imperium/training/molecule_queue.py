@@ -303,6 +303,7 @@ class TrainingQueue:
         *,
         lease_s: float = DEFAULT_LEASE_S,
         exclude: Collection[str] = (),
+        avoid_own_failures: bool = False,
     ) -> list[ClaimedMolecule]:
         """Reserve up to ``count`` queued molecules to ``cell_id``, smallest first.
 
@@ -312,7 +313,10 @@ class TrainingQueue:
         ``training_attempt``. ``exclude`` keeps molecules out of this claim:
         the central run passes what it already tried, so a molecule that just
         failed (``rerun``, still smallest first) waits for the next run
-        instead of being retried at once.
+        instead of being retried at once. A remote cell has no runs, so it
+        passes ``avoid_own_failures`` instead: molecules this cell already
+        failed go to another cell (or the central), and a broken cell can
+        spend at most one rerun per molecule.
         """
         if not cell_id:
             raise ValueError("cell_id must not be empty")
@@ -330,6 +334,8 @@ class TrainingQueue:
                 "  SELECT mol_id FROM training_queue"
                 "  WHERE status IN ('pending', 'rerun')"
                 "  AND mol_id NOT IN (SELECT value FROM json_each(?))"
+                "  AND NOT (? AND mol_id IN (SELECT mol_id FROM training_attempt"
+                "   WHERE cell_id = ? AND outcome = 'failed'))"
                 "  ORDER BY nheavy, mol_id LIMIT ?)"
                 " RETURNING mol_id, smiles, charge, multiplicity, nheavy, h298_cbs,"
                 " attempt_id",
@@ -338,6 +344,8 @@ class TrainingQueue:
                     lease_until,
                     now.isoformat(),
                     json.dumps(sorted(exclude)),
+                    int(avoid_own_failures),
+                    cell_id,
                     count,
                 ),
             ).fetchall()
@@ -389,6 +397,22 @@ class TrainingQueue:
                 " AND attempt_id IN (SELECT value FROM json_each(?))",
                 (lease_until, cell_id, json.dumps(attempt_ids)),
             ).rowcount
+
+    def held_attempts(self, cell_id: str) -> set[str]:
+        """``attempt_id`` of every molecule ``cell_id`` currently holds."""
+        with closing(connect(self._db_path)) as connection:
+            rows = connection.execute(
+                "SELECT attempt_id FROM training_queue"
+                " WHERE status = 'running' AND cell_id = ?",
+                (cell_id,),
+            ).fetchall()
+        return {str(r["attempt_id"]) for r in rows}
+
+    def attempt_owner(self, attempt_id: str) -> tuple[str, str]:
+        """``(mol_id, cell_id)`` of ``attempt_id``, kept after it is settled."""
+        with closing(connect(self._db_path)) as connection:
+            found = self._attempt(connection, attempt_id)
+        return str(found["mol_id"]), str(found["cell_id"])
 
     def release(self, cell_id: str, *, include_unowned: bool = False) -> list[str]:
         """Give ``cell_id``'s running molecules back to the queue; return them.

@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from semi_imperium.training.program_info import probe_programs
+from semi_imperium.training.program_info import probe_programs, program_mismatches
 
 
 def _script(folder: Path, name: str, output: str) -> Path:
@@ -63,3 +63,43 @@ def test_unrecognised_version_output_keeps_the_hash(tmp_path: Path) -> None:
     info = probe_programs({"crest": str(crest)})
 
     assert info["crest"] == "unknown" and info["crest_sha256"] == _sha256(crest)
+
+
+CENTRAL = {
+    "crest": "3.0.2",
+    "crest_sha256": "aaa",
+    "crest_path": "/home/central/env/bin/crest",
+    "mopac": "23.2.2",
+    "mopac_sha256": "bbb",
+    "mopac_path": "/x/mopac",
+}
+
+
+def test_same_programs_in_another_folder_match() -> None:
+    cell = {**CENTRAL, "crest_path": "/home/aluno/env/bin/crest", "mopac_path": "m"}
+    assert program_mismatches(CENTRAL, cell) == []
+
+
+def test_version_hash_and_missing_programs_are_each_reported() -> None:
+    cell = {**CENTRAL, "crest": "3.0.1", "mopac_sha256": "ccc"}
+    del cell["crest_sha256"]
+    assert program_mismatches(CENTRAL, cell) == [
+        "crest: 3.0.1 (central 3.0.2)",
+        "crest_sha256: ausente (central aaa)",
+        "mopac_sha256: ccc (central bbb)",
+    ]
+
+
+def test_unreadable_programs_never_match_even_on_both_sides() -> None:
+    central = {**CENTRAL, "crest": "unknown"}
+    cell = {**CENTRAL, "crest": "unknown", "mopac": "unavailable"}
+    assert program_mismatches(central, cell) == [
+        "crest: unknown (central unknown)",
+        "mopac: unavailable (central 23.2.2)",
+    ]
+
+
+def test_a_program_the_central_does_not_use_is_a_mismatch() -> None:
+    assert program_mismatches(CENTRAL, {**CENTRAL, "orca": "6.0"}) == [
+        "orca: 6.0 (central ausente)"
+    ]

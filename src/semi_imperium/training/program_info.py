@@ -65,3 +65,25 @@ def probe_programs(executables: Mapping[str, str]) -> dict[str, str]:
         info[f"{name}_sha256"] = _sha256(path)
         info[f"{name}_path"] = str(path)
     return info
+
+
+def program_mismatches(
+    central: Mapping[str, str], cell: Mapping[str, str]
+) -> list[str]:
+    """Why ``cell``'s programs differ from ``central``'s; empty when they match.
+
+    Versions and sha256 must be equal; install paths (``*_path``) may differ.
+    A program missing or unreadable on either side never matches, so a
+    broken central refuses every cell instead of admitting broken ones.
+    """
+    differences = []
+    for key in sorted(set(central) | set(cell)):
+        if key.endswith("_path"):
+            continue
+        ours, theirs = central.get(key), cell.get(key)
+        if ours == theirs and ours not in (UNAVAILABLE, UNKNOWN):
+            continue
+        differences.append(
+            f"{key}: {theirs or 'ausente'} (central {ours or 'ausente'})"
+        )
+    return differences
