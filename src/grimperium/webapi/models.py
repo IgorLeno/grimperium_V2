@@ -308,3 +308,40 @@ class CellResultRequest(BaseModel):
 
 class CellResultResponse(BaseModel):
     outcome: str
+
+
+# Dashboard side of the cells (``grimperium.webapi.app``, local only).
+
+
+class CellSummary(BaseModel):
+    cell_id: str
+    name: str
+    #: online · late · silent · never_seen · version_mismatch · blocked · revoked
+    state: str
+    admission: str
+    host: str | None
+    cores: int | None
+    workers: int | None
+    crest_threads: int | None
+    program_versions: dict[str, str]
+    refusal: str | None
+    created_at: str
+    registered_at: str | None
+    last_seen_at: str | None
+    revoked_at: str | None
+    #: Molecules reserved to this cell right now.
+    held: int
+
+
+class CellNameRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=80, pattern=r"\S")
+
+
+class CellCreated(BaseModel):
+    cell: CellSummary
+    #: Shown only in this response; the central keeps just its hash.
+    token: str
+
+
+class CellReleased(BaseModel):
+    released: list[str]

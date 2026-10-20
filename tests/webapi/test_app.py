@@ -264,7 +264,9 @@ def test_non_numeric_value_is_reported(paths: DashboardPaths) -> None:
     assert "H298_cbs" in response.json()["detail"]
 
 
-def test_only_the_training_routes_accept_writes(paths: DashboardPaths) -> None:
+def test_only_the_training_and_cell_routes_accept_writes(
+    paths: DashboardPaths,
+) -> None:
     app = create_app(paths)
     writers = {
         getattr(route, "path", "")
@@ -272,7 +274,14 @@ def test_only_the_training_routes_accept_writes(paths: DashboardPaths) -> None:
         if getattr(route, "path", "").startswith("/api/")
         and getattr(route, "methods", set()) - {"GET", "HEAD"}
     }
-    assert writers == {"/api/training/start", "/api/training/stop"}
+    assert writers == {
+        "/api/training/start",
+        "/api/training/stop",
+        "/api/cells",
+        "/api/cells/{cell_id}/rename",
+        "/api/cells/{cell_id}/release",
+        "/api/cells/{cell_id}/revoke",
+    }
 
 
 # --------------------------------------------------- table profiles & rows

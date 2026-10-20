@@ -1,4 +1,5 @@
-"""API the cells call: register, claim, heartbeat and result.
+"""API the cells call (register, claim, heartbeat, result) and the
+dashboard's cell actions (list, create, rename, release, revoke).
 
 It is a separate app from the dashboard (``create_cell_app``), served on its
 own port bound to the Tailscale address, so a cell can reach these four
@@ -30,17 +31,20 @@ from grimperium.webapi.config import DashboardPaths
 from grimperium.webapi.models import (
     CellClaimRequest,
     CellClaimResponse,
+    CellCreated,
     CellHeartbeatRequest,
     CellHeartbeatResponse,
     CellMolecule,
     CellRegisterRequest,
     CellRegisterResponse,
+    CellReleased,
     CellResultRequest,
     CellResultResponse,
+    CellSummary,
 )
 
 if TYPE_CHECKING:
-    from semi_imperium.training.cells import Cell
+    from semi_imperium.training.cells import Cell, CellRegistry
 
 ProgramsProbe = Callable[[], dict[str, str]]
 
@@ -258,3 +262,86 @@ def create_cell_app(
         return CellResultResponse(outcome=outcome)
 
     return app
+
+
+# ------------------------------------------------------------ dashboard side
+# Called by ``grimperium.webapi.app`` (127.0.0.1 only), never by a cell.
+
+
+def _summary(cell: Cell, held: int) -> CellSummary:
+    from datetime import datetime, timezone
+
+    from semi_imperium.training.cells import cell_state
+
+    return CellSummary(
+        cell_id=cell.cell_id,
+        name=cell.name,
+        state=cell_state(cell, datetime.now(timezone.utc)),
+        admission=cell.admission,
+        host=cell.host,
+        cores=cell.cores,
+        workers=cell.workers,
+        crest_threads=cell.crest_threads,
+        program_versions=cell.program_versions,
+        refusal=cell.refusal,
+        created_at=cell.created_at,
+        registered_at=cell.registered_at,
+        last_seen_at=cell.last_seen_at,
+        revoked_at=cell.revoked_at,
+        held=held,
+    )
+
+
+def _held(paths: DashboardPaths, cell_id: str) -> int:
+    from semi_imperium.training.db import database_path
+    from semi_imperium.training.molecule_queue import TrainingQueue
+
+    db = database_path(paths.semi_imperium_store)
+    return len(TrainingQueue(db, paths.cbs_csv).held_attempts(cell_id))
+
+
+def _registry(paths: DashboardPaths) -> CellRegistry:
+    from semi_imperium.training.cells import CellRegistry
+    from semi_imperium.training.db import database_path
+
+    return CellRegistry(database_path(paths.semi_imperium_store))
+
+
+def _known(paths: DashboardPaths, cell_id: str) -> Cell:
+    try:
+        return _registry(paths).get(cell_id)
+    except KeyError:
+        raise HTTPException(404, f"Célula desconhecida: {cell_id}") from None
+
+
+def list_cells(paths: DashboardPaths) -> list[CellSummary]:
+    """Every cell with its state by the central's clock; never creates the DB."""
+    return [_summary(c, _held(paths, c.cell_id)) for c in _registry(paths).list()]
+
+
+def create_cell(paths: DashboardPaths, name: str) -> CellCreated:
+    cell, token = _registry(paths).create(name)
+    return CellCreated(cell=_summary(cell, 0), token=token)
+
+
+def rename_cell(paths: DashboardPaths, cell_id: str, name: str) -> CellSummary:
+    _known(paths, cell_id)
+    cell = _registry(paths).rename(cell_id, name)
+    return _summary(cell, _held(paths, cell_id))
+
+
+def release_cell(paths: DashboardPaths, cell_id: str) -> CellReleased:
+    """ "Devolver à fila": the only way a silent cell's molecules come back."""
+    from semi_imperium.training.db import database_path
+    from semi_imperium.training.molecule_queue import TrainingQueue
+
+    _known(paths, cell_id)
+    queue = TrainingQueue(database_path(paths.semi_imperium_store), paths.cbs_csv)
+    return CellReleased(released=queue.release(cell_id))
+
+
+def revoke_cell(paths: DashboardPaths, cell_id: str) -> CellSummary:
+    """Invalidate the token. Held molecules stay reserved until released."""
+    _known(paths, cell_id)
+    cell = _registry(paths).revoke(cell_id)
+    return _summary(cell, _held(paths, cell_id))

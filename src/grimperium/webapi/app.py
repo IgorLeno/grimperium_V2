@@ -8,9 +8,13 @@ from typing import Literal
 from fastapi import Depends, FastAPI, HTTPException, Query, Request
 from fastapi.responses import JSONResponse
 
-from grimperium.webapi import profiles, readers, training
+from grimperium.webapi import cells, profiles, readers, training
 from grimperium.webapi.config import DashboardPaths
 from grimperium.webapi.models import (
+    CellCreated,
+    CellNameRequest,
+    CellReleased,
+    CellSummary,
     DatasetProfile,
     DatasetProgress,
     ExperimentalComparison,
@@ -108,5 +112,33 @@ def create_app(
     @app.post("/api/training/stop", dependencies=[Depends(require_local_origin)])
     def training_stop() -> TrainingStatus:
         return training.stop(files)
+
+    # The cells themselves talk to ``cells.create_cell_app`` on another port;
+    # these routes are the dashboard's view of them and stay local.
+    @app.get("/api/cells")
+    def cells_list() -> list[CellSummary]:
+        return cells.list_cells(files)
+
+    @app.post("/api/cells", dependencies=[Depends(require_local_origin)])
+    def cells_create(body: CellNameRequest) -> CellCreated:
+        return cells.create_cell(files, body.name)
+
+    @app.post(
+        "/api/cells/{cell_id}/rename", dependencies=[Depends(require_local_origin)]
+    )
+    def cells_rename(cell_id: str, body: CellNameRequest) -> CellSummary:
+        return cells.rename_cell(files, cell_id, body.name)
+
+    @app.post(
+        "/api/cells/{cell_id}/release", dependencies=[Depends(require_local_origin)]
+    )
+    def cells_release(cell_id: str) -> CellReleased:
+        return cells.release_cell(files, cell_id)
+
+    @app.post(
+        "/api/cells/{cell_id}/revoke", dependencies=[Depends(require_local_origin)]
+    )
+    def cells_revoke(cell_id: str) -> CellSummary:
+        return cells.revoke_cell(files, cell_id)
 
     return app
