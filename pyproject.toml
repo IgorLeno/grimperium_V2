@@ -82,6 +82,7 @@ output = ["openpyxl"]
 grimperium = "grimperium.cli:main"
 grimperium-worker = "grimperium.worker.__main__:main"
 semi-imperium = "semi_imperium.app:main"
+celula = "semi_imperium.cell.__main__:main"
 
 [tool.ruff]
 target-version = "py310"
