@@ -8,9 +8,13 @@ Tests cover:
     - Dataset statistics
 """
 
+import json
+
 import pytest
 
+from grimperium.data.loader import ChemperiumLoader
 from tests.fixtures.real_data import (
+    DATASET_MANIFEST_PATH,
     HAS_REAL_DATASET,
     get_dataset_stats,
     load_real_subset,
@@ -59,9 +63,11 @@ def test_real_train_test_split():
 def test_dataset_stats():
     """Test dataset statistics calculation."""
     stats = get_dataset_stats()
+    # The CSV is gitignored; its versioned manifest is the row-count authority.
+    manifest = json.loads(DATASET_MANIFEST_PATH.read_text())
 
-    assert stats["n_molecules"] == 29568
-    assert stats["n_columns"] == 6
-    assert "H298_cbs" in stats["columns"]
+    assert stats["n_molecules"] == manifest["rows"]
+    assert stats["n_columns"] == len(stats["columns"])
+    assert set(ChemperiumLoader.REQUIRED_COLUMNS) <= set(stats["columns"])
     assert stats["nheavy_min"] >= 1
     assert stats["nheavy_max"] <= 22

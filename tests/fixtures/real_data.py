@@ -2,7 +2,8 @@
 Real dataset fixtures for integration testing.
 
 This module provides functions to load subsets of the real
-cbs_referencia.csv dataset (29,568 CHON molecules) for CI testing
+cbs_referencia.csv dataset (CHON molecules; row count in
+cbs_referencia.manifest.json) for CI testing
 without requiring the full dataset.
 
 Example:
@@ -20,6 +21,7 @@ from sklearn.model_selection import train_test_split
 _DATASET_PATH = (
     Path(__file__).parent.parent.parent / "data" / "cbs_referencia.csv"
 )  # Primary CHON dataset
+DATASET_MANIFEST_PATH = _DATASET_PATH.with_suffix(".manifest.json")
 _PM7_DATASET_PATH = (
     Path(__file__).parent.parent.parent / "data" / "pm7_fila_pipeline.csv"
 )
@@ -60,7 +62,7 @@ def load_real_subset(
     if not path.exists():
         raise FileNotFoundError(
             f"Real dataset not found at {path}. "
-            f"Expected: data/cbs_referencia.csv (29,568 CHON molecules)\n"
+            f"Expected: data/cbs_referencia.csv (CHON molecules)\n"
             f"Note: thermo_cbs_clean.csv and thermo_cbs_opt.csv are no longer used"
         )
 
