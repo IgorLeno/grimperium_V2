@@ -8,6 +8,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Ambiente fixo de CREST, xtb e MOPAC (células distribuídas, Lote 0)** (2026-10-20)
+  - `environment.yml` + `conda-lock.yml` (linux-64, conda-forge):
+    `crest 3.0.2`, `xtb 6.7.1`, `mopac 23.2.2`, cada pacote com sha256.
+    Mesmas versões que os RPMs do Fedora e o `crest` estático usados até
+    agora, mas fixadas: um `dnf upgrade` não troca mais o binário em silêncio.
+  - `src/semi_imperium/training/__main__.py`: `run --bin-dir`; sem a opção, usa
+    o ambiente `grimperium-quimica` (`$MAMBA_ROOT_PREFIX` ou `~/micromamba`) e
+    só cai no `PATH` com aviso no stderr. `--bin-dir` sem algum programa sai
+    com código 2. O dashboard herda o padrão.
+  - `src/semi_imperium/training/program_info.py`: `probe_programs` registra
+    versão, sha256 e caminho de cada programa (`unavailable`/`unknown` em vez de
+    omitir). O runner sonda uma vez por rodada; rodada e cada cálculo gravam
+    `program_versions` e `hostname` na proveniência.
+  - Validação: 5 moléculas aceitas (`CO`, `[H][C]=C`, `C[N+](=O)[O-]`,
+    `OCCO`, `CCC(=O)O`) recalculadas com o ambiente novo em store temporário
+    deram HOF idêntico ao de produção (Δ = 0,00000 kcal/mol) e o mesmo número
+    de conformeros.
+  - Verification: `poetry run pytest tests/training tests/webapi
+    tests/unit/semi_imperium tests/cli tests/test_csv_schema.py -q`
 - **Painel Calcular PM7: rodada, workers e threads** (2026-10-20)
   - `apps/dashboard`: barra da rodada atual (processadas / limite ou fila
     restante), decorrido, ETA e ritmo pelo relógio de parede, tempo médio,

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 import tempfile
 from collections.abc import Sequence
@@ -15,6 +16,38 @@ from semi_imperium.training.runner import RunSettings, run_training
 
 # src/semi_imperium/training/__main__.py -> repository root
 _ROOT = Path(__file__).resolve().parents[3]
+
+# Fixed environment from environment.yml / conda-lock.yml. Using it by default
+# keeps a `dnf upgrade` from swapping CREST, xtb or MOPAC under a running queue.
+FIXED_ENV = "grimperium-quimica"
+_PROGRAMS = ("crest", "xtb", "mopac")
+
+
+def _fixed_env_bin() -> Path:
+    root = os.environ.get("MAMBA_ROOT_PREFIX") or str(Path.home() / "micromamba")
+    return Path(root) / "envs" / FIXED_ENV / "bin"
+
+
+def _executables(bin_dir: Path | None) -> dict[str, str]:
+    """Programs of ``bin_dir``, else of the fixed environment, else of PATH.
+
+    An explicit ``bin_dir`` missing a program is an error; only the implicit
+    default may fall back to PATH, and it says so on stderr.
+    """
+    if bin_dir is not None:
+        missing = [name for name in _PROGRAMS if not (bin_dir / name).is_file()]
+        if missing:
+            raise FileNotFoundError(f"{bin_dir} não tem: {', '.join(missing)}")
+        return {name: str(bin_dir / name) for name in _PROGRAMS}
+    fixed = _fixed_env_bin()
+    if all((fixed / name).is_file() for name in _PROGRAMS):
+        return {name: str(fixed / name) for name in _PROGRAMS}
+    print(
+        f"aviso: ambiente {FIXED_ENV} não encontrado em {fixed}; "
+        "usando crest/xtb/mopac do PATH (versões não fixadas)",
+        file=sys.stderr,
+    )
+    return {name: name for name in _PROGRAMS}
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -43,6 +76,12 @@ def _build_parser() -> argparse.ArgumentParser:
     run.add_argument("--crest-timeout", type=float, default=3600.0)
     run.add_argument("--mopac-timeout", type=float, default=900.0)
     run.add_argument("--keep-artifacts", action="store_true")
+    run.add_argument(
+        "--bin-dir",
+        type=Path,
+        default=None,
+        help=f"pasta com crest, xtb e mopac (padrão: ambiente {FIXED_ENV})",
+    )
     commands.add_parser("stop", help="pede ao job em execução que pare")
     return parser
 
@@ -74,6 +113,11 @@ def _status(args: argparse.Namespace) -> int:
 
 
 def _run(args: argparse.Namespace) -> int:
+    try:
+        executables = _executables(args.bin_dir)
+    except FileNotFoundError as exc:
+        print(f"erro: {exc}", file=sys.stderr)
+        return 2
     settings = RunSettings(
         cbs_csv=args.csv,
         store_root=args.store,
@@ -84,6 +128,9 @@ def _run(args: argparse.Namespace) -> int:
         crest_timeout_s=args.crest_timeout,
         mopac_timeout_s=args.mopac_timeout,
         keep_artifacts=args.keep_artifacts,
+        crest_executable=executables["crest"],
+        xtb_executable=executables["xtb"],
+        mopac_executable=executables["mopac"],
     )
     try:
         summary = run_training(settings)

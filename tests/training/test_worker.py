@@ -208,3 +208,24 @@ def test_missing_mopac_outputs_turn_a_verified_result_into_a_failure(
     assert result.ok is False and result.state == "failed"
     assert "MOPAC" in (result.error or "")
     assert not (tmp_path / "store" / "geometrias" / "mol_00001").exists()
+
+
+def test_the_calculation_record_carries_program_versions_and_hostname(
+    tmp_path: Path,
+) -> None:
+    from semi_imperium.persistence import SemiImperiumStore
+
+    run_task(
+        _task(
+            tmp_path,
+            program_versions=(("mopac", "23.2.2"), ("mopac_sha256", "def")),
+            hostname="central",
+        ),
+        executor=FakeExecutor(_verified(), store=tmp_path / "store"),
+    )
+    (record,) = SemiImperiumStore(tmp_path / "store").list_calculations()
+    assert record.provenance.program_versions == {
+        "mopac": "23.2.2",
+        "mopac_sha256": "def",
+    }
+    assert record.provenance.hostname == "central"

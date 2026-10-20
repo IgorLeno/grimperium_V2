@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import os
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from concurrent.futures import Executor, ThreadPoolExecutor
 from pathlib import Path
 
@@ -230,3 +230,41 @@ def test_an_unreadable_cbs_is_refused_before_any_job_state(
             install_signals=False,
         )
     assert JobState(_db(tmp_path)).snapshot().state == "idle"
+
+
+def test_the_run_and_every_task_carry_program_versions_and_hostname(
+    tmp_path: Path, make_cbs: CbsFactory
+) -> None:
+    import socket
+
+    from semi_imperium.persistence import SemiImperiumStore
+
+    probed: list[dict[str, str]] = []
+
+    def probe(executables: Mapping[str, str]) -> dict[str, str]:
+        probed.append(dict(executables))
+        return {"crest": "3.0.2", "crest_sha256": "abc"}
+
+    tasks: list[WorkerTask] = []
+    fake = _fake()
+
+    def task_fn(task: WorkerTask) -> WorkerResult:
+        tasks.append(task)
+        return fake(task)
+
+    run_training(
+        _settings(tmp_path, _cbs(make_cbs), crest_executable="/opt/env/bin/crest"),
+        pool_factory=_threads,
+        task_fn=task_fn,
+        install_signals=False,
+        probe=probe,
+    )
+
+    assert probed == [{"crest": "/opt/env/bin/crest", "xtb": "xtb", "mopac": "mopac"}]
+    (run,) = SemiImperiumStore(tmp_path / "store").list_runs()
+    assert run.provenance.program_versions == {"crest": "3.0.2", "crest_sha256": "abc"}
+    assert run.provenance.hostname == socket.gethostname()
+    assert {t.program_versions for t in tasks} == {
+        (("crest", "3.0.2"), ("crest_sha256", "abc"))
+    }
+    assert {t.hostname for t in tasks} == {socket.gethostname()}
