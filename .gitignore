@@ -197,4 +197,6 @@ data/semi_imperium/*.sqlite3*
 # Delta Entalpia: log, cópias de segurança da migração e registros de cálculo gerados pela rotina
 data/semi_imperium/training.log
 data/semi_imperium/calculations/
+# Saída durável por molécula (.xyz/.out/.freq.out/.json): ~45 KB cada, ~1 GB no lote completo
+data/semi_imperium/geometrias/
 data/*.pre-protocol-*.bak
