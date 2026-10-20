@@ -91,3 +91,28 @@ def test_a_fresh_database_has_the_cell_columns_and_the_attempt_log(
             str(r[1]) for r in connection.execute("PRAGMA index_list(training_queue)")
         }
     assert "training_queue_cell" in indexes
+
+
+def test_connect_adds_the_cells_table_to_an_old_database(tmp_path: Path) -> None:
+    path = _old_database(tmp_path)
+    for _ in range(2):  # idempotent
+        with closing(connect(path)) as connection:
+            assert _columns(connection, "cells") >= {
+                "cell_id",
+                "name",
+                "token_hash",
+                "admission",
+                "host",
+                "cores",
+                "workers",
+                "crest_threads",
+                "program_versions",
+                "protocol_signature",
+                "refusal",
+                "created_at",
+                "registered_at",
+                "last_seen_at",
+                "revoked_at",
+            }
+            count = connection.execute("SELECT COUNT(*) FROM training_queue")
+            assert count.fetchone()[0] == 2

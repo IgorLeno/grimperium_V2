@@ -72,6 +72,23 @@ CREATE TABLE IF NOT EXISTS training_attempt (
     note TEXT
 );
 CREATE INDEX IF NOT EXISTS training_attempt_mol ON training_attempt (mol_id);
+CREATE TABLE IF NOT EXISTS cells (
+    cell_id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    token_hash TEXT UNIQUE,
+    admission TEXT NOT NULL DEFAULT 'pending',
+    host TEXT,
+    cores INTEGER,
+    workers INTEGER,
+    crest_threads INTEGER,
+    program_versions TEXT,
+    protocol_signature TEXT,
+    refusal TEXT,
+    created_at TEXT NOT NULL,
+    registered_at TEXT,
+    last_seen_at TEXT,
+    revoked_at TEXT
+);
 CREATE TABLE IF NOT EXISTS training_failure (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     mol_id TEXT NOT NULL,
