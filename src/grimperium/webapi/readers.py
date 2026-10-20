@@ -15,14 +15,13 @@ import pandas as pd
 
 from grimperium.webapi.models import (
     BLANK_LABEL,
-    LEGACY_PROTOCOL,
     ComparisonPoint,
     DatasetProgress,
     ErrorStats,
     ExperimentalComparison,
     ExperimentalSummary,
-    LegacyDatasetProgress,
     StoreProgress,
+    TrainingProgress,
 )
 
 EXP_FLAGS = (
@@ -86,17 +85,6 @@ def _floats(path: Path, frame: pd.DataFrame, column: str, *, blank: bool) -> pd.
 # ---------------------------------------------------------------- progress
 
 
-def legacy_progress(path: Path) -> LegacyDatasetProgress:
-    frame = _read_csv(path, ("status", "cbs_quality_flag"))
-    return LegacyDatasetProgress(
-        protocol=LEGACY_PROTOCOL,
-        path=str(path),
-        total=len(frame),
-        status=_counts(frame["status"]),
-        cbs_quality_flag=_counts(frame["cbs_quality_flag"]),
-    )
-
-
 def store_progress(root: Path) -> StoreProgress:
     """Summarise the Semi-Imperium store; an absent store is empty, not an error.
 
@@ -122,9 +110,24 @@ def store_progress(root: Path) -> StoreProgress:
     )
 
 
-def dataset_progress(pm7_csv: Path, store_root: Path) -> DatasetProgress:
+def queue_progress(store_root: Path, cbs_csv: Path) -> TrainingProgress:
+    """Training-queue counts (never writes; see ``molecule_queue.read_progress``)."""
+    from semi_imperium.training.db import database_path
+    from semi_imperium.training.molecule_queue import CbsReadError, read_progress
+
+    try:
+        counts = read_progress(database_path(store_root), cbs_csv)
+    except FileNotFoundError as e:
+        raise DataUnavailable(cbs_csv, "file not found") from e
+    except CbsReadError as e:
+        raise DataUnavailable(cbs_csv, str(e)) from e
+    return TrainingProgress(**counts.__dict__)
+
+
+def dataset_progress(cbs_csv: Path, store_root: Path) -> DatasetProgress:
     return DatasetProgress(
-        legacy=legacy_progress(pm7_csv), semi_imperium=store_progress(store_root)
+        queue=queue_progress(store_root, cbs_csv),
+        semi_imperium=store_progress(store_root),
     )
 
 

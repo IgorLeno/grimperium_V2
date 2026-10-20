@@ -4,10 +4,6 @@ from __future__ import annotations
 
 from pydantic import BaseModel, Field
 
-LEGACY_PROTOCOL = "crest_pm7"
-"""Protocol that produced ``pm7_fila_pipeline.csv``; the canonical one is
-Semi-Imperium, so these rows are shown as legacy, never as training v2."""
-
 BLANK_LABEL = "unset"
 """Count key for empty cells, so a blank flag is visible, not dropped."""
 
@@ -17,12 +13,15 @@ class Health(BaseModel):
     can_dispatch: bool
 
 
-class LegacyDatasetProgress(BaseModel):
-    protocol: str
-    path: str
+class TrainingProgress(BaseModel):
+    """Molecules of the training queue per stage; ``total`` is the denominator."""
+
     total: int
-    status: dict[str, int]
-    cbs_quality_flag: dict[str, int]
+    ok: int
+    pending: int
+    rerun: int
+    running: int
+    skipped: int
 
 
 class StoreProgress(BaseModel):
@@ -35,7 +34,7 @@ class StoreProgress(BaseModel):
 
 
 class DatasetProgress(BaseModel):
-    legacy: LegacyDatasetProgress
+    queue: TrainingProgress
     semi_imperium: StoreProgress
 
 
@@ -153,19 +152,6 @@ class TablePage(BaseModel):
 
 
 # ------------------------------------------------------------------ training
-
-
-class TrainingProgress(BaseModel):
-    total: int
-    protocol2: int
-    protocol1: int
-    ok_unmarked: int
-    pending: int
-    selected: int
-    rerun: int
-    running: int
-    skipped: int
-    migrated: bool
 
 
 class TrainingJob(BaseModel):

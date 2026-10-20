@@ -12,31 +12,23 @@ from grimperium.webapi.config import DashboardPaths
 from grimperium.webapi.training import TrainingLaunch
 from semi_imperium.training.db import database_path
 from semi_imperium.training.job_state import JobState
+from semi_imperium.training.molecule_queue import TrainingQueue
 from tests.training.conftest import row
 
-SCHEMA_ROWS = [
-    row("a", "OK", protocol="1"),
-    row("b", "Pending", protocol=""),
-    row("c", "Pending", protocol=""),
-]
+CBS_ROWS = [row("a", nheavy=1), row("b", nheavy=2), row("c", nheavy=3)]
 
 
 def _paths(
     tmp_path: Path, rows: list[dict[str, object]] | None = None
 ) -> DashboardPaths:
-    from grimperium.crest_pm7.batch.csv_manager import BatchCSVManager
-
-    schema = BatchCSVManager(csv_path=None).get_schema()
-    pd.DataFrame(rows or SCHEMA_ROWS).reindex(columns=schema).to_csv(
-        tmp_path / "pm7.csv", index=False
-    )
+    pd.DataFrame(rows or CBS_ROWS).to_csv(tmp_path / "cbs.csv", index=False)
     for name in ("exp.csv", "vs_cbs.csv"):
         (tmp_path / name).write_text("x\n")
     return DashboardPaths(
-        pm7_csv=tmp_path / "pm7.csv",
         semi_imperium_store=tmp_path / "store",
         exp_csv=tmp_path / "exp.csv",
         exp_vs_cbs_csv=tmp_path / "vs_cbs.csv",
+        cbs_csv=tmp_path / "cbs.csv",
     )
 
 
@@ -55,24 +47,34 @@ def _client(paths: DashboardPaths, recorder: Recorder) -> TestClient:
 def test_status_reports_progress_and_an_idle_job(tmp_path: Path) -> None:
     client = _client(_paths(tmp_path), Recorder())
     body = client.get("/api/training/status").json()
-    assert body["progress"]["total"] == 3
-    assert (body["progress"]["protocol1"], body["progress"]["pending"]) == (1, 2)
-    assert body["progress"]["migrated"] is True
+    assert body["progress"] == {
+        "total": 3,
+        "ok": 0,
+        "pending": 3,
+        "rerun": 0,
+        "running": 0,
+        "skipped": 0,
+    }
     assert body["job"]["state"] == "idle"
     assert body["geometries"] == 0 and body["failures"] == []
     assert not database_path(tmp_path / "store").exists()  # GET never creates it
 
 
-def test_status_of_an_unmigrated_csv_is_not_an_error(tmp_path: Path) -> None:
-    paths = _paths(tmp_path, [row("a", "OK"), row("b", "Pending")])
-    body = _client(paths, Recorder()).get("/api/training/status").json()
-    assert body["progress"]["migrated"] is False
-    assert body["progress"]["ok_unmarked"] == 1
-
-
-def test_status_with_a_missing_csv_is_503(tmp_path: Path) -> None:
+def test_status_counts_results_from_the_database(tmp_path: Path) -> None:
     paths = _paths(tmp_path)
-    paths.pm7_csv.unlink()
+    queue = TrainingQueue(database_path(paths.semi_imperium_store), paths.cbs_csv)
+    queue.ensure_seeded()
+    queue.record_success(
+        "a", hof_kcal_mol=-1.0, conformers_evaluated=1, elapsed_s=1.0, batch_id="b"
+    )
+    body = _client(paths, Recorder()).get("/api/training/status").json()
+    assert (body["progress"]["total"], body["progress"]["ok"]) == (3, 1)
+    assert "protocol1" not in body["progress"] and "migrated" not in body["progress"]
+
+
+def test_status_with_a_missing_cbs_is_503(tmp_path: Path) -> None:
+    paths = _paths(tmp_path)
+    paths.cbs_csv.unlink()
     response = _client(paths, Recorder()).get("/api/training/status")
     assert response.status_code == 503
 
@@ -85,16 +87,7 @@ def test_start_launches_with_the_requested_limits(tmp_path: Path) -> None:
     assert response.status_code == 200
     (launch,) = recorder.launches
     assert (launch.workers, launch.limit) == (2, 5)
-    assert launch.csv_path == tmp_path / "pm7.csv"
-
-
-def test_start_is_refused_when_the_csv_is_not_migrated(tmp_path: Path) -> None:
-    recorder = Recorder()
-    paths = _paths(tmp_path, [row("a", "OK"), row("b", "Pending")])
-    response = _client(paths, recorder).post("/api/training/start", json={})
-    assert response.status_code == 409
-    assert "migrate --apply" in response.json()["detail"]
-    assert recorder.launches == []
+    assert launch.cbs_csv == tmp_path / "cbs.csv"
 
 
 def test_start_is_refused_while_a_job_is_alive(tmp_path: Path) -> None:

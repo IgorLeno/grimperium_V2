@@ -21,7 +21,7 @@ from grimperium.webapi.models import (
     TrainingStatus,
 )
 
-TableKey = Literal["exp", "cbs", "pm7"]
+TableKey = Literal["exp", "cbs"]
 
 
 def create_app(
@@ -49,7 +49,7 @@ def create_app(
 
     @app.get("/api/dataset/progress")
     def dataset_progress() -> DatasetProgress:
-        return readers.dataset_progress(files.pm7_csv, files.semi_imperium_store)
+        return readers.dataset_progress(files.cbs_csv, files.semi_imperium_store)
 
     @app.get("/api/experimental/summary")
     def experimental_summary() -> ExperimentalSummary:
@@ -60,10 +60,7 @@ def create_app(
         return readers.experimental_comparison(files.exp_vs_cbs_csv)
 
     def table_path(key: TableKey) -> Path:
-        path = {"exp": files.exp_csv, "cbs": files.cbs_csv, "pm7": files.pm7_csv}[key]
-        if path is None:
-            raise readers.DataUnavailable(Path(key), "table path not configured")
-        return path
+        return {"exp": files.exp_csv, "cbs": files.cbs_csv}[key]
 
     @app.get("/api/tables/{key}/profile")
     def table_profile(key: TableKey) -> DatasetProfile:

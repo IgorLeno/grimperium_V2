@@ -20,14 +20,8 @@ from grimperium.webapi.config import DashboardPaths
 from grimperium.webapi.models import (
     TrainingFailure,
     TrainingJob,
-    TrainingProgress,
     TrainingStartRequest,
     TrainingStatus,
-)
-
-_MIGRATE_HINT = (
-    "O CSV ainda não foi migrado para o protocolo 2. Rode no terminal: "
-    "poetry run python -m semi_imperium.training migrate --apply"
 )
 
 
@@ -35,7 +29,7 @@ _MIGRATE_HINT = (
 class TrainingLaunch:
     """What the launcher needs to start one run."""
 
-    csv_path: Path
+    cbs_csv: Path
     store_root: Path
     workers: int
     limit: int | None
@@ -51,7 +45,7 @@ def default_launcher(launch: TrainingLaunch) -> None:
         "-m",
         "semi_imperium.training",
         "--csv",
-        str(launch.csv_path),
+        str(launch.cbs_csv),
         "--store",
         str(launch.store_root),
         "run",
@@ -72,21 +66,17 @@ def default_launcher(launch: TrainingLaunch) -> None:
 
 
 def build_status(paths: DashboardPaths) -> TrainingStatus:
-    """Progress from the CSV, job and failures from SQLite."""
+    """Queue progress, job and failures from SQLite (the CBS only seeds the queue)."""
     from semi_imperium.training.db import database_path
     from semi_imperium.training.geometry_store import GeometryStore
     from semi_imperium.training.job_state import JobState
-    from semi_imperium.training.ledger import read_progress
 
-    try:
-        progress = read_progress(paths.pm7_csv)
-    except FileNotFoundError as exc:
-        raise readers.DataUnavailable(paths.pm7_csv, "file not found") from exc
+    progress = readers.queue_progress(paths.semi_imperium_store, paths.cbs_csv)
     db = database_path(paths.semi_imperium_store)
     state = JobState(db)
     snapshot = state.snapshot()
     return TrainingStatus(
-        progress=TrainingProgress(**progress.__dict__),
+        progress=progress,
         job=TrainingJob(
             state=snapshot.state,
             pid=snapshot.pid,
@@ -111,15 +101,13 @@ def build_status(paths: DashboardPaths) -> TrainingStatus:
 def start(
     paths: DashboardPaths, body: TrainingStartRequest, launcher: Launcher
 ) -> TrainingStatus:
-    """Launch the routine unless one is alive or the CSV is not migrated."""
+    """Launch the routine unless one is alive."""
     status = build_status(paths)
     if status.job.state in ("running", "stopping"):
         raise HTTPException(409, "Já existe um treinamento em execução.")
-    if not status.progress.migrated:
-        raise HTTPException(409, _MIGRATE_HINT)
     launcher(
         TrainingLaunch(
-            csv_path=paths.pm7_csv,
+            cbs_csv=paths.cbs_csv,
             store_root=paths.semi_imperium_store,
             workers=body.workers,
             limit=body.limit,

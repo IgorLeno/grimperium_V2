@@ -15,12 +15,11 @@ _REPO_ROOT = Path(__file__).resolve().parents[3]
 class DashboardPaths:
     """Every input file of the API; tests point these at fixtures."""
 
-    pm7_csv: Path
     semi_imperium_store: Path
     exp_csv: Path
     exp_vs_cbs_csv: Path
-    cbs_csv: Path | None = None
-    """CHON CBS reference table; ``None`` reports it as not configured."""
+    cbs_csv: Path
+    """CHON CBS reference table: read only, and the source of the training queue."""
 
     @classmethod
     def default(cls, root: Path | None = None) -> DashboardPaths:
@@ -32,7 +31,6 @@ class DashboardPaths:
         base = root or Path(os.environ.get("GRIMPERIUM_ROOT", _REPO_ROOT))
         data = base / "data"
         return cls(
-            pm7_csv=data / "pm7_fila_pipeline.csv",
             semi_imperium_store=data / "semi_imperium",
             exp_csv=data / "experimental.csv",
             exp_vs_cbs_csv=data / "experimental_vs_cbs.csv",

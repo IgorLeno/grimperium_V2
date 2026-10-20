@@ -78,12 +78,6 @@ def _source_family(frame: pd.DataFrame) -> pd.Series:
     return frame["source"].astype(str).str.split(":").str[0]
 
 
-def _pm7_delta(frame: pd.DataFrame) -> pd.DataFrame:
-    # Delta-learning target, same sign convention as the training code.
-    frame["delta_cbs_pm7"] = frame["H298_cbs"] - frame["H298_pm7"]
-    return frame
-
-
 EXP_SPEC = TableSpec(
     key="exp",
     title="Experimental ΔHf",
@@ -173,68 +167,7 @@ CBS_SPEC = TableSpec(
     ),
 )
 
-PM7_SPEC = TableSpec(
-    key="pm7",
-    title="CREST + PM7 (legado)",
-    id_column="mol_id",
-    required=("mol_id", "status", "smiles"),
-    optional=(
-        "nheavy",
-        "H298_cbs",
-        "H298_pm7",
-        "cbs_quality_flag",
-        "crest_status",
-        "mopac_status",
-        "crest_conformers_generated",
-        "num_conformers_selected",
-        "crest_time_s",
-        "mopac_time_s",
-        "reruns",
-    ),
-    table_columns=(
-        "mol_id",
-        "smiles",
-        "status",
-        "nheavy",
-        "H298_cbs",
-        "H298_pm7",
-        "delta_cbs_pm7",
-        "cbs_quality_flag",
-        "crest_status",
-        "mopac_status",
-        "crest_conformers_generated",
-        "crest_time_s",
-        "mopac_time_s",
-    ),
-    search_columns=("mol_id", "smiles", "status"),
-    numeric=(
-        "nheavy",
-        "H298_cbs",
-        "H298_pm7",
-        "crest_conformers_generated",
-        "num_conformers_selected",
-        "crest_time_s",
-        "mopac_time_s",
-        "reruns",
-    ),
-    categories={
-        "status": _column("status"),
-        "cbs_quality_flag": _column("cbs_quality_flag"),
-        "crest_status": _column("crest_status"),
-        "mopac_status": _column("mopac_status"),
-    },
-    histograms=(
-        HistogramSpec("delta_cbs_pm7", "Erro do PM7 (CBS − PM7)", "kcal/mol"),
-        HistogramSpec("H298_pm7", "Entalpia de formação PM7", "kcal/mol"),
-        HistogramSpec("crest_time_s", "Tempo do CREST", "s"),
-        HistogramSpec("mopac_time_s", "Tempo do MOPAC", "s"),
-    ),
-    derived=_pm7_delta,
-    error_column="delta_cbs_pm7",
-    pair_columns=("H298_cbs", "H298_pm7"),
-)
-
-SPECS = {spec.key: spec for spec in (EXP_SPEC, CBS_SPEC, PM7_SPEC)}
+SPECS = {spec.key: spec for spec in (EXP_SPEC, CBS_SPEC)}
 
 _cache: dict[tuple[str, str], tuple[int, pd.DataFrame, list[str]]] = {}
 

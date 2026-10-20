@@ -24,6 +24,8 @@ from semi_imperium.domain import (
     VerificationSettings,
 )
 from semi_imperium.persistence import SemiImperiumStore
+from semi_imperium.training.db import database_path
+from semi_imperium.training.molecule_queue import TrainingQueue
 
 EXP_ROWS = {
     "source": ["atct", "nist:gas", "bains:Pedley", "bains:Yaws"],
@@ -55,18 +57,25 @@ COMPARISON_ROWS = {
 def paths(tmp_path: Path) -> DashboardPaths:
     pd.DataFrame(
         {
-            "mol_id": ["a", "b", "c", "d"],
-            "status": ["OK", "OK", "Pending", "Skip"],
-            "cbs_quality_flag": ["OK", "SUSPECT", "", ""],
+            "mol_id": ["cbs_1", "cbs_2", "cbs_3", "cbs_4"],
+            "smiles": ["C", "CCO", "CN", "CCO"],
+            "nheavy": [1, 3, 2, 3],
+            "charge": [0, 0, 0, 0],
+            "multiplicity": [1, 1, 2, 1],
+            "H298_cbs": [-17.8, -56.2, -5.5, -55.0],
+            "H298_b3": [-10.0, -40.0, -1.0, -39.0],
+            "cbs_b3": [-7.8, -16.2, -4.5, -16.0],
+            "conformer_rank_by_h298": [1, 1, 1, 2],
+            "smiles_count": [1, 2, 1, 2],
         }
-    ).to_csv(tmp_path / "pm7.csv", index=False)
+    ).to_csv(tmp_path / "cbs.csv", index=False)
     pd.DataFrame(EXP_ROWS).to_csv(tmp_path / "exp.csv", index=False)
     pd.DataFrame(COMPARISON_ROWS).to_csv(tmp_path / "vs_cbs.csv", index=False)
     return DashboardPaths(
-        pm7_csv=tmp_path / "pm7.csv",
         semi_imperium_store=tmp_path / "store",
         exp_csv=tmp_path / "exp.csv",
         exp_vs_cbs_csv=tmp_path / "vs_cbs.csv",
+        cbs_csv=tmp_path / "cbs.csv",
     )
 
 
@@ -121,16 +130,35 @@ def test_health_reports_dispatch_capability(paths: DashboardPaths) -> None:
     assert response.json() == {"status": "ok", "can_dispatch": True}
 
 
-def test_progress_counts_legacy_rows_and_labels_protocol(
+def test_progress_counts_the_queue_one_molecule_per_smiles(
     paths: DashboardPaths,
 ) -> None:
     body = _client(paths).get("/api/dataset/progress").json()
 
-    legacy = body["legacy"]
-    assert legacy["protocol"] == "crest_pm7"
-    assert legacy["total"] == 4
-    assert legacy["status"] == {"OK": 2, "Pending": 1, "Skip": 1}
-    assert legacy["cbs_quality_flag"] == {"unset": 2, "OK": 1, "SUSPECT": 1}
+    assert "legacy" not in body
+    # 4 CBS rows, but "CCO" appears twice: the queue has 3 molecules.
+    assert body["queue"] == {
+        "total": 3,
+        "ok": 0,
+        "pending": 3,
+        "rerun": 0,
+        "running": 0,
+        "skipped": 0,
+    }
+    assert not database_path(paths.semi_imperium_store).exists()
+
+
+def test_progress_reads_results_from_the_training_database(
+    paths: DashboardPaths,
+) -> None:
+    queue = TrainingQueue(database_path(paths.semi_imperium_store), paths.cbs_csv)
+    queue.ensure_seeded()
+    queue.record_success(
+        "cbs_1", hof_kcal_mol=-15.0, conformers_evaluated=1, elapsed_s=1.0, batch_id="b"
+    )
+    body = _client(paths).get("/api/dataset/progress").json()
+    assert (body["queue"]["total"], body["queue"]["ok"]) == (3, 1)
+    assert body["queue"]["pending"] == 2
 
 
 def test_progress_treats_missing_store_as_empty(paths: DashboardPaths) -> None:
@@ -191,7 +219,7 @@ def test_experimental_comparison_returns_points_and_stats(
 @pytest.mark.parametrize(
     ("endpoint", "attribute"),
     [
-        ("/api/dataset/progress", "pm7_csv"),
+        ("/api/dataset/progress", "cbs_csv"),
         ("/api/experimental/summary", "exp_csv"),
         ("/api/experimental/comparison", "exp_vs_cbs_csv"),
     ],
@@ -209,12 +237,12 @@ def test_missing_file_is_an_explicit_503(
 
 
 def test_missing_column_is_reported(paths: DashboardPaths) -> None:
-    pd.DataFrame({"status": ["OK"]}).to_csv(paths.pm7_csv, index=False)
+    pd.DataFrame({"mol_id": ["a"], "smiles": ["C"]}).to_csv(paths.cbs_csv, index=False)
 
     response = _client(paths).get("/api/dataset/progress")
 
     assert response.status_code == 503
-    assert "cbs_quality_flag" in response.json()["detail"]
+    assert "conformer_rank_by_h298" in response.json()["detail"]
 
 
 def test_non_boolean_flag_is_reported(paths: DashboardPaths) -> None:
@@ -251,86 +279,44 @@ def test_only_the_training_routes_accept_writes(paths: DashboardPaths) -> None:
 # --------------------------------------------------- table profiles & rows
 
 
-def _tables(tmp_path: Path, paths: DashboardPaths) -> DashboardPaths:
-    pd.DataFrame(
-        {
-            "mol_id": ["cbs_1", "cbs_2", "cbs_3"],
-            "smiles": ["C", "CCO", "CN"],
-            "nheavy": [1, 3, 2],
-            "charge": [0, 0, 0],
-            "multiplicity": [1, 1, 2],
-            "H298_cbs": [-17.8, -56.2, -5.5],
-            "H298_b3": [-10.0, -40.0, -1.0],
-            "cbs_b3": [-7.8, -16.2, -4.5],
-        }
-    ).to_csv(tmp_path / "cbs.csv", index=False)
-    pd.DataFrame(
-        {
-            "mol_id": ["a", "b", "c"],
-            "status": ["OK", "OK", "Pending"],
-            "smiles": ["C", "CCO", "N"],
-            "nheavy": [1, 3, 1],
-            "H298_cbs": [-17.8, -56.2, -10.0],
-            "H298_pm7": [-15.8, -60.2, ""],
-        }
-    ).to_csv(tmp_path / "pm7_full.csv", index=False)
-    return DashboardPaths(
-        pm7_csv=tmp_path / "pm7_full.csv",
-        semi_imperium_store=paths.semi_imperium_store,
-        exp_csv=paths.exp_csv,
-        exp_vs_cbs_csv=paths.exp_vs_cbs_csv,
-        cbs_csv=tmp_path / "cbs.csv",
-    )
-
-
 def test_cbs_profile_describes_size_composition_and_enthalpy(
-    tmp_path: Path, paths: DashboardPaths
+    paths: DashboardPaths,
 ) -> None:
-    body = _client(_tables(tmp_path, paths)).get("/api/tables/cbs/profile").json()
+    body = _client(paths).get("/api/tables/cbs/profile").json()
 
-    assert body["rows"] == 3
-    assert body["nheavy"] == {"1": 1, "2": 1, "3": 1}
-    assert body["composition"] == {"CH": 1, "CHO": 1, "CHN": 1, "CHNO": 0}
-    assert body["categories"]["multiplicity"] == {"1": 2, "2": 1}
+    assert body["rows"] == 4
+    assert body["nheavy"] == {"1": 1, "2": 1, "3": 2}
+    assert body["composition"] == {"CH": 1, "CHO": 2, "CHN": 1, "CHNO": 0}
+    assert body["categories"]["multiplicity"] == {"1": 3, "2": 1}
     h298 = next(h for h in body["histograms"] if h["column"] == "H298_cbs")
-    assert h298["n"] == 3
-    assert sum(b["count"] for b in h298["bins"]) + h298["below"] + h298["above"] == 3
-    assert "smiles_count" in body["missing_columns"]
+    assert h298["n"] == 4
+    assert sum(b["count"] for b in h298["bins"]) + h298["below"] + h298["above"] == 4
+    assert body["missing_columns"] == []
 
 
-def test_pm7_profile_derives_delta_and_pairs(
-    tmp_path: Path, paths: DashboardPaths
-) -> None:
-    body = _client(_tables(tmp_path, paths)).get("/api/tables/pm7/profile").json()
-
-    delta = next(h for h in body["histograms"] if h["column"] == "delta_cbs_pm7")
-    assert delta["n"] == 2
-    assert delta["mean"] == pytest.approx((-2.0 + 4.0) / 2)
-    assert body["pairs_total"] == 2
-    assert {p["id"] for p in body["pairs"]} == {"a", "b"}
-    assert [s["nheavy"] for s in body["by_nheavy"]] == [1, 3]
-    assert body["categories"]["status"] == {"OK": 2, "Pending": 1}
-
-
-def test_rows_search_sort_and_paginate(tmp_path: Path, paths: DashboardPaths) -> None:
-    client = _client(_tables(tmp_path, paths))
+def test_rows_search_sort_and_paginate(paths: DashboardPaths) -> None:
+    client = _client(paths)
     page = client.get(
         "/api/tables/cbs/rows", params={"sort": "H298_cbs", "limit": 2}
     ).json()
-    assert [row["mol_id"] for row in page["rows"]] == ["cbs_2", "cbs_1"]
-    assert (page["total"], page["matched"]) == (3, 3)
+    assert [row["mol_id"] for row in page["rows"]] == ["cbs_2", "cbs_4"]
+    assert (page["total"], page["matched"]) == (4, 4)
 
-    found = client.get("/api/tables/cbs/rows", params={"q": "cco"}).json()
-    assert [row["mol_id"] for row in found["rows"]] == ["cbs_2"]
-
-    pm7 = client.get("/api/tables/pm7/rows").json()
-    assert pm7["rows"][2]["H298_pm7"] is None
-    assert pm7["rows"][0]["delta_cbs_pm7"] == pytest.approx(-2.0)
+    found = client.get("/api/tables/cbs/rows", params={"q": "cn"}).json()
+    assert [row["mol_id"] for row in found["rows"]] == ["cbs_3"]
 
 
-def test_unknown_table_and_missing_cbs(paths: DashboardPaths) -> None:
+def test_unknown_table_is_422_and_the_pm7_table_is_gone(
+    paths: DashboardPaths,
+) -> None:
     client = _client(paths)
     assert client.get("/api/tables/xyz/profile").status_code == 422
-    response = client.get("/api/tables/cbs/profile")
+    assert client.get("/api/tables/pm7/profile").status_code == 422
+    assert client.get("/api/tables/pm7/rows").status_code == 422
+
+
+def test_missing_cbs_table_is_an_explicit_503(paths: DashboardPaths) -> None:
+    paths.cbs_csv.unlink()
+    response = _client(paths).get("/api/tables/cbs/profile")
     assert response.status_code == 503
-    assert response.json()["detail"] == "table path not configured"
+    assert response.json()["detail"] == "file not found"
