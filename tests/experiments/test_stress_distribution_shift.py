@@ -59,6 +59,7 @@ Do NOT use this test to:
 """
 
 import numpy as np
+import pytest
 from sklearn.model_selection import train_test_split
 
 from grimperium.core.delta_learning import DeltaLearner
@@ -226,6 +227,17 @@ def test_stress_distribution_shift_extreme(real_data_1k_extreme):
     }
 
 
+# strict: an XPASS means the outliers are back in the dataset and this
+# marker (and the premise above) must be revisited.
+@pytest.mark.xfail(
+    strict=True,
+    reason=(
+        "cbs_referencia.csv repaired the cal/mol enthalpies that created the "
+        "extreme outliers (h298_unit_repair in cbs_referencia.manifest.json); "
+        "H298_cbs now spans ~[-286, +555] kcal/mol, so random splits no "
+        "longer shift the mean by >100 kcal/mol."
+    ),
+)
 def test_distribution_shift_detection(real_data_1k_extreme):
     """
     Verify that extreme data actually creates distribution shift.
