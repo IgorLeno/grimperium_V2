@@ -1,9 +1,11 @@
 """Coordinator of the training routine: the single writer.
 
-It reads the queue, dispatches one molecule per free worker, and records each
-finished molecule: first the geometry, then the queue row, so a molecule
-marked ``ok`` always has its geometry. Stopping is cooperative: no new
-molecule is dispatched, in-flight ones finish, untouched molecules stay ``pending``.
+The local routine is the ``central`` cell: it claims one molecule per free
+worker from the shared queue, exactly as a remote cell will, renews the
+leases of what it is computing, and reports each result by ``attempt_id``
+(geometry and queue row in one transaction, so a molecule marked ``ok``
+always has its geometry). Stopping is cooperative: nothing new is claimed,
+in-flight molecules finish, untouched molecules stay ``pending``.
 """
 
 from __future__ import annotations
@@ -14,7 +16,6 @@ import signal
 import socket
 import threading
 import uuid
-from collections import deque
 from collections.abc import Callable
 from concurrent.futures import (
     FIRST_COMPLETED,
@@ -30,9 +31,16 @@ from pathlib import Path
 from semi_imperium.domain import RunRecord, RunState
 from semi_imperium.persistence import SemiImperiumStore
 from semi_imperium.training.db import database_path
-from semi_imperium.training.geometry_store import GeometryRecord, GeometryStore
+from semi_imperium.training.geometry_store import GeometryRecord
 from semi_imperium.training.job_state import JobState
-from semi_imperium.training.molecule_queue import QueuedMolecule, TrainingQueue
+from semi_imperium.training.molecule_queue import (
+    ACCEPTED,
+    CENTRAL_CELL,
+    RERUN,
+    SKIP,
+    ClaimedMolecule,
+    TrainingQueue,
+)
 from semi_imperium.training.program_info import ProgramProbe, probe_programs
 from semi_imperium.training.protocol import (
     CANONICAL_PROTOCOL,
@@ -104,11 +112,13 @@ def run_training(
     db_path = database_path(settings.store_root)
     work = TrainingQueue(db_path, settings.cbs_csv, max_reruns=settings.max_reruns)
     work.ensure_seeded()  # reads the CBS before any job state is touched
-    queue = work.queue(settings.limit)
 
     job = JobState(db_path)
-    geometries = GeometryStore(db_path)
     job.begin(pid=os.getpid(), workers=settings.workers, limit=settings.limit)
+    # Only after begin() proved no other central run is alive: whatever the
+    # central cell still holds was interrupted, and restarts from scratch.
+    # Rows ``running`` with no cell predate the cell columns and are ours too.
+    work.release(CENTRAL_CELL, include_unowned=True)
 
     stop = threading.Event()
     if install_signals:
@@ -143,33 +153,39 @@ def run_training(
     attempted = 0
     stopped = False
     try:
-        pending = deque(queue)
-        in_flight: dict[Future[WorkerResult], QueuedMolecule] = {}
+        in_flight: dict[Future[WorkerResult], ClaimedMolecule] = {}
+        tried: set[str] = set()  # one attempt per molecule per run
         with pool_factory(settings.workers) as pool:
-            while pending or in_flight:
+            while True:
                 halt = stop.is_set() or job.stop_requested()
                 if halt and not stopped:
                     stopped = True
                     job.mark_stopping()
-                while pending and len(in_flight) < settings.workers and not halt:
-                    molecule = pending.popleft()
-                    work.mark_running(molecule.mol_id)
-                    in_flight[
-                        pool.submit(
-                            task_fn,
-                            _task(settings, run_id, molecule, versions, hostname),
-                        )
-                    ] = molecule
-                    attempted += 1
+                free = settings.workers - len(in_flight)
+                if settings.limit is not None:
+                    free = min(free, settings.limit - attempted)
+                if free > 0 and not halt:
+                    for molecule in work.claim(CENTRAL_CELL, free, exclude=tried):
+                        tried.add(molecule.mol_id)
+                        in_flight[
+                            pool.submit(
+                                task_fn,
+                                _task(settings, run_id, molecule, versions, hostname),
+                            )
+                        ] = molecule
+                        attempted += 1
                 if not in_flight:
                     break
                 done, _ = wait(in_flight, timeout=30.0, return_when=FIRST_COMPLETED)
                 for future in done:
-                    molecule = in_flight.pop(future)
-                    if _record(work, geometries, job, molecule, future, batch_id):
+                    outcome = _record(
+                        work, job, in_flight.pop(future), future, batch_id
+                    )
+                    if outcome == ACCEPTED:
                         ok += 1
-                    else:
+                    elif outcome in (RERUN, SKIP):
                         failed += 1
+                work.renew(CENTRAL_CELL, [m.attempt_id for m in in_flight.values()])
                 job.heartbeat(done=ok, failed=failed)
         run_state = (
             RunState.COMPLETED
@@ -194,7 +210,7 @@ def run_training(
 def _task(
     settings: RunSettings,
     run_id: str,
-    molecule: QueuedMolecule,
+    molecule: ClaimedMolecule,
     versions: dict[str, str],
     hostname: str,
 ) -> WorkerTask:
@@ -220,26 +236,25 @@ def _task(
 
 def _record(
     work: TrainingQueue,
-    geometries: GeometryStore,
     job: JobState,
-    molecule: QueuedMolecule,
+    molecule: ClaimedMolecule,
     future: Future[WorkerResult],
     batch_id: str,
-) -> bool:
-    """Persist one finished molecule; return whether it was accepted."""
+) -> str:
+    """Report one finished attempt; return the queue's outcome for it.
+
+    ``accepted`` and ``rerun``/``skip`` count for the job; ``discarded`` or
+    ``duplicate`` (the molecule was released and finished elsewhere) do not.
+    """
     try:
         result = future.result()
     except Exception as exc:  # worker process died or was killed
-        reason = f"{type(exc).__name__}: {exc}"
-        work.record_failure(molecule.mol_id, reason)
-        job.record_failure(molecule.mol_id, reason)
-        return False
+        return _fail(work, job, molecule, f"{type(exc).__name__}: {exc}")
     if not result.ok or result.hof_kcal_mol is None:
-        work.record_failure(molecule.mol_id, result.error or result.state)
-        job.record_failure(molecule.mol_id, result.error or result.state)
-        return False
-    geometries.save(
-        GeometryRecord(
+        return _fail(work, job, molecule, result.error or result.state)
+    return work.accept_success(
+        molecule.attempt_id,
+        geometry=GeometryRecord(
             mol_id=result.mol_id,
             smiles=result.smiles,
             hamiltonian=HAMILTONIAN,
@@ -252,13 +267,17 @@ def _record(
             hof_kcal_mol=result.hof_kcal_mol,
             lowest_frequency_cm1=result.lowest_frequency_cm1,
             minimum_confirmed=True,
-        )
-    )
-    work.record_success(
-        result.mol_id,
-        hof_kcal_mol=result.hof_kcal_mol,
+        ),
         conformers_evaluated=result.conformers_evaluated,
         elapsed_s=result.elapsed_s,
         batch_id=batch_id,
     )
-    return True
+
+
+def _fail(
+    work: TrainingQueue, job: JobState, molecule: ClaimedMolecule, reason: str
+) -> str:
+    outcome = work.accept_failure(molecule.attempt_id, reason)
+    if outcome in (RERUN, SKIP):  # a late failure is already in training_attempt
+        job.record_failure(molecule.mol_id, reason)
+    return outcome

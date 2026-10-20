@@ -8,7 +8,7 @@ import semi_imperium.training.__main__ as cli
 from semi_imperium.training.__main__ import main
 from semi_imperium.training.molecule_queue import TrainingQueue
 from semi_imperium.training.runner import RunSettings, RunSummary
-from tests.training.conftest import CbsFactory, row
+from tests.training.conftest import CbsFactory, row, set_ok
 
 
 def _args(tmp_path: Path, cbs: Path, *rest: str) -> list[str]:
@@ -31,9 +31,7 @@ def test_status_after_a_result_counts_ok(
     cbs = make_cbs([row("a"), row("b")])
     queue = TrainingQueue(tmp_path / "store" / "training.sqlite3", cbs)
     queue.ensure_seeded()
-    queue.record_success(
-        "a", hof_kcal_mol=-1.0, conformers_evaluated=1, elapsed_s=1.0, batch_id="x"
-    )
+    set_ok(tmp_path / "store" / "training.sqlite3", "a", hof=-1.0)
     assert main([*_args(tmp_path, cbs), "status"]) == 0
     assert "concluídas (ok): 1 de 2 (50.0%)" in capsys.readouterr().out
 

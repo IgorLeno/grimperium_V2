@@ -116,6 +116,12 @@ def test_claim_takes_pending_and_rerun_but_never_running_ok_or_skip(
     assert queue.claim("central", 10) == []
 
 
+def test_claim_skips_excluded_molecules(tmp_path: Path, make_cbs: CbsFactory) -> None:
+    queue = _seeded(tmp_path, _cbs(make_cbs))
+    claimed = queue.claim("central", 2, exclude={"tiny", "mid"})
+    assert [m.mol_id for m in claimed] == ["small", "big"]
+
+
 def test_claim_of_zero_is_empty_and_negative_is_refused(
     tmp_path: Path, make_cbs: CbsFactory
 ) -> None:

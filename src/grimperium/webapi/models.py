@@ -179,6 +179,7 @@ class TrainingInFlight(BaseModel):
     smiles: str
     nheavy: int
     started_at: str | None
+    cell_id: str | None = None
 
 
 class TrainingCompleted(BaseModel):

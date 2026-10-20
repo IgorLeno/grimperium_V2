@@ -13,7 +13,7 @@ from grimperium.webapi.training import TrainingLaunch
 from semi_imperium.training.db import database_path
 from semi_imperium.training.job_state import JobState
 from semi_imperium.training.molecule_queue import TrainingQueue
-from tests.training.conftest import row
+from tests.training.conftest import row, set_ok, set_running
 
 CBS_ROWS = [row("a", nheavy=1), row("b", nheavy=2), row("c", nheavy=3)]
 
@@ -64,9 +64,7 @@ def test_status_counts_results_from_the_database(tmp_path: Path) -> None:
     paths = _paths(tmp_path)
     queue = TrainingQueue(database_path(paths.semi_imperium_store), paths.cbs_csv)
     queue.ensure_seeded()
-    queue.record_success(
-        "a", hof_kcal_mol=-1.0, conformers_evaluated=1, elapsed_s=1.0, batch_id="b"
-    )
+    set_ok(database_path(paths.semi_imperium_store), "a", hof=-1.0)
     body = _client(paths, Recorder()).get("/api/training/status").json()
     assert (body["progress"]["total"], body["progress"]["ok"]) == (3, 1)
     assert "protocol1" not in body["progress"] and "migrated" not in body["progress"]
@@ -127,15 +125,14 @@ def test_status_reports_activity_and_cpu_count(tmp_path: Path) -> None:
     JobState(database_path(paths.semi_imperium_store)).begin(
         pid=os.getpid(), workers=2, limit=None
     )
-    queue.mark_running("b")
-    queue.mark_running("a")
-    queue.record_success(
-        "a", hof_kcal_mol=-20.0, conformers_evaluated=3, elapsed_s=12.0, batch_id="x"
-    )
+    db = database_path(paths.semi_imperium_store)
+    set_running(db, "b")
+    set_ok(db, "a", hof=-20.0, conformers=3, elapsed_s=12.0, batch_id="x")
     body = _client(paths, Recorder()).get("/api/training/status").json()
     activity = body["activity"]
     assert [m["mol_id"] for m in activity["in_flight"]] == ["b"]
     assert activity["in_flight"][0]["smiles"] == "smiles-b"
+    assert activity["in_flight"][0]["cell_id"] == "central"
     (done,) = activity["recent"]
     assert (done["mol_id"], done["h298_pm7"], done["elapsed_s"]) == ("a", -20.0, 12.0)
     assert done["delta_kcal_mol"] == pytest.approx(-17.8 + 20.0)

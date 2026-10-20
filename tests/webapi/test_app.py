@@ -26,6 +26,7 @@ from semi_imperium.domain import (
 from semi_imperium.persistence import SemiImperiumStore
 from semi_imperium.training.db import database_path
 from semi_imperium.training.molecule_queue import TrainingQueue
+from tests.training.conftest import set_ok
 
 EXP_ROWS = {
     "source": ["atct", "nist:gas", "bains:Pedley", "bains:Yaws"],
@@ -153,9 +154,7 @@ def test_progress_reads_results_from_the_training_database(
 ) -> None:
     queue = TrainingQueue(database_path(paths.semi_imperium_store), paths.cbs_csv)
     queue.ensure_seeded()
-    queue.record_success(
-        "cbs_1", hof_kcal_mol=-15.0, conformers_evaluated=1, elapsed_s=1.0, batch_id="b"
-    )
+    set_ok(database_path(paths.semi_imperium_store), "cbs_1", hof=-15.0)
     body = _client(paths).get("/api/dataset/progress").json()
     assert (body["queue"]["total"], body["queue"]["ok"]) == (3, 1)
     assert body["queue"]["pending"] == 2

@@ -14,7 +14,13 @@ from semi_imperium.training.molecule_queue import (
     read_progress,
     select_reference_rows,
 )
-from tests.training.conftest import CbsFactory, row
+from tests.training.conftest import (
+    CbsFactory,
+    row,
+    set_ok,
+    set_running,
+    set_status,
+)
 
 
 def _cbs(make_cbs: CbsFactory) -> Path:
@@ -92,63 +98,9 @@ def test_seeding_is_idempotent_and_never_resets_state(
 ) -> None:
     queue = _queue(tmp_path, _cbs(make_cbs))
     assert queue.ensure_seeded() == 4
-    queue.mark_running("tiny")
+    (claimed,) = queue.claim("central", 1)
     assert queue.ensure_seeded() == 0
-    assert _status(tmp_path, "tiny") == "running"
-
-
-def test_queue_is_smallest_molecules_first_and_skips_finished_rows(
-    tmp_path: Path, make_cbs: CbsFactory
-) -> None:
-    queue = _queue(tmp_path, _cbs(make_cbs))
-    queue.ensure_seeded()
-    queue.mark_running("small")
-    queue.record_success(
-        "tiny", hof_kcal_mol=-1.0, conformers_evaluated=1, elapsed_s=6.0, batch_id="b"
-    )
-    queue.record_failure("big", "boom")
-    ids = [m.mol_id for m in queue.queue()]
-    # ok is gone; running (orphan) and rerun stay; smallest first
-    assert ids == ["small", "mid", "big"]
-    assert [m.mol_id for m in queue.queue(limit=2)] == ["small", "mid"]
-
-
-def test_queued_molecule_carries_identity_and_cbs_value(
-    tmp_path: Path, make_cbs: CbsFactory
-) -> None:
-    cbs = make_cbs([row("r", smiles="[CH3]", multiplicity=2, charge=0, H298_cbs=34.8)])
-    queue = _queue(tmp_path, cbs)
-    queue.ensure_seeded()
-    (molecule,) = queue.queue()
-    assert (molecule.smiles, molecule.multiplicity, molecule.charge) == ("[CH3]", 2, 0)
-    assert molecule.h298_cbs == pytest.approx(34.8)
-
-
-def test_success_stores_value_delta_and_provenance(
-    tmp_path: Path, make_cbs: CbsFactory
-) -> None:
-    cbs = make_cbs([row("a", H298_cbs=-20.0)])
-    queue = _queue(tmp_path, cbs)
-    queue.ensure_seeded()
-    queue.record_success(
-        "a", hof_kcal_mol=-15.0, conformers_evaluated=3, elapsed_s=90.0, batch_id="b1"
-    )
-    with closing(sqlite3.connect(database_path(tmp_path / "store"))) as connection:
-        stored = connection.execute(
-            "SELECT status, h298_pm7, delta_kcal_mol, conformers_evaluated,"
-            " elapsed_s, batch_id FROM training_queue WHERE mol_id = 'a'"
-        ).fetchone()
-    assert stored == ("ok", -15.0, -5.0, 3, 90.0, "b1")  # delta = CBS - PM7
-
-
-def test_failures_rerun_until_the_limit_then_skip(
-    tmp_path: Path, make_cbs: CbsFactory
-) -> None:
-    queue = _queue(tmp_path, make_cbs([row("a")]), max_reruns=2)
-    queue.ensure_seeded()
-    assert queue.record_failure("a", "x") == "rerun"
-    assert queue.record_failure("a", "x") == "skip"
-    assert queue.queue() == []
+    assert _status(tmp_path, claimed.mol_id) == "running"
 
 
 # ------------------------------------------------------------------ progress
@@ -167,13 +119,11 @@ def test_progress_counts_each_bucket_from_the_database(
     tmp_path: Path, make_cbs: CbsFactory
 ) -> None:
     cbs = make_cbs([row(m) for m in ("a", "b", "c", "d", "e")])
-    queue = _queue(tmp_path, cbs, max_reruns=1)
-    queue.ensure_seeded()
-    queue.record_success(
-        "a", hof_kcal_mol=-1.0, conformers_evaluated=1, elapsed_s=1.0, batch_id="b"
-    )
-    queue.mark_running("b")
-    queue.record_failure("c", "x")  # max_reruns=1 -> skip
+    _queue(tmp_path, cbs).ensure_seeded()
+    db = database_path(tmp_path / "store")
+    set_ok(db, "a", hof=-1.0)
+    set_running(db, "b")
+    set_status(db, "c", "skip", reruns=1)
     progress = read_progress(database_path(tmp_path / "store"), cbs)
     assert (progress.total, progress.ok, progress.running) == (5, 1, 1)
     assert (progress.pending, progress.rerun, progress.skipped) == (2, 0, 1)
@@ -195,33 +145,20 @@ def test_activity_without_a_database_is_empty(tmp_path: Path) -> None:
 def test_activity_mean_only_counts_molecules_since_the_run_started(
     tmp_path: Path, make_cbs: CbsFactory
 ) -> None:
-    queue = _queue(tmp_path, _cbs(make_cbs))
-    queue.ensure_seeded()
-    queue.record_success(
-        "tiny",
-        hof_kcal_mol=-1.0,
-        conformers_evaluated=1,
-        elapsed_s=100.0,
-        batch_id="old",
-    )
+    _queue(tmp_path, _cbs(make_cbs)).ensure_seeded()
     db = database_path(tmp_path / "store")
+    set_ok(db, "tiny", hof=-1.0, elapsed_s=100.0, batch_id="old")
     with closing(sqlite3.connect(db)) as connection, connection:
         connection.execute(
             "UPDATE training_queue SET updated_at = '2000-01-01T00:00:00+00:00'"
             " WHERE mol_id = 'tiny'"
         )
     since = "2020-01-01T00:00:00+00:00"
-    queue.record_success(
-        "small",
-        hof_kcal_mol=-2.0,
-        conformers_evaluated=2,
-        elapsed_s=10.0,
-        batch_id="new",
-    )
-    queue.mark_running("mid")
+    set_ok(db, "small", hof=-2.0, conformers=2, elapsed_s=10.0, batch_id="new")
+    set_running(db, "mid", cell_id="cell-x")
     activity = read_activity(db, since=since, recent=5)
     assert activity.mean_elapsed_s == 10.0
     assert [m.mol_id for m in activity.recent] == ["small", "tiny"]  # newest first
     (running,) = activity.in_flight
-    assert (running.mol_id, running.nheavy) == ("mid", 5)
+    assert (running.mol_id, running.nheavy, running.cell_id) == ("mid", 5, "cell-x")
     assert running.started_at is not None

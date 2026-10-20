@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import sqlite3
 from collections.abc import Callable
+from contextlib import closing
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -38,3 +41,49 @@ def row(mol_id: str, **extra: Any) -> dict[str, Any]:
     }
     base.update(extra)
     return base
+
+
+def set_running(db: Path, mol_id: str, cell_id: str | None = "central") -> None:
+    """Put a queue row in flight without a logged attempt (legacy or fixture)."""
+    with closing(sqlite3.connect(db)) as connection, connection:
+        connection.execute(
+            "UPDATE training_queue SET status = 'running', cell_id = ?,"
+            " updated_at = ? WHERE mol_id = ?",
+            (cell_id, datetime.now(timezone.utc).isoformat(), mol_id),
+        )
+
+
+def set_ok(
+    db: Path,
+    mol_id: str,
+    *,
+    hof: float,
+    elapsed_s: float = 1.0,
+    conformers: int = 1,
+    batch_id: str = "b",
+) -> None:
+    """Store a result row as ``accept_success`` leaves it (no geometry)."""
+    with closing(sqlite3.connect(db)) as connection, connection:
+        connection.execute(
+            "UPDATE training_queue SET status = 'ok', h298_pm7 = ?,"
+            " delta_kcal_mol = h298_cbs - ?, conformers_evaluated = ?,"
+            " elapsed_s = ?, batch_id = ?, updated_at = ? WHERE mol_id = ?",
+            (
+                hof,
+                hof,
+                conformers,
+                elapsed_s,
+                batch_id,
+                datetime.now(timezone.utc).isoformat(),
+                mol_id,
+            ),
+        )
+
+
+def set_status(db: Path, mol_id: str, status: str, reruns: int = 0) -> None:
+    """Force a queue row's status and rerun count."""
+    with closing(sqlite3.connect(db)) as connection, connection:
+        connection.execute(
+            "UPDATE training_queue SET status = ?, reruns = ? WHERE mol_id = ?",
+            (status, reruns, mol_id),
+        )

@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import os
+import sqlite3
 from collections.abc import Callable, Mapping
 from concurrent.futures import Executor, ThreadPoolExecutor
+from contextlib import closing
 from pathlib import Path
 
 import pytest
@@ -12,7 +14,7 @@ from semi_imperium.training.job_state import JobAlreadyRunning, JobState
 from semi_imperium.training.molecule_queue import CbsReadError, read_progress
 from semi_imperium.training.runner import RunSettings, run_training
 from semi_imperium.training.worker import WorkerResult, WorkerTask
-from tests.training.conftest import CbsFactory, row
+from tests.training.conftest import CbsFactory, row, set_running
 
 
 def _threads(workers: int) -> Executor:
@@ -61,6 +63,14 @@ def _cbs(make_cbs: CbsFactory) -> Path:
 
 def _db(tmp_path: Path) -> Path:
     return tmp_path / "store" / "training.sqlite3"
+
+
+def _attempt_outcomes(tmp_path: Path) -> dict[str, tuple[str, str | None]]:
+    with closing(sqlite3.connect(_db(tmp_path))) as connection:
+        rows = connection.execute(
+            "SELECT attempt_id, cell_id, outcome FROM training_attempt"
+        ).fetchall()
+    return {str(a): (str(c), o) for a, c, o in rows}
 
 
 def test_run_records_results_in_queue_geometry_store_and_job(
@@ -168,15 +178,14 @@ def test_repeated_failures_end_in_skip(tmp_path: Path, make_cbs: CbsFactory) -> 
     assert again.attempted == 0
 
 
-def test_orphan_running_molecules_are_requeued(
+def test_legacy_running_rows_without_a_cell_are_requeued(
     tmp_path: Path, make_cbs: CbsFactory
 ) -> None:
     from semi_imperium.training.molecule_queue import TrainingQueue
 
     cbs = make_cbs([row("orphan")])
-    seeded = TrainingQueue(_db(tmp_path), cbs)
-    seeded.ensure_seeded()
-    seeded.mark_running("orphan")  # a previous run died while it was in flight
+    TrainingQueue(_db(tmp_path), cbs).ensure_seeded()
+    set_running(_db(tmp_path), "orphan", cell_id=None)  # died before the migration
     summary = run_training(
         _settings(tmp_path, cbs),
         pool_factory=_threads,
@@ -184,6 +193,67 @@ def test_orphan_running_molecules_are_requeued(
         install_signals=False,
     )
     assert summary.ok == 1
+
+
+def test_a_restarted_central_recomputes_its_interrupted_molecules(
+    tmp_path: Path, make_cbs: CbsFactory
+) -> None:
+    from semi_imperium.training.molecule_queue import TrainingQueue
+
+    cbs = make_cbs([row("a")])
+    queue = TrainingQueue(_db(tmp_path), cbs)
+    queue.ensure_seeded()
+    (interrupted,) = queue.claim("central", 1)  # the previous run was killed
+    summary = run_training(
+        _settings(tmp_path, cbs),
+        pool_factory=_threads,
+        task_fn=_fake(),
+        install_signals=False,
+    )
+    assert (summary.attempted, summary.ok) == (1, 1)
+    outcomes = _attempt_outcomes(tmp_path)
+    assert outcomes[interrupted.attempt_id] == ("central", "released")
+    assert sorted(outcomes.values()) == [
+        ("central", "accepted"),
+        ("central", "released"),
+    ]
+
+
+def test_the_central_cell_never_takes_another_cells_molecule(
+    tmp_path: Path, make_cbs: CbsFactory
+) -> None:
+    from semi_imperium.training.molecule_queue import TrainingQueue
+
+    cbs = _cbs(make_cbs)
+    queue = TrainingQueue(_db(tmp_path), cbs)
+    queue.ensure_seeded()
+    (remote,) = queue.claim("cell-x", 1)  # "a" is computing elsewhere
+    summary = run_training(
+        _settings(tmp_path, cbs),
+        pool_factory=_threads,
+        task_fn=_fake(),
+        install_signals=False,
+    )
+    assert (summary.attempted, summary.ok) == (2, 2)
+    progress = read_progress(_db(tmp_path), cbs)
+    assert (progress.ok, progress.running) == (2, 1)
+    assert _attempt_outcomes(tmp_path)[remote.attempt_id] == ("cell-x", None)
+
+
+def test_every_molecule_of_a_run_goes_through_a_central_attempt(
+    tmp_path: Path, make_cbs: CbsFactory
+) -> None:
+    run_training(
+        _settings(tmp_path, _cbs(make_cbs)),
+        pool_factory=_threads,
+        task_fn=_fake(fail={"b"}),
+        install_signals=False,
+    )
+    assert sorted(_attempt_outcomes(tmp_path).values()) == [
+        ("central", "accepted"),
+        ("central", "accepted"),
+        ("central", "failed"),
+    ]
 
 
 def test_stop_request_prevents_new_dispatch(

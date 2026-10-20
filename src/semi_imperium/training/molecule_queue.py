@@ -6,7 +6,9 @@ One molecule per SMILES: among the rows that share a SMILES the reference
 conformer wins (lowest ``conformer_rank_by_h298``, which is the lowest H298);
 ties fall back to the lowest ``H298_cbs`` and then to ``mol_id``.
 
-Only the coordinator writes here; workers never touch the database.
+Every consumer (the local routine as cell ``central``, later the remote
+cells through the central API) takes molecules with ``claim`` and reports
+them by ``attempt_id``; workers never touch the database.
 """
 
 from __future__ import annotations
@@ -14,7 +16,7 @@ from __future__ import annotations
 import json
 import math
 import sqlite3
-from collections.abc import Iterator
+from collections.abc import Collection, Iterator
 from contextlib import closing, contextmanager
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
@@ -42,8 +44,8 @@ OK = "ok"
 RERUN = "rerun"
 SKIP = "skip"
 
-#: Rows the routine still has to compute. ``running`` is an orphan of an
-#: interrupted run (the coordinator waits for in-flight work before exiting).
+#: Rows still to compute. ``running`` ones are reserved to a cell and only
+#: return to the queue through ``TrainingQueue.release``.
 QUEUE_STATUSES = (PENDING, RERUN, RUNNING)
 
 
@@ -161,12 +163,14 @@ def read_progress(db_path: Path, cbs_csv: Path) -> TrainingProgress:
 
 @dataclass(frozen=True)
 class InFlightMolecule:
-    """A molecule flagged ``running``; ``started_at`` is when it was dispatched."""
+    """A molecule flagged ``running``; ``started_at`` is when it was claimed."""
 
     mol_id: str
     smiles: str
     nheavy: int
     started_at: str | None
+    #: Which cell holds it (``None`` only for rows from before the migration).
+    cell_id: str | None
 
 
 @dataclass(frozen=True)
@@ -205,7 +209,7 @@ def read_activity(
         return TrainingActivity((), (), None)
     with closing(connect(db_path)) as connection:
         running = connection.execute(
-            "SELECT mol_id, smiles, nheavy, updated_at FROM training_queue"
+            "SELECT mol_id, smiles, nheavy, updated_at, cell_id FROM training_queue"
             " WHERE status = ? ORDER BY updated_at",
             (RUNNING,),
         ).fetchall()
@@ -227,6 +231,7 @@ def read_activity(
                 smiles=str(r["smiles"]),
                 nheavy=int(r["nheavy"]),
                 started_at=r["updated_at"],
+                cell_id=r["cell_id"],
             )
             for r in running
         ),
@@ -291,36 +296,23 @@ class TrainingQueue:
                 raise
         return inserted
 
-    def queue(self, limit: int | None = None) -> list[QueuedMolecule]:
-        """Queued molecules, smallest first (ties by ``mol_id``)."""
-        with closing(connect(self._db_path)) as connection:
-            rows = connection.execute(
-                "SELECT mol_id, smiles, charge, multiplicity, nheavy, h298_cbs"
-                " FROM training_queue WHERE status IN ('pending', 'rerun', 'running')"
-                " ORDER BY nheavy, mol_id LIMIT ?",
-                (-1 if limit is None else limit,),  # SQLite: negative = no limit
-            ).fetchall()
-        return [
-            QueuedMolecule(
-                mol_id=r["mol_id"],
-                smiles=r["smiles"],
-                charge=r["charge"],
-                multiplicity=r["multiplicity"],
-                nheavy=r["nheavy"],
-                h298_cbs=r["h298_cbs"],
-            )
-            for r in rows
-        ]
-
     def claim(
-        self, cell_id: str, count: int, *, lease_s: float = DEFAULT_LEASE_S
+        self,
+        cell_id: str,
+        count: int,
+        *,
+        lease_s: float = DEFAULT_LEASE_S,
+        exclude: Collection[str] = (),
     ) -> list[ClaimedMolecule]:
         """Reserve up to ``count`` queued molecules to ``cell_id``, smallest first.
 
         One ``UPDATE … RETURNING`` under the write lock, so two claimers (the
         central routine and a cell API request) never get the same molecule.
         Each reserved row gets a fresh ``attempt_id``, also logged in
-        ``training_attempt``.
+        ``training_attempt``. ``exclude`` keeps molecules out of this claim:
+        the central run passes what it already tried, so a molecule that just
+        failed (``rerun``, still smallest first) waits for the next run
+        instead of being retried at once.
         """
         if not cell_id:
             raise ValueError("cell_id must not be empty")
@@ -337,10 +329,17 @@ class TrainingQueue:
                 " updated_at = ? WHERE mol_id IN ("
                 "  SELECT mol_id FROM training_queue"
                 "  WHERE status IN ('pending', 'rerun')"
+                "  AND mol_id NOT IN (SELECT value FROM json_each(?))"
                 "  ORDER BY nheavy, mol_id LIMIT ?)"
                 " RETURNING mol_id, smiles, charge, multiplicity, nheavy, h298_cbs,"
                 " attempt_id",
-                (cell_id, lease_until, now.isoformat(), count),
+                (
+                    cell_id,
+                    lease_until,
+                    now.isoformat(),
+                    json.dumps(sorted(exclude)),
+                    count,
+                ),
             ).fetchall()
             connection.executemany(
                 "INSERT INTO training_attempt (attempt_id, mol_id, cell_id, claimed_at)"
@@ -541,70 +540,6 @@ class TrainingQueue:
             (outcome, note, _now(), attempt_id),
         )
 
-    def mark_running(self, mol_id: str) -> None:
-        """Flag ``mol_id`` as in flight (persisted immediately)."""
-        self._expect_one(
-            "UPDATE training_queue SET status = 'running', updated_at = ?"
-            " WHERE mol_id = ?",
-            (_now(), mol_id),
-            mol_id,
-        )
-
-    def record_success(
-        self,
-        mol_id: str,
-        *,
-        hof_kcal_mol: float,
-        conformers_evaluated: int,
-        elapsed_s: float,
-        batch_id: str,
-    ) -> None:
-        """Store a protocol-2 result: PM7 value and delta to CBS (CBS − PM7)."""
-        if not math.isfinite(hof_kcal_mol):
-            raise ValueError(f"non-finite PM7 value for {mol_id}: {hof_kcal_mol}")
-        self._expect_one(
-            "UPDATE training_queue SET status = 'ok', h298_pm7 = ?,"
-            " delta_kcal_mol = h298_cbs - ?, conformers_evaluated = ?,"
-            " elapsed_s = ?, batch_id = ?, updated_at = ? WHERE mol_id = ?",
-            (
-                hof_kcal_mol,
-                hof_kcal_mol,
-                conformers_evaluated,
-                elapsed_s,
-                batch_id,
-                _now(),
-                mol_id,
-            ),
-            mol_id,
-        )
-
-    def record_failure(self, mol_id: str, reason: str) -> str:
-        """Count a failed attempt: ``rerun`` below the limit, else ``skip``.
-
-        The reason is persisted by ``JobState.record_failure``.
-        """
-        del reason
-        with closing(connect(self._db_path)) as connection:
-            connection.execute("BEGIN IMMEDIATE")
-            try:
-                found = connection.execute(
-                    "SELECT reruns FROM training_queue WHERE mol_id = ?", (mol_id,)
-                ).fetchone()
-                if found is None:
-                    raise KeyError(mol_id)
-                reruns = int(found["reruns"]) + 1
-                status = SKIP if reruns >= self._max_reruns else RERUN
-                connection.execute(
-                    "UPDATE training_queue SET status = ?, reruns = ?, updated_at = ?"
-                    " WHERE mol_id = ?",
-                    (status, reruns, _now(), mol_id),
-                )
-                connection.execute("COMMIT")
-            except BaseException:
-                connection.execute("ROLLBACK")
-                raise
-        return status
-
     @contextmanager
     def _write(self) -> Iterator[sqlite3.Connection]:
         """One write transaction, taken up front so readers never see half of it."""
@@ -616,12 +551,6 @@ class TrainingQueue:
             except BaseException:
                 connection.execute("ROLLBACK")
                 raise
-
-    def _expect_one(self, sql: str, params: tuple[object, ...], mol_id: str) -> None:
-        with closing(connect(self._db_path)) as connection:
-            changed = connection.execute(sql, params).rowcount
-        if changed != 1:
-            raise KeyError(mol_id)
 
 
 def _now() -> str:
