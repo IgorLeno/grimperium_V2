@@ -45,7 +45,7 @@ export function App() {
   return (
     <>
       <header className="app-header">
-        <div className="brand"><span className="brand-mark" aria-hidden="true">Δ</span><span><strong>Delta Chemistry</strong><small>Métodos rápidos, corrigidos por IA</small></span></div>
+        <div className="brand"><img className="brand-mark" src="/favicon.svg" alt="" aria-hidden="true" /><span><strong>Delta Chemistry</strong><small>Métodos rápidos, corrigidos por IA</small></span></div>
         <nav aria-label="Telas">
           {active.tabs.map((tab) => (
             <button key={tab.key} type="button" title={tab.hint} aria-current={topTab.key === tab.key ? 'page' : undefined}

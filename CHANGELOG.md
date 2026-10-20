@@ -8,6 +8,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Nova logo Delta Bridge e favicon** (2026-10-20)
+  - `apps/dashboard/public/favicon.svg`: logo "Delta Bridge" (Δ aberto em
+    gradiente menta com a ponte âmbar na base), servida como favicon via
+    `index.html` e reutilizada na marca do cabeçalho.
+  - `apps/dashboard/src/App.tsx`, `style.css`: `.brand-mark` deixa o
+    quadrado verde com o caractere Δ e mostra a logo sobre um ladrilho sutil
+    (o cabeçalho é escuro nos dois temas).
+  - Verification: `npm run lint && npm run typecheck && npm test && npm run build`
+    em `apps/dashboard`; conferido no navegador em tema claro e escuro.
 - **Painel Calcular PM7: rodada, workers e threads** (2026-10-20)
   - `apps/dashboard`: barra da rodada atual (processadas / limite ou fila
     restante), decorrido, ETA e ritmo pelo relógio de parede, tempo médio,
