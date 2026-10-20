@@ -146,3 +146,77 @@ def test_concurrent_claimers_never_share_a_molecule(
     for thread in threads:
         thread.join()
     assert sorted(taken) == sorted(f"m{i:02d}" for i in range(40))
+
+
+# ------------------------------------------------------------ lease, release
+
+
+def test_an_expired_lease_never_returns_the_molecule_by_itself(
+    tmp_path: Path, make_cbs: CbsFactory
+) -> None:
+    queue = _seeded(tmp_path, make_cbs([row("a")]))
+    queue.claim("cell-a", 1, lease_s=-60.0)  # already lapsed
+    assert queue.claim("cell-b", 1) == []
+    assert _row(tmp_path, "a")["cell_id"] == "cell-a"
+
+
+def test_renew_extends_only_the_cells_own_running_attempts(
+    tmp_path: Path, make_cbs: CbsFactory
+) -> None:
+    queue = _seeded(tmp_path, _cbs(make_cbs))
+    (mine,) = queue.claim("cell-a", 1, lease_s=10.0)
+    (theirs,) = queue.claim("cell-b", 1, lease_s=10.0)
+    before = _row(tmp_path, theirs.mol_id)["lease_until"]
+    started = _row(tmp_path, mine.mol_id)["updated_at"]
+
+    renewed = queue.renew(
+        "cell-a", [mine.attempt_id, theirs.attempt_id, "unknown"], lease_s=600.0
+    )
+
+    assert renewed == 1
+    assert _row(tmp_path, mine.mol_id)["lease_until"] > before
+    assert _row(tmp_path, theirs.mol_id)["lease_until"] == before
+    # the dashboard reads updated_at as "started at": renewal must not move it
+    assert _row(tmp_path, mine.mol_id)["updated_at"] == started
+
+
+def test_release_returns_a_cells_molecules_to_the_queue(
+    tmp_path: Path, make_cbs: CbsFactory
+) -> None:
+    queue = _seeded(tmp_path, _cbs(make_cbs))
+    _set_status(tmp_path, "small", "rerun", reruns=1)
+    mine = queue.claim("cell-a", 2)  # tiny (pending) and small (rerun)
+    (theirs,) = queue.claim("cell-b", 1)
+
+    released = queue.release("cell-a")
+
+    assert sorted(released) == ["small", "tiny"]
+    tiny, small = _row(tmp_path, "tiny"), _row(tmp_path, "small")
+    assert (tiny["status"], tiny["reruns"]) == ("pending", 0)
+    assert (small["status"], small["reruns"]) == ("rerun", 1)  # no rerun spent
+    for stored in (tiny, small):
+        assert (stored["cell_id"], stored["attempt_id"], stored["lease_until"]) == (
+            None,
+            None,
+            None,
+        )
+    assert _row(tmp_path, theirs.mol_id)["cell_id"] == "cell-b"
+    by_id = {a["attempt_id"]: a for a in _attempts(tmp_path)}
+    for molecule in mine:
+        assert by_id[molecule.attempt_id]["outcome"] == "released"
+        assert by_id[molecule.attempt_id]["released_at"]
+    assert by_id[theirs.attempt_id]["outcome"] is None
+    # released molecules are claimable again, by anyone
+    assert {m.mol_id for m in queue.claim("cell-c", 5)} == {"tiny", "small", "big"}
+
+
+def test_release_can_take_back_legacy_rows_with_no_cell(
+    tmp_path: Path, make_cbs: CbsFactory
+) -> None:
+    queue = _seeded(tmp_path, _cbs(make_cbs))
+    _set_status(tmp_path, "mid", "running")  # orphan from before the migration
+    queue.claim("cell-b", 1)
+    assert queue.release("central") == []
+    assert queue.release("central", include_unowned=True) == ["mid"]
+    assert _row(tmp_path, "mid")["status"] == "pending"
+    assert _row(tmp_path, "tiny")["cell_id"] == "cell-b"

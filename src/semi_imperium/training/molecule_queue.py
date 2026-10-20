@@ -11,6 +11,7 @@ Only the coordinator writes here; workers never touch the database.
 
 from __future__ import annotations
 
+import json
 import math
 import sqlite3
 from collections.abc import Iterator
@@ -355,6 +356,63 @@ class TrainingQueue:
         ]
         # RETURNING has no defined order; keep the queue's.
         return sorted(claimed, key=lambda m: (m.nheavy, m.mol_id))
+
+    def renew(
+        self,
+        cell_id: str,
+        attempt_ids: list[str],
+        *,
+        lease_s: float = DEFAULT_LEASE_S,
+    ) -> int:
+        """Push ``lease_until`` of ``cell_id``'s running attempts; count them.
+
+        Attempts of other cells, finished or released ones are ignored, so a
+        late heartbeat cannot take a molecule back. ``updated_at`` is left
+        alone: readers show it as the time the molecule was claimed.
+        """
+        if not attempt_ids:
+            return 0
+        lease_until = (
+            datetime.now(timezone.utc) + timedelta(seconds=lease_s)
+        ).isoformat()
+        with self._write() as connection:
+            return connection.execute(
+                "UPDATE training_queue SET lease_until = ?"
+                " WHERE status = 'running' AND cell_id = ?"
+                " AND attempt_id IN (SELECT value FROM json_each(?))",
+                (lease_until, cell_id, json.dumps(attempt_ids)),
+            ).rowcount
+
+    def release(self, cell_id: str, *, include_unowned: bool = False) -> list[str]:
+        """Give ``cell_id``'s running molecules back to the queue; return them.
+
+        This is the only way a reservation ends without a result (no lease
+        expiry). No rerun is spent: a row returns to ``rerun`` if it had
+        failed before, else to ``pending``. ``include_unowned`` also takes
+        ``running`` rows with no cell, left by runs from before the cell
+        columns existed. A result that still arrives for a released attempt
+        is handled by the acceptance rules, not refused here.
+        """
+        now = _now()
+        params = (cell_id, int(include_unowned))
+        with self._write() as connection:
+            # Attempts first: RETURNING would only show the cleared attempt_id.
+            connection.execute(
+                "UPDATE training_attempt SET outcome = 'released', released_at = ?"
+                " WHERE outcome IS NULL AND attempt_id IN ("
+                "  SELECT attempt_id FROM training_queue WHERE status = 'running'"
+                "  AND (cell_id = ? OR (? AND cell_id IS NULL)))",
+                (now, *params),
+            )
+            rows = connection.execute(
+                "UPDATE training_queue SET"
+                " status = CASE WHEN reruns > 0 THEN 'rerun' ELSE 'pending' END,"
+                " cell_id = NULL, attempt_id = NULL, lease_until = NULL,"
+                " updated_at = ? WHERE status = 'running'"
+                " AND (cell_id = ? OR (? AND cell_id IS NULL)) RETURNING mol_id",
+                (now, *params),
+            ).fetchall()
+        return sorted(str(r["mol_id"]) for r in rows)
 
     def mark_running(self, mol_id: str) -> None:
         """Flag ``mol_id`` as in flight (persisted immediately)."""
