@@ -9,6 +9,10 @@ somente leitura; estado das moléculas no SQLite `data/semi_imperium/training.sq
 fica a linha de `conformer_rank_by_h298` mínimo (o conformer de referência de menor
 H298); empate por `mol_id`. O CSV é só lido, nunca escrito.
 
+> Atualizado em 2026-10-21: a chave passou a ser a `MolecularIdentity` (SMILES
+> canônico, carga, multiplicidade), não o SMILES bruto: 27.332 linhas. Ver
+> CHANGELOG, "Fila de treinamento: uma linha por `MolecularIdentity`".
+
 ## Itens
 
 - [x] `queue.py` (tabela `training_queue` em `db.py`): semeadura idempotente, fila,

@@ -174,6 +174,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   o arquivo de trava do LibreOffice.
 
 ### Fixed
+- **Fila de treinamento: uma linha por `MolecularIdentity`** (2026-10-21)
+  - `src/semi_imperium/training/molecule_queue.py`: a semeadura deduplica
+    pelo `molecule_id` do worker (SMILES canônico, carga, multiplicidade),
+    não pelo SMILES bruto; mesmo desempate (menor rank, menor H298,
+    `mol_id`). Fila: 27.335 → 27.332 linhas. Três pares de radicais do CBS
+    tinham duas grafias (ficam `cbs_52946`, `cbs_52416`, `cbs_52812`); dois
+    workers com a mesma identidade dividiam `work/crest/<molecule_id>` e o
+    `calculation_id` (CREST sem `MDFILES/crest_1.trj`, `StoreIntegrityError`).
+  - Filas já semeadas: na próxima rodada central, `cbs_00150`, `cbs_52394`
+    e `cbs_52947` (se ainda `pending`/`rerun`) vão para `skip`, com o
+    `mol_id` mantido em `training_failure`; `ok`/`running` não mudam.
+  - SMILES que o RDKit não lê (`cbs_31629`, `cbs_31633`, `cbs_52805`)
+    continuam na fila como antes.
+  - Verification: `pytest tests/training tests/webapi tests/unit/semi_imperium
+    tests/cli tests/test_csv_schema.py tests/cell` (779 passed); semeadura
+    sobre cópia do banco de produção.
 - Dashboard: a referência CBS aparecia como "arquivo não encontrado".
   `DashboardPaths.default` apontava para `data/thermo_cbs_chon.csv`, nome que
   não existe mais; agora usa `data/thermo_cbs_chon_v2.csv` (27.760 linhas).
