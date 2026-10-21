@@ -99,7 +99,7 @@ export function CellsPanel() {
       {error && <p role="alert" className="error-state">{error}</p>}
       {state.status === 'error' && <p role="alert" className="error-state">{state.message}</p>}
       {cells.length > 0 && (
-        <ul className="training-failures">
+        <ul className="training-failures cells-list">
           {cells.map((cell) => (
             <li key={cell.cell_id}>
               <strong>{cell.name}</strong>

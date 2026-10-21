@@ -721,6 +721,8 @@ button.choice-card:hover:not(:disabled) { transform: translateY(-2px); border-co
 .training-controls label { display: grid; gap: 4px; font-size: 0.9rem; }
 .training-failures { list-style: none; padding: 0; display: grid; gap: 6px; }
 .training-failures li { display: flex; gap: 10px; flex-wrap: wrap; }
+.cells-list li { align-items: center; }
+.cells-list .ghost-button { margin-top: 0; }
 
 /* ------------------------------------------------- calcular PM7: rodada */
 .training-bar--thin { height: 8px; }
