@@ -19,8 +19,10 @@ Serve with (address from ``tailscale ip -4``)::
 
 from __future__ import annotations
 
+import tempfile
 import threading
 from collections.abc import Callable
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Request
@@ -44,6 +46,7 @@ from grimperium.webapi.models import (
 )
 
 if TYPE_CHECKING:
+    from grimperium.webapi.cell_package import WheelBuilder
     from semi_imperium.training.cells import Cell, CellRegistry
 
 ProgramsProbe = Callable[[], dict[str, str]]
@@ -345,3 +348,54 @@ def revoke_cell(paths: DashboardPaths, cell_id: str) -> CellSummary:
     _known(paths, cell_id)
     cell = _registry(paths).revoke(cell_id)
     return _summary(cell, _held(paths, cell_id))
+
+
+def set_admission(paths: DashboardPaths, cell_id: str, admission: str) -> CellSummary:
+    """Admit (or block) a cell by hand, after checking its reference molecules."""
+    _known(paths, cell_id)
+    cell = _registry(paths).set_admission(cell_id, admission)
+    return _summary(cell, _held(paths, cell_id))
+
+
+def package_cell(
+    paths: DashboardPaths,
+    cell_id: str,
+    central_url: str,
+    *,
+    build_wheel: WheelBuilder,
+    central_programs: ProgramsProbe,
+) -> tuple[str, bytes]:
+    """Zip name and bytes of a fresh package for ``cell_id``, with a new token.
+
+    The wheel and the central's programs come first: only once the package
+    can be built does the token rotate (the installed cell's token then
+    stops working, so the new package must replace it).
+    """
+    from grimperium.webapi.cell_package import (
+        CellPackage,
+        PackageError,
+        package_folder,
+    )
+
+    cell = _known(paths, cell_id)
+    if cell.revoked_at is not None:
+        raise HTTPException(409, "Célula revogada; crie outra célula.")
+    with tempfile.TemporaryDirectory(prefix="grimperium-celula-") as scratch:
+        try:
+            wheel = build_wheel(Path(scratch))
+        except PackageError as exc:
+            raise HTTPException(503, f"Pacote não gerado: {exc}") from None
+        programs = central_programs()
+        try:
+            cell, token = _registry(paths).rotate_token(cell_id)
+        except ValueError:
+            raise HTTPException(409, "Célula revogada; crie outra célula.") from None
+        data = CellPackage(
+            cell_id=cell.cell_id,
+            cell_name=cell.name,
+            central_url=central_url.rstrip("/"),
+            token=token,
+            wheel=wheel,
+            central_programs=programs,
+        ).build()
+    return f"{package_folder(cell.cell_id, cell.name)}.zip", data

@@ -76,6 +76,28 @@ def test_authenticate_maps_a_token_to_its_cell(tmp_path: Path) -> None:
     assert registry.authenticate("") is None
 
 
+def test_rotated_token_replaces_the_old_one(tmp_path: Path) -> None:
+    registry = _registry(tmp_path)
+    cell, old = registry.create("a")
+    rotated, new = registry.rotate_token(cell.cell_id)
+    assert new != old and rotated.cell_id == cell.cell_id
+    assert registry.authenticate(old) is None
+    found = registry.authenticate(new)
+    assert found is not None and found.cell_id == cell.cell_id
+    for path in tmp_path.glob("training.sqlite3*"):
+        assert new.encode() not in path.read_bytes()
+
+
+def test_revoked_cell_gets_no_new_token(tmp_path: Path) -> None:
+    registry = _registry(tmp_path)
+    cell, _ = registry.create("a")
+    registry.revoke(cell.cell_id)
+    with pytest.raises(ValueError, match="revoked"):
+        registry.rotate_token(cell.cell_id)
+    with pytest.raises(KeyError):
+        registry.rotate_token("nope")
+
+
 def test_revoked_token_no_longer_authenticates(tmp_path: Path) -> None:
     registry = _registry(tmp_path)
     cell, token = registry.create("a")

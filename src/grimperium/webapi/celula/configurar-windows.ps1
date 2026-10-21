@@ -1,0 +1,73 @@
+# Lado Windows da célula do Grimperium. O instalador (instalar.sh, no WSL)
+# preenche a distribuição e o usuário e grava este arquivo na sua pasta do
+# Windows. Rode no PowerShell do seu usuário (não precisa ser administrador):
+#
+#   powershell -ExecutionPolicy Bypass -File "$env:USERPROFILE\grimperium-celula-windows.ps1"
+#
+# 1. .wslconfig: o WSL usa todos os núcleos e 75% da memória (cópia do
+#    arquivo anterior em .wslconfig.antes-grimperium).
+# 2. Tarefa "Grimperium Celula" no Agendador: inicia a célula no logon deste
+#    usuário, sem janela, sem limite de tempo, também na bateria.
+# 3. Energia: o computador não suspende nem hiberna (tela pode desligar).
+#
+# Depois, reinicie o Windows. Para a célula voltar sozinha depois de uma
+# queda de energia sem ninguém fazer logon, ative o logon automático
+# (netplwiz) e, na BIOS, "ligar ao voltar a energia" (veja o guia).
+
+$ErrorActionPreference = 'Stop'
+
+$Distro = '@DISTRO@'
+$LinuxUser = '@LINUX_USER@'
+$Iniciar = '@INICIAR@'
+$TaskName = 'Grimperium Celula'
+
+if ($Distro.StartsWith('@')) {
+    throw 'Este é o modelo do pacote. Use o arquivo que o instalar.sh gravou na sua pasta do Windows.'
+}
+
+# --- 1. .wslconfig ------------------------------------------------------------
+$computer = Get-CimInstance Win32_ComputerSystem
+$cores = [int]$computer.NumberOfLogicalProcessors
+$ramGB = [math]::Floor($computer.TotalPhysicalMemory / 1GB)
+$memGB = [math]::Max(2, [math]::Floor($ramGB * 0.75))
+$wslconfig = Join-Path $env:USERPROFILE '.wslconfig'
+if (Test-Path $wslconfig) {
+    Copy-Item $wslconfig "$wslconfig.antes-grimperium" -Force
+    Write-Host "Cópia do .wslconfig anterior: $wslconfig.antes-grimperium"
+}
+$lines = @(
+    '# Escrito pelo instalador da célula do Grimperium.',
+    '[wsl2]',
+    "processors=$cores",
+    "memory=${memGB}GB"
+)
+Set-Content -Path $wslconfig -Value $lines -Encoding ascii
+Write-Host "1/3 .wslconfig: $cores núcleos, ${memGB} GB de memória para o WSL."
+
+# --- 2. tarefa no Agendador ---------------------------------------------------
+$wsl = Join-Path $env:WINDIR 'System32\wsl.exe'
+$user = "$env:USERDOMAIN\$env:USERNAME"
+# PowerShell oculto só para não abrir uma janela que alguém feche sem querer.
+$command = "& '$wsl' -d '$Distro' -u '$LinuxUser' -- '$Iniciar'"
+$action = New-ScheduledTaskAction -Execute 'powershell.exe' `
+    -Argument "-NoProfile -WindowStyle Hidden -Command `"$command`""
+$trigger = New-ScheduledTaskTrigger -AtLogOn -User $user
+$settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries `
+    -DontStopIfGoingOnBatteries -StartWhenAvailable `
+    -ExecutionTimeLimit ([TimeSpan]::Zero) -MultipleInstances IgnoreNew `
+    -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 5)
+$principal = New-ScheduledTaskPrincipal -UserId $user -LogonType Interactive -RunLevel Limited
+Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $trigger `
+    -Settings $settings -Principal $principal -Force | Out-Null
+Write-Host "2/3 Tarefa '$TaskName' criada: inicia a célula no logon de $user."
+
+# --- 3. energia ---------------------------------------------------------------
+foreach ($setting in 'standby-timeout-ac', 'standby-timeout-dc', 'hibernate-timeout-ac', 'hibernate-timeout-dc') {
+    powercfg /change $setting 0
+    if ($LASTEXITCODE -ne 0) { Write-Warning "powercfg /change $setting 0 falhou" }
+}
+Write-Host '3/3 Energia: sem suspensão e sem hibernação.'
+
+Write-Host ''
+Write-Host 'Pronto. Reinicie o Windows: a célula inicia sozinha depois do logon.'
+Write-Host "Para iniciar agora sem reiniciar: wsl --shutdown; Start-ScheduledTask -TaskName '$TaskName'"

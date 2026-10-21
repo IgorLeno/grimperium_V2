@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Literal
+
 from pydantic import BaseModel, Field, FiniteFloat, model_validator
 
 BLANK_LABEL = "unset"
@@ -345,3 +347,19 @@ class CellCreated(BaseModel):
 
 class CellReleased(BaseModel):
     released: list[str]
+
+
+class CellPackageRequest(BaseModel):
+    #: What the cell calls: the cell API on the central's Tailscale address.
+    central_url: str = Field(
+        min_length=8, max_length=200, pattern=r"^https?://[^\s/]+(:\d+)?/?$"
+    )
+
+
+class CellPackageDefaults(BaseModel):
+    #: Suggested ``central_url`` (``""`` when the central's address is unknown).
+    central_url: str
+
+
+class CellAdmissionRequest(BaseModel):
+    admission: Literal["pending", "passed", "blocked"]

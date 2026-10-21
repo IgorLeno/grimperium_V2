@@ -1,0 +1,33 @@
+Pacote da célula do Grimperium
+==============================
+
+ATENÇÃO: este pacote contém o token da célula (config.json). Quem tiver o
+token pode pedir moléculas à central em nome desta célula. Não envie por
+e-mail nem deixe em pasta compartilhada; apague o zip e a pasta extraída
+depois de instalar. Se vazar, revogue a célula no dashboard e crie outra.
+Gerar um pacote novo para a mesma célula troca o token: o pacote anterior
+deixa de funcionar.
+
+Como instalar (guia completo: docs/guia-celulas.md no repositório):
+
+1. No Windows, clique com o botão direito no zip > "Extrair tudo".
+2. Abra o Ubuntu (WSL) e rode, trocando o caminho pelo da pasta extraída:
+
+       bash /mnt/c/Users/SEU_USUARIO/Downloads/NOME_DA_PASTA/instalar.sh
+
+3. No fim, o instalador mostra o comando do PowerShell que configura o
+   Windows (.wslconfig, tarefa no Agendador, sem suspensão). Rode-o e
+   reinicie o Windows.
+4. Na central, admita a célula no dashboard.
+5. No Ubuntu: celula status
+
+Conteúdo:
+  instalar.sh                 instalador (Ubuntu no WSL2, sem sudo)
+  windows/                    modelo do script do Windows (o instalador o preenche)
+  config.json                 endereço da central + token (segredo)
+  pacote.json                 commit, versões e programas da central
+  conda-lock.yml              CREST, xtb e MOPAC fixos (iguais aos da central)
+  environment.yml             origem do lockfile
+  requirements-celula.txt     bibliotecas Python da célula
+  constraints-central.txt     versões das bibliotecas na central
+  wheels/                     o programa (grimperium + semi_imperium)

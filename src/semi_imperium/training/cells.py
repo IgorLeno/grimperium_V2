@@ -180,6 +180,23 @@ class CellRegistry:
             (_now(),),
         )
 
+    def rotate_token(self, cell_id: str) -> tuple[Cell, str]:
+        """Give ``cell_id`` a new token (shown only now); the old one stops working.
+
+        The cell package carries the token, and the central keeps only its
+        hash, so every new package needs a new token. A revoked cell stays
+        revoked: ``ValueError``.
+        """
+        token = secrets.token_urlsafe(32)
+        with self._write() as connection:
+            if self._get(connection, cell_id).revoked_at is not None:
+                raise ValueError(f"cell {cell_id} is revoked")
+            connection.execute(
+                "UPDATE cells SET token_hash = ? WHERE cell_id = ?",
+                (_hash(token), cell_id),
+            )
+            return self._get(connection, cell_id), token
+
     def set_admission(self, cell_id: str, admission: str) -> Cell:
         if admission not in ADMISSIONS:
             raise ValueError(f"admission must be one of {ADMISSIONS}, got {admission}")

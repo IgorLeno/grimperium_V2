@@ -6,13 +6,16 @@ from pathlib import Path
 from typing import Literal
 
 from fastapi import Depends, FastAPI, HTTPException, Query, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 
-from grimperium.webapi import cells, profiles, readers, training
+from grimperium.webapi import cell_package, cells, profiles, readers, training
 from grimperium.webapi.config import DashboardPaths
 from grimperium.webapi.models import (
+    CellAdmissionRequest,
     CellCreated,
     CellNameRequest,
+    CellPackageDefaults,
+    CellPackageRequest,
     CellReleased,
     CellSummary,
     DatasetProfile,
@@ -31,10 +34,18 @@ TableKey = Literal["exp", "cbs"]
 def create_app(
     paths: DashboardPaths | None = None,
     launcher: training.Launcher | None = None,
+    wheel_builder: cell_package.WheelBuilder | None = None,
+    central_programs: cells.ProgramsProbe | None = None,
 ) -> FastAPI:
-    """Build the app; ``paths`` defaults to the datasets of this checkout."""
+    """Build the app; ``paths`` defaults to the datasets of this checkout.
+
+    ``wheel_builder`` and ``central_programs`` feed the cell package (tests
+    replace the ``poetry build`` and the hashing of the real binaries).
+    """
     files = paths or DashboardPaths.default()
     dispatch = launcher or training.default_launcher
+    build_wheel = wheel_builder or cell_package.build_wheel_from_head
+    probe_central = central_programs or cells.default_central_programs
     app = FastAPI(title="Grimperium dashboard API", version="0.1.0")
 
     @app.exception_handler(readers.DataUnavailable)
@@ -140,5 +151,37 @@ def create_app(
     )
     def cells_revoke(cell_id: str) -> CellSummary:
         return cells.revoke_cell(files, cell_id)
+
+    @app.post(
+        "/api/cells/{cell_id}/admission",
+        dependencies=[Depends(require_local_origin)],
+    )
+    def cells_admission(cell_id: str, body: CellAdmissionRequest) -> CellSummary:
+        return cells.set_admission(files, cell_id, body.admission)
+
+    @app.get("/api/cells/package-defaults")
+    def cells_package_defaults() -> CellPackageDefaults:
+        return CellPackageDefaults(central_url=cell_package.suggest_central_url())
+
+    @app.post(
+        "/api/cells/{cell_id}/package", dependencies=[Depends(require_local_origin)]
+    )
+    def cells_package(cell_id: str, body: CellPackageRequest) -> Response:
+        # The zip holds the cell's new token: built in memory, never cached.
+        filename, data = cells.package_cell(
+            files,
+            cell_id,
+            body.central_url,
+            build_wheel=build_wheel,
+            central_programs=probe_central,
+        )
+        return Response(
+            content=data,
+            media_type="application/zip",
+            headers={
+                "Content-Disposition": f'attachment; filename="{filename}"',
+                "Cache-Control": "no-store",
+            },
+        )
 
     return app
