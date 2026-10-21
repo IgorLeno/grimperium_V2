@@ -8,6 +8,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Pacote e instalação da célula (células distribuídas, Lote 4)** (2026-10-21)
+  - `POST /api/cells/{id}/package` (dashboard, só local): zip gerado em
+    memória com `conda-lock.yml`/`environment.yml`, um wheel do `HEAD`
+    commitado (`git archive` + `poetry build`; leva `grimperium` e
+    `semi_imperium` juntos, porque a célula importa os dois), as bibliotecas
+    Python da célula fixadas nas versões da central
+    (`requirements-celula.txt` + `constraints-central.txt`), `instalar.sh`,
+    o script do Windows, `pacote.json` (commit + programas da central) e
+    `config.json` (URL + token, modo 600 no zip).
+  - Token: a central guarda só o hash, então cada pacote chama
+    `CellRegistry.rotate_token` e o token novo existe apenas no zip; o
+    anterior para de funcionar. O wheel é gerado antes da troca: falha no
+    build (503) não derruba a célula instalada. Célula revogada: 409.
+  - `src/grimperium/webapi/celula/instalar.sh` (Ubuntu/WSL2, sem sudo):
+    micromamba 2.9.0 com sha256 fixo em `~/.local/bin`, ambiente
+    `grimperium-quimica` pelo lockfile, Python da central (conda-forge) num
+    ambiente e venv separados (fora do `grimperium-quimica`, senão o
+    `environment_sha256` muda e o registro dá 409), `~/grimperium-celula/`
+    com `config.json` 600 e `iniciar.sh` (`setsid -w celula start`), e
+    confere os programas contra os da central e a conexão antes de terminar.
+    No WSL grava `grimperium-celula-windows.ps1` (`.wslconfig`, tarefa no
+    Agendador no logon, energia sem suspensão).
+  - `POST /api/cells/{id}/admission` e `GET /api/cells/package-defaults`
+    (sugere `http://<tailscale ip -4>:8100` ou `GRIMPERIUM_CELL_URL`).
+  - Dashboard (Calcular PM7 → Células): criar e baixar pacote, pacote novo
+    com confirmação, admitir/bloquear, aviso explícito de que o zip contém o
+    token.
+  - `docs/guia-celulas.md`: Tailscale, API das células, pacote, instalação,
+    admissão, `celula status` e reinício pelo TeamViewer.
+  - Pendente: teste de admissão automático (5 moléculas de referência,
+    0,1 kcal/mol); a admissão é manual.
+  - Verification: `poetry run pytest tests/webapi/test_cell_package.py
+    tests/training/test_cells.py -q`; `npx vitest run` em `apps/dashboard`;
+    E2E com o instalador num container Ubuntu 24.04 registrando numa
+    central local (cópia do banco).
 - **Programa da célula (células distribuídas, Lote 3)** (2026-10-20)
   - `src/semi_imperium/cell/`: o programa que roda em cada computador
     remoto (WSL2), `celula start | status | update` (script `celula` ou

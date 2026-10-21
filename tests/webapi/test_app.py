@@ -281,6 +281,8 @@ def test_only_the_training_and_cell_routes_accept_writes(
         "/api/cells/{cell_id}/rename",
         "/api/cells/{cell_id}/release",
         "/api/cells/{cell_id}/revoke",
+        "/api/cells/{cell_id}/admission",
+        "/api/cells/{cell_id}/package",
     }
 
 
