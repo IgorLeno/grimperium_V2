@@ -86,17 +86,29 @@ ative o logon automático do Windows (`netplwiz`, desmarque "Os usuários
 devem digitar um nome…") e, na BIOS, a opção de ligar quando a energia
 volta ("Restore on AC power loss" / "Power On").
 
-## 5. Admitir a célula
+## 5. Teste de admissão
 
-Uma célula nova fica **em admissão**: registra-se, mas não recebe moléculas.
-No dashboard (Calcular PM7 → Células) ela aparece com o computador e os
-workers. Clique em **Admitir**. Se precisar parar de mandar trabalho a ela,
-**Bloquear**.
+Uma célula nova fica **em admissão** e, antes de receber a fila, calcula
+sozinha 5 moléculas de referência que a central já calculou: `cbs_09698` CO,
+`cbs_00187` [H][C]=C, `cbs_24671` C[N+](=O)[O-], `cbs_08982` OCCO e
+`cbs_01400` CCC(=O)O. A central compara cada HOF com o valor que ela aceitou:
 
-O teste de admissão automático (calcular 5 moléculas de referência e comparar
-o HOF dentro de 0,1 kcal/mol) **ainda não existe**: a admissão é manual. Se
-quiser conferir antes, compare as primeiras moléculas que ela entregar com as
-da central.
+- as 5 dentro de **0,1 kcal/mol**: a célula passa para **Admitida** e começa
+  a receber a fila (em até 1 minuto);
+- uma fora da tolerância, ou uma que falhe (timeout do CREST, erro do MOPAC):
+  a célula fica **Bloqueada** e o dashboard mostra o motivo, por exemplo
+  `cbs_09698 (CO): HOF -48.70000 contra -48.93880 da central (Δ 0.23880 > 0.1
+  kcal/mol)`.
+
+Os resultados das referências não entram na fila nem nas geometrias da
+central. No dashboard (Calcular PM7 → Células), enquanto o teste roda, a
+linha mostra quantas referências já voltaram. Se a célula reiniciar no meio,
+ela recalcula só as que faltavam.
+
+Depois de um bloqueio, corrija a causa (em geral, reinstale com um pacote
+novo) e clique em **Refazer admissão**: os resultados anteriores são
+descartados e as 5 são calculadas de novo. **Admitir** e **Bloquear** seguem
+disponíveis para decidir à mão.
 
 Se o dashboard mostrar **Versão divergente**, os programas da célula não são
 os da central: rode o instalador de novo com um pacote novo.

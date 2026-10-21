@@ -8,6 +8,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Teste de admissão automático da célula (células distribuídas, Lote 4)** (2026-10-21)
+  - Uma célula `pending` pede trabalho pelo mesmo `POST /api/cell/claim` e
+    recebe as 5 moléculas de referência (`cbs_09698`, `cbs_00187`,
+    `cbs_24671`, `cbs_08982`, `cbs_01400`) com `attempt_id` `adm-…`, fora
+    da fila; antes o claim respondia 403. Bloqueada continua 403. O
+    programa da célula não muda (a fase do 403 passa a ser "bloqueada").
+  - `POST /api/cell/result` reconhece `adm-…` e compara o HOF com
+    `final_geometry` da central: as 5 dentro de 0,1 kcal/mol (Δ arredondado
+    a 6 casas, então 0,1 exato passa) dão `passed`; uma fora, ou uma falha
+    de cálculo, dá `blocked`. Nada vai para a fila, as geometrias ou
+    `training_failure`. Central sem o HOF de alguma referência: 503.
+  - Tabela nova `cell_admission_attempt` (`CREATE TABLE IF NOT EXISTS`,
+    sem `ALTER`). `training/cells.py::AdmissionTest`; o registro libera as
+    referências em aberto (reinício recalcula só as que faltam, e um
+    resultado atrasado ainda conta, uma vez); heartbeat e workers livres
+    contam as referências em aberto.
+  - Dashboard: `admission_note` em `GET /api/cells` (progresso ou motivo do
+    bloqueio) e botão **Refazer admissão** (`admission: pending` descarta a
+    rodada anterior). Admitir/Bloquear manuais continuam.
+  - Verification: `poetry run pytest tests/training/test_admission.py
+    tests/webapi/test_cell_api.py tests/webapi/test_cells_dashboard.py
+    tests/cell -q`; `npx vitest run` em `apps/dashboard`; E2E na cópia do
+    banco real (backup do SQLite): Δ 0,1 e −0,05 admitida e recebeu a fila,
+    Δ 0,15 bloqueada com motivo, progresso da fila e HOFs de referência
+    iguais.
 - **Pacote e instalação da célula (células distribuídas, Lote 4)** (2026-10-21)
   - `POST /api/cells/{id}/package` (dashboard, só local): zip gerado em
     memória com `conda-lock.yml`/`environment.yml`, um wheel do `HEAD`
@@ -37,8 +62,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     token.
   - `docs/guia-celulas.md`: Tailscale, API das células, pacote, instalação,
     admissão, `celula status` e reinício pelo TeamViewer.
-  - Pendente: teste de admissão automático (5 moléculas de referência,
-    0,1 kcal/mol); a admissão é manual.
+  - Teste de admissão automático: ver a entrada acima.
   - Verification: `poetry run pytest tests/webapi/test_cell_package.py
     tests/training/test_cells.py -q`; `npx vitest run` em `apps/dashboard`;
     E2E com o instalador num container Ubuntu 24.04 registrando numa
