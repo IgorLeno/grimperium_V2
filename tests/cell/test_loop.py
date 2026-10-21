@@ -333,7 +333,9 @@ def test_each_heartbeat_refreshes_the_last_contact_on_disk(
     contacts: list[str] = []
 
     def watch(name: str, _reply: Any) -> None:
-        if name == "heartbeat" and len(client.calls[-1][1]) == 2:
+        # Freeing the gate does not stop the loop at once: another heartbeat
+        # may still go out with both workers busy, so record only the first 3.
+        if name == "heartbeat" and len(client.calls[-1][1]) == 2 and len(contacts) < 3:
             contacts.append(read_state(tmp_path / "celula")["last_contact_at"])
             if len(contacts) == 3:
                 tasks.gate.set()  # type: ignore[union-attr]
@@ -342,3 +344,4 @@ def test_each_heartbeat_refreshes_the_last_contact_on_disk(
 
     assert loop.run() == EXIT_OK
     assert len(set(contacts)) == 3  # written after every heartbeat, not only claims
+    assert contacts == sorted(contacts)
