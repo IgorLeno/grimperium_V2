@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { postJson } from './api'
+import { CellsPanel } from './CellsPanel'
 import type { TrainingFailure, TrainingInFlight, TrainingStatus } from './api'
 import { PageHero, SectionHeading } from './StoryVisuals'
 import { HEARTBEAT_ALERT_S, elapsedSince, formatDuration, heartbeatAge, runStats } from './trainingRun'
@@ -69,6 +70,7 @@ export function TrainingView() {
           workers: Number(workers), crest_threads: Number(threads), limit: limit.trim() === '' ? null : Number(limit),
         })}
         onStop={() => act('/api/training/stop')} />}
+      <CellsPanel />
     </div>
   )
 }

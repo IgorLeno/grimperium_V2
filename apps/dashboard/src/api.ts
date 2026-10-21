@@ -211,3 +211,62 @@ export interface TrainingStatus {
   activity: TrainingActivity
   cpu_count: number
 }
+
+/** Uma célula (computador remoto) como a central a vê; nunca o token. */
+export interface CellSummary {
+  cell_id: string
+  name: string
+  /** online · late · silent · never_seen · version_mismatch · blocked · revoked */
+  state: string
+  admission: string
+  host: string | null
+  cores: number | null
+  workers: number | null
+  crest_threads: number | null
+  program_versions: Record<string, string>
+  refusal: string | null
+  created_at: string
+  registered_at: string | null
+  last_seen_at: string | null
+  revoked_at: string | null
+  held: number
+}
+
+export interface CellCreated { cell: CellSummary; token: string }
+
+/**
+ * Pede o pacote da célula (zip com token novo) e dispara o download.
+ * O zip só existe na memória do navegador até ser salvo.
+ */
+export async function downloadCellPackage(cellId: string, centralUrl: string): Promise<string> {
+  const path = `/api/cells/${encodeURIComponent(cellId)}/package`
+  let response: Response
+  try {
+    response = await fetch(path, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ central_url: centralUrl }),
+    })
+  } catch (error) {
+    throw new Error(`Não foi possível conectar à API (${path}). Verifique se o servidor está ativo.`, { cause: error })
+  }
+  if (!response.ok) {
+    const body: unknown = await response.json().catch(() => null)
+    const detail = typeof body === 'object' && body !== null && 'detail' in body
+      ? (typeof body.detail === 'string' ? body.detail : 'endereço da central inválido (use http://IP:porta)')
+      : response.statusText || 'erro desconhecido'
+    throw new Error(`${response.status} — ${detail}`)
+  }
+  const match = /filename="([^"]+)"/.exec(response.headers.get('Content-Disposition') ?? '')
+  const filename = match?.[1] ?? 'celula.zip'
+  const url = URL.createObjectURL(await response.blob())
+  const link = document.createElement('a')
+  link.href = url
+  link.download = filename
+  document.body.append(link)
+  link.click()
+  link.remove()
+  // Revogar na hora pode cancelar o download em alguns navegadores.
+  window.setTimeout(() => URL.revokeObjectURL(url), 60_000)
+  return filename
+}
