@@ -4,7 +4,7 @@ import { CellsPanel } from './CellsPanel'
 import type { CellSummary } from './api'
 
 const cell: CellSummary = {
-  cell_id: 'cell-abc', name: 'PC do Lab', state: 'never_seen', admission: 'pending', host: null, cores: null,
+  cell_id: 'cell-abc', name: 'PC do Lab', state: 'never_seen', admission: 'pending', admission_note: null, host: null, cores: null,
   workers: null, crest_threads: null, program_versions: {}, refusal: null, created_at: '2026-10-21T00:00:00Z',
   registered_at: null, last_seen_at: null, revoked_at: null, held: 0,
 }
@@ -71,4 +71,17 @@ test('pacote novo pede confirmação e admitir chama a rota de admissão', async
   expect(calls.some((c) => c.path.endsWith('/package'))).toBe(false)
   fireEvent.click(screen.getByRole('button', { name: 'Admitir' }))
   await waitFor(() => expect(calls.find((c) => c.path === '/api/cells/cell-abc/admission')?.body).toBe(JSON.stringify({ admission: 'passed' })))
+})
+
+test('célula bloqueada pelo teste mostra o motivo e refazer volta para pending', async () => {
+  const blocked: CellSummary = {
+    ...cell, state: 'blocked', admission: 'blocked',
+    admission_note: 'cbs_09698 (CO): HOF -48.70000 contra -48.93880 da central (Δ 0.23880 > 0.1 kcal/mol)',
+  }
+  const calls = mock([blocked])
+  render(<CellsPanel />)
+  expect(await screen.findByText(/Bloqueada pelo teste de admissão: cbs_09698 \(CO\)/)).toBeInTheDocument()
+  expect(screen.queryByRole('button', { name: 'Bloquear' })).not.toBeInTheDocument()
+  fireEvent.click(screen.getByRole('button', { name: 'Refazer admissão' }))
+  await waitFor(() => expect(calls.find((c) => c.path === '/api/cells/cell-abc/admission')?.body).toBe(JSON.stringify({ admission: 'pending' })))
 })

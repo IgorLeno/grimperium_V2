@@ -197,12 +197,31 @@ def test_a_revoked_token_stops_the_cell(tmp_path: Path, central: Central) -> Non
     assert read_state(tmp_path / "celula")["phase"] == "token recusado"
 
 
-def test_a_cell_in_admission_waits_and_starts_once_admitted(
+def test_a_new_cell_passes_the_admission_test_then_gets_work(
+    tmp_path: Path,
+) -> None:
+    from semi_imperium.training.cells import ADMISSION_PASSED, ADMISSION_REFERENCES
+
+    central = Central(tmp_path, references=True)
+    cell_id, token = central.new_cell(admitted=False)
+    tasks = Tasks(threading.Event(), stop_after=8)
+    loop, client = _loop(tmp_path, central, token, tasks)
+
+    assert loop.run() == EXIT_OK
+    computed = [t.mol_id for t in tasks.seen]
+    assert sorted(computed[:5]) == sorted(ADMISSION_REFERENCES)
+    assert sorted(computed[5:]) == ["m0", "m1", "m2"]
+    assert central.cells.get(cell_id).admission == ADMISSION_PASSED
+    assert central.progress().ok == 3 + len(ADMISSION_REFERENCES)
+
+
+def test_a_blocked_cell_waits_and_starts_once_admitted(
     tmp_path: Path, central: Central
 ) -> None:
-    from semi_imperium.training.cells import ADMISSION_PASSED
+    from semi_imperium.training.cells import ADMISSION_BLOCKED, ADMISSION_PASSED
 
     cell_id, token = central.new_cell(admitted=False)
+    central.cells.set_admission(cell_id, ADMISSION_BLOCKED)
     tasks = Tasks(threading.Event(), stop_after=3)
     loop, client = _loop(tmp_path, central, token, tasks)
     phases: list[str] = []

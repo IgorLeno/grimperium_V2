@@ -219,6 +219,8 @@ export interface CellSummary {
   /** online · late · silent · never_seen · version_mismatch · blocked · revoked */
   state: string
   admission: string
+  /** Progresso do teste de admissão (pending) ou motivo do bloqueio (blocked). */
+  admission_note: string | null
   host: string | null
   cores: number | null
   workers: number | null

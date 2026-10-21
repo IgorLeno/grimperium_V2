@@ -87,3 +87,46 @@ def set_status(db: Path, mol_id: str, status: str, reruns: int = 0) -> None:
             "UPDATE training_queue SET status = ?, reruns = ? WHERE mol_id = ?",
             (status, reruns, mol_id),
         )
+
+
+#: The admission references (``ADMISSION_REFERENCES``) as CBS rows.
+REFERENCE_ROWS = (
+    ("cbs_09698", "CO", 1, 2),
+    ("cbs_00187", "[H][C]=C", 2, 2),
+    ("cbs_24671", "C[N+](=O)[O-]", 1, 4),
+    ("cbs_08982", "OCCO", 1, 4),
+    ("cbs_01400", "CCC(=O)O", 1, 5),
+)
+
+
+def reference_rows() -> list[dict[str, Any]]:
+    """CBS rows of the five admission references (seed them with the queue)."""
+    return [
+        row(mol_id, smiles=smiles, multiplicity=mult, nheavy=nheavy)
+        for mol_id, smiles, mult, nheavy in REFERENCE_ROWS
+    ]
+
+
+def accept_references(db: Path, hof: float = -12.5) -> None:
+    """Accept every reference at the central with ``hof``, as the queue would."""
+    from semi_imperium.training.geometry_store import GeometryRecord, GeometryStore
+
+    store = GeometryStore(db)
+    for mol_id, smiles, _mult, _nheavy in REFERENCE_ROWS:
+        set_ok(db, mol_id, hof=hof)
+        store.save(
+            GeometryRecord(
+                mol_id=mol_id,
+                smiles=smiles,
+                hamiltonian="PM7",
+                protocol="2",
+                signature="sig",
+                calculation_id=f"calc-{mol_id}",
+                conformer_index=0,
+                elements=("C",),
+                coordinates=((0.0, 0.0, 0.0),),
+                hof_kcal_mol=hof,
+                lowest_frequency_cm1=100.0,
+                minimum_confirmed=True,
+            )
+        )

@@ -321,6 +321,8 @@ class CellSummary(BaseModel):
     #: online · late · silent · never_seen · version_mismatch · blocked · revoked
     state: str
     admission: str
+    #: Admission test progress while pending, or why it blocked the cell.
+    admission_note: str | None
     host: str | None
     cores: int | None
     workers: int | None

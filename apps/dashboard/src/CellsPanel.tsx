@@ -106,6 +106,9 @@ export function CellsPanel() {
               <span>{STATE_LABEL[cell.state] ?? cell.state} · {ADMISSION_LABEL[cell.admission] ?? cell.admission}</span>
               {cell.host && <small>{cell.host} · {cell.workers ?? '?'} × {cell.crest_threads ?? '?'} threads · {cell.held} em cálculo</small>}
               {cell.refusal && <small>Recusada: {cell.refusal}</small>}
+              {cell.admission_note && (
+                <small>{cell.admission === 'blocked' ? `Bloqueada pelo teste de admissão: ${cell.admission_note}` : cell.admission_note}</small>
+              )}
               {cell.state !== 'revoked' && (
                 <>
                   <button type="button" className="ghost-button ghost-button--small" disabled={busy || url === ''}
@@ -117,6 +120,10 @@ export function CellsPanel() {
                   {cell.admission !== 'blocked' && (
                     <button type="button" className="ghost-button ghost-button--small" disabled={busy}
                       onClick={() => void setAdmission(cell, 'blocked')}>Bloquear</button>
+                  )}
+                  {cell.admission !== 'pending' && (
+                    <button type="button" className="ghost-button ghost-button--small" disabled={busy}
+                      onClick={() => void setAdmission(cell, 'pending')}>Refazer admissão</button>
                   )}
                 </>
               )}

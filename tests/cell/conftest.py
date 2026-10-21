@@ -21,7 +21,7 @@ from semi_imperium.training.db import database_path
 from semi_imperium.training.molecule_queue import TrainingQueue, read_progress
 from semi_imperium.training.protocol import canonical_settings, canonical_signature
 from semi_imperium.training.worker import WorkerResult, WorkerTask
-from tests.training.conftest import row
+from tests.training.conftest import accept_references, reference_rows, row
 
 PROGRAMS = {
     "crest": "3.0.2",
@@ -79,8 +79,12 @@ class SpyClient(CentralClient):
 
 
 class Central:
-    def __init__(self, tmp_path: Path, molecules: int = 3) -> None:
+    def __init__(
+        self, tmp_path: Path, molecules: int = 3, *, references: bool = False
+    ) -> None:
         rows = [row(f"m{n}", nheavy=n + 1) for n in range(molecules)]
+        if references:  # the admission test's, accepted with the fake HOF
+            rows += reference_rows()
         pd.DataFrame(rows).to_csv(tmp_path / "cbs.csv", index=False)
         self.paths = DashboardPaths(
             semi_imperium_store=tmp_path / "central",
@@ -91,6 +95,8 @@ class Central:
         self.db = database_path(self.paths.semi_imperium_store)
         self.queue = TrainingQueue(self.db, self.paths.cbs_csv)
         self.queue.ensure_seeded()
+        if references:
+            accept_references(self.db, hof=-12.5)
         self.cells = CellRegistry(self.db)
         self.http = TestClient(
             create_cell_app(self.paths, central_programs=lambda: dict(PROGRAMS))

@@ -12,10 +12,10 @@ from fastapi.testclient import TestClient
 
 from grimperium.webapi.app import create_app
 from grimperium.webapi.config import DashboardPaths
-from semi_imperium.training.cells import ADMISSION_PASSED, CellRegistry
+from semi_imperium.training.cells import ADMISSION_PASSED, AdmissionTest, CellRegistry
 from semi_imperium.training.db import connect, database_path
 from semi_imperium.training.molecule_queue import TrainingQueue
-from tests.training.conftest import row
+from tests.training.conftest import accept_references, reference_rows, row
 
 LOCAL = {"Origin": "http://127.0.0.1:5173"}
 
@@ -150,3 +150,25 @@ def test_actions_refuse_foreign_origins(
         headers={"Origin": "http://evil.example"},
     )
     assert response.status_code == 403
+
+
+def test_the_list_says_why_the_admission_test_blocked(env: Env, tmp_path: Path) -> None:
+    pd.DataFrame(reference_rows()).to_csv(tmp_path / "cbs.csv", index=False)
+    env.queue.ensure_seeded()
+    accept_references(env.db, hof=-48.9388)
+    cell_id = str(env.create()["cell"]["cell_id"])  # type: ignore[index]
+    test = AdmissionTest(env.db)
+    (first,) = test.claim(cell_id, 1)
+    test.record(first.attempt_id, hof_kcal_mol=-48.5, failure=None)
+    (cell,) = env.client.get("/api/cells").json()
+    assert cell["admission"] == "blocked" and cell["state"] == "blocked"
+    assert cell["admission_note"].startswith("cbs_09698 (CO): HOF -48.50000")
+
+    # "Refazer admissão": back to pending, the earlier results set aside.
+    response = env.client.post(
+        f"/api/cells/{cell_id}/admission", json={"admission": "pending"}, headers=LOCAL
+    )
+    assert response.status_code == 200
+    assert response.json()["admission"] == "pending"
+    assert response.json()["admission_note"] is None
+    assert [m.mol_id for m in test.claim(cell_id, 1)] == ["cbs_09698"]

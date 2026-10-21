@@ -15,6 +15,8 @@ from grimperium.webapi.config import DashboardPaths
 from semi_imperium.training.cells import (
     ADMISSION_BLOCKED,
     ADMISSION_PASSED,
+    ADMISSION_REFERENCES,
+    AdmissionTest,
     CellRegistry,
 )
 from semi_imperium.training.db import database_path
@@ -22,7 +24,7 @@ from semi_imperium.training.geometry_store import GeometryStore
 from semi_imperium.training.job_state import JobState
 from semi_imperium.training.molecule_queue import TrainingQueue
 from semi_imperium.training.protocol import canonical_settings, canonical_signature
-from tests.training.conftest import row
+from tests.training.conftest import accept_references, reference_rows, row
 
 PROGRAMS = {
     "crest": "3.0.2",
@@ -217,10 +219,12 @@ def test_claim_needs_registration_and_admission(env: Env) -> None:
     assert env.claim(unregistered).status_code == 409
     pending_id, pending = env.new_cell(admitted=False)
     env.register(pending)
+    # Pending cells get the admission test, which needs the central's values.
     response = env.claim(pending)
-    assert response.status_code == 403 and "admissão" in response.json()["detail"]
+    assert response.status_code == 503 and "cbs_09698" in response.json()["detail"]
     env.cells.set_admission(pending_id, ADMISSION_BLOCKED)
-    assert env.claim(pending).status_code == 403
+    response = env.claim(pending)
+    assert response.status_code == 403 and "bloqueada" in response.json()["detail"]
 
 
 def test_claim_count_is_validated(env: Env) -> None:
@@ -373,3 +377,120 @@ def test_a_result_after_release_is_still_accepted_while_open(env: Env) -> None:
         headers=headers,
     )
     assert response.json() == {"outcome": "accepted"}
+
+
+# ------------------------------------------------------- admission test
+
+
+REFERENCE_HOF = -12.5
+
+
+@pytest.fixture
+def admission_env(tmp_path: Path) -> Env:
+    env = Env(tmp_path, [*reference_rows(), row("a", nheavy=1), row("b", nheavy=2)])
+    accept_references(env.db, hof=REFERENCE_HOF)
+    return env
+
+
+def _pending_cell(env: Env) -> tuple[str, dict[str, str]]:
+    cell_id, headers = env.new_cell(admitted=False)
+    assert env.register(headers, workers=5).status_code == 200
+    return cell_id, headers
+
+
+def _send(
+    env: Env, headers: dict[str, str], molecule: dict[str, Any], **kw: Any
+) -> Any:
+    body: dict[str, Any] = {"attempt_id": molecule["attempt_id"]}
+    if "failure" in kw:
+        body["failure"] = kw["failure"]
+    else:
+        body["result"] = _result(molecule["mol_id"], **kw)
+    return env.client.post("/api/cell/result", json=body, headers=headers)
+
+
+def test_a_pending_cell_computes_the_references_then_gets_work(
+    admission_env: Env,
+) -> None:
+    env = admission_env
+    cell_id, headers = _pending_cell(env)
+    response = env.claim(headers, 5)
+    assert response.status_code == 200
+    references = response.json()["molecules"]
+    assert [m["mol_id"] for m in references] == list(ADMISSION_REFERENCES)
+    assert all(m["attempt_id"].startswith("adm-") for m in references)
+    assert references[1]["multiplicity"] == 2
+    # Every worker is busy with a reference: nothing more, not even them again.
+    assert env.claim(headers, 5).json()["molecules"] == []
+    before = env.queue.held_attempts(cell_id), GeometryStore(env.db).count()
+
+    for n, molecule in enumerate(references):
+        reply = _send(env, headers, molecule, hof_kcal_mol=REFERENCE_HOF + 0.05)
+        assert reply.status_code == 200 and reply.json() == {"outcome": "accepted"}
+        admission = env.cells.get(cell_id).admission
+        assert admission == (ADMISSION_PASSED if n == 4 else "pending")
+
+    # The references never touched the queue nor the central's geometries.
+    assert (env.queue.held_attempts(cell_id), GeometryStore(env.db).count()) == before
+    assert GeometryStore(env.db).get("cbs_09698").hof_kcal_mol == REFERENCE_HOF  # type: ignore[union-attr]
+    work = env.claim(headers, 5).json()["molecules"]
+    assert [m["mol_id"] for m in work] == ["a", "b"]
+
+
+def test_a_reference_outside_tolerance_blocks_the_cell(admission_env: Env) -> None:
+    env = admission_env
+    cell_id, headers = _pending_cell(env)
+    first, second, *_ = env.claim(headers, 5).json()["molecules"]
+    assert _send(env, headers, first, hof_kcal_mol=REFERENCE_HOF + 0.2).json() == {
+        "outcome": "accepted"
+    }
+    assert env.cells.get(cell_id).admission == ADMISSION_BLOCKED
+    assert env.claim(headers).status_code == 403
+    # Late references are acknowledged (the outbox lets go) but not judged.
+    late = _send(env, headers, second, failure="crest timeout")
+    assert late.status_code == 200 and late.json() == {"outcome": "discarded"}
+    note = AdmissionTest(env.db).note(cell_id, ADMISSION_BLOCKED)
+    assert note is not None and note.startswith("cbs_09698 (CO): HOF -12.30000")
+
+
+def test_a_failed_reference_blocks_the_cell(admission_env: Env) -> None:
+    env = admission_env
+    cell_id, headers = _pending_cell(env)
+    (first, *_) = env.claim(headers, 5).json()["molecules"]
+    assert _send(env, headers, first, failure="mopac error").status_code == 200
+    assert env.cells.get(cell_id).admission == ADMISSION_BLOCKED
+    # The failure of a reference is not a molecule failure at the central.
+    assert JobState(env.db).recent_failures() == []
+
+
+def test_reference_results_are_checked_like_any_result(admission_env: Env) -> None:
+    env = admission_env
+    _, headers = _pending_cell(env)
+    first, second, *_ = env.claim(headers, 5).json()["molecules"]
+    _other_id, other = _pending_cell(env)
+    assert _send(env, other, first).status_code == 403
+    assert _send(env, headers, first, signature="other").status_code == 422
+    wrong = {**second, "mol_id": first["mol_id"]}
+    assert _send(env, headers, wrong).status_code == 422
+    unknown = {"attempt_id": "adm-nope", "mol_id": "cbs_09698"}
+    assert _send(env, headers, unknown).status_code == 404
+
+
+def test_the_heartbeat_keeps_reference_attempts(admission_env: Env) -> None:
+    env = admission_env
+    _, headers = _pending_cell(env)
+    ids = [m["attempt_id"] for m in env.claim(headers, 2).json()["molecules"]]
+    reply = env.client.post(
+        "/api/cell/heartbeat", json={"attempt_ids": [*ids, "gone"]}, headers=headers
+    ).json()
+    assert reply == {"renewed": 2, "not_held": ["gone"]}
+
+
+def test_a_restart_hands_unfinished_references_again(admission_env: Env) -> None:
+    env = admission_env
+    _, headers = _pending_cell(env)
+    first, *_ = env.claim(headers, 5).json()["molecules"]
+    _send(env, headers, first)
+    assert env.register(headers, workers=5).status_code == 200
+    again = env.claim(headers, 5).json()["molecules"]
+    assert [m["mol_id"] for m in again] == list(ADMISSION_REFERENCES[1:])

@@ -82,7 +82,8 @@ TaskFn = Callable[[WorkerTask], WorkerResult]
 class Timings:
     #: Wait before asking again when the queue is empty.
     idle_s: float = 60.0
-    #: Wait before asking again while the cell's admission is pending.
+    #: Wait before asking again while the cell is blocked (a pending cell
+    #: gets the admission test's references through the same claim).
     admission_s: float = 60.0
     #: Override of the central's ``heartbeat_s`` (tests only).
     heartbeat_s: float | None = None
@@ -427,10 +428,10 @@ class CellLoop:
                     token_refused, draining = True, True
                     code, final = EXIT_TOKEN, "token recusado"
                     self._set(last_error=reply.detail)
-                elif reply.status == 403:  # admission pending or blocked
+                elif reply.status == 403:  # blocked: waits for a manual decision
                     self._contact()
                     next_claim = now + timings.admission_s
-                    self._set(phase="em admissão", last_error=reply.detail)
+                    self._set(phase="bloqueada", last_error=reply.detail)
                 elif reply.status == 409:  # the central forgot or refused us
                     log.warning(
                         "claim recusado (%s); registrando de novo", reply.detail

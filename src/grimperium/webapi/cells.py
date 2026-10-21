@@ -9,7 +9,9 @@ opens a connection to a cell: every exchange starts here, from the cell.
 Each request carries ``Authorization: Bearer <token>``; the token names the
 cell, so no body ever declares a ``cell_id``. Work is handed out only to a
 cell whose last registration matched the central's programs and protocol
-and whose admission passed.
+and whose admission passed. A cell still ``pending`` claims the same way but
+gets the admission test's reference molecules (attempt ids ``adm-…``); their
+results become the admission verdict, never queue results.
 
 Serve with (address from ``tailscale ip -4``)::
 
@@ -21,7 +23,7 @@ from __future__ import annotations
 
 import tempfile
 import threading
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -47,7 +49,8 @@ from grimperium.webapi.models import (
 
 if TYPE_CHECKING:
     from grimperium.webapi.cell_package import WheelBuilder
-    from semi_imperium.training.cells import Cell, CellRegistry
+    from semi_imperium.training.cells import AdmissionMolecule, Cell, CellRegistry
+    from semi_imperium.training.molecule_queue import ClaimedMolecule
 
 ProgramsProbe = Callable[[], dict[str, str]]
 
@@ -68,7 +71,15 @@ def create_cell_app(
     central_programs: ProgramsProbe | None = None,
 ) -> FastAPI:
     """Build the cell API over the same training database as the dashboard."""
-    from semi_imperium.training.cells import ADMISSION_PASSED, CellRegistry
+    from semi_imperium.training.cells import (
+        ADMISSION_BLOCKED,
+        ADMISSION_PASSED,
+        ADMISSION_PENDING,
+        ADMISSION_PREFIX,
+        AdmissionTest,
+        AdmissionUnavailable,
+        CellRegistry,
+    )
     from semi_imperium.training.db import database_path
     from semi_imperium.training.geometry_store import GeometryRecord
     from semi_imperium.training.job_state import JobState
@@ -89,6 +100,7 @@ def create_cell_app(
     files = paths or DashboardPaths.default()
     db = database_path(files.semi_imperium_store)
     registry = CellRegistry(db)
+    admission_test = AdmissionTest(db)
     queue = TrainingQueue(db, files.cbs_csv)
     signature = canonical_signature(canonical_settings())
     probe = central_programs or default_central_programs
@@ -142,11 +154,15 @@ def create_cell_app(
             raise HTTPException(409, "Célula não registrada; registre antes.")
         return cell
 
-    def admitted(cell: Cell = Depends(registered)) -> Cell:
+    def require_admitted(cell: Cell) -> None:
         if cell.admission != ADMISSION_PASSED:
-            state = "bloqueada" if cell.admission == "blocked" else "em admissão"
+            state = (
+                "bloqueada" if cell.admission == ADMISSION_BLOCKED else "em admissão"
+            )
             raise HTTPException(403, f"Célula {state}; não recebe trabalho.")
-        return cell
+
+    def held(cell_id: str) -> set[str]:
+        return queue.held_attempts(cell_id) | admission_test.held(cell_id)
 
     @app.post("/api/cell/register")
     def register(
@@ -171,6 +187,7 @@ def create_cell_app(
         # A cell registers when it (re)starts: whatever it held was
         # interrupted and starts over, whether or not it is admitted now.
         released = queue.release(cell.cell_id)
+        admission_test.release(cell.cell_id)
         if refusal is not None:
             raise HTTPException(409, f"Programas diferentes da central: {refusal}")
         return CellRegisterResponse(
@@ -184,14 +201,24 @@ def create_cell_app(
 
     @app.post("/api/cell/claim")
     def claim(
-        body: CellClaimRequest, cell: Cell = Depends(admitted)
+        body: CellClaimRequest, cell: Cell = Depends(registered)
     ) -> CellClaimResponse:
+        if cell.admission != ADMISSION_PENDING:
+            require_admitted(cell)
         # Never more than the free workers it registered: a confused cell
         # cannot drain the queue into reservations it will not compute.
-        free = (cell.workers or 0) - len(queue.held_attempts(cell.cell_id))
-        molecules = queue.claim(
-            cell.cell_id, min(body.count, max(free, 0)), avoid_own_failures=True
-        )
+        free = (cell.workers or 0) - len(held(cell.cell_id))
+        count = min(body.count, max(free, 0))
+        molecules: Sequence[ClaimedMolecule | AdmissionMolecule]
+        if cell.admission == ADMISSION_PENDING:
+            try:
+                molecules = admission_test.claim(cell.cell_id, count)
+            except AdmissionUnavailable as exc:
+                raise HTTPException(
+                    503, f"Teste de admissão indisponível: {exc}"
+                ) from None
+        else:
+            molecules = queue.claim(cell.cell_id, count, avoid_own_failures=True)
         return CellClaimResponse(
             molecules=[
                 CellMolecule(
@@ -212,16 +239,45 @@ def create_cell_app(
         body: CellHeartbeatRequest, cell: Cell = Depends(registered)
     ) -> CellHeartbeatResponse:
         renewed = queue.renew(cell.cell_id, body.attempt_ids)
-        held = queue.held_attempts(cell.cell_id)
+        # Admission attempts have no lease: holding them is enough.
+        holding = held(cell.cell_id)
+        renewed += len(admission_test.held(cell.cell_id) & set(body.attempt_ids))
         return CellHeartbeatResponse(
             renewed=renewed,
-            not_held=sorted(set(body.attempt_ids) - held),
+            not_held=sorted(set(body.attempt_ids) - holding),
         )
+
+    def admission_result(cell: Cell, body: CellResultRequest) -> CellResultResponse:
+        try:
+            mol_id, owner = admission_test.owner(body.attempt_id)
+        except KeyError:
+            raise HTTPException(404, "Tentativa desconhecida.") from None
+        if owner != cell.cell_id:
+            raise HTTPException(403, "Tentativa de outra célula.")
+        computed = body.result
+        if computed is not None:
+            if computed.signature != signature:
+                raise HTTPException(
+                    422, "Assinatura do cálculo diferente do protocolo 2 da central."
+                )
+            if computed.mol_id != mol_id:
+                raise HTTPException(
+                    422, f"Resultado de {computed.mol_id} para a tentativa de {mol_id}."
+                )
+        outcome = admission_test.record(
+            body.attempt_id,
+            hof_kcal_mol=None if computed is None else computed.hof_kcal_mol,
+            failure=None if computed is not None else str(body.failure),
+        )
+        return CellResultResponse(outcome=outcome)
 
     @app.post("/api/cell/result")
     def result(
-        body: CellResultRequest, cell: Cell = Depends(admitted)
+        body: CellResultRequest, cell: Cell = Depends(registered)
     ) -> CellResultResponse:
+        if body.attempt_id.startswith(ADMISSION_PREFIX):
+            return admission_result(cell, body)
+        require_admitted(cell)
         try:
             mol_id, owner = queue.attempt_owner(body.attempt_id)
         except KeyError:
@@ -271,7 +327,7 @@ def create_cell_app(
 # Called by ``grimperium.webapi.app`` (127.0.0.1 only), never by a cell.
 
 
-def _summary(cell: Cell, held: int) -> CellSummary:
+def _summary(cell: Cell, held: int, admission_note: str | None) -> CellSummary:
     from datetime import datetime, timezone
 
     from semi_imperium.training.cells import cell_state
@@ -281,6 +337,7 @@ def _summary(cell: Cell, held: int) -> CellSummary:
         name=cell.name,
         state=cell_state(cell, datetime.now(timezone.utc)),
         admission=cell.admission,
+        admission_note=admission_note,
         host=cell.host,
         cores=cell.cores,
         workers=cell.workers,
@@ -296,11 +353,24 @@ def _summary(cell: Cell, held: int) -> CellSummary:
 
 
 def _held(paths: DashboardPaths, cell_id: str) -> int:
+    from semi_imperium.training.cells import AdmissionTest
     from semi_imperium.training.db import database_path
     from semi_imperium.training.molecule_queue import TrainingQueue
 
     db = database_path(paths.semi_imperium_store)
-    return len(TrainingQueue(db, paths.cbs_csv).held_attempts(cell_id))
+    queue = TrainingQueue(db, paths.cbs_csv)
+    return len(queue.held_attempts(cell_id)) + len(AdmissionTest(db).held(cell_id))
+
+
+def _row(paths: DashboardPaths, cell: Cell) -> CellSummary:
+    """``cell`` as the dashboard lists it, with its holdings and admission test."""
+    from semi_imperium.training.cells import AdmissionTest
+    from semi_imperium.training.db import database_path
+
+    test = AdmissionTest(database_path(paths.semi_imperium_store))
+    return _summary(
+        cell, _held(paths, cell.cell_id), test.note(cell.cell_id, cell.admission)
+    )
 
 
 def _registry(paths: DashboardPaths) -> CellRegistry:
@@ -319,18 +389,18 @@ def _known(paths: DashboardPaths, cell_id: str) -> Cell:
 
 def list_cells(paths: DashboardPaths) -> list[CellSummary]:
     """Every cell with its state by the central's clock; never creates the DB."""
-    return [_summary(c, _held(paths, c.cell_id)) for c in _registry(paths).list()]
+    return [_row(paths, c) for c in _registry(paths).list()]
 
 
 def create_cell(paths: DashboardPaths, name: str) -> CellCreated:
     cell, token = _registry(paths).create(name)
-    return CellCreated(cell=_summary(cell, 0), token=token)
+    return CellCreated(cell=_summary(cell, 0, None), token=token)
 
 
 def rename_cell(paths: DashboardPaths, cell_id: str, name: str) -> CellSummary:
     _known(paths, cell_id)
     cell = _registry(paths).rename(cell_id, name)
-    return _summary(cell, _held(paths, cell_id))
+    return _row(paths, cell)
 
 
 def release_cell(paths: DashboardPaths, cell_id: str) -> CellReleased:
@@ -347,14 +417,14 @@ def revoke_cell(paths: DashboardPaths, cell_id: str) -> CellSummary:
     """Invalidate the token. Held molecules stay reserved until released."""
     _known(paths, cell_id)
     cell = _registry(paths).revoke(cell_id)
-    return _summary(cell, _held(paths, cell_id))
+    return _row(paths, cell)
 
 
 def set_admission(paths: DashboardPaths, cell_id: str, admission: str) -> CellSummary:
-    """Admit (or block) a cell by hand, after checking its reference molecules."""
+    """Admit or block a cell by hand, or start its admission test over (pending)."""
     _known(paths, cell_id)
     cell = _registry(paths).set_admission(cell_id, admission)
-    return _summary(cell, _held(paths, cell_id))
+    return _row(paths, cell)
 
 
 def package_cell(

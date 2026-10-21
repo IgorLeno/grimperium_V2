@@ -89,6 +89,20 @@ CREATE TABLE IF NOT EXISTS cells (
     last_seen_at TEXT,
     revoked_at TEXT
 );
+CREATE TABLE IF NOT EXISTS cell_admission_attempt (
+    attempt_id TEXT PRIMARY KEY,
+    cell_id TEXT NOT NULL,
+    mol_id TEXT NOT NULL,
+    claimed_at TEXT NOT NULL,
+    released_at TEXT,
+    finished_at TEXT,
+    hof_kcal_mol REAL,
+    reference_hof_kcal_mol REAL,
+    outcome TEXT,
+    note TEXT
+);
+CREATE INDEX IF NOT EXISTS cell_admission_attempt_cell
+    ON cell_admission_attempt (cell_id);
 CREATE TABLE IF NOT EXISTS training_failure (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     mol_id TEXT NOT NULL,
