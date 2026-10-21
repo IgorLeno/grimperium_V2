@@ -184,7 +184,14 @@ export interface TrainingJob {
 export interface TrainingFailure { mol_id: string; reason: string; at: string }
 
 /** Molécula marcada como em cálculo; `started_at` é quando foi despachada. */
-export interface TrainingInFlight { mol_id: string; smiles: string; nheavy: number; started_at: string | null }
+export interface TrainingInFlight {
+  mol_id: string
+  smiles: string
+  nheavy: number
+  started_at: string | null
+  /** Computador que reservou a molécula (`central` ou o id da célula). */
+  cell_id?: string | null
+}
 
 export interface TrainingCompleted {
   mol_id: string

@@ -1,10 +1,11 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { postJson } from './api'
 import { CellsPanel } from './CellsPanel'
-import type { TrainingFailure, TrainingInFlight, TrainingStatus } from './api'
+import type { TrainingFailure, TrainingStatus } from './api'
 import { PageHero, SectionHeading } from './StoryVisuals'
-import { HEARTBEAT_ALERT_S, elapsedSince, formatDuration, heartbeatAge, runStats } from './trainingRun'
+import { HEARTBEAT_ALERT_S, formatDuration, heartbeatAge, runStats } from './trainingRun'
 import { useApi } from './useApi'
+import { useNow } from './useNow'
 
 const POLL_MS = 5000
 const FEED_SIZE = 8
@@ -22,19 +23,8 @@ const JOB_LABEL: Record<string, string> = {
   stale: 'Interrompido sem aviso',
 }
 
-/** Relógio de 1 s para cronômetros e idade do heartbeat entre um poll e outro. */
-function useNow(active: boolean): number {
-  const [now, setNow] = useState(() => Date.now())
-  useEffect(() => {
-    if (!active) return undefined
-    const id = window.setInterval(() => setNow(Date.now()), 1000)
-    return () => window.clearInterval(id)
-  }, [active])
-  return now
-}
-
 export function TrainingView() {
-  const { state, reload } = useApi<TrainingStatus>('/api/training/status', { pollMs: POLL_MS })
+  const { state, reload, refresh } = useApi<TrainingStatus>('/api/training/status', { pollMs: POLL_MS })
   const [workers, setWorkers] = useState('3')
   const [threads, setThreads] = useState('4')
   const [limit, setLimit] = useState('')
@@ -69,8 +59,7 @@ export function TrainingView() {
         onStart={() => act('/api/training/start', {
           workers: Number(workers), crest_threads: Number(threads), limit: limit.trim() === '' ? null : Number(limit),
         })}
-        onStop={() => act('/api/training/stop')} />}
-      <CellsPanel />
+        onStop={() => act('/api/training/stop')} onRefresh={refresh} />}
     </div>
   )
 }
@@ -87,9 +76,10 @@ interface ReadyProps {
   onLimit: (value: string) => void
   onStart: () => void
   onStop: () => void
+  onRefresh: () => void
 }
 
-function Ready({ data, busy, workers, threads, limit, actionError, onWorkers, onThreads, onLimit, onStart, onStop }: ReadyProps) {
+function Ready({ data, busy, workers, threads, limit, actionError, onWorkers, onThreads, onLimit, onStart, onStop, onRefresh }: ReadyProps) {
   const { job } = data
   const active = job.state === 'running' || job.state === 'stopping'
   const now = useNow(active)
@@ -98,7 +88,7 @@ function Ready({ data, busy, workers, threads, limit, actionError, onWorkers, on
   return (
     <>
       {job.started_at && <RunPanel data={data} active={active} now={now} />}
-      {active && <WorkersPanel data={data} now={now} />}
+      <CellsPanel training={data} onRefreshTraining={onRefresh} />
 
       <section className="panel" aria-label="Controle do cálculo">
         <SectionHeading eyebrow="Controle" title="Iniciar ou parar" />
@@ -182,50 +172,6 @@ function RunPanel({ data, active, now }: { data: TrainingStatus; active: boolean
         </p>
       )}
     </section>
-  )
-}
-
-function WorkersPanel({ data, now }: { data: TrainingStatus; now: number }) {
-  const slots = Math.max(data.job.workers, data.activity.in_flight.length)
-  const cards: (TrainingInFlight | null)[] = Array.from({ length: slots }, (_, i) => data.activity.in_flight[i] ?? null)
-  return (
-    <section className="panel" aria-label="Moléculas em cálculo">
-      <SectionHeading eyebrow="Agora" title="Em cálculo" />
-      <ul className="worker-grid">
-        {cards.map((molecule, index) => (
-          <WorkerCard key={molecule?.mol_id ?? `free-${index}`} index={index} molecule={molecule}
-            mean={data.activity.mean_elapsed_s} now={now} />
-        ))}
-      </ul>
-    </section>
-  )
-}
-
-function WorkerCard({ index, molecule, mean, now }: { index: number; molecule: TrainingInFlight | null; mean: number | null; now: number }) {
-  if (!molecule) {
-    return (
-      <li className="worker-card worker-card--free">
-        <span className="worker-card__slot">Worker {index + 1}</span>
-        <p>Aguardando a próxima molécula…</p>
-      </li>
-    )
-  }
-  const elapsed = elapsedSince(molecule.started_at, now)
-  // Comparado à média da rodada; fica em 95% enquanto não termina para não prometer o fim.
-  const share = mean && elapsed !== null ? Math.min(95, (100 * elapsed) / mean) : null
-  return (
-    <li className="worker-card">
-      <span className="worker-card__slot"><i className="worker-card__spinner" aria-hidden="true" />Worker {index + 1}</span>
-      <strong>{molecule.mol_id}</strong>
-      <code title={molecule.smiles}>{molecule.smiles}</code>
-      <span className="worker-card__meta">{molecule.nheavy} átomos pesados · {elapsed === null ? '—' : formatDuration(elapsed)}</span>
-      <div className={`worker-card__bar${share === null ? ' worker-card__bar--unknown' : ''}`} aria-hidden="true">
-        {share !== null && <span style={{ width: `${share}%` }} />}
-      </div>
-      {share !== null && elapsed !== null && mean !== null && elapsed > mean && (
-        <span className="worker-card__meta">Acima do tempo médio ({formatDuration(mean)})</span>
-      )}
-    </li>
   )
 }
 

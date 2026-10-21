@@ -11,7 +11,7 @@ interface Options {
   pollMs?: number
 }
 
-export function useApi<T>(path: string, options: Options = {}): { state: ApiState<T>; reload: () => void } {
+export function useApi<T>(path: string, options: Options = {}): { state: ApiState<T>; reload: () => void; refresh: () => void } {
   const { pollMs } = options
   const [state, setState] = useState<ApiState<T>>({ status: 'loading' })
   const [revision, setRevision] = useState(0)
@@ -39,5 +39,8 @@ export function useApi<T>(path: string, options: Options = {}): { state: ApiStat
     setRevision((current) => current + 1)
   }, [])
 
-  return { state, reload }
+  // Busca de novo sem passar por "carregando": a tela não pisca.
+  const refresh = useCallback(() => setRevision((current) => current + 1), [])
+
+  return { state, reload, refresh }
 }

@@ -8,6 +8,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Dashboard: uma linha por computador (células distribuídas, Lote 5)** (2026-10-21)
+  - Calcular PM7 → **Computadores** (`apps/dashboard/src/CellsPanel.tsx`)
+    substitui a grade única de workers: primeiro esta central (estado da
+    rotina, último sinal, suas moléculas), depois uma linha por célula com
+    estado do heartbeat, idade do último sinal, workers ocupados/livres e um
+    cartão por worker com a molécula e o tempo dela (`in_flight` filtrado por
+    `cell_id`). As referências da admissão (fora da fila) aparecem como
+    "Referência de admissão". Workers livres só em célula `online`/`atrasada`.
+  - Ações por linha: **Verificar agora** (busca de novo e, sem resposta
+    recente, mostra o comando de reinício do guia), **Devolver à fila** e
+    **Revogar** (com confirmação), **Renomear** no próprio nome, além de
+    pacote novo e admissão. Indicadores de versão divergente (com o motivo da
+    recusa) e "Em admissão" com o progresso.
+  - Só frontend: usa as rotas `/api/cells/*` do Lote 2. `useApi` ganha
+    `refresh()`, que busca de novo sem piscar "carregando".
+  - Verification: `npx vitest run` (43 testes), `npx tsc --noEmit`,
+    `npx eslint src`, `npm run build`; conferido no navegador com a API real e
+    células simuladas (desktop e 375 px).
 - **Teste de admissão automático da célula (células distribuídas, Lote 4)** (2026-10-21)
   - Uma célula `pending` pede trabalho pelo mesmo `POST /api/cell/claim` e
     recebe as 5 moléculas de referência (`cbs_09698`, `cbs_00187`,

@@ -721,8 +721,27 @@ button.choice-card:hover:not(:disabled) { transform: translateY(-2px); border-co
 .training-controls label { display: grid; gap: 4px; font-size: 0.9rem; }
 .training-failures { list-style: none; padding: 0; display: grid; gap: 6px; }
 .training-failures li { display: flex; gap: 10px; flex-wrap: wrap; }
-.cells-list li { align-items: center; }
-.cells-list .ghost-button { margin-top: 0; }
+
+/* ------------------------------------------- calcular PM7: computadores */
+.computers { list-style: none; margin: 0; padding: 0; display: grid; gap: .9rem; }
+.computer { display: grid; gap: .7rem; min-width: 0; padding: 1rem 1.1rem; border-radius: var(--radius); background: var(--surface-1); border: 1px solid var(--border-strong); }
+.computer--revoked { opacity: .6; }
+.computer__head { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem .9rem; }
+.computer__head small { color: var(--text-muted); font-size: .82rem; font-variant-numeric: tabular-nums; }
+.computer__name { font-size: 1.05rem; }
+.computer__state { padding: .12rem .6rem; border-radius: 999px; font-size: .75rem; font-weight: 700; background: color-mix(in srgb, var(--tone) 16%, transparent); color: color-mix(in srgb, var(--tone) 65%, var(--text-primary)); --tone: var(--status-neutral); }
+.computer__state--good { --tone: var(--status-good); }
+.computer__state--warning { --tone: var(--status-warning); }
+.computer__state--critical { --tone: var(--status-critical); }
+.computer__state--info { --tone: var(--status-info); }
+.computer__rename { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem; }
+.computer__rename .ghost-button, .computer__actions .ghost-button { margin-top: 0; }
+.computer__actions { display: flex; flex-wrap: wrap; gap: .4rem; }
+.computer__note, .computer__alert { margin: 0; font-size: .86rem; color: var(--text-secondary); overflow-wrap: anywhere; }
+.computer__alert { color: color-mix(in srgb, var(--status-critical) 75%, var(--text-primary)); font-weight: 600; }
+.computer__note code { font-family: var(--font-mono); font-size: .8rem; }
+.computers__subtitle { margin: 1.4rem 0 .6rem; font-size: 1rem; }
+.ghost-button--danger { color: var(--status-critical); }
 
 /* ------------------------------------------------- calcular PM7: rodada */
 .training-bar--thin { height: 8px; }
