@@ -186,6 +186,38 @@ def test_concurrent_claimers_never_share_a_molecule(
     assert sorted(taken) == sorted(f"m{i:02d}" for i in range(40))
 
 
+def test_two_spellings_of_one_molecule_are_never_handed_out_in_parallel(
+    tmp_path: Path, make_cbs: CbsFactory
+) -> None:
+    # cbs_52946 and cbs_52947 share a MolecularIdentity, so a worker on each
+    # would share work/crest/<molecule_id> and the calculation_id (E2E Lote 3).
+    cbs = make_cbs(
+        [
+            row("cbs_52946", smiles="C=C[C]=C", multiplicity=2, H298_cbs=78.63363),
+            row("cbs_52947", smiles="C=[C]C=C", multiplicity=2, H298_cbs=86.79913),
+            row("other", nheavy=2),
+        ]
+    )
+    _seeded(tmp_path, cbs)
+    start = threading.Barrier(2)
+    taken: list[str] = []
+    lock = threading.Lock()
+
+    def claimer(cell: str) -> None:
+        queue = TrainingQueue(_db(tmp_path), cbs)
+        start.wait()
+        while batch := queue.claim(cell, 1):
+            with lock:
+                taken.extend(m.mol_id for m in batch)
+
+    threads = [threading.Thread(target=claimer, args=(c,)) for c in ("central", "lab")]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+    assert sorted(taken) == ["cbs_52946", "other"]
+
+
 # ------------------------------------------------------------ lease, release
 
 

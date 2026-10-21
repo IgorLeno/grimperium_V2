@@ -2,9 +2,14 @@
 
 The queue is seeded from ``cbs_referencia.csv`` (read only) and lives in the
 ``training_queue`` table of the training database, so the CSV never changes.
-One molecule per SMILES: among the rows that share a SMILES the reference
-conformer wins (lowest ``conformer_rank_by_h298``, which is the lowest H298);
-ties fall back to the lowest ``H298_cbs`` and then to ``mol_id``.
+One molecule per ``MolecularIdentity`` (canonical SMILES, charge,
+multiplicity), the same identity the worker computes: among the rows that
+share it the reference conformer wins (lowest ``conformer_rank_by_h298``,
+which is the lowest H298); ties fall back to the lowest ``H298_cbs`` and then
+to ``mol_id``. Two spellings of one species would otherwise share the CREST
+directory and the ``calculation_id`` of the worker, and protocol 2 (which
+starts from the SMILES) gives both the same PM7 value against different CBS
+references.
 
 Every consumer (the local routine as cell ``central``, later the remote
 cells through the central API) takes molecules with ``claim`` and reports
@@ -20,10 +25,13 @@ from collections.abc import Collection, Iterator
 from contextlib import closing, contextmanager
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
+from importlib import import_module
 from pathlib import Path
+from typing import Any
 
 import pandas as pd
 
+from semi_imperium.domain.identity import MolecularIdentity
 from semi_imperium.training.db import connect
 from semi_imperium.training.geometry_store import GeometryRecord, insert_geometry
 
@@ -101,7 +109,36 @@ class TrainingProgress:
 
 
 def select_reference_rows(cbs_csv: Path) -> pd.DataFrame:
-    """The queue's rows: one per SMILES, the reference conformer."""
+    """The queue's rows: one per molecular identity, the reference conformer."""
+    return _select(cbs_csv)[0]
+
+
+def _identity_key(chem: Any, smiles: str, charge: int, multiplicity: int) -> str:
+    """``molecule_id`` as the worker derives it; the raw SMILES if unparseable.
+
+    Same canonicalization as ``MolecularIdentity.from_smiles``, without its
+    InChI (provenance, not identity), which alone would double the seeding
+    time over the ~27k CBS SMILES. A SMILES RDKit cannot read keeps its own
+    row, as before the identity dedup: the worker fails it and the rerun
+    budget sends it to ``skip``.
+    """
+    mol = chem.MolFromSmiles(smiles)
+    if mol is None:
+        return f"smiles:{smiles}"
+    return MolecularIdentity(
+        canonical_smiles=str(chem.MolToSmiles(mol)),
+        charge=charge,
+        multiplicity=multiplicity,
+    ).molecule_id
+
+
+def _select(cbs_csv: Path) -> tuple[pd.DataFrame, dict[str, str]]:
+    """The queue's rows and the superseded spellings (``mol_id`` -> kept one).
+
+    A superseded spelling is the reference conformer of its own SMILES that
+    lost to another SMILES of the same identity: queues seeded one row per
+    SMILES hold it, and ``ensure_seeded`` takes it out of the queue there.
+    """
     if not cbs_csv.is_file():
         raise FileNotFoundError(f"CBS CSV not found: {cbs_csv}")
     header = pd.read_csv(cbs_csv, nrows=0).columns
@@ -111,10 +148,30 @@ def select_reference_rows(cbs_csv: Path) -> pd.DataFrame:
     frame = pd.read_csv(cbs_csv, usecols=list(CBS_COLUMNS))
     if frame[list(CBS_COLUMNS)].isna().any().any():
         raise CbsReadError(f"{cbs_csv}: empty cells in {list(CBS_COLUMNS)}")
-    ordered = frame.sort_values(
-        ["smiles", "conformer_rank_by_h298", "H298_cbs", "mol_id"], kind="stable"
-    )
-    return ordered.drop_duplicates("smiles", keep="first").reset_index(drop=True)
+    order = ["conformer_rank_by_h298", "H298_cbs", "mol_id"]
+    per_smiles = frame.sort_values(["smiles", *order], kind="stable")
+    per_smiles = per_smiles.drop_duplicates("smiles", keep="first").copy()
+    chem: Any = import_module("rdkit.Chem")
+    rdbase: Any = import_module("rdkit.rdBase")
+    with rdbase.BlockLogs():  # unparseable SMILES are expected, not news
+        per_smiles["_identity"] = [
+            _identity_key(chem, str(smiles), int(charge), int(multiplicity))
+            for smiles, charge, multiplicity in zip(
+                per_smiles["smiles"],
+                per_smiles["charge"],
+                per_smiles["multiplicity"],
+                strict=True,
+            )
+        ]
+    ordered = per_smiles.sort_values(["_identity", *order], kind="stable")
+    kept = ordered.drop_duplicates("_identity", keep="first")
+    winner = dict(zip(kept["_identity"], kept["mol_id"], strict=True))
+    lost = ordered[~ordered.index.isin(kept.index)]
+    superseded = {
+        str(mol_id): str(winner[key])
+        for mol_id, key in zip(lost["mol_id"], lost["_identity"], strict=True)
+    }
+    return kept.drop(columns="_identity").reset_index(drop=True), superseded
 
 
 # The CBS has ~27k rows and the dashboard polls progress, so the derived
@@ -264,10 +321,14 @@ class TrainingQueue:
     def ensure_seeded(self) -> int:
         """Insert the CBS molecules that are not in the queue yet.
 
-        Existing rows are never touched, so a rerun of the routine keeps every
-        status. Returns how many rows were inserted.
+        Existing rows keep their status, so a rerun of the routine resumes
+        where it stopped. The one exception is a superseded spelling of a
+        molecule (see :func:`_select`) still ``pending``/``rerun``: it goes to
+        ``skip``, with the kept ``mol_id`` logged in ``training_failure``.
+        ``ok`` and ``running`` rows are never touched. Returns how many rows
+        were inserted.
         """
-        selected = select_reference_rows(self._cbs_csv)
+        selected, superseded = _select(self._cbs_csv)
         records = [
             (
                 str(r.mol_id),
@@ -290,6 +351,26 @@ class TrainingQueue:
                     records,
                 )
                 inserted = connection.total_changes - before
+                now = _now()
+                skipped = connection.execute(
+                    "UPDATE training_queue SET status = 'skip', updated_at = ?"
+                    " WHERE status IN ('pending', 'rerun')"
+                    " AND mol_id IN (SELECT key FROM json_each(?)) RETURNING mol_id",
+                    (now, json.dumps(superseded)),
+                ).fetchall()
+                connection.executemany(
+                    "INSERT INTO training_failure (mol_id, reason, at)"
+                    " VALUES (?, ?, ?)",
+                    [
+                        (
+                            r["mol_id"],
+                            "mesma MolecularIdentity que"
+                            f" {superseded[r['mol_id']]}, que fica na fila",
+                            now,
+                        )
+                        for r in skipped
+                    ],
+                )
                 connection.execute("COMMIT")
             except BaseException:
                 connection.execute("ROLLBACK")

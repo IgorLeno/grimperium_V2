@@ -38,8 +38,9 @@ PROGRAMS = {
 SIGNATURE = canonical_signature(canonical_settings())
 
 
-def _paths(tmp_path: Path) -> DashboardPaths:
-    rows = [row("a", nheavy=1), row("b", nheavy=2), row("c", nheavy=3)]
+def _paths(tmp_path: Path, rows: list[dict[str, Any]] | None = None) -> DashboardPaths:
+    if rows is None:
+        rows = [row("a", nheavy=1), row("b", nheavy=2), row("c", nheavy=3)]
     pd.DataFrame(rows).to_csv(tmp_path / "cbs.csv", index=False)
     return DashboardPaths(
         semi_imperium_store=tmp_path / "store",
@@ -50,8 +51,10 @@ def _paths(tmp_path: Path) -> DashboardPaths:
 
 
 class Env:
-    def __init__(self, tmp_path: Path) -> None:
-        self.paths = _paths(tmp_path)
+    def __init__(
+        self, tmp_path: Path, rows: list[dict[str, Any]] | None = None
+    ) -> None:
+        self.paths = _paths(tmp_path, rows)
         self.db = database_path(self.paths.semi_imperium_store)
         self.queue = TrainingQueue(self.db, self.paths.cbs_csv)
         self.queue.ensure_seeded()
@@ -223,6 +226,22 @@ def test_claim_needs_registration_and_admission(env: Env) -> None:
 def test_claim_count_is_validated(env: Env) -> None:
     _, headers = env.ready_cell()
     assert env.claim(headers, 0).status_code == 422
+
+
+def test_a_cell_never_gets_two_spellings_of_one_molecule(tmp_path: Path) -> None:
+    # Same MolecularIdentity: they would share the CREST directory and the
+    # calculation_id with the central or between this cell's own workers.
+    env = Env(
+        tmp_path,
+        [
+            row("cbs_52946", smiles="C=C[C]=C", multiplicity=2, H298_cbs=78.63363),
+            row("cbs_52947", smiles="C=[C]C=C", multiplicity=2, H298_cbs=86.79913),
+        ],
+    )
+    _, headers = env.ready_cell()
+    claimed = env.claim(headers, 2).json()["molecules"]
+    assert [m["mol_id"] for m in claimed] == ["cbs_52946"]
+    assert env.queue.claim("central", 2) == []
 
 
 def test_a_cell_does_not_retry_its_own_failure(env: Env) -> None:
