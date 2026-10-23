@@ -251,6 +251,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   o arquivo de trava do LibreOffice.
 
 ### Fixed
+- **Pacote da célula: texto da admissão e cópia do `.wslconfig`** (2026-10-23)
+  - `instalar.sh` e `LEIA-ME.txt` não mandam mais "admitir a célula no
+    dashboard": desde o Lote 4 a admissão é automática (5 referências).
+  - `configurar-windows.ps1` copia o `.wslconfig` para
+    `.wslconfig.antes-grimperium` só se a cópia ainda não existir; rodar o
+    script de novo sobrescrevia o original com o arquivo do próprio
+    Grimperium. Guia atualizado.
+  - Verification: `pytest tests/webapi` (89 passed), `bash -n instalar.sh`.
+    O `.ps1` não foi executado nem checado por parser (sem PowerShell aqui).
 - **Fila de treinamento: uma linha por `MolecularIdentity`** (2026-10-21)
   - `src/semi_imperium/training/molecule_queue.py`: a semeadura deduplica
     pelo `molecule_id` do worker (SMILES canônico, carga, multiplicidade),

@@ -219,7 +219,8 @@ else
     echo "  1. Isto não parece o WSL: a parte do Windows foi pulada."
     echo "     Para iniciar à mão: $CELULA/iniciar.sh"
 fi
-echo "  2. Na central, admita a célula no dashboard (Calcular PM7 > Células)."
+echo "  2. A célula faz sozinha o teste de admissão (5 referências) e então recebe a fila."
+echo "     Acompanhe na central: dashboard, Calcular PM7 > Células."
 echo "  3. Acompanhe aqui com: celula status   (log: $CELULA/celula.log)"
 echo
 echo "O pacote extraído ($PACOTE) e o zip contêm o token da célula: apague os dois."

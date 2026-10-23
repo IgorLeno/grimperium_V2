@@ -75,7 +75,8 @@ No Windows da célula:
 4. O instalador mostra um comando do PowerShell. Rode-o **no PowerShell do
    seu usuário** (não precisa ser administrador). Ele:
    - escreve `%USERPROFILE%\.wslconfig` (todos os núcleos, 75% da memória;
-     o anterior fica em `.wslconfig.antes-grimperium`);
+     o anterior fica em `.wslconfig.antes-grimperium`, copiado só na
+     primeira vez, então rodar de novo não apaga o original);
    - cria a tarefa **Grimperium Celula** no Agendador, que inicia a célula no
      logon, sem janela;
    - tira a suspensão e a hibernação do plano de energia.

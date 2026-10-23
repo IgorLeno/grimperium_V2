@@ -5,7 +5,7 @@
 #   powershell -ExecutionPolicy Bypass -File "$env:USERPROFILE\grimperium-celula-windows.ps1"
 #
 # 1. .wslconfig: o WSL usa todos os núcleos e 75% da memória (cópia do
-#    arquivo anterior em .wslconfig.antes-grimperium).
+#    arquivo anterior em .wslconfig.antes-grimperium, feita só uma vez).
 # 2. Tarefa "Grimperium Celula" no Agendador: inicia a célula no logon deste
 #    usuário, sem janela, sem limite de tempo, também na bateria.
 # 3. Energia: o computador não suspende nem hiberna (tela pode desligar).
@@ -31,9 +31,12 @@ $cores = [int]$computer.NumberOfLogicalProcessors
 $ramGB = [math]::Floor($computer.TotalPhysicalMemory / 1GB)
 $memGB = [math]::Max(2, [math]::Floor($ramGB * 0.75))
 $wslconfig = Join-Path $env:USERPROFILE '.wslconfig'
-if (Test-Path $wslconfig) {
-    Copy-Item $wslconfig "$wslconfig.antes-grimperium" -Force
-    Write-Host "Cópia do .wslconfig anterior: $wslconfig.antes-grimperium"
+$backup = "$wslconfig.antes-grimperium"
+# Só a primeira execução copia: numa segunda, o .wslconfig já é o nosso e
+# sobrescreveria a cópia do original.
+if ((Test-Path $wslconfig) -and -not (Test-Path $backup)) {
+    Copy-Item $wslconfig $backup
+    Write-Host "Cópia do .wslconfig anterior: $backup"
 }
 $lines = @(
     '# Escrito pelo instalador da célula do Grimperium.',
