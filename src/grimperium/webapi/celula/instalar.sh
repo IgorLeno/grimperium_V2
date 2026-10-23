@@ -13,10 +13,11 @@
 #      ~/grimperium-celula/venv) para o programa `celula`. Fora do
 #      grimperium-quimica de propósito: lá ele mudaria o environment_sha256
 #      e a central recusaria o registro (409);
-#   4. ~/grimperium-celula/ com config.json (chmod 600) e iniciar.sh;
+#   4. ~/grimperium-celula/ com config.json (chmod 600), iniciar.sh e
+#      painel.sh;
 #   5. confere os programas contra os da central e se a central responde;
-#   6. no WSL, deixa o script do Windows (.wslconfig, Agendador, energia) na
-#      pasta do seu usuário do Windows.
+#   6. no WSL, deixa o script do Windows (.wslconfig, Agendador, energia,
+#      atalho do painel) na pasta do seu usuário do Windows.
 #
 # Rodar de novo é seguro: refaz os ambientes e troca o token pelo do pacote
 # novo (pare a célula antes).
@@ -151,8 +152,15 @@ cat > "$CELULA/iniciar.sh" <<INICIAR
 exec setsid -w "$CELULA/venv/bin/celula" --config "$CELULA/config.json" start
 INICIAR
 chmod 755 "$CELULA/iniciar.sh"
+cat > "$CELULA/painel.sh" <<PAINEL
+#!/usr/bin/env bash
+# Chamado pelo atalho "Grimperium Célula" da Área de Trabalho: só lê os
+# arquivos da célula; fechar a janela não para o cálculo.
+exec "$CELULA/venv/bin/celula" --config "$CELULA/config.json" painel
+PAINEL
+chmod 755 "$CELULA/painel.sh"
 ln -sf "$CELULA/venv/bin/celula" "$BIN/celula"
-echo "config.json (600), pacote.json e iniciar.sh prontos; comando: $BIN/celula"
+echo "config.json (600), pacote.json, iniciar.sh e painel.sh prontos; comando: $BIN/celula"
 
 # --- 5. conferências --------------------------------------------------------
 
@@ -203,6 +211,7 @@ if [ -n "${WSL_DISTRO_NAME:-}" ] && command -v cmd.exe >/dev/null 2>&1 \
             sed -e "s|@DISTRO@|$WSL_DISTRO_NAME|g" \
                 -e "s|@LINUX_USER@|$(id -un)|g" \
                 -e "s|@INICIAR@|$CELULA/iniciar.sh|g" \
+                -e "s|@PAINEL@|$CELULA/painel.sh|g" \
                 "$PACOTE/windows/configurar-windows.ps1"
         } > "$SCRIPT_WINDOWS"
     fi
@@ -213,7 +222,8 @@ echo "Próximos passos:"
 if [ -n "$SCRIPT_WINDOWS" ]; then
     echo "  1. No Windows, abra o PowerShell (sem ser administrador) e rode:"
     echo "       powershell -ExecutionPolicy Bypass -File \"$perfil\\grimperium-celula-windows.ps1\""
-    echo "     Ele ajusta o .wslconfig, cria a tarefa no Agendador e tira a suspensão."
+    echo "     Ele ajusta o .wslconfig, cria a tarefa no Agendador, tira a suspensão"
+    echo "     e põe o atalho \"Grimperium Célula\" (o painel) na Área de Trabalho."
     echo "     Depois reinicie o Windows: a célula sobe sozinha no logon."
 else
     echo "  1. Isto não parece o WSL: a parte do Windows foi pulada."
@@ -221,6 +231,7 @@ else
 fi
 echo "  2. A célula faz sozinha o teste de admissão (5 referências) e então recebe a fila."
 echo "     Acompanhe na central: dashboard, Calcular PM7 > Células."
-echo "  3. Acompanhe aqui com: celula status   (log: $CELULA/celula.log)"
+echo "  3. Acompanhe aqui com: celula painel   (ao vivo; Ctrl+C fecha só o painel)"
+echo "     ou: celula status   (log: $CELULA/celula.log)"
 echo
 echo "O pacote extraído ($PACOTE) e o zip contêm o token da célula: apague os dois."

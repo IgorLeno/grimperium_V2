@@ -16,12 +16,14 @@ Como instalar (guia completo: docs/guia-celulas.md no repositório):
        bash /mnt/c/Users/SEU_USUARIO/Downloads/NOME_DA_PASTA/instalar.sh
 
 3. No fim, o instalador mostra o comando do PowerShell que configura o
-   Windows (.wslconfig, tarefa no Agendador, sem suspensão). Rode-o e
-   reinicie o Windows.
+   Windows (.wslconfig, tarefa no Agendador, sem suspensão, atalho do
+   painel). Rode-o e reinicie o Windows.
 4. A célula faz sozinha o teste de admissão (5 moléculas de referência) e
    passa a receber a fila se todas baterem com a central. Acompanhe no
    dashboard (Calcular PM7 > Células).
-5. No Ubuntu: celula status
+5. Para ver a célula trabalhando: atalho "Grimperium Célula" na Área de
+   Trabalho, ou no Ubuntu: celula painel (Ctrl+C fecha só o painel).
+   Resumo em texto: celula status
 
 Conteúdo:
   instalar.sh                 instalador (Ubuntu no WSL2, sem sudo)

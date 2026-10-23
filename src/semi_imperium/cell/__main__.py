@@ -1,9 +1,11 @@
-"""Command line of a cell: ``celula start | status | update``.
+"""Command line of a cell: ``celula start | status | painel | update``.
 
 ``start`` runs in the foreground (the scheduled task of the Windows host
-calls it inside WSL); ``status`` reads only local files, so it answers even
-with the central unreachable; ``update`` installs a new wheel while the cell
-is stopped. One cell per folder: ``start`` holds ``celula.lock``.
+calls it inside WSL); ``status`` and ``painel`` read only local files, so
+they answer even with the central unreachable (``painel`` redraws itself
+every second until Ctrl+C, which never reaches the cell); ``update``
+installs a new wheel while the cell is stopped. One cell per folder:
+``start`` holds ``celula.lock``.
 """
 
 from __future__ import annotations
@@ -29,9 +31,9 @@ from semi_imperium.cell.config import (
 )
 from semi_imperium.cell.loop import CellLoop, read_state
 from semi_imperium.cell.outbox import Outbox
+from semi_imperium.cell.panel import LOG_FILENAME, run_panel
 
 LOCK_FILENAME = "celula.lock"
-LOG_FILENAME = "celula.log"
 
 EXIT_CONFIG = 2
 EXIT_RUNNING = 3
@@ -121,6 +123,14 @@ def _status(config: CellConfig) -> int:
             f"  workers: {state.get('workers')} × {state.get('crest_threads')} threads"
         )
         print(f"  último contato com a central: {state.get('last_contact_at') or '-'}")
+        totals = state.get("totals")
+        if isinstance(totals, dict):
+            print(
+                f"  concluídas: sessão {totals.get('session_ok', 0)} ok, "
+                f"{totals.get('session_failed', 0)} falhas; "
+                f"hoje {totals.get('day_ok', 0)} ok, "
+                f"{totals.get('day_failed', 0)} falhas"
+            )
         if state.get("last_error"):
             print(f"  último erro: {state['last_error']}")
         for busy in state.get("busy") or []:
@@ -183,6 +193,15 @@ def _build_parser() -> argparse.ArgumentParser:
     commands = parser.add_subparsers(dest="command", required=True)
     commands.add_parser("start", help="registra na central e calcula até parar")
     commands.add_parser("status", help="mostra o estado local (sem rede)")
+    painel = commands.add_parser(
+        "painel", help="painel ao vivo da célula (sem rede; Ctrl+C fecha só ele)"
+    )
+    painel.add_argument(
+        "--uma-vez",
+        action="store_true",
+        dest="once",
+        help="desenha uma vez e sai",
+    )
     update = commands.add_parser("update", help="instala um wheel novo")
     update.add_argument("wheel", type=Path)
     return parser
@@ -200,6 +219,8 @@ def main(argv: Sequence[str] | None = None, *, pip: Pip = _pip) -> int:
         return _start(config)
     if args.command == "status":
         return _status(config)
+    if args.command == "painel":
+        return run_panel(config, lambda: _is_running(config.root), once=args.once)
     return _update(config, args.wheel, pip)
 
 

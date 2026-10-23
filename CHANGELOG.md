@@ -8,6 +8,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Painel ao vivo da célula: `celula painel`** (2026-10-23)
+  - Comando novo da célula (`src/semi_imperium/cell/panel.py`, Rich): fase
+    com indicador vivo (inclui PARADA e SEM NOTÍCIAS, estado parado há mais
+    de 400 s com a célula rodando), admissão, último contato, cada worker
+    com mol_id, SMILES, tempo e barra do limite (CREST + MOPAC), concluídas
+    na sessão e hoje, últimos resultados com ΔHf (`⇡` = ainda no outbox),
+    dead-letter e fim do `celula.log`. Uma coluna abaixo de 100 colunas.
+    Só lê arquivos locais, sem rede; fechar não para a célula.
+    `--uma-vez` desenha e sai.
+  - `CellLoop` grava em `state.json` `totals` (sessão/hoje, ✓/✗; o dia
+    sobrevive a reinício) e `recent` (10 últimos resultados). `celula
+    status` mostra as concluídas.
+  - Correção: a admissão em `state.json` só mudava no registro; uma célula
+    aprovada durante a sessão mostrava `pending` até reiniciar. Agora um
+    claim com molécula da fila grava `passed` e um claim 403, `blocked`.
+  - Instalador cria `~/grimperium-celula/painel.sh`; o script do Windows
+    põe o atalho "Grimperium Célula" na Área de Trabalho (não abre no
+    logon). Células instaladas recebem com um pacote novo + reinstalação.
 - **Dashboard: uma linha por computador (células distribuídas, Lote 5)** (2026-10-21)
   - Calcular PM7 → **Computadores** (`apps/dashboard/src/CellsPanel.tsx`)
     substitui a grade única de workers: primeiro esta central (estado da

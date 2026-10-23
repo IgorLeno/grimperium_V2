@@ -79,7 +79,9 @@ No Windows da célula:
      primeira vez, então rodar de novo não apaga o original);
    - cria a tarefa **Grimperium Celula** no Agendador, que inicia a célula no
      logon, sem janela;
-   - tira a suspensão e a hibernação do plano de energia.
+   - tira a suspensão e a hibernação do plano de energia;
+   - põe na Área de Trabalho o atalho **Grimperium Célula**, que abre o
+     painel ao vivo (seção 6). O painel não abre sozinho no logon.
 5. Reinicie o Windows e faça logon. A célula sobe sozinha.
 
 Para voltar sozinha depois de uma queda de energia sem ninguém por perto:
@@ -116,15 +118,34 @@ os da central: rode o instalador de novo com um pacote novo.
 
 ## 6. Acompanhar na célula
 
-No Ubuntu da célula:
+Clique duas vezes no atalho **Grimperium Célula** da Área de Trabalho, ou,
+no Ubuntu da célula:
 
 ```bash
-celula status
+celula painel
 ```
 
-Mostra se está rodando, a fase, a admissão, os workers ocupados, o último
-contato com a central e os resultados à espera de envio. Log completo em
-`~/grimperium-celula/celula.log`. O `status` funciona mesmo sem rede.
+O painel se redesenha a cada segundo e mostra:
+
+- a fase, com indicador vivo: **CALCULANDO**, **OCIOSA** (fila vazia),
+  **SEM CONEXÃO** (tentando de novo), **BLOQUEADA**, **PARANDO**; **PARADA**
+  quando a célula não está rodando e **SEM NOTÍCIAS** quando ela roda mas
+  não escreve o estado há mais de ~7 min (travada: veja a seção 7);
+- a admissão (em admissão, admitida, bloqueada) e há quanto tempo foi o
+  último contato com a central;
+- cada worker: molécula, SMILES, tempo decorrido e a barra do limite
+  (timeout do CREST + MOPAC; amarela a partir de 75 %). `REF` marca as
+  moléculas do teste de admissão;
+- concluídas na sessão e hoje (✓/✗), resultados a enviar e dead-letter;
+- os últimos resultados com ΔHf e tempo (`⇡`: calculado, ainda não aceito
+  pela central) e as últimas linhas do log.
+
+Abaixo de 100 colunas ele vira uma coluna só. O painel só lê arquivos da
+célula: funciona sem rede, e fechar a janela (ou Ctrl+C) **não** para o
+cálculo. `celula painel --uma-vez` desenha uma vez e sai.
+
+Resumo em texto: `celula status`. Log completo em
+`~/grimperium-celula/celula.log`. Os dois também funcionam sem rede.
 
 ## 7. Reiniciar pelo TeamViewer
 

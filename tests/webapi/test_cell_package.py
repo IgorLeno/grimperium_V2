@@ -259,5 +259,5 @@ def test_installer_scripts_parse() -> None:
         ["bash", "-n", str(templates / "instalar.sh")], check=True  # noqa: S607
     )
     windows = (templates / "configurar-windows.ps1").read_text(encoding="utf-8")
-    for placeholder in ("@DISTRO@", "@LINUX_USER@", "@INICIAR@"):
+    for placeholder in ("@DISTRO@", "@LINUX_USER@", "@INICIAR@", "@PAINEL@"):
         assert placeholder in windows

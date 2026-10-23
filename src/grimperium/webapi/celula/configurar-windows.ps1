@@ -9,6 +9,8 @@
 # 2. Tarefa "Grimperium Celula" no Agendador: inicia a célula no logon deste
 #    usuário, sem janela, sem limite de tempo, também na bateria.
 # 3. Energia: o computador não suspende nem hiberna (tela pode desligar).
+# 4. Atalho "Grimperium Célula" na Área de Trabalho: abre o painel ao vivo
+#    (celula painel). Fechar a janela não para o cálculo.
 #
 # Depois, reinicie o Windows. Para a célula voltar sozinha depois de uma
 # queda de energia sem ninguém fazer logon, ative o logon automático
@@ -19,6 +21,7 @@ $ErrorActionPreference = 'Stop'
 $Distro = '@DISTRO@'
 $LinuxUser = '@LINUX_USER@'
 $Iniciar = '@INICIAR@'
+$Painel = '@PAINEL@'
 $TaskName = 'Grimperium Celula'
 
 if ($Distro.StartsWith('@')) {
@@ -45,7 +48,7 @@ $lines = @(
     "memory=${memGB}GB"
 )
 Set-Content -Path $wslconfig -Value $lines -Encoding ascii
-Write-Host "1/3 .wslconfig: $cores núcleos, ${memGB} GB de memória para o WSL."
+Write-Host "1/4 .wslconfig: $cores núcleos, ${memGB} GB de memória para o WSL."
 
 # --- 2. tarefa no Agendador ---------------------------------------------------
 $wsl = Join-Path $env:WINDIR 'System32\wsl.exe'
@@ -62,14 +65,26 @@ $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries `
 $principal = New-ScheduledTaskPrincipal -UserId $user -LogonType Interactive -RunLevel Limited
 Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $trigger `
     -Settings $settings -Principal $principal -Force | Out-Null
-Write-Host "2/3 Tarefa '$TaskName' criada: inicia a célula no logon de $user."
+Write-Host "2/4 Tarefa '$TaskName' criada: inicia a célula no logon de $user."
 
 # --- 3. energia ---------------------------------------------------------------
 foreach ($setting in 'standby-timeout-ac', 'standby-timeout-dc', 'hibernate-timeout-ac', 'hibernate-timeout-dc') {
     powercfg /change $setting 0
     if ($LASTEXITCODE -ne 0) { Write-Warning "powercfg /change $setting 0 falhou" }
 }
-Write-Host '3/3 Energia: sem suspensão e sem hibernação.'
+Write-Host '3/4 Energia: sem suspensão e sem hibernação.'
+
+# --- 4. atalho do painel ------------------------------------------------------
+# GetFolderPath acha a Área de Trabalho também quando o OneDrive a move.
+$desktop = [Environment]::GetFolderPath('Desktop')
+$shortcutPath = Join-Path $desktop 'Grimperium Célula.lnk'
+$shortcut = (New-Object -ComObject WScript.Shell).CreateShortcut($shortcutPath)
+$shortcut.TargetPath = $wsl
+$shortcut.Arguments = "-d `"$Distro`" -u `"$LinuxUser`" -- `"$Painel`""
+$shortcut.Description = 'Painel ao vivo da célula do Grimperium (fechar não para o cálculo)'
+$shortcut.IconLocation = "$wsl,0"
+$shortcut.Save()
+Write-Host "4/4 Atalho do painel na Área de Trabalho: $shortcutPath"
 
 Write-Host ''
 Write-Host 'Pronto. Reinicie o Windows: a célula inicia sozinha depois do logon.'

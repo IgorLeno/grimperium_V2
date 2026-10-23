@@ -56,6 +56,11 @@ from semi_imperium.cell.outbox import (
 )
 from semi_imperium.domain import RunRecord, RunState
 from semi_imperium.persistence import SemiImperiumStore
+from semi_imperium.training.cells import (
+    ADMISSION_BLOCKED,
+    ADMISSION_PASSED,
+    ADMISSION_PREFIX,
+)
 from semi_imperium.training.program_info import ProgramProbe, probe_programs
 from semi_imperium.training.protocol import (
     canonical_configuration,
@@ -73,6 +78,9 @@ EXIT_REFUSED = 5  # registration refused: programs or protocol differ
 
 STATE_FILENAME = "state.json"
 _FAILURE_MAX = 2000  # the central's limit for a failure reason
+#: Finished molecules kept in the state for ``celula painel``.
+RECENT_MAX = 10
+_RECENT_ERROR_MAX = 200
 
 PoolFactory = Callable[[int], Executor]
 TaskFn = Callable[[WorkerTask], WorkerResult]
@@ -110,6 +118,26 @@ def _abort_process_group() -> None:
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
+
+
+def _today() -> str:
+    """The cell's local date: "today" is the day of whoever looks at it."""
+    return datetime.now().date().isoformat()
+
+
+def _carried_totals(previous: Any, today: str) -> dict[str, Any]:
+    """Counters of a new session: today's count survives a restart."""
+    totals: dict[str, Any] = {
+        "date": today,
+        "session_ok": 0,
+        "session_failed": 0,
+        "day_ok": 0,
+        "day_failed": 0,
+    }
+    if isinstance(previous, dict) and previous.get("date") == today:
+        totals["day_ok"] = int(previous.get("day_ok") or 0)
+        totals["day_failed"] = int(previous.get("day_failed") or 0)
+    return totals
 
 
 def read_state(root: Path) -> dict[str, Any]:
@@ -210,6 +238,36 @@ class CellLoop:
         # state, and ``status`` must still show a live heartbeat.
         self._set(last_contact_at=_now())
 
+    def _record(self, busy: _Busy, request: Mapping[str, Any]) -> None:
+        """Count one finished molecule and put it first in ``recent``.
+
+        ``request`` is what goes to the central, so the cell's own tally
+        never calls a success what the central will get as a failure.
+        """
+        result = request.get("result")
+        ok = isinstance(result, dict)
+        values: Mapping[str, Any] = result if isinstance(result, dict) else {}
+        today = _today()
+        totals = dict(self._state.get("totals") or _carried_totals(None, today))
+        if totals.get("date") != today:  # running past midnight
+            totals.update(date=today, day_ok=0, day_failed=0)
+        key = "ok" if ok else "failed"
+        totals[f"session_{key}"] = int(totals.get(f"session_{key}") or 0) + 1
+        totals[f"day_{key}"] = int(totals.get(f"day_{key}") or 0) + 1
+        failure = request.get("failure")
+        entry = {
+            "at": _now(),
+            "attempt_id": busy.attempt_id,
+            "mol_id": busy.mol_id,
+            "smiles": busy.smiles,
+            "ok": ok,
+            "hof_kcal_mol": values.get("hof_kcal_mol"),
+            "elapsed_s": values.get("elapsed_s"),
+            "error": None if ok else str(failure or "falha")[:_RECENT_ERROR_MAX],
+        }
+        recent = [entry, *(self._state.get("recent") or [])][:RECENT_MAX]
+        self._set(totals=totals, recent=recent)
+
     def _end(self, code: int, phase: str, error: str | None = None) -> int:
         if error:
             log.error("%s: %s", phase, error)
@@ -231,9 +289,12 @@ class CellLoop:
             request = failure_request(busy.attempt_id, f"{type(exc).__name__}: {exc}")
             self.outbox.put(busy.attempt_id, busy.mol_id, request)
             log.warning("%s: worker falhou: %s", busy.mol_id, exc)
+            self._record(busy, request)
             return
-        self.queue_result(busy.attempt_id, busy.mol_id, result)
+        request = result_request(busy.attempt_id, result)
+        self.outbox.put(busy.attempt_id, busy.mol_id, request)
         log.info("%s: %s", busy.mol_id, "ok" if result.ok else result.error)
+        self._record(busy, request)
 
     # -------------------------------------------------------------- run
     def run(self) -> int:
@@ -245,6 +306,7 @@ class CellLoop:
         # Whatever is in the work folder was interrupted: it starts over.
         shutil.rmtree(self.config.work_dir, ignore_errors=True)
         self.config.work_dir.mkdir(parents=True, exist_ok=True)
+        previous = read_state(root)
         self._state = {
             "pid": os.getpid(),
             "started_at": _now(),
@@ -255,6 +317,8 @@ class CellLoop:
             "crest_threads": self.config.crest_threads,
             "root": str(root),
             "last_error": None,
+            "totals": _carried_totals(previous.get("totals"), _today()),
+            "recent": list(previous.get("recent") or [])[:RECENT_MAX],
         }
         self._set(phase="iniciando")
         executables = self._executables or self._default_executables()
@@ -421,8 +485,18 @@ class CellLoop:
                         )
                     if not molecules:
                         next_claim = now + timings.idle_s
+                    changes: dict[str, Any] = {}
+                    # The claim does not say the admission changed; queue work
+                    # (anything but the test's references) means it passed.
+                    if any(
+                        not str(m["attempt_id"]).startswith(ADMISSION_PREFIX)
+                        for m in molecules
+                    ):
+                        changes["admission"] = ADMISSION_PASSED
                     self._set(
-                        phase="calculando" if self._busy else "ociosa", last_error=None
+                        phase="calculando" if self._busy else "ociosa",
+                        last_error=None,
+                        **changes,
                     )
                 elif verdict is Verdict.STOP:
                     token_refused, draining = True, True
@@ -431,7 +505,11 @@ class CellLoop:
                 elif reply.status == 403:  # blocked: waits for a manual decision
                     self._contact()
                     next_claim = now + timings.admission_s
-                    self._set(phase="bloqueada", last_error=reply.detail)
+                    self._set(
+                        phase="bloqueada",
+                        admission=ADMISSION_BLOCKED,
+                        last_error=reply.detail,
+                    )
                 elif reply.status == 409:  # the central forgot or refused us
                     log.warning(
                         "claim recusado (%s); registrando de novo", reply.detail

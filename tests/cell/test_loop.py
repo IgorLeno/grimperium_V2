@@ -345,3 +345,144 @@ def test_each_heartbeat_refreshes_the_last_contact_on_disk(
     assert loop.run() == EXIT_OK
     assert len(set(contacts)) == 3  # written after every heartbeat, not only claims
     assert contacts == sorted(contacts)
+
+
+def test_finished_molecules_are_counted_and_listed_newest_first(
+    tmp_path: Path, central: Central
+) -> None:
+    _cell_id, token = central.new_cell()
+    tasks = Tasks(threading.Event(), stop_after=3)
+    tasks.fail = {"m1"}
+    loop, _client = _loop(tmp_path, central, token, tasks)
+
+    assert loop.run() == EXIT_OK
+
+    state = read_state(tmp_path / "celula")
+    totals = state["totals"]
+    assert (totals["session_ok"], totals["session_failed"]) == (2, 1)
+    assert (totals["day_ok"], totals["day_failed"]) == (2, 1)
+    recent = state["recent"]
+    assert sorted(r["mol_id"] for r in recent) == ["m0", "m1", "m2"]
+    assert recent == sorted(recent, key=lambda r: r["at"], reverse=True)
+    failed = next(r for r in recent if r["mol_id"] == "m1")
+    assert failed["ok"] is False and failed["error"] == "failed: crest timeout"
+    assert failed["hof_kcal_mol"] is None
+    done = next(r for r in recent if r["mol_id"] == "m0")
+    assert done["ok"] is True and done["hof_kcal_mol"] == -12.5
+    assert done["elapsed_s"] == 1.5 and done["smiles"] and done["attempt_id"]
+
+
+def test_a_dead_worker_counts_as_a_failure(tmp_path: Path, central: Central) -> None:
+    _cell_id, token = central.new_cell()
+    stop = threading.Event()
+
+    def crash(task: WorkerTask) -> Any:
+        stop.set()
+        raise RuntimeError("worker morto")
+
+    tasks = Tasks(stop, stop_after=99)
+    loop, _client = _loop(tmp_path, central, token, tasks)
+    loop._task_fn = crash
+
+    assert loop.run() == EXIT_OK
+
+    state = read_state(tmp_path / "celula")
+    assert state["totals"]["session_ok"] == 0
+    assert state["totals"]["session_failed"] >= 1
+    assert "RuntimeError: worker morto" in state["recent"][0]["error"]
+
+
+def test_only_the_last_results_are_kept(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from semi_imperium.cell import loop as loop_module
+
+    monkeypatch.setattr(loop_module, "RECENT_MAX", 2)
+    central = Central(tmp_path, molecules=4)
+    _cell_id, token = central.new_cell()
+    tasks = Tasks(threading.Event(), stop_after=4)
+    loop, _client = _loop(tmp_path, central, token, tasks)
+
+    assert loop.run() == EXIT_OK
+
+    state = read_state(tmp_path / "celula")
+    assert len(state["recent"]) == 2
+    assert state["totals"]["session_ok"] == 4
+
+
+def test_a_restart_keeps_today_s_count_and_a_new_day_starts_over(
+    tmp_path: Path, central: Central, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from semi_imperium.cell import loop as loop_module
+
+    monkeypatch.setattr(loop_module, "_today", lambda: "2026-10-23")
+    root = tmp_path / "celula"
+    root.mkdir()
+    old = {"date": "2026-10-23", "session_ok": 9, "day_ok": 9, "day_failed": 2}
+    earlier = [{"mol_id": "antiga", "ok": True, "at": "t0"}]
+    (root / "state.json").write_text(json.dumps({"totals": old, "recent": earlier}))
+    _cell_id, token = central.new_cell()
+    tasks = Tasks(threading.Event(), stop_after=3)
+    loop, _client = _loop(tmp_path, central, token, tasks)
+
+    assert loop.run() == EXIT_OK
+
+    state = read_state(root)
+    assert state["totals"]["session_ok"] == 3  # this session only
+    assert (state["totals"]["day_ok"], state["totals"]["day_failed"]) == (12, 2)
+    assert state["recent"][-1]["mol_id"] == "antiga"
+
+    monkeypatch.setattr(loop_module, "_today", lambda: "2026-10-24")
+    central.queue.ensure_seeded()
+    loop, _client = _loop(tmp_path, central, token, Tasks(threading.Event(), 1))
+    loop.stop.set()  # register, claim nothing, stop
+
+    assert loop.run() == EXIT_OK
+
+    totals = read_state(root)["totals"]
+    assert totals["date"] == "2026-10-24"
+    assert (totals["day_ok"], totals["day_failed"]) == (0, 0)
+
+
+def test_the_state_follows_the_admission_without_a_restart(
+    tmp_path: Path,
+) -> None:
+    from semi_imperium.training.cells import ADMISSION_REFERENCES
+
+    central = Central(tmp_path, references=True)
+    _cell_id, token = central.new_cell(admitted=False)
+    tasks = Tasks(threading.Event(), stop_after=len(ADMISSION_REFERENCES) + 1)
+    loop, client = _loop(tmp_path, central, token, tasks)
+    admissions: list[str] = []
+
+    def watch(name: str, _reply: Any) -> None:
+        if name == "claim":
+            admissions.append(read_state(tmp_path / "celula")["admission"])
+
+    client.on_call = watch
+
+    assert loop.run() == EXIT_OK
+
+    assert admissions[0] == "pending"  # what the registration said
+    assert read_state(tmp_path / "celula")["admission"] == "passed"
+
+
+def test_a_refused_claim_shows_the_cell_blocked(
+    tmp_path: Path, central: Central
+) -> None:
+    from semi_imperium.training.cells import ADMISSION_BLOCKED
+
+    cell_id, token = central.new_cell(admitted=False)
+    tasks = Tasks(threading.Event(), stop_after=99)
+    loop, client = _loop(tmp_path, central, token, tasks)
+
+    def stop_after_refusal(name: str, reply: Any) -> None:
+        if name == "register":  # registered pending, blocked right after
+            central.cells.set_admission(cell_id, ADMISSION_BLOCKED)
+        if name == "claim" and reply.status == 403:
+            tasks.stop.set()
+
+    client.on_call = stop_after_refusal
+
+    assert loop.run() == EXIT_OK
+    assert read_state(tmp_path / "celula")["admission"] == "blocked"

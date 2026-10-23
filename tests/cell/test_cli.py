@@ -1,4 +1,4 @@
-"""``celula start | status | update``."""
+"""``celula start | status | painel | update``."""
 
 from __future__ import annotations
 
@@ -133,6 +133,13 @@ def test_status_shows_the_state_the_queue_and_the_dead_letter(
                 ],
                 "last_contact_at": "2026-10-20T12:01:00+00:00",
                 "last_error": None,
+                "totals": {
+                    "date": "2026-10-20",
+                    "session_ok": 3,
+                    "session_failed": 1,
+                    "day_ok": 8,
+                    "day_failed": 2,
+                },
             }
         )
     )
@@ -149,7 +156,31 @@ def test_status_shows_the_state_the_queue_and_the_dead_letter(
     assert "Lab do Prof. X" in out and "cbs_00187" in out
     assert "resultados a enviar: 1" in out and "dead-letter: 1" in out
     assert "cbs_00002" in out and "422" in out and "Assinatura diferente" in out
+    assert "sessão 3 ok, 1 falhas; hoje 8 ok, 2 falhas" in out
     assert token not in out
+
+
+@pytest.mark.usefixtures("running")
+def test_painel_draws_once_from_local_files(
+    config: Path, home: Path, capsys: pytest.CaptureFixture[str], token: str
+) -> None:
+    (home / STATE_FILENAME).write_text(
+        json.dumps({"phase": "ociosa", "name": "Lab", "updated_at": "x"})
+    )
+
+    assert cli.main(["--config", str(config), "painel", "--uma-vez"]) == 0
+
+    out = capsys.readouterr().out
+    assert "Lab" in out and "http://100.64.0.1:8100" in out
+    assert "SEM NOTÍCIAS" in out  # running, yet the state carries no valid time
+    assert token not in out
+
+
+def test_painel_of_a_stopped_cell(
+    config: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    assert cli.main(["--config", str(config), "painel", "--uma-vez"]) == 0
+    assert "NUNCA INICIADA" in capsys.readouterr().out
 
 
 def test_update_installs_the_wheel_with_this_python(
