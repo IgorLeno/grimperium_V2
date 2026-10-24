@@ -14,7 +14,7 @@ export function AboutView() {
   return (
     <div className="view">
       <PageHero
-        eyebrow="Sobre · Delta Chemistry" title="Métodos rápidos," accent="corrigidos por IA."
+        eyebrow="Sobre · Delta Chemistry" title="Aproximando" accent="velocidade e precisão."
         lead="O Delta Chemistry é um hub de rotinas de cálculo de propriedades de moléculas. Ele usa métodos rápidos e corrige o erro deles com machine learning, aprendido a partir de dados de métodos mais precisos."
       />
 
